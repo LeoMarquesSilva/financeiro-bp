@@ -3,7 +3,8 @@ import { User, Lock, Eye, EyeOff } from 'lucide-react'
 import { getExpectedLogin, getExpectedPassword, setAuthenticated } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
-const BACKGROUND_IMAGE = '/escritorio dia.png'
+// Arquivo em public/escritorio dia.png – espaço na URL como %20 para carregar certo
+const BACKGROUND_IMAGE = '/escritorio%20dia.png'
 const LOGO_URL = '/team/logo-azul.png'
 
 interface LoginProps {
