@@ -31,13 +31,22 @@ export interface DashboardData {
   followUpAlerts: FollowUpAlerts
 }
 
+type RowValorEmAberto = { valor_em_aberto: number }
+type RowClasseValor = { status_classe: string; valor_em_aberto: number }
+type RowValorPago = { valor_pago: number }
+type RowPagamentoClient = { client_id: string; valor_pago: number }
+type RowClientGestor = { id: string; gestor: string | null }
+type RowClientArea = { id: string; area: string | null }
+type RowResolvido = { created_at: string; resolvido_at: string | null }
+
 async function getTotalEmAberto(): Promise<number> {
   const { data, error } = await supabase
     .from('clients_inadimplencia')
     .select('valor_em_aberto')
     .is('resolvido_at', null)
   if (error) return 0
-  return (data ?? []).reduce((sum, r) => sum + Number(r.valor_em_aberto), 0)
+  const rows = (data ?? []) as RowValorEmAberto[]
+  return rows.reduce((sum, r) => sum + Number(r.valor_em_aberto), 0)
 }
 
 async function getTotaisPorClasse(): Promise<{ A: number; B: number; C: number }> {
@@ -47,7 +56,8 @@ async function getTotaisPorClasse(): Promise<{ A: number; B: number; C: number }
     .is('resolvido_at', null)
   if (error) return { A: 0, B: 0, C: 0 }
   const acc = { A: 0, B: 0, C: 0 }
-  for (const r of data ?? []) {
+  const rows = (data ?? []) as RowClasseValor[]
+  for (const r of rows) {
     acc[r.status_classe as keyof typeof acc] += Number(r.valor_em_aberto)
   }
   return acc
@@ -62,7 +72,8 @@ async function getTotalRecuperadoNoMes(): Promise<number> {
     .gte('data_pagamento', start)
     .lte('data_pagamento', end)
   if (error) return 0
-  return (data ?? []).reduce((sum, r) => sum + Number(r.valor_pago), 0)
+  const rows = (data ?? []) as RowValorPago[]
+  return rows.reduce((sum, r) => sum + Number(r.valor_pago), 0)
 }
 
 async function getRankingGestores(): Promise<RankingItem[]> {
@@ -73,18 +84,20 @@ async function getRankingGestores(): Promise<RankingItem[]> {
     .select('client_id, valor_pago')
     .gte('data_pagamento', start)
     .lte('data_pagamento', end)
-  if (errP || !pagamentos?.length) return []
+  const pagamentosRows = (pagamentos ?? []) as RowPagamentoClient[]
+  if (errP || !pagamentosRows.length) return []
 
-  const clientIds = [...new Set(pagamentos.map((p) => p.client_id))]
+  const clientIds = [...new Set(pagamentosRows.map((p) => p.client_id))]
   const { data: clients, error: errC } = await supabase
     .from('clients_inadimplencia')
     .select('id, gestor')
     .in('id', clientIds)
-  if (errC || !clients?.length) return []
+  const clientsRows = (clients ?? []) as RowClientGestor[]
+  if (errC || !clientsRows.length) return []
 
   const byGestor = new Map<string, { valor: number; qty: number }>()
-  for (const p of pagamentos) {
-    const client = clients.find((c) => c.id === p.client_id)
+  for (const p of pagamentosRows) {
+    const client = clientsRows.find((c) => c.id === p.client_id)
     const gestor = client?.gestor ?? 'Não informado'
     const cur = byGestor.get(gestor) ?? { valor: 0, qty: 0 }
     cur.valor += Number(p.valor_pago)
@@ -102,9 +115,10 @@ async function getValorEmAbertoPorGestor(): Promise<RankingItem[]> {
     .from('clients_inadimplencia')
     .select('gestor, valor_em_aberto')
     .is('resolvido_at', null)
-  if (error || !data?.length) return []
+  const rows = (data ?? []) as { gestor: string | null; valor_em_aberto: number }[]
+  if (error || !rows.length) return []
   const byGestor = new Map<string, number>()
-  for (const r of data) {
+  for (const r of rows) {
     const nome = r.gestor ?? 'Não informado'
     byGestor.set(nome, (byGestor.get(nome) ?? 0) + Number(r.valor_em_aberto))
   }
@@ -118,9 +132,10 @@ async function getValorEmAbertoPorArea(): Promise<RankingItem[]> {
     .from('clients_inadimplencia')
     .select('area, valor_em_aberto')
     .is('resolvido_at', null)
-  if (error || !data?.length) return []
+  const rows = (data ?? []) as { area: string | null; valor_em_aberto: number }[]
+  if (error || !rows.length) return []
   const byArea = new Map<string, number>()
-  for (const r of data) {
+  for (const r of rows) {
     const nome = r.area ?? 'Não informado'
     byArea.set(nome, (byArea.get(nome) ?? 0) + Number(r.valor_em_aberto))
   }
@@ -137,18 +152,20 @@ async function getRankingAreas(): Promise<RankingItem[]> {
     .select('client_id, valor_pago')
     .gte('data_pagamento', start)
     .lte('data_pagamento', end)
-  if (errP || !pagamentos?.length) return []
+  const pagamentosRows = (pagamentos ?? []) as RowPagamentoClient[]
+  if (errP || !pagamentosRows.length) return []
 
-  const clientIds = [...new Set(pagamentos.map((p) => p.client_id))]
+  const clientIds = [...new Set(pagamentosRows.map((p) => p.client_id))]
   const { data: clients, error: errC } = await supabase
     .from('clients_inadimplencia')
     .select('id, area')
     .in('id', clientIds)
-  if (errC || !clients?.length) return []
+  const clientsRows = (clients ?? []) as RowClientArea[]
+  if (errC || !clientsRows.length) return []
 
   const byArea = new Map<string, { valor: number; qty: number }>()
-  for (const p of pagamentos) {
-    const client = clients.find((c) => c.id === p.client_id)
+  for (const p of pagamentosRows) {
+    const client = clientsRows.find((c) => c.id === p.client_id)
     const area = client?.area ?? 'Não informado'
     const cur = byArea.get(area) ?? { valor: 0, qty: 0 }
     cur.valor += Number(p.valor_pago)
@@ -166,9 +183,10 @@ async function getTempoMedioRecuperacao(): Promise<number | null> {
     .from('clients_inadimplencia')
     .select('created_at, resolvido_at')
     .not('resolvido_at', 'is', null)
-  if (errR || !resolvidos?.length) return null
+  const rows = (resolvidos ?? []) as RowResolvido[]
+  if (errR || !rows.length) return null
 
-  const dias: number[] = resolvidos.map((r) => {
+  const dias: number[] = rows.map((r) => {
     const created = new Date(r.created_at).getTime()
     const resolved = new Date(r.resolvido_at!).getTime()
     return Math.round((resolved - created) / (1000 * 60 * 60 * 24))

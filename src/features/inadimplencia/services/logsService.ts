@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { InadimplenciaTipoAcao } from '@/lib/database.types'
+import type { Database, InadimplenciaTipoAcao } from '@/lib/database.types'
+
+type LogInsert = Database['public']['Tables']['inadimplencia_logs']['Insert']
 
 export interface CreateLogInput {
   client_id: string
@@ -11,15 +13,16 @@ export interface CreateLogInput {
 
 export const logsService = {
   async create(input: CreateLogInput) {
+    const row: LogInsert = {
+      client_id: input.client_id,
+      tipo: input.tipo ?? 'outro',
+      descricao: input.descricao ?? null,
+      usuario: input.usuario ?? null,
+      data_acao: input.data_acao ?? new Date().toISOString(),
+    }
     const { data, error } = await supabase
       .from('inadimplencia_logs')
-      .insert({
-        client_id: input.client_id,
-        tipo: input.tipo ?? 'outro',
-        descricao: input.descricao ?? null,
-        usuario: input.usuario ?? null,
-        data_acao: input.data_acao ?? new Date().toISOString(),
-      })
+      .insert(row as never)
       .select()
       .single()
     return { data, error }

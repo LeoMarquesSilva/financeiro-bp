@@ -67,8 +67,12 @@ function buildListQuery(params: {
 
 const EXPORT_PAGE_SIZE = 10000
 
-function escapeCsvCell(value: string | number | null | undefined): string {
-  const s = value == null ? '' : String(value)
+function escapeCsvCell(value: string | number | null | undefined | Record<string, unknown> | object): string {
+  const s = value == null
+    ? ''
+    : typeof value === 'object'
+      ? JSON.stringify(value)
+      : String(value)
   const needsQuotes = /[",\n\r]/.test(s)
   return needsQuotes ? `"${s.replace(/"/g, '""')}"` : s
 }
@@ -116,7 +120,7 @@ export const inadimplenciaService = {
       'contato',
     ] as const
     const lines = rows.map((r) =>
-      keyMap.map((k) => escapeCsvCell(r[k] ?? '')).join(';')
+      keyMap.map((k) => escapeCsvCell(r[k] as string | number | null | undefined | Record<string, unknown>)).join(';')
     )
     return ['\uFEFF', headerLine, ...lines].join('\r\n')
   },
@@ -149,13 +153,14 @@ export const inadimplenciaService = {
 
     const { data: client, error } = await supabase
       .from('clients_inadimplencia')
-      .insert(insert)
+      .insert(insert as never)
       .select()
       .single()
 
     if (!error && client) {
+      const inserted = client as { id: string }
       await logsService.create({
-        client_id: client.id,
+        client_id: inserted.id,
         descricao: 'Cliente inserido no módulo de inadimplência',
         tipo: 'outro',
       })
@@ -187,7 +192,7 @@ export const inadimplenciaService = {
 
     const { data, error } = await supabase
       .from('clients_inadimplencia')
-      .update(update)
+      .update(update as never)
       .eq('id', id)
       .select()
       .single()
@@ -198,7 +203,7 @@ export const inadimplenciaService = {
   async marcarComoResolvido(id: string) {
     const { data, error } = await supabase
       .from('clients_inadimplencia')
-      .update({ resolvido_at: new Date().toISOString() })
+      .update({ resolvido_at: new Date().toISOString() } as never)
       .eq('id', id)
       .select()
       .single()

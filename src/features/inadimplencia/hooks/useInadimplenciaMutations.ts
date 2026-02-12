@@ -54,7 +54,10 @@ export function useInadimplenciaMutations() {
       })
       return updateError ? { data: null, error: updateError } : { data: {}, error: null }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (
+      _: unknown,
+      variables: { clientId: string; form: RegistroAcaoForm; usuario?: string }
+    ) => {
       invalidate()
       queryClient.invalidateQueries({ queryKey: ['inadimplencia', 'logs', variables.clientId] })
     },
@@ -75,7 +78,10 @@ export function useInadimplenciaMutations() {
         forma_pagamento: form.forma_pagamento ?? null,
         observacao: form.observacao ?? null,
       }),
-    onSuccess: (_, variables) => {
+    onSuccess: (
+      _: unknown,
+      variables: { clientId: string; form: RegistroPagamentoForm }
+    ) => {
       invalidate()
       queryClient.invalidateQueries({ queryKey: ['inadimplencia', 'pagamentos', variables.clientId] })
     },

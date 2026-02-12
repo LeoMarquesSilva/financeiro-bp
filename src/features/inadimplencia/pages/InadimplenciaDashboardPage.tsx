@@ -2,6 +2,7 @@ import { formatCurrency } from '@/shared/utils/format'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
 import { Avatar } from '@/shared/components/Avatar'
+import type { RankingItem } from '../services/dashboardService'
 import { useDashboard } from '../hooks/useDashboard'
 import { useTeamMembers } from '../hooks/useTeamMembers'
 
@@ -102,7 +103,7 @@ export function InadimplenciaDashboardPage() {
             <p className="text-sm text-slate-500">Nenhum dado no mês.</p>
           ) : (
             <ul className="space-y-2">
-              {rankingGestores.slice(0, 8).map((item, i) => {
+              {rankingGestores.slice(0, 8).map((item: RankingItem, i: number) => {
                 const member = resolveTeamMember(item.nome, teamMembers)
                 return (
                   <li key={item.nome} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-3 py-2">
@@ -133,7 +134,7 @@ export function InadimplenciaDashboardPage() {
           <p className="text-sm text-slate-500">Nenhum dado no mês.</p>
         ) : (
           <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {rankingAreas.slice(0, 9).map((item, i) => (
+            {rankingAreas.slice(0, 9).map((item: RankingItem, i: number) => (
               <li key={item.nome} className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2">
                 <span className="text-sm font-medium text-slate-700">
                   {i + 1}. {item.nome}
@@ -152,7 +153,7 @@ export function InadimplenciaDashboardPage() {
             <p className="text-sm text-slate-500">Nenhum dado.</p>
           ) : (
             <div className="space-y-2">
-              {valorEmAbertoPorGestor.slice(0, 8).map((item) => {
+              {valorEmAbertoPorGestor.slice(0, 8).map((item: RankingItem) => {
                 const member = resolveTeamMember(item.nome, teamMembers)
                 const displayName = member ? `${member.full_name} (${member.area})` : item.nome
                 return (
@@ -196,7 +197,7 @@ export function InadimplenciaDashboardPage() {
             <p className="text-sm text-slate-500">Nenhum dado.</p>
           ) : (
             <div className="space-y-2">
-              {valorEmAbertoPorArea.slice(0, 8).map((item) => (
+              {valorEmAbertoPorArea.slice(0, 8).map((item: RankingItem) => (
                 <div key={item.nome} className="flex items-center gap-2">
                   <span className="w-32 truncate text-sm font-medium text-slate-700">{item.nome}</span>
                   <div className="flex-1 overflow-hidden rounded bg-slate-100">

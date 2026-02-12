@@ -1,6 +1,5 @@
 import { formatCurrency } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
-import { AlertTriangle, CalendarClock } from 'lucide-react'
 
 interface KPIsHeaderProps {
   totalEmAberto: number
@@ -22,12 +21,8 @@ export function KPIsHeader({
   totalClasseB,
   totalClasseC,
   taxaRecuperacao,
-  followUpVencidos = 0,
-  followUpAVencer = 0,
   loading,
 }: KPIsHeaderProps) {
-  const hasFollowUpAlerts = followUpVencidos > 0 || followUpAVencer > 0
-
   if (loading) {
     return (
       <div className="mb-4 flex flex-wrap gap-4">

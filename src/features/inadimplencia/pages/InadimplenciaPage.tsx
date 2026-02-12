@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { ClientInadimplenciaRow } from '../types/inadimplencia.types'
 import { useFiltros } from '../hooks/useFiltros'
 import { useInadimplencia } from '../hooks/useInadimplencia'
 import { useDashboard } from '../hooks/useDashboard'
@@ -32,10 +33,7 @@ export function InadimplenciaPage() {
     listagemParams.gestor,
     listagemParams.area,
     listagemParams.classe,
-    listagemParams.valorMin,
-    listagemParams.valorMax,
-    listagemParams.diasMin,
-    listagemParams.diasMax,
+    listagemParams.prioridade,
     listagemParams.orderBy,
     listagemParams.orderDesc,
   ])
@@ -176,7 +174,7 @@ export function InadimplenciaPage() {
       {!loading && clientes.length > 0 && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {clientes.map((client) => (
+            {clientes.map((client: ClientInadimplenciaRow) => (
               <InadimplenciaCard
                 key={client.id}
                 client={client}
@@ -228,7 +226,7 @@ export function InadimplenciaPage() {
       />
       <ConfirmarResolverModal
         open={!!resolvingId}
-        clientName={resolvingId ? clientes.find((c) => c.id === resolvingId)?.razao_social : null}
+        clientName={resolvingId ? clientes.find((c: ClientInadimplenciaRow) => c.id === resolvingId)?.razao_social : null}
         onClose={() => setResolvingId(null)}
         onConfirm={handleConfirmarResolver}
         loading={marcarResolvido.isPending}

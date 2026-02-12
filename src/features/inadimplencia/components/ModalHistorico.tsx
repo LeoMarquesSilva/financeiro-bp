@@ -3,6 +3,7 @@ import { formatDate } from '@/shared/utils/format'
 import { ModalBase } from './ModalBase'
 import { logsService } from '../services/logsService'
 import { TIPOS_ACAO } from '@/shared/constants/inadimplencia'
+import type { InadimplenciaLogRow } from '@/lib/database.types'
 
 interface ModalHistoricoProps {
   open: boolean
@@ -32,7 +33,7 @@ export function ModalHistorico({ open, onClose, clientId }: ModalHistoricoProps)
       )}
       {logs && logs.length > 0 && (
         <ul className="space-y-3">
-          {logs.map((log) => (
+          {logs.map((log: InadimplenciaLogRow) => (
             <li
               key={log.id}
               className="rounded border border-slate-200 bg-slate-50 p-3 text-sm"

@@ -1,4 +1,7 @@
 import { supabase } from '@/lib/supabaseClient'
+import type { Database } from '@/lib/database.types'
+
+type PagamentoInsert = Database['public']['Tables']['inadimplencia_pagamentos']['Insert']
 
 export interface CreatePagamentoInput {
   client_id: string
@@ -10,15 +13,16 @@ export interface CreatePagamentoInput {
 
 export const pagamentosService = {
   async create(input: CreatePagamentoInput) {
+    const row: PagamentoInsert = {
+      client_id: input.client_id,
+      valor_pago: input.valor_pago,
+      data_pagamento: input.data_pagamento,
+      forma_pagamento: input.forma_pagamento ?? null,
+      observacao: input.observacao ?? null,
+    }
     const { data, error } = await supabase
       .from('inadimplencia_pagamentos')
-      .insert({
-        client_id: input.client_id,
-        valor_pago: input.valor_pago,
-        data_pagamento: input.data_pagamento,
-        forma_pagamento: input.forma_pagamento ?? null,
-        observacao: input.observacao ?? null,
-      })
+      .insert(row as never)
       .select()
       .single()
     return { data, error }
