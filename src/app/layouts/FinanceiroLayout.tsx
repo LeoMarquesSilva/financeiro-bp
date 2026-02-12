@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { clearAuthenticated } from '@/lib/auth'
 
 const LOGO_BRANCO = '/team/logo-branco.png'
 
@@ -68,8 +69,38 @@ export function FinanceiroLayout() {
             <NavItems />
           </nav>
 
+          {/* Logout (desktop) */}
+          <div className="hidden flex-shrink-0 md:block">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                clearAuthenticated()
+                window.location.href = '/'
+              }}
+              className="gap-2 text-slate-300 hover:bg-slate-700/50 hover:text-white"
+            >
+              <LogOut className="h-4 w-4" />
+              Sair
+            </Button>
+          </div>
+
           {/* Botão menu mobile */}
-          <div className="flex flex-1 justify-end md:hidden">
+          <div className="flex flex-1 justify-end gap-2 md:hidden">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                clearAuthenticated()
+                window.location.href = '/'
+              }}
+              className="h-10 w-10 text-slate-300 hover:bg-slate-700/50 hover:text-white"
+              aria-label="Sair"
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -97,6 +128,17 @@ export function FinanceiroLayout() {
           >
             <div className="container mx-auto max-w-[1400px] space-y-2 py-3 px-8">
               <NavItems onLinkClick={closeMobileMenu} />
+              <button
+                type="button"
+                onClick={() => {
+                  clearAuthenticated()
+                  window.location.href = '/'
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white"
+              >
+                <LogOut className="h-4 w-4" />
+                Sair
+              </button>
             </div>
           </div>
         )}
