@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Env (nunca subir chaves)
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Planilhas com dados sensíveis (opcional: remova se quiser versionar)
+# CDI_20260211.xlsx
+# DADOS.xlsx

@@ -1,0 +1,110 @@
+import { useState } from 'react'
+import { Outlet, NavLink } from 'react-router-dom'
+import { Menu, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
+const LOGO_BRANCO = '/team/logo-branco.png'
+
+const navLinks = [
+  { to: '/financeiro/inadimplencia', label: 'Inadimplência' },
+  { to: '/financeiro/inadimplencia/dashboard', label: 'Dashboard' },
+]
+
+function NavItems({ onLinkClick }: { onLinkClick?: () => void }) {
+  return (
+    <>
+      {navLinks.map(({ to, label }) => (
+        <NavLink
+          key={to}
+          to={to}
+          onClick={onLinkClick}
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-800',
+              isActive
+                ? 'bg-slate-700 text-white shadow-md'
+                : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+            )
+          }
+        >
+          {label}
+        </NavLink>
+      ))}
+    </>
+  )
+}
+
+export function FinanceiroLayout() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const closeMobileMenu = () => setMobileMenuOpen(false)
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="sticky top-0 z-50 w-full bg-slate-800 shadow-lg">
+        {/* Barra superior (faixa fina no topo) */}
+        <div className="h-1 w-full bg-slate-600" aria-hidden />
+
+        <div className="container mx-auto flex h-16 max-w-[1400px] items-center px-8">
+          {/* Logo principal */}
+          <NavLink
+            to="/financeiro/inadimplencia"
+            className="relative mr-6 flex shrink-0 items-center focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-800 rounded"
+            aria-label="Ir para Inadimplência"
+          >
+            <img
+              src={LOGO_BRANCO}
+              alt="Bismarchi Pires - Sociedade de Advogados"
+              className="relative h-12 w-auto max-w-[200px] object-contain object-left"
+            />
+          </NavLink>
+
+          {/* Navegação desktop */}
+          <nav
+            className="hidden flex-1 items-center justify-center gap-2 md:flex"
+            aria-label="Menu financeiro"
+          >
+            <NavItems />
+          </nav>
+
+          {/* Botão menu mobile */}
+          <div className="flex flex-1 justify-end md:hidden">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setMobileMenuOpen((o) => !o)}
+              className="h-10 w-10 text-slate-300 hover:bg-slate-700/50 hover:text-white"
+              aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Menu mobile (painel expandido) */}
+        {mobileMenuOpen && (
+          <div
+            className="border-t border-slate-700/50 bg-slate-800/98 backdrop-blur-md shadow-lg md:hidden"
+            role="dialog"
+            aria-label="Menu de navegação"
+          >
+            <div className="container mx-auto max-w-[1400px] space-y-2 py-3 px-8">
+              <NavItems onLinkClick={closeMobileMenu} />
+            </div>
+          </div>
+        )}
+      </header>
+
+      <main className="container mx-auto max-w-[1400px] p-8">
+        <Outlet />
+      </main>
+    </div>
+  )
+}

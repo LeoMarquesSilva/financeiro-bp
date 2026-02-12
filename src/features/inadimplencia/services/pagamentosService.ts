@@ -1,0 +1,35 @@
+import { supabase } from '@/lib/supabaseClient'
+
+export interface CreatePagamentoInput {
+  client_id: string
+  valor_pago: number
+  data_pagamento: string
+  forma_pagamento?: string | null
+  observacao?: string | null
+}
+
+export const pagamentosService = {
+  async create(input: CreatePagamentoInput) {
+    const { data, error } = await supabase
+      .from('inadimplencia_pagamentos')
+      .insert({
+        client_id: input.client_id,
+        valor_pago: input.valor_pago,
+        data_pagamento: input.data_pagamento,
+        forma_pagamento: input.forma_pagamento ?? null,
+        observacao: input.observacao ?? null,
+      })
+      .select()
+      .single()
+    return { data, error }
+  },
+
+  async listByClientId(clientId: string) {
+    const { data, error } = await supabase
+      .from('inadimplencia_pagamentos')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('data_pagamento', { ascending: false })
+    return { data: data ?? [], error }
+  },
+}
