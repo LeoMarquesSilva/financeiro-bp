@@ -151,12 +151,12 @@ export function ClienteDetailSheet({
   })
   const linkedEscritorio =
     client?.cliente_escritorio_id != null
-      ? clientesEscritorio.find((ce) => ce.id === client.cliente_escritorio_id)
+      ? clientesEscritorio.find((ce: ClienteEscritorioRow) => ce.id === client.cliente_escritorio_id)
       : null
   const grupoCliente = linkedEscritorio?.grupo_cliente ?? null
   const empresasDoGrupo =
     grupoCliente != null && grupoCliente !== ''
-      ? clientesEscritorio.filter((ce) => (ce.grupo_cliente ?? '') === grupoCliente)
+      ? clientesEscritorio.filter((ce: ClienteEscritorioRow) => (ce.grupo_cliente ?? '') === grupoCliente)
       : []
 
   const { data: horasPorGrupoMap } = useQuery({

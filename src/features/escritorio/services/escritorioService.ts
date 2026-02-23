@@ -61,7 +61,7 @@ export async function fetchClientesEscritorio(): Promise<ClienteEscritorioRow[]>
   const { data, error } = await supabase
     .from('clientes_escritorio')
     .select('id, grupo_cliente, razao_social, cnpj, qtd_processos, horas_total, horas_por_ano, created_at, updated_at')
-    .order('grupo_cliente', { ascending: true, nullFirst: true })
+    .order('grupo_cliente', { ascending: true, nullsFirst: true })
     .order('razao_social', { ascending: true })
     .limit(MAX_ROWS_ESCRITORIO)
   if (error) throw error
