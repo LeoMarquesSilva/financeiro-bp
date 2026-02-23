@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "shadcn": {
+      "command": "npx",
+      "args": ["shadcn@latest", "mcp"]
+    },
+    "lucide-icons": {
+      "command": "npx",
+      "args": ["-y", "lucide-icons-mcp", "--stdio"]
+    },
+    "page-design-guide": {
+      "command": "npx",
+      "args": ["-y", "page-design-guide-mcp"]
+    }
+  }
+}

@@ -3,6 +3,11 @@
  * Uso: node scripts/import-cdi-xlsx.cjs [caminho/para/CDI_20260211.xlsx]
  *
  * Requer .env com VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.
+ *
+ * Mapeamento CDI_20260211.xlsx (QUADRO RESUMO):
+ * - Coluna "Observações" / "Observações gerais" → observacoes_gerais
+ * - Coluna "Plano de Ação" → ultima_providencia (Providência)
+ * Providência e datas também podem vir da aba Planilha1 (preferência sobre Plano de Ação).
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
@@ -164,6 +169,7 @@ async function main() {
   const idxClassif = headerResumo.findIndex((h) => /classifica/i.test(h));
   const idxValorMensal = headerResumo.findIndex((h) => /valor mensal/i.test(h));
   const idxSaldo = headerResumo.findIndex((h) => /saldo em aberto/i.test(h));
+  // Observações gerais → observacoes_gerais; Plano de Ação → ultima_providencia (Providência)
   const idxObs = headerResumo.findIndex((h) => /observa/i.test(h));
   const idxPlano = headerResumo.findIndex((h) => /plano de a/i.test(h));
   const idxResp = headerResumo.findIndex((h) => /respons/i.test(h));
@@ -208,9 +214,10 @@ async function main() {
     const saldoAberto = parseValorMonetario(row[idxSaldo]);
     const classificacao = mapClassificacao(row[idxClassif]);
     const responsavel = idxResp >= 0 ? (row[idxResp] || '').toString().trim() || null : null;
-    const observacoes = idxObs >= 0 ? (row[idxObs] || '').toString().trim() || null : null;
+    // Observações gerais (coluna "Observações" / "Observações gerais") → observacoes_gerais
+    const observacoesGerais = idxObs >= 0 ? (row[idxObs] || '').toString().trim() || null : null;
+    // Plano de Ação → Providência (ultima_providencia)
     const planoAcao = idxPlano >= 0 ? (row[idxPlano] || '').toString().trim() || null : null;
-    const ultimaProvidenciaText = [observacoes, planoAcao].filter(Boolean).join(' | ') || null;
 
     const clientSheet = findClientSheet(workbook, razaoSocial);
     const dataVencimento = clientSheet ? getUltimaDataVencimentoAberto(clientSheet) : null;
@@ -219,7 +226,8 @@ async function main() {
     const statusClasse = classificacao;
 
     const p1 = planilha1Rows.find((r) => r.cliente && (razaoSocial.toUpperCase().startsWith(r.cliente.toUpperCase()) || r.cliente.toUpperCase().startsWith(razaoSocial.split(' ')[0])));
-    const ultimaProvidencia = (p1 && p1.providencia) ? p1.providencia : ultimaProvidenciaText;
+    // Providência: preferir Planilha1 (providencia) senão Plano de Ação do QUADRO RESUMO
+    const ultimaProvidencia = (p1 && p1.providencia) ? p1.providencia : planoAcao;
     const dataProvidencia = p1 && p1.dataProvidencia ? p1.dataProvidencia : null;
     const followUp = p1 && p1.followUp ? p1.followUp : null;
     const dataFollowUp = p1 && p1.dataFollowUp ? p1.dataFollowUp : null;
@@ -227,6 +235,12 @@ async function main() {
     const gestorEmail = mapResponsavelToEmail(responsavel);
     const valorMensalRaw = idxValorMensal >= 0 ? row[idxValorMensal] : null;
     const valorMensal = valorMensalRaw != null && valorMensalRaw !== '' ? parseValorMonetario(valorMensalRaw) : null;
+
+    // Vincular ao cliente da base do escritório (clientes_escritorio) por razão social
+    let clienteEscritorioId = null;
+    const { data: ceRow } = await supabase.from('clientes_escritorio').select('id').eq('razao_social', razaoSocial.trim()).limit(1).maybeSingle();
+    if (ceRow && ceRow.id) clienteEscritorioId = ceRow.id;
+
     const payload = {
       razao_social: razaoSocial,
       status_classe: statusClasse,
@@ -235,10 +249,12 @@ async function main() {
       valor_mensal: valorMensal === 0 ? null : valorMensal,
       data_vencimento: dataVencimento,
       gestor: gestorEmail || responsavel || null,
+      observacoes_gerais: observacoesGerais || null,
       ultima_providencia: ultimaProvidencia || null,
       data_providencia: dataProvidencia || null,
       follow_up: followUp || null,
       data_follow_up: dataFollowUp || null,
+      cliente_escritorio_id: clienteEscritorioId,
     };
 
     const { data: existing } = await supabase.from('clients_inadimplencia').select('id').eq('razao_social', razaoSocial).is('resolvido_at', null).limit(1).maybeSingle();

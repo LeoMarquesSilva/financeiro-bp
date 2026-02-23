@@ -11,12 +11,10 @@ export const tipoAcaoSchema = z.enum(['ligacao', 'email', 'reuniao', 'proposta',
 export const clienteInadimplenciaFormSchema = z.object({
   razao_social: z.string().min(1, 'Razão social é obrigatória'),
   cnpj: z.string().optional().transform((s) => (s ? s.replace(/\D/g, '') : undefined)),
-  contato: z.string().optional(),
   gestor: z.string().optional(),
   area: z.string().optional(),
   status_classe: classeSchema.default('A'),
   valor_em_aberto: z.coerce.number().min(0, 'Valor deve ser >= 0'),
-  data_vencimento: z.string().min(1, 'Data de vencimento é obrigatória'),
 })
 export type ClienteInadimplenciaForm = z.infer<typeof clienteInadimplenciaFormSchema>
 

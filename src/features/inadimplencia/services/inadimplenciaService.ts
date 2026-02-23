@@ -11,11 +11,11 @@ type ClientUpdate = Database['public']['Tables']['clients_inadimplencia']['Updat
 export interface CreateClienteInput {
   razao_social: string
   cnpj?: string | null
-  contato?: string | null
+  /** Vincula ao cliente da base do escritório (clientes_escritorio). */
+  cliente_escritorio_id?: string | null
   gestor?: string | null
   area?: string | null
   valor_em_aberto: number
-  data_vencimento: string
   /** Classificação definida na reunião (caso a caso). Se não informada, usa sugestão por dias. */
   status_classe?: InadimplenciaClasse
   created_by?: string | null
@@ -135,17 +135,17 @@ export const inadimplenciaService = {
   },
 
   async create(input: CreateClienteInput) {
-    const diasEmAberto = calcularDiasEmAberto(input.data_vencimento)
+    const diasEmAberto = 0
     const statusClasse = input.status_classe ?? calcularClasse(diasEmAberto)
 
     const insert: ClientInsert = {
       razao_social: input.razao_social,
       cnpj: input.cnpj ?? null,
-      contato: input.contato ?? null,
+      cliente_escritorio_id: input.cliente_escritorio_id ?? null,
       gestor: input.gestor ?? null,
       area: input.area ?? null,
       valor_em_aberto: input.valor_em_aberto,
-      data_vencimento: input.data_vencimento,
+      data_vencimento: null,
       dias_em_aberto: diasEmAberto,
       status_classe: statusClasse,
       created_by: input.created_by ?? null,
@@ -169,7 +169,7 @@ export const inadimplenciaService = {
     return { data: client, error }
   },
 
-  async update(id: string, input: Partial<CreateClienteInput> & { status_classe?: InadimplenciaClasse; ultima_providencia?: string; data_providencia?: string; follow_up?: string; data_follow_up?: string }) {
+  async update(id: string, input: Partial<CreateClienteInput> & { status_classe?: InadimplenciaClasse; cliente_escritorio_id?: string | null; observacoes_gerais?: string; ultima_providencia?: string; data_providencia?: string; follow_up?: string; data_follow_up?: string }) {
     let diasEmAberto: number | undefined
     if (input.data_vencimento !== undefined) {
       diasEmAberto = calcularDiasEmAberto(input.data_vencimento)
@@ -178,6 +178,7 @@ export const inadimplenciaService = {
     const update: ClientUpdate = {}
     if (input.razao_social !== undefined) update.razao_social = input.razao_social
     if (input.cnpj !== undefined) update.cnpj = input.cnpj
+    if (input.cliente_escritorio_id !== undefined) update.cliente_escritorio_id = input.cliente_escritorio_id
     if (input.contato !== undefined) update.contato = input.contato
     if (input.gestor !== undefined) update.gestor = input.gestor
     if (input.area !== undefined) update.area = input.area
@@ -185,6 +186,7 @@ export const inadimplenciaService = {
     if (input.data_vencimento !== undefined) update.data_vencimento = input.data_vencimento
     if (diasEmAberto !== undefined) update.dias_em_aberto = diasEmAberto
     if (input.status_classe !== undefined) update.status_classe = input.status_classe
+    if (input.observacoes_gerais !== undefined) update.observacoes_gerais = input.observacoes_gerais
     if (input.ultima_providencia !== undefined) update.ultima_providencia = input.ultima_providencia
     if (input.data_providencia !== undefined) update.data_providencia = input.data_providencia
     if (input.follow_up !== undefined) update.follow_up = input.follow_up

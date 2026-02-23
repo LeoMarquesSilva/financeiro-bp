@@ -1,9 +1,13 @@
 /**
  * Mapeia DADOS.xlsx com os clientes da tabela clients_inadimplencia (CDI).
- * Atualiza: qtd_processos, horas_total, horas_por_ano (timesheet dos advogados).
+ * Atualiza: qtd_processos, horas_total, horas_por_ano (timesheet dos advogados)
+ * e cliente_escritorio_id (vínculo com clientes_escritorio).
+ *
+ * O nome do cliente em DADOS.xlsx é o nome correto: atualizamos razao_social
+ * em clients_inadimplencia para ficar igual ao DADOS e usamos para vincular a clientes_escritorio.
  *
  * Estrutura esperada em DADOS.xlsx (primeira aba):
- * - Coluna Cliente / Razão Social / Cliente/Grupo (nome para casar com razao_social)
+ * - Coluna Cliente / Razão Social / Cliente/Grupo (nome correto para Supabase)
  * - Coluna QT PASTAS = quantidade de processos (qtd_processos)
  * - Coluna QT HORAS = horas total (horas_total; formato Excel duração ou "HH:MM:SS")
  * - Colunas de horas por ano: "2024", "2023", etc. (opcional)
@@ -103,6 +107,24 @@ function matchCliente(nomePlanilha, razaoSocial) {
   return false;
 }
 
+/** Nomes de grupo com casamento explícito (ex.: nome exato "Grupo Disep" na base). */
+const GRUPO_NOME_EXATO = [
+  { planilha: /^grupo\s+disep$/i, grupoOuRazao: /^grupo\s+disep$/i, nomePadrao: 'Grupo Disep' },
+];
+function matchGrupoExato(nomePlanilha, grupoOuRazao) {
+  if (!nomePlanilha || !grupoOuRazao) return false;
+  const p = String(nomePlanilha).trim();
+  const g = String(grupoOuRazao).trim();
+  return GRUPO_NOME_EXATO.some(
+    (r) => r.planilha.test(p) && (r.grupoOuRazao.test(g) || g.toUpperCase() === 'DISEP')
+  );
+}
+function nomePadraoGrupoExato(nomePlanilha) {
+  const p = String(nomePlanilha || '').trim();
+  const reg = GRUPO_NOME_EXATO.find((r) => r.planilha.test(p));
+  return reg ? reg.nomePadrao : null;
+}
+
 async function main() {
   const url = process.env.VITE_SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY;
@@ -161,7 +183,7 @@ async function main() {
 
   const { data: clientes, error: errClientes } = await supabase
     .from('clients_inadimplencia')
-    .select('id, razao_social')
+    .select('id, razao_social, cliente_escritorio_id')
     .is('resolvido_at', null);
 
   if (errClientes) {
@@ -169,9 +191,22 @@ async function main() {
     process.exit(1);
   }
 
+  const { data: escritorioList, error: errEscritorio } = await supabase
+    .from('clientes_escritorio')
+    .select('id, razao_social, grupo_cliente');
+
+  if (errEscritorio) {
+    console.error('Erro ao buscar clientes_escritorio:', errEscritorio.message);
+    process.exit(1);
+  }
+
+  const listaEscritorio = escritorioList || [];
+  const listaInadimplentes = clientes || [];
+
   let updated = 0;
   let skipped = 0;
   let notFound = 0;
+  let vinculados = 0;
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -191,38 +226,73 @@ async function main() {
     const horasPorAnoJson =
       Object.keys(horasPorAno).length > 0 ? horasPorAno : null;
 
-    const client = (clientes || []).find((c) => matchCliente(nomePlanilha, c.razao_social));
-    if (!client) {
+    // Nome em DADOS pode ser grupo ou empresa: casar com clientes_escritorio (grupo_cliente ou razao_social)
+    const candidatosEscritorio = listaEscritorio.filter(
+      (ce) =>
+        matchCliente(nomePlanilha, ce.razao_social) ||
+        matchCliente(nomePlanilha, ce.grupo_cliente || '') ||
+        matchGrupoExato(nomePlanilha, ce.grupo_cliente || '') ||
+        matchGrupoExato(nomePlanilha, ce.razao_social)
+    );
+
+    // Inadimplentes que batem com esta linha do DADOS: por nome direto, por vínculo já existente, ou por nome de empresa do grupo
+    const idsEscritorioCandidatos = new Set(candidatosEscritorio.map((ce) => ce.id));
+    const inadimplentesParaAtualizar = listaInadimplentes.filter((c) => {
+      if (matchCliente(nomePlanilha, c.razao_social)) return true;
+      if (matchGrupoExato(nomePlanilha, c.razao_social)) return true;
+      if (c.cliente_escritorio_id && idsEscritorioCandidatos.has(c.cliente_escritorio_id)) return true;
+      const ceLinked = listaEscritorio.find((ce) => ce.id === c.cliente_escritorio_id);
+      if (ceLinked && (matchCliente(nomePlanilha, ceLinked.grupo_cliente || '') || matchCliente(nomePlanilha, ceLinked.razao_social)))
+        return true;
+      if (ceLinked && (matchGrupoExato(nomePlanilha, ceLinked.grupo_cliente || '') || matchGrupoExato(nomePlanilha, ceLinked.razao_social)))
+        return true;
+      return candidatosEscritorio.some((ce) => matchCliente(c.razao_social, ce.razao_social));
+    });
+
+    if (inadimplentesParaAtualizar.length === 0) {
       notFound++;
       console.log('Cliente não encontrado na base:', nomePlanilha);
       continue;
     }
 
-    const payload = {};
-    if (qtdProcessos != null) payload.qtd_processos = Math.max(0, Math.round(qtdProcessos));
-    if (horasTotal != null) payload.horas_total = Math.max(0, horasTotal);
-    if (horasPorAnoJson != null) payload.horas_por_ano = horasPorAnoJson;
+    const nomeCorreto = nomePadraoGrupoExato(nomePlanilha) || nomePlanilha.trim();
+    const nomeSemGrupo = stripGrupo(nomePlanilha).trim();
+    let clienteEscritorioId = null;
+    const ceExato = listaEscritorio.find((ce) => ce.razao_social === nomeCorreto || ce.razao_social === nomeSemGrupo || (ce.grupo_cliente && (ce.grupo_cliente === nomeCorreto || ce.grupo_cliente === nomeSemGrupo)));
+    if (ceExato) clienteEscritorioId = ceExato.id;
+    else if (candidatosEscritorio.length > 0) clienteEscritorioId = candidatosEscritorio[0].id;
 
-    if (Object.keys(payload).length === 0) {
-      skipped++;
-      continue;
-    }
+    for (const client of inadimplentesParaAtualizar) {
+      let idEscritorio = clienteEscritorioId;
+      if (!idEscritorio && client.cliente_escritorio_id) idEscritorio = client.cliente_escritorio_id;
+      const melhorCe = candidatosEscritorio.find((ce) => matchCliente(client.razao_social, ce.razao_social));
+      if (melhorCe) idEscritorio = melhorCe.id;
 
-    const { error } = await supabase
-      .from('clients_inadimplencia')
-      .update(payload)
-      .eq('id', client.id);
+      const payload = { razao_social: nomeCorreto };
+      if (qtdProcessos != null) payload.qtd_processos = Math.max(0, Math.round(qtdProcessos));
+      if (horasTotal != null) payload.horas_total = Math.max(0, horasTotal);
+      if (horasPorAnoJson != null) payload.horas_por_ano = horasPorAnoJson;
+      if (idEscritorio != null) payload.cliente_escritorio_id = idEscritorio;
 
-    if (error) {
-      console.error('Erro ao atualizar', client.razao_social, error.message);
-    } else {
-      updated++;
-      console.log('OK:', client.razao_social, payload);
+      const { error } = await supabase
+        .from('clients_inadimplencia')
+        .update(payload)
+        .eq('id', client.id);
+
+      if (error) {
+        console.error('Erro ao atualizar', client.razao_social, error.message);
+      } else {
+        updated++;
+        if (idEscritorio) vinculados++;
+        const nomeAlterado = client.razao_social !== nomeCorreto ? ` (era: ${client.razao_social})` : '';
+        console.log('OK:', nomeCorreto + nomeAlterado, payload);
+      }
     }
   }
 
   console.log('\n--- Resumo ---');
   console.log('Atualizados:', updated);
+  console.log('Vinculados a clientes_escritorio:', vinculados);
   console.log('Ignorados (sem nome ou sem dados):', skipped);
   console.log('Não encontrados na base:', notFound);
 }

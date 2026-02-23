@@ -12,9 +12,9 @@ export function InadimplenciaDashboardPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard Estratégico</h1>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="space-y-6 px-6 py-6 sm:px-8 sm:py-8">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Dashboard Estratégico</h1>
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="h-32 animate-pulse rounded-lg bg-slate-200" />
           ))}
@@ -25,8 +25,8 @@ export function InadimplenciaDashboardPage() {
 
   if (error || !data) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard Estratégico</h1>
+      <div className="space-y-6 px-6 py-6 sm:px-8 sm:py-8">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Dashboard Estratégico</h1>
         <p className="rounded bg-red-50 p-3 text-sm text-red-700">
           Erro ao carregar o dashboard. Verifique a conexão com o Supabase.
         </p>
@@ -44,12 +44,15 @@ export function InadimplenciaDashboardPage() {
   } = data
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Dashboard Estratégico</h1>
+    <div className="space-y-8 px-6 py-6 sm:px-8 sm:py-8">
+      <header className="border-b border-slate-200 pb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Dashboard Estratégico</h1>
+        <p className="mt-1 text-sm text-slate-500">Visão geral e indicadores de inadimplência</p>
+      </header>
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-800">Resumo</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">Total em aberto</p>
             <p className="text-2xl font-bold text-slate-900">{formatCurrency(totais.totalEmAberto)}</p>

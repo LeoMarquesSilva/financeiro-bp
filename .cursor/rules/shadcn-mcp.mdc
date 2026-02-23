@@ -1,0 +1,58 @@
+---
+description: Como usar o MCP do shadcn para buscar, instalar e documentar componentes de UI
+alwaysApply: true
+---
+
+# Uso do MCP shadcn no projeto
+
+O projeto usa o **MCP shadcn** (Model Context Protocol) no Cursor. Use-o sempre que for trabalhar em frontend/UI para garantir componentes alinhados ao design system.
+
+## O que o MCP oferece
+
+- **Registries**: Listar e buscar em registries configurados em `components.json` (ex.: `@shadcn`).
+- **Busca**: `search_items_in_registries` — buscar componentes por nome ou descrição (ex.: "button", "dialog", "form").
+- **Detalhes**: `view_items_in_registries` — ver nome, descrição, tipo e conteúdo dos itens.
+- **Exemplos**: `get_item_examples_from_registries` — obter código de uso/demos (ex.: "button-demo", "card example").
+- **Instalação**: `get_add_command_for_items` — comando CLI para adicionar itens ao projeto (ex.: `npx shadcn@latest add button card`).
+- **Checklist**: `get_audit_checklist` — conferir se novos componentes/arquivos estão corretos após mudanças.
+
+## Fluxo recomendado
+
+1. **Antes de criar UI nova**: Buscar no registry (`search_items_in_registries`) por componente ou padrão (ex.: "form", "table", "dropdown").
+2. **Antes de implementar**: Ver detalhes (`view_items_in_registries`) e exemplos (`get_item_examples_from_registries`) para seguir a API e o estilo.
+3. **Para adicionar componente**: Usar `get_add_command_for_items` e rodar o comando no projeto (ou orientar o usuário a rodar).
+4. **Após adicionar/criar componente**: Rodar `get_audit_checklist` para validar.
+
+## Quando usar as ferramentas
+
+- **get_project_registries**: Ver quais registries estão em `components.json` (retorna erro se não existir; considerar `npx shadcn@latest init`).
+- **list_items_in_registries** / **search_items_in_registries**: Descobrir componentes/blocks disponíveis.
+- **view_items_in_registries**: Ver implementação e dependências de um item.
+- **get_item_examples_from_registries**: Pegar exemplos prontos (ex.: "card-demo", "form example").
+- **get_add_command_for_items**: Obter comando para instalar itens (ex.: `npx shadcn@latest add button`).
+- **get_audit_checklist**: Revisar novos componentes/arquivos gerados.
+
+## Configuração do projeto
+
+- MCP já configurado em `.cursor/mcp.json` com `npx shadcn@latest mcp`.
+- O registry padrão **shadcn/ui** funciona sem config extra.
+- Registries extras (ex.: `@acme`) vão em `components.json` em `registries`. Se o projeto ainda não tiver `components.json`, rodar `npx shadcn@latest init` na raiz.
+
+## Exemplos de prompts (para o usuário)
+
+- "Crie um formulário de contato usando componentes do registry shadcn."
+- "Adicione os componentes button, dialog e card ao projeto."
+- "Mostre todos os componentes disponíveis no registry shadcn."
+- "Encontre um exemplo de login form no registry shadcn."
+
+## Troubleshooting
+
+- **MCP não responde**: Verificar rede, reiniciar Cursor, conferir se o servidor shadcn está habilitado nas configurações MCP (bolinha verde).
+- **Sem tools/prompts**: View → Output → dropdown "MCP: project-*" para logs; reabilitar o servidor; em último caso `npx clear-npx-cache`.
+- **Falha ao instalar componente**: Verificar permissões, dependências do projeto e se `components.json` existe e está válido.
+- **Registry inacessível**: Para registries privados, usar `components.json` com `headers` e variáveis em `.env.local` (ex.: `REGISTRY_TOKEN`).
+
+## Referências
+
+- Documentação MCP shadcn: https://ui.shadcn.com/docs/mcp
+- Registry e namespaces: https://ui.shadcn.com/docs/registry

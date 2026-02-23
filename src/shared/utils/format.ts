@@ -29,6 +29,24 @@ export function parseCnpjMasked(masked: string): string {
   return masked.replace(/\D/g, '')
 }
 
+/** Converte string em formato BRL (ex: "1.234,56" ou "R$ 1.234,56") para número. */
+export function parseCurrencyBr(value: string): number {
+  if (!value || typeof value !== 'string') return 0
+  const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '')
+  const n = Number.parseFloat(normalized)
+  return Number.isFinite(n) ? n : 0
+}
+
+/** Formata valor digitado para exibição em BRL (ex: "123456" → "1.234,56"). Aceita string parcial. */
+export function formatCurrencyInput(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 0) return ''
+  const cents = digits.slice(-2).padStart(2, '0')
+  const intPart = digits.slice(0, -2) || '0'
+  const withThousands = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${withThousands},${cents}`
+}
+
 /**
  * Formata horas decimais como "X horas e Y min" (ex.: 1932,5 → "1.932 horas e 30 min").
  */
@@ -47,4 +65,20 @@ export function formatHorasDuracao(horasDecimais: number): string {
   }
   if (min > 0) return `${min} min`
   return '0 h'
+}
+
+/**
+ * Converte horas decimais (total_horas do banco) para HH:MM:SS.
+ * Regra única: valor é sempre em horas decimais (ex.: 194,55 → "194:33:00", 50,5 → "50:30:00").
+ * Assim todos os grupos são tratados igual; valores absurdos (dados antigos errados) continuarão
+ * grandes até o TimeSheets ser re-sincronizado com a coluna em decimal correta.
+ */
+export function formatHorasHHMMSS(horasDecimais: number): string {
+  if (!Number.isFinite(horasDecimais) || horasDecimais < 0) return '0:00:00'
+  const totalSegundos = Math.round(horasDecimais * 3600)
+  const h = Math.floor(totalSegundos / 3600)
+  const resto = totalSegundos % 3600
+  const min = Math.floor(resto / 60)
+  const seg = resto % 60
+  return `${h}:${String(min).padStart(2, '0')}:${String(seg).padStart(2, '0')}`
 }

@@ -24,13 +24,13 @@ export function EmptyState({ hasActiveFilters, onNovoCliente, onLimparFiltros }:
           <p className="text-sm text-slate-500">
             {hasActiveFilters
               ? 'Tente alterar os filtros ou limpar para ver todos os clientes.'
-              : 'Cadastre um novo cliente inadimplente para começar.'}
+              : 'Registre uma inadimplência selecionando um cliente da base para começar.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Button type="button" onClick={onNovoCliente} className="gap-2">
             <Plus className="h-4 w-4" />
-            Novo Cliente
+            Nova inadimplência
           </Button>
           {hasActiveFilters && (
             <Button type="button" variant="outline" onClick={onLimparFiltros} className="gap-2">

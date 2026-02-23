@@ -1,3 +1,4 @@
+import { Card, CardContent } from '@/components/ui/card'
 import { formatCurrency } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 
@@ -12,8 +13,67 @@ interface KPIsHeaderProps {
   loading?: boolean
 }
 
-const kpiCardBase =
-  'min-w-[140px] rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm'
+const cardBase = 'min-w-[140px]'
+
+const kpiVariants = {
+  default: '',
+  blue: 'border-blue-200/80 bg-blue-50/50',
+  amber: 'border-amber-200/80 bg-amber-50/50',
+  red: 'border-red-200/80 bg-red-50/50',
+} as const
+
+const labelVariants = {
+  default: 'text-slate-500',
+  blue: 'text-blue-700',
+  amber: 'text-amber-700',
+  red: 'text-red-700',
+} as const
+
+const valueVariants = {
+  default: 'text-slate-900',
+  blue: 'text-blue-900',
+  amber: 'text-amber-900',
+  red: 'text-red-900',
+} as const
+
+function KPICard({
+  label,
+  value,
+  variant = 'default',
+}: {
+  label: string
+  value: string
+  variant?: keyof typeof kpiVariants
+}) {
+  return (
+    <Card className={cn(cardBase, kpiVariants[variant])}>
+      <CardContent className="p-4 pt-4">
+        <p
+          className={cn(
+            'text-xs font-medium uppercase tracking-wider',
+            labelVariants[variant]
+          )}
+        >
+          {label}
+        </p>
+        <p className={cn('mt-1 text-xl font-bold', valueVariants[variant])}>
+          {value}
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function KPICardSkeleton() {
+  return (
+    <Card className={cn(cardBase, 'h-20 overflow-hidden')}>
+      <CardContent className="h-full p-4">
+        <div className="h-3 w-20 animate-pulse rounded bg-slate-200" />
+        <div className="mt-2 h-6 w-24 animate-pulse rounded bg-slate-200" />
+      </CardContent>
+    </Card>
+  )
+}
 
 export function KPIsHeader({
   totalEmAberto,
@@ -27,10 +87,7 @@ export function KPIsHeader({
     return (
       <div className="mb-4 flex flex-wrap gap-4">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div
-            key={i}
-            className={cn(kpiCardBase, 'h-20 animate-pulse bg-slate-100')}
-          />
+          <KPICardSkeleton key={i} />
         ))}
       </div>
     )
@@ -38,52 +95,31 @@ export function KPIsHeader({
 
   return (
     <div className="mb-4 flex flex-wrap gap-4">
-      <div className={kpiCardBase}>
-        <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-          Total em aberto
-        </p>
-        <p className="mt-1 text-xl font-bold text-slate-900">
-          {formatCurrency(totalEmAberto)}
-        </p>
-      </div>
-      <div
-        className={cn(kpiCardBase, 'border-blue-200/80 bg-blue-50/50')}
-      >
-        <p className="text-xs font-medium uppercase tracking-wider text-blue-700">
-          Classe A
-        </p>
-        <p className="mt-1 text-xl font-bold text-blue-900">
-          {formatCurrency(totalClasseA)}
-        </p>
-      </div>
-      <div
-        className={cn(kpiCardBase, 'border-amber-200/80 bg-amber-50/50')}
-      >
-        <p className="text-xs font-medium uppercase tracking-wider text-amber-700">
-          Classe B
-        </p>
-        <p className="mt-1 text-xl font-bold text-amber-900">
-          {formatCurrency(totalClasseB)}
-        </p>
-      </div>
-      <div
-        className={cn(kpiCardBase, 'border-red-200/80 bg-red-50/50')}
-      >
-        <p className="text-xs font-medium uppercase tracking-wider text-red-700">
-          Classe C
-        </p>
-        <p className="mt-1 text-xl font-bold text-red-900">
-          {formatCurrency(totalClasseC)}
-        </p>
-      </div>
-      <div className={kpiCardBase}>
-        <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-          Taxa de recuperação
-        </p>
-        <p className="mt-1 text-xl font-bold text-slate-900">
-          {taxaRecuperacao.toFixed(1)}%
-        </p>
-      </div>
+      <KPICard
+        label="Total em aberto"
+        value={formatCurrency(totalEmAberto)}
+        variant="default"
+      />
+      <KPICard
+        label="Classe A"
+        value={formatCurrency(totalClasseA)}
+        variant="blue"
+      />
+      <KPICard
+        label="Classe B"
+        value={formatCurrency(totalClasseB)}
+        variant="amber"
+      />
+      <KPICard
+        label="Classe C"
+        value={formatCurrency(totalClasseC)}
+        variant="red"
+      />
+      <KPICard
+        label="Taxa de recuperação"
+        value={`${taxaRecuperacao.toFixed(1)}%`}
+        variant="default"
+      />
     </div>
   )
 }

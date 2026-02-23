@@ -44,6 +44,7 @@ export function ModalEditarCliente({ open, onClose, client, onSuccess }: ModalEd
   const [dataVencimento, setDataVencimento] = useState(
     client.data_vencimento ? client.data_vencimento.slice(0, 10) : ''
   )
+  const [observacoesGerais, setObservacoesGerais] = useState(client.observacoes_gerais ?? '')
   const [ultimaProvidencia, setUltimaProvidencia] = useState(client.ultima_providencia ?? '')
   const [dataProvidencia, setDataProvidencia] = useState(
     client.data_providencia ? client.data_providencia.slice(0, 10) : ''
@@ -65,6 +66,7 @@ export function ModalEditarCliente({ open, onClose, client, onSuccess }: ModalEd
       setStatusClasse(client.status_classe)
       setValorEmAberto(String(client.valor_em_aberto ?? 0))
       setDataVencimento(client.data_vencimento ? client.data_vencimento.slice(0, 10) : '')
+      setObservacoesGerais(client.observacoes_gerais ?? '')
       setUltimaProvidencia(client.ultima_providencia ?? '')
       setDataProvidencia(client.data_providencia ? client.data_providencia.slice(0, 10) : '')
       setFollowUp(client.follow_up ?? '')
@@ -86,6 +88,7 @@ export function ModalEditarCliente({ open, onClose, client, onSuccess }: ModalEd
         status_classe: statusClasse,
         valor_em_aberto: Number(valorEmAberto) || 0,
         data_vencimento: dataVencimento || undefined,
+        observacoes_gerais: observacoesGerais || undefined,
         ultima_providencia: ultimaProvidencia || undefined,
         data_providencia: dataProvidencia || undefined,
         follow_up: followUp || undefined,
@@ -192,6 +195,15 @@ export function ModalEditarCliente({ open, onClose, client, onSuccess }: ModalEd
             type="date"
             value={dataVencimento}
             onChange={(e) => setDataVencimento(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Observações gerais</Label>
+          <Textarea
+            value={observacoesGerais}
+            onChange={(e) => setObservacoesGerais(e.target.value)}
+            placeholder="Observações gerais do registro"
+            rows={2}
           />
         </div>
         <div className="space-y-2">
