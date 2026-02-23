@@ -20,7 +20,7 @@ export function EscritorioPage() {
   const [selectedCliente, setSelectedCliente] = useState<ClienteEscritorioRow | null>(null)
   const { grupos, loading, fetching, error, refetch } = useGruposEscritorio()
 
-  const filtrado = busca.trim() ? grupos.filter((g) => matchBusca(g, busca)) : grupos
+  const filtrado = busca.trim() ? grupos.filter((g: GrupoEscritorio) => matchBusca(g, busca)) : grupos
 
   return (
     <div className="space-y-6 px-6 py-6 sm:px-8 sm:py-8">
@@ -84,7 +84,7 @@ export function EscritorioPage() {
 
       {!loading && !error && filtrado.length > 0 && (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {filtrado.map((grupo) => (
+          {filtrado.map((grupo: GrupoEscritorio) => (
             <GrupoEscritorioCard
               key={grupo.grupo_cliente}
               grupo={grupo}

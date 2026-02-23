@@ -30,7 +30,7 @@ export function ModalNovaProvidencia({ open, onClose, clientId, onSuccess }: Mod
       return
     }
     setSubmitting(true)
-    const { data, error } = await providenciaService.create(clientId, t)
+    const { error } = await providenciaService.create(clientId, t)
     setSubmitting(false)
     if (error) {
       toast.error('Erro ao criar providência')

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { formatCurrency, formatCnpj, formatDate, formatHorasDuracao } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
-import type { ClientInadimplenciaRow, InadimplenciaClasse, InadimplenciaLogRow } from '@/lib/database.types'
+import type { ClientInadimplenciaRow, InadimplenciaClasse, InadimplenciaLogRow, ClienteEscritorioRow, ContagemCiPorGrupoRow, ProvidenciaFollowUpRow } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
 import { getPrioridade } from '../services/prioridade'
@@ -101,12 +101,12 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
     queryFn: fetchClientesEscritorio,
   })
   const linkedEscritorio = client.cliente_escritorio_id
-    ? clientesEscritorio.find((ce) => ce.id === client.cliente_escritorio_id)
+    ? clientesEscritorio.find((ce: ClienteEscritorioRow) => ce.id === client.cliente_escritorio_id)
     : null
   const grupoCliente = linkedEscritorio?.grupo_cliente ?? null
   const empresasDoGrupo =
     grupoCliente != null && grupoCliente !== ''
-      ? clientesEscritorio.filter((ce) => (ce.grupo_cliente ?? '') === grupoCliente)
+      ? clientesEscritorio.filter((ce: ClienteEscritorioRow) => (ce.grupo_cliente ?? '') === grupoCliente)
       : []
 
   const { data: horasPorGrupoMap } = useQuery({
@@ -152,8 +152,8 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
   })
   const contagemCi =
     grupoCliente && contagemList.length > 0
-      ? contagemList.find((c) => c.grupo_cliente.trim() === grupoCliente.trim()) ??
-        contagemList.find((c) => normalizarNomeGrupo(c.grupo_cliente) === normalizarNomeGrupo(grupoCliente))
+      ? contagemList.find((c: ContagemCiPorGrupoRow) => c.grupo_cliente.trim() === grupoCliente.trim()) ??
+        contagemList.find((c: ContagemCiPorGrupoRow) => normalizarNomeGrupo(c.grupo_cliente) === normalizarNomeGrupo(grupoCliente))
       : null
 
   const prioridade: PrioridadeTipo = getPrioridade(client.dias_em_aberto, Number(client.valor_em_aberto))
@@ -227,7 +227,7 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
             <section className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 shadow-sm">
               <p className="text-xs font-medium text-slate-500">Empresas</p>
               <ul className="mt-1 max-h-20 overflow-y-auto list-inside list-disc space-y-0.5 text-xs text-slate-700">
-                {empresasDoGrupo.map((ce) => (
+                {empresasDoGrupo.map((ce: ClienteEscritorioRow) => (
                   <li key={ce.id} className="truncate" title={ce.razao_social}>
                     {ce.razao_social}
                   </li>
@@ -413,7 +413,7 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
                 {/* Follow-ups da última providência (novo modelo) */}
                 {followUpsUltima.length > 0 && (
                   <ul className="mt-2 space-y-1 border-t border-slate-200/80 pt-2">
-                    {followUpsUltima.slice(0, 3).map((fu) => (
+                    {followUpsUltima.slice(0, 3).map((fu: ProvidenciaFollowUpRow) => (
                       <li key={fu.id} className="flex items-start gap-1.5 text-xs">
                         <span className="shrink-0 font-medium text-slate-600">
                           {PROVIDENCIA_FOLLOW_UP_TIPO_LABEL[fu.tipo]}:

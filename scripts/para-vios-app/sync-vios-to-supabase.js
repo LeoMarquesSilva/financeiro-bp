@@ -6,6 +6,11 @@
  * Sincroniza TODOS os clientes do escritório (VIOS Processos Completo) para a
  * tabela clientes_escritorio no Supabase. Não usa clients_inadimplencia.
  *
+ * Funções exportadas:
+ *   runSync(filePath)                      — Processos Completo → clientes_escritorio + contagem_ci_por_grupo
+ *   runSyncTimeSheets(filePath, options)   — TimeSheets → timesheets
+ *   runSyncRelatorioFinanceiro(filePath)   — CSV/Excel Relatório Financeiro → relatorio_financeiro
+ *
  * No vios-app:
  *   1. npm install dotenv xlsx @supabase/supabase-js
  *   2. .env com: VITE_SUPABASE_URL=... e VITE_SUPABASE_ANON_KEY=...
@@ -483,4 +488,171 @@ export async function runSyncTimeSheets(filePath, options = {}) {
 
   console.log('[Sync Supabase] timesheets | Inseridos:', inserted, '| Período substituído:', !!deleted, '| Erros:', errors);
   return { inserted, deleted: deleted ? 1 : 0, errors };
+}
+
+// ========== Relatório Financeiro (CSV: CI Título, CI Parcela, Data Vencimento, Nro Título, Cliente, Descrição, Valor, Situação, Data Baixa) ==========
+const RELATORIO_FINANCEIRO_COLUMNS = {
+  ci_titulo: ['ci título', 'ci titulo', 'ci_titulo'],
+  ci_parcela: ['ci parcela', 'ci_parcela'],
+  data_vencimento: ['data vencimento', 'data_vencimento'],
+  nro_titulo: ['nro título', 'nro titulo', 'nro_titulo', 'numero titulo'],
+  cliente: ['cliente'],
+  descricao: ['descrição', 'descricao'],
+  valor: ['valor'],
+  situacao: ['situação', 'situacao'],
+  data_baixa: ['data baixa', 'data_baixa'],
+};
+
+/** Normaliza cabeçalho para match (lowercase, sem acentos). */
+function normalizeFinanceiroHeader(cell) {
+  return (cell != null ? String(cell).toLowerCase().trim().normalize('NFD').replace(/\u0300-\u036f/g, '') : '');
+}
+
+function buildFinanceiroColumnIndexes(headerRow) {
+  const normalized = headerRow.map(normalizeFinanceiroHeader);
+  const idx = {};
+  for (const [key, aliases] of Object.entries(RELATORIO_FINANCEIRO_COLUMNS)) {
+    idx[key] = normalized.findIndex((h) => aliases.some((a) => h.includes(a) || a.includes(h)));
+  }
+  return idx;
+}
+
+/** Data DD/MM/YYYY → YYYY-MM-DD. 00/00/0000 ou vazio → null. */
+function parseDateBR(val) {
+  if (val == null || val === '') return null;
+  const s = String(val).trim();
+  if (!s || s === '00/00/0000') return null;
+  const m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(s);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+
+/** Valor BR (9.939,84) → número. */
+function parseValorBR(val) {
+  if (val == null || val === '') return null;
+  if (typeof val === 'number' && !Number.isNaN(val)) return val;
+  const s = String(val).trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(s);
+  return Number.isNaN(n) ? null : n;
+}
+
+/**
+ * Lê CSV (separador ;) ou Excel e retorna { headerRow, dataRows }.
+ * Aceita: caminho de arquivo (.csv ou .xlsx) OU string com conteúdo CSV (para uso com download em memória).
+ */
+function readRelatorioFinanceiroFile(filePathOrContent) {
+  const isRawCsv =
+    typeof filePathOrContent === 'string' &&
+    (filePathOrContent.includes('\n') || filePathOrContent.includes('\r'));
+  if (isRawCsv) {
+    const raw = filePathOrContent;
+    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (lines.length < 2) throw new Error('CSV do relatório financeiro sem dados (cabeçalho + pelo menos uma linha).');
+    const headerRow = lines[0].split(';').map((c) => c.trim());
+    const dataRows = [];
+    for (let i = 1; i < lines.length; i++) {
+      dataRows.push(lines[i].split(';').map((c) => c.trim()));
+    }
+    return { headerRow, dataRows };
+  }
+  const filePath = filePathOrContent;
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.csv') {
+    const raw = fs.readFileSync(filePath, { encoding: 'utf8' });
+    return readRelatorioFinanceiroFile(raw);
+  }
+  const workbook = XLSX.readFile(filePath, { cellDates: true, raw: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) throw new Error('Nenhuma aba encontrada no arquivo.');
+  const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+  if (data.length < 2) throw new Error('Planilha sem dados (cabeçalho + pelo menos uma linha).');
+  const headerRow = data[0].map((c) => (c != null ? String(c).trim() : ''));
+  const dataRows = data.slice(1);
+  return { headerRow, dataRows };
+}
+
+/**
+ * Sincroniza o relatório de faturamento (CSV ou Excel) para a tabela relatorio_financeiro.
+ * Usa upsert por (ci_titulo, ci_parcela). Colunas: CI Título, CI Parcela, Data Vencimento, Nro Título, Cliente, Descrição, Valor, Situação, Data Baixa.
+ * @param {string} filePathOrCsvContent - Caminho do arquivo (.csv ou .xlsx) OU string com o conteúdo CSV (ex.: após axios.get em memória).
+ * @returns {Promise<{ upserted: number, errors: number }>}
+ */
+export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
+  const url = process.env.VITE_SUPABASE_URL;
+  const key = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error('Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no .env do vios-app.');
+  }
+
+  const sourceLabel =
+    typeof filePathOrCsvContent === 'string' && (filePathOrCsvContent.includes('\n') || filePathOrCsvContent.includes('\r'))
+      ? '(CSV em memória)'
+      : filePathOrCsvContent;
+  console.log('[Sync Supabase] Relatório Financeiro:', sourceLabel);
+  let headerRow;
+  let dataRows;
+  try {
+    const out = readRelatorioFinanceiroFile(filePathOrCsvContent);
+    headerRow = out.headerRow;
+    dataRows = out.dataRows;
+  } catch (err) {
+    throw new Error('Erro ao abrir/processar o relatório financeiro: ' + err.message);
+  }
+
+  const idx = buildFinanceiroColumnIndexes(headerRow);
+  if (idx.ci_titulo < 0 || idx.ci_parcela < 0 || idx.data_vencimento < 0 || idx.nro_titulo < 0 || idx.cliente < 0 || idx.valor < 0 || idx.situacao < 0) {
+    throw new Error(
+      'Relatório Financeiro: colunas obrigatórias não encontradas (CI Título, CI Parcela, Data Vencimento, Nro Título, Cliente, Valor, Situação). Verifique o cabeçalho.'
+    );
+  }
+
+  const rows = [];
+  for (const row of dataRows) {
+    const ciTitulo = idx.ci_titulo >= 0 ? parseInt(String(row[idx.ci_titulo] ?? '').replace(/\D/g, ''), 10) : NaN;
+    const ciParcela = idx.ci_parcela >= 0 ? parseInt(String(row[idx.ci_parcela] ?? '').replace(/\D/g, ''), 10) : NaN;
+    const dataVencimento = parseDateBR(idx.data_vencimento >= 0 ? row[idx.data_vencimento] : null);
+    const nroTitulo = idx.nro_titulo >= 0 ? String(row[idx.nro_titulo] ?? '').trim() : '';
+    const cliente = idx.cliente >= 0 ? String(row[idx.cliente] ?? '').trim() : '';
+    const valor = parseValorBR(idx.valor >= 0 ? row[idx.valor] : null);
+    const situacao = idx.situacao >= 0 ? String(row[idx.situacao] ?? 'ABERTO').trim().toUpperCase() || 'ABERTO';
+
+    if (Number.isNaN(ciTitulo) || Number.isNaN(ciParcela) || !dataVencimento || !nroTitulo || !cliente || valor == null) {
+      continue;
+    }
+
+    const descricao = idx.descricao >= 0 ? String(row[idx.descricao] ?? '').trim() || null : null;
+    const dataBaixa = parseDateBR(idx.data_baixa >= 0 ? row[idx.data_baixa] : null);
+
+    rows.push({
+      ci_titulo: ciTitulo,
+      ci_parcela: ciParcela,
+      data_vencimento: dataVencimento,
+      nro_titulo: nroTitulo,
+      cliente,
+      descricao,
+      valor: Math.round(valor * 100) / 100,
+      situacao: situacao === 'PAGO' ? 'PAGO' : 'ABERTO',
+      data_baixa: dataBaixa,
+    });
+  }
+
+  const supabase = createClient(url, key);
+  let upserted = 0;
+  let errors = 0;
+  const BATCH = 200;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const chunk = rows.slice(i, i + BATCH);
+    const { error } = await supabase
+      .from('relatorio_financeiro')
+      .upsert(chunk, { onConflict: 'ci_titulo,ci_parcela' });
+    if (error) {
+      console.error('[Sync Supabase] relatorio_financeiro upsert error:', error.message);
+      errors++;
+    } else {
+      upserted += chunk.length;
+    }
+  }
+
+  console.log('[Sync Supabase] relatorio_financeiro | Linhas processadas:', rows.length, '| Upserted:', upserted, '| Erros:', errors);
+  return { upserted, errors };
 }

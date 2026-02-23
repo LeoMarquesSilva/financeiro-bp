@@ -134,6 +134,10 @@ Há um exemplo completo em **`scripts/para-vios-app/TimeSheets-exemplo.cjs`** (e
 
 Por padrão, o sync **substitui** no Supabase todas as linhas cujas datas existem no arquivo (evita duplicar ao re-rodar). Para apenas inserir sem apagar: `runSyncTimeSheets(caminho, { replaceDateRange: false })`.
 
+## Relatório Financeiro (tabela `relatorio_financeiro`)
+
+O **Relatório de Parcelas** (financeiro) do VIOS pode ser baixado e sincronizado para a tabela **relatorio_financeiro**. Use o script **`FinanceiroRelatorioParcelas.js`** na pasta `scripts/para-vios-app/`: ele faz login no VIOS, gera o CSV do relatório de parcelas, baixa em memória e chama **`runSyncRelatorioFinanceiro(csvData)`** (aceita caminho de arquivo ou string com conteúdo CSV). Copie esse script e o `sync-vios-to-supabase.js` para a pasta do vios-app onde roda a automação (ex.: mesma pasta do FinanceiroRelatorioParcelas.js).
+
 ## Credenciais (nunca no código)
 
 - **No vios-app (servidor):** arquivo `.env` na raiz do vios-app (ou na pasta do script) com `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. VIOS (usuário/senha) só se a automação de download rodar lá.

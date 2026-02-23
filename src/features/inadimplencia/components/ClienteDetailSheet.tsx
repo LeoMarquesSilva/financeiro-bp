@@ -3,14 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
   SheetTitle,
   SheetDescription,
-  SheetFooter,
 } from '@/components/ui/sheet'
 import { formatCurrency, formatCnpj, formatDate, formatHorasDuracao } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
-import type { ClientInadimplenciaRow, InadimplenciaClasse, InadimplenciaLogRow } from '@/lib/database.types'
+import type { ClientInadimplenciaRow, InadimplenciaClasse, InadimplenciaLogRow, ClienteEscritorioRow, ContagemCiPorGrupoRow, ProvidenciaRow, ProvidenciaFollowUpRow } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
 import { getPrioridade } from '../services/prioridade'
@@ -93,7 +91,7 @@ function FollowUpsList({ providenciaId }: { providenciaId: string }) {
     <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Follow-ups</p>
       <ul className="space-y-2">
-        {list.map((fu) => (
+        {list.map((fu: ProvidenciaFollowUpRow) => (
           <li
             key={fu.id}
             className="flex flex-col gap-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
@@ -187,8 +185,8 @@ export function ClienteDetailSheet({
   })
   const contagemCi =
     grupoCliente && contagemList.length > 0
-      ? contagemList.find((c) => c.grupo_cliente.trim() === grupoCliente.trim()) ??
-        contagemList.find((c) => normalizarNomeGrupo(c.grupo_cliente) === normalizarNomeGrupo(grupoCliente))
+      ? contagemList.find((c: ContagemCiPorGrupoRow) => c.grupo_cliente.trim() === grupoCliente.trim()) ??
+        contagemList.find((c: ContagemCiPorGrupoRow) => normalizarNomeGrupo(c.grupo_cliente) === normalizarNomeGrupo(grupoCliente))
       : null
 
   const { data: providencias = [] } = useQuery({
@@ -308,7 +306,7 @@ export function ClienteDetailSheet({
               </div>
               <div className="space-y-4">
                 {providencias.length > 0 ? (
-                  providencias.map((p) => (
+                  providencias.map((p: ProvidenciaRow) => (
                     <div
                       key={p.id}
                       className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
@@ -399,7 +397,7 @@ export function ClienteDetailSheet({
                 <h3 className="mb-2 text-sm font-medium text-slate-600">Empresas</h3>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <ul className="max-h-32 overflow-y-auto list-inside list-disc space-y-0.5 text-sm text-slate-700">
-                    {empresasDoGrupo.map((ce) => (
+                    {empresasDoGrupo.map((ce: ClienteEscritorioRow) => (
                       <li key={ce.id}>{ce.razao_social}</li>
                     ))}
                   </ul>

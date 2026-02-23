@@ -169,7 +169,7 @@ export const inadimplenciaService = {
     return { data: client, error }
   },
 
-  async update(id: string, input: Partial<CreateClienteInput> & { status_classe?: InadimplenciaClasse; cliente_escritorio_id?: string | null; observacoes_gerais?: string; ultima_providencia?: string; data_providencia?: string; follow_up?: string; data_follow_up?: string }) {
+  async update(id: string, input: Partial<CreateClienteInput> & { status_classe?: InadimplenciaClasse; cliente_escritorio_id?: string | null; data_vencimento?: string | null; contato?: string | null; observacoes_gerais?: string; ultima_providencia?: string; data_providencia?: string; follow_up?: string; data_follow_up?: string }) {
     let diasEmAberto: number | undefined
     if (input.data_vencimento !== undefined) {
       diasEmAberto = calcularDiasEmAberto(input.data_vencimento)

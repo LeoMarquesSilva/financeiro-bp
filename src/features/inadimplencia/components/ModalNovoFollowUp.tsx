@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { providenciaService, PROVIDENCIA_FOLLOW_UP_TIPO_LABEL } from '../services/providenciaService'
-import type { ProvidenciaFollowUpTipo } from '@/lib/database.types'
+import type { ProvidenciaFollowUpTipo, ProvidenciaRow } from '@/lib/database.types'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { formatDate } from '@/shared/utils/format'
@@ -84,7 +84,7 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
               required
             >
               <option value="">Selecione…</option>
-              {providencias.map((p) => (
+              {providencias.map((p: ProvidenciaRow) => (
                 <option key={p.id} value={p.id}>
                   {p.texto.slice(0, 60)}
                   {p.texto.length > 60 ? '…' : ''} — {formatDate(p.created_at)}

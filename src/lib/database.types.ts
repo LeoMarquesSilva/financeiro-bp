@@ -96,7 +96,6 @@ export interface Database {
           created_at?: string
           updated_at?: string
           created_by?: string | null
-          cliente_escritorio_id?: string | null
         }
         Update: {
           id?: string
@@ -231,8 +230,26 @@ export interface Database {
           created_at: string
           updated_at: string
         }
-        Insert: unknown
-        Update: unknown
+        Insert: {
+          id?: string
+          grupo_cliente?: string | null
+          razao_social: string
+          cnpj?: string | null
+          qtd_processos?: number | null
+          horas_total?: number | null
+          horas_por_ano?: Record<string, number> | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          grupo_cliente?: string | null
+          razao_social?: string
+          cnpj?: string | null
+          qtd_processos?: number | null
+          horas_total?: number | null
+          horas_por_ano?: Record<string, number> | null
+          updated_at?: string
+        }
       }
       timesheets: {
         Row: {
@@ -266,6 +283,24 @@ export interface Database {
         Insert: unknown
         Update: unknown
       }
+      relatorio_financeiro: {
+        Row: {
+          id: string
+          ci_titulo: number
+          ci_parcela: number
+          data_vencimento: string
+          nro_titulo: string
+          cliente: string
+          descricao: string | null
+          valor: number
+          situacao: string
+          data_baixa: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: unknown
+        Update: unknown
+      }
       timesheets_resumo_por_grupo_ano: {
         Row: {
           grupo_cliente: string
@@ -283,6 +318,7 @@ export type ClientInadimplenciaRow = Database['public']['Tables']['clients_inadi
 export type ClienteEscritorioRow = Database['public']['Tables']['clientes_escritorio']['Row']
 export type TimesheetRow = Database['public']['Tables']['timesheets']['Row']
 export type ContagemCiPorGrupoRow = Database['public']['Tables']['contagem_ci_por_grupo']['Row']
+export type RelatorioFinanceiroRow = Database['public']['Tables']['relatorio_financeiro']['Row']
 export type ProvidenciaRow = Database['public']['Tables']['providencias']['Row']
 export type ProvidenciaFollowUpRow = Database['public']['Tables']['providencia_follow_ups']['Row']
 export type InadimplenciaLogRow = Database['public']['Tables']['inadimplencia_logs']['Row']

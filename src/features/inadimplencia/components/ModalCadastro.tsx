@@ -62,7 +62,7 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
   const selectedCliente: ClienteEscritorioRow | null = useMemo(() => {
     if (!form.razao_social) return null
     return clientes.find(
-      (c) =>
+      (c: ClienteEscritorioRow) =>
         c.razao_social === form.razao_social &&
         (c.cnpj ?? '') === (form.cnpj ?? '')
     ) ?? null
@@ -73,7 +73,7 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
     if (!q) return clientes.slice(0, 50)
     return clientes
       .filter(
-        (c) =>
+        (c: ClienteEscritorioRow) =>
           c.razao_social.toLowerCase().includes(q) ||
           (c.grupo_cliente?.toLowerCase().includes(q)) ||
           (c.cnpj?.replace(/\D/g, '').includes(q.replace(/\D/g, '')))
@@ -209,7 +209,7 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
                     </div>
                   ) : (
                     <ul className="py-1">
-                      {filteredClientes.map((c) => (
+                      {filteredClientes.map((c: ClienteEscritorioRow) => (
                         <li key={c.id}>
                           <button
                             type="button"

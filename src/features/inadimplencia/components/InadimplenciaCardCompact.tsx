@@ -46,9 +46,9 @@ interface InadimplenciaCardCompactProps {
 
 export function InadimplenciaCardCompact({
   client,
-  onMarcarResolvido,
-  onRefresh,
   onSelectClient,
+  onMarcarResolvido: _onMarcarResolvido,
+  onRefresh: _onRefresh,
 }: InadimplenciaCardCompactProps) {
   const { teamMembers } = useTeamMembers()
 
