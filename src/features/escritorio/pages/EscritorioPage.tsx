@@ -38,7 +38,6 @@ export function EscritorioPage() {
     totalPages,
     page,
     setPage,
-    pageSize,
     totais,
     loading,
     fetchingResumo,
@@ -142,12 +141,12 @@ export function EscritorioPage() {
         <div className="flex flex-wrap gap-1.5">
           {(
             [
-              { value: 'todos' as const, label: 'Todos', count: totalCount },
+              { value: 'todos' as const, label: 'Todos', icon: undefined, count: totalCount },
               { value: 'em_atraso' as const, label: 'Em atraso', icon: AlertTriangle, count: totais.countAtraso },
               { value: 'a_vencer' as const, label: 'A vencer', icon: CalendarClock, count: totais.countAVencer },
               { value: 'em_aberto' as const, label: 'Em aberto', icon: CircleDollarSign, count: totais.countAberto },
               { value: 'com_pago' as const, label: 'Com valor pago', icon: Banknote, count: totais.countPago },
-            ] as const
+            ]
           ).map(({ value, label, icon: Icon, count }) => (
             <Button
               key={value}

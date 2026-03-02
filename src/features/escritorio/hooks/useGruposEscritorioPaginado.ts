@@ -91,12 +91,12 @@ export function useGruposEscritorioPaginado(filtros: FiltrosEscritorio, pageSize
   const filtrado = useMemo(() => {
     if (!resumoData?.resumo) return []
     const b = filtros.busca.toLowerCase().trim()
-    let list = resumoData.resumo.filter((r) => {
+    let list = resumoData.resumo.filter((r: GrupoResumoRow) => {
       const nome = r.grupo_cliente === '' ? GRUPO_SEM_NOME : r.grupo_cliente
       return !b || nome.toLowerCase().includes(b)
     })
-    list = list.filter((r) => aplicaFiltroFinanceiroResumo(r, filtros.filtroFinanceiro))
-    list = list.filter((r) => passaFiltroMinimoResumo(r, filtros.filtroFinanceiro, filtros.minValor))
+    list = list.filter((r: GrupoResumoRow) => aplicaFiltroFinanceiroResumo(r, filtros.filtroFinanceiro))
+    list = list.filter((r: GrupoResumoRow) => passaFiltroMinimoResumo(r, filtros.filtroFinanceiro, filtros.minValor))
     return ordenaResumo(list, filtros.ordenacao)
   }, [resumoData?.resumo, filtros.busca, filtros.filtroFinanceiro, filtros.minValor, filtros.ordenacao])
 

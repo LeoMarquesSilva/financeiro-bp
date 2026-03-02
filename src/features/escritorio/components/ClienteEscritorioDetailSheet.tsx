@@ -65,12 +65,12 @@ export function ClienteEscritorioDetailSheet({
             </div>
           </section>
 
-          {cliente.cnpj && (
+          {cliente.cpf_cnpj && (
             <section className="mb-6">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                CNPJ
+                CNPJ/CPF
               </h4>
-              <p className="font-mono text-sm text-slate-700">{formatCnpj(cliente.cnpj)}</p>
+              <p className="font-mono text-sm text-slate-700">{formatCnpj(cliente.cpf_cnpj)}</p>
             </section>
           )}
 

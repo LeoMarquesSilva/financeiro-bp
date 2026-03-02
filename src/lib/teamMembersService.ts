@@ -29,16 +29,14 @@ export const teamMembersService = {
   },
 
   async create(input: CreateTeamMemberInput): Promise<TeamMember> {
-    const { data, error } = await supabase
-      .from('team_members')
-      .insert({
-        email: input.email.trim().toLowerCase(),
-        full_name: input.full_name.trim(),
-        area: input.area.trim(),
-        avatar_url: input.avatar_url?.trim() || null,
-      })
-      .select()
-      .single()
+    const insertData = {
+      email: input.email.trim().toLowerCase(),
+      full_name: input.full_name.trim(),
+      area: input.area.trim(),
+      avatar_url: input.avatar_url?.trim() || null,
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client infers Insert as never for some schemas
+    const { data, error } = await supabase.from('team_members').insert(insertData as any).select().single()
     if (error) throw error
     return data
   },

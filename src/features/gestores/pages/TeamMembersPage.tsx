@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { teamMembersService, type CreateTeamMemberInput } from '@/lib/teamMembersService'
+import type { TeamMember } from '@/lib/database.types'
 import { getTeamMember, getAreaTags } from '@/lib/teamAvatars'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,10 +31,11 @@ export function TeamMembersPage() {
   const [form, setForm] = useState(initialForm)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; full_name: string } | null>(null)
 
-  const { data: teamMembers = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['team_members'],
     queryFn: () => teamMembersService.list(),
   })
+  const teamMembers: TeamMember[] = data ?? []
 
   const createMutation = useMutation({
     mutationFn: (input: CreateTeamMemberInput) => teamMembersService.create(input),
@@ -59,9 +61,9 @@ export function TeamMembersPage() {
     },
   })
 
-  const areasFromDb = [...new Set(teamMembers.map((m) => m.area).filter(Boolean))]
+  const areasFromDb = [...new Set(teamMembers.map((m: TeamMember) => m.area).filter(Boolean))] as string[]
   const areasFromAvatars = getAreaTags()
-  const areas = [...new Set([...areasFromDb, ...areasFromAvatars])].sort((a, b) =>
+  const areas: string[] = [...new Set([...areasFromDb, ...areasFromAvatars])].sort((a: string, b: string) =>
     a.localeCompare(b, 'pt-BR')
   )
 
@@ -78,7 +80,7 @@ export function TeamMembersPage() {
       toast.error('E-mail inválido.')
       return
     }
-    if (teamMembers.some((m) => m.email.toLowerCase() === email)) {
+    if (teamMembers.some((m: TeamMember) => m.email.toLowerCase() === email)) {
       toast.error('Já existe um usuário com este e-mail.')
       return
     }
@@ -147,7 +149,7 @@ export function TeamMembersPage() {
                 onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))}
               />
               <datalist id="tm-areas">
-                {areas.map((a) => (
+                {areas.map((a: string) => (
                   <option key={a} value={a} />
                 ))}
               </datalist>
@@ -201,7 +203,7 @@ export function TeamMembersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {teamMembers.map((m) => {
+                  {teamMembers.map((m: TeamMember) => {
                     const avatarInfo = getTeamMember(m.email)
                     const avatarUrl = m.avatar_url || avatarInfo?.avatar
                     return (
@@ -214,7 +216,7 @@ export function TeamMembersPage() {
                             <AvatarFallback className="text-xs">
                               {m.full_name
                                 .split(/\s+/)
-                                .map((p) => p[0])
+                                .map((p: string) => p[0])
                                 .join('')
                                 .slice(0, 2)
                                 .toUpperCase()}

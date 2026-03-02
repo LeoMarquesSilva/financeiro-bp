@@ -245,8 +245,10 @@ export async function fetchRelatorioFinanceiroResumoPorCliente(): Promise<
     .select('pessoa_id, valor_aberto, valor_pago, valor_em_atraso, parcelas_abertas, parcelas_pagas, parcelas_em_atraso')
     .limit(10000)
   if (error) throw error
+  type FinanceiroRow = { pessoa_id: string; valor_aberto: number; valor_pago: number; valor_em_atraso: number; parcelas_abertas: number; parcelas_pagas: number; parcelas_em_atraso: number }
+  const rows = (data ?? []) as FinanceiroRow[]
   const map = new Map<string, { valorAberto: number; valorPago: number; valorEmAtraso: number; parcelasAbertas: number; parcelasPagas: number; parcelasEmAtraso: number }>()
-  for (const r of data ?? []) {
+  for (const r of rows) {
     const id = r.pessoa_id
     if (id) {
       map.set(id, {
