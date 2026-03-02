@@ -20,13 +20,18 @@ export const providenciaService = {
   },
 
   /** Cria uma providência (coordenadora na reunião do comitê). */
-  async create(clienteInadimplenciaId: string, texto: string, createdBy?: string | null) {
+  async create(
+    clienteInadimplenciaId: string,
+    texto: string,
+    options?: { dataProvidencia?: string | null; createdBy?: string | null }
+  ) {
     const { data, error } = await supabase
       .from('providencias')
       .insert({
         cliente_inadimplencia_id: clienteInadimplenciaId,
         texto,
-        created_by: createdBy ?? null,
+        data_providencia: options?.dataProvidencia ?? null,
+        created_by: options?.createdBy ?? null,
       } as never)
       .select()
       .single()
@@ -61,5 +66,23 @@ export const providenciaService = {
       .select()
       .single()
     return { data: data as ProvidenciaFollowUpRow | null, error }
+  },
+
+  /** Remove uma providência (e seus follow-ups por cascade). */
+  async deleteProvidencia(providenciaId: string) {
+    const { error } = await supabase
+      .from('providencias')
+      .delete()
+      .eq('id', providenciaId)
+    return { error }
+  },
+
+  /** Remove um follow-up. */
+  async deleteFollowUp(followUpId: string) {
+    const { error } = await supabase
+      .from('providencia_follow_ups')
+      .delete()
+      .eq('id', followUpId)
+    return { error }
   },
 }

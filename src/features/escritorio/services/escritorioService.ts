@@ -10,23 +10,34 @@ export interface HorasGrupo {
   porAno: Record<string, number>
 }
 
-/** Dados agregados por grupo para o card: empresas do grupo, contagem de CI e horas (timesheets). */
+export type FiltroFinanceiro = 'todos' | 'em_atraso' | 'a_vencer' | 'em_aberto' | 'com_pago'
+export type OrdenacaoEscritorio = 'nome' | 'atraso' | 'a_vencer' | 'aberto' | 'pago'
+
+/** Dados agregados por grupo para o card: empresas do grupo, contagem de CI, horas (timesheets) e totais do relatório financeiro. */
 export interface GrupoEscritorio {
   grupo_cliente: string
   empresas: ClienteEscritorioRow[]
   contagem: ContagemCiPorGrupoRow | null
   horasGrupo: number
   horasPorAno: Record<string, number>
+  /** Soma do valor em aberto (relatório financeiro) das empresas do grupo. */
+  valorAberto: number
+  /** Soma do valor pago (relatório financeiro) das empresas do grupo. */
+  valorPago: number
+  /** Soma do valor em atraso (parcelas abertas com vencimento < hoje). */
+  valorEmAtraso: number
 }
 
 /** Garante que valores numéricos vindos do Supabase (podem vir como string) sejam number. */
-function normalizeClienteRow(row: Record<string, unknown>): ClienteEscritorioRow {
+function normalizePessoaRow(row: Record<string, unknown>): ClienteEscritorioRow {
   return {
     ...row,
     id: String(row.id ?? ''),
     grupo_cliente: row.grupo_cliente != null ? String(row.grupo_cliente) : null,
-    razao_social: String(row.razao_social ?? ''),
-    cnpj: row.cnpj != null ? String(row.cnpj) : null,
+    nome: String(row.nome ?? ''),
+    cpf_cnpj: row.cpf_cnpj != null ? String(row.cpf_cnpj) : null,
+    categoria: row.categoria != null ? String(row.categoria) : null,
+    ci: row.ci != null ? String(row.ci) : null,
     qtd_processos: row.qtd_processos != null ? Number(row.qtd_processos) : null,
     horas_total: row.horas_total != null ? Number(row.horas_total) : null,
     horas_por_ano: (row.horas_por_ano as Record<string, number> | null) ?? null,
@@ -54,19 +65,131 @@ function normalizeContagemRow(row: Record<string, unknown>): ContagemCiPorGrupoR
   } as ContagemCiPorGrupoRow
 }
 
-/** Limite alto para não cortar dados (Supabase default é 1000). Ajuste se tiver mais grupos/empresas. */
-const MAX_ROWS_ESCRITORIO = 5000
+/** Tamanho do lote (Supabase/PostgREST limitam a 1000 por requisição). */
+const PAGE_SIZE = 1000
 
+/** Resumo por grupo (uma linha por grupo): leve para filtros, ordenação e totais. View escritorio_grupos_resumo. */
+export interface GrupoResumoRow {
+  grupo_cliente: string
+  total_empresas: number
+  total_geral: number
+  horas_total: number
+  valor_aberto: number
+  valor_pago: number
+  valor_em_atraso: number
+}
+
+function normalizeResumoRow(row: Record<string, unknown>): GrupoResumoRow {
+  return {
+    grupo_cliente: String(row.grupo_cliente ?? ''),
+    total_empresas: Number(row.total_empresas) || 0,
+    total_geral: Number(row.total_geral) || 0,
+    horas_total: Number(row.horas_total) || 0,
+    valor_aberto: Number(row.valor_aberto) || 0,
+    valor_pago: Number(row.valor_pago) || 0,
+    valor_em_atraso: Number(row.valor_em_atraso) || 0,
+  }
+}
+
+/** Chave exibida para grupo vazio (view usa ''). */
+export const GRUPO_SEM_NOME = 'Sem grupo'
+
+/** Lista resumo de todos os grupos (leve: uma linha por grupo). */
+export async function fetchGruposResumo(): Promise<GrupoResumoRow[]> {
+  const allRows: Record<string, unknown>[] = []
+  let from = 0
+  let hasMore = true
+  while (hasMore) {
+    const to = from + PAGE_SIZE - 1
+    const { data, error } = await supabase
+      .from('escritorio_grupos_resumo')
+      .select('grupo_cliente, total_empresas, total_geral, horas_total, valor_aberto, valor_pago, valor_em_atraso')
+      .order('grupo_cliente', { ascending: true })
+      .range(from, to)
+    if (error) throw error
+    const chunk = (data ?? []) as Record<string, unknown>[]
+    allRows.push(...chunk)
+    hasMore = chunk.length === PAGE_SIZE
+    from += PAGE_SIZE
+  }
+  return allRows.map(normalizeResumoRow)
+}
+
+/** Empresas apenas dos grupos indicados (para a página atual). groupKeys usa '' para "Sem grupo". */
+export async function fetchEmpresasPorGrupos(groupKeys: string[]): Promise<ClienteEscritorioRow[]> {
+  if (groupKeys.length === 0) return []
+  const hasEmpty = groupKeys.includes('')
+  const nonEmpty = groupKeys.filter((g) => g !== '')
+  const allRows: Record<string, unknown>[] = []
+
+  if (nonEmpty.length > 0) {
+    let from = 0
+    let hasMore = true
+    while (hasMore) {
+      const to = from + PAGE_SIZE - 1
+      const { data, error } = await supabase
+        .from('escritorio_empresas_por_grupo')
+        .select('id, grupo_cliente, nome, cpf_cnpj, categoria, ci, qtd_processos, horas_total, horas_por_ano, created_at, updated_at')
+        .in('grupo_cliente', nonEmpty)
+        .order('grupo_cliente', { ascending: true })
+        .order('nome', { ascending: true })
+        .range(from, to)
+      if (error) throw error
+      const chunk = (data ?? []) as Record<string, unknown>[]
+      allRows.push(...chunk)
+      hasMore = chunk.length === PAGE_SIZE
+      from += PAGE_SIZE
+    }
+  }
+
+  if (hasEmpty) {
+    let from = 0
+    let hasMore = true
+    while (hasMore) {
+      const to = from + PAGE_SIZE - 1
+      const { data, error } = await supabase
+        .from('escritorio_empresas_por_grupo')
+        .select('id, grupo_cliente, nome, cpf_cnpj, categoria, ci, qtd_processos, horas_total, horas_por_ano, created_at, updated_at')
+        .is('grupo_cliente', null)
+        .order('nome', { ascending: true })
+        .range(from, to)
+      if (error) throw error
+      const chunk = (data ?? []) as Record<string, unknown>[]
+      allRows.push(...chunk)
+      hasMore = chunk.length === PAGE_SIZE
+      from += PAGE_SIZE
+    }
+  }
+
+  return allRows.map((row) => {
+    const normalized = normalizePessoaRow(row)
+    if (normalized.grupo_cliente == null || normalized.grupo_cliente.trim() === '') {
+      normalized.grupo_cliente = ''
+    }
+    return normalized
+  })
+}
+
+/** Lista empresas por grupo (view escritorio_empresas_por_grupo). Busca em lotes de 1000 para ultrapassar o limite do Supabase. */
 export async function fetchClientesEscritorio(): Promise<ClienteEscritorioRow[]> {
-  const { data, error } = await supabase
-    .from('clientes_escritorio')
-    .select('id, grupo_cliente, razao_social, cnpj, qtd_processos, horas_total, horas_por_ano, created_at, updated_at')
-    .order('grupo_cliente', { ascending: true, nullsFirst: true })
-    .order('razao_social', { ascending: true })
-    .limit(MAX_ROWS_ESCRITORIO)
-  if (error) throw error
-  const rows = (data ?? []) as Record<string, unknown>[]
-  return rows.map(normalizeClienteRow)
+  const allRows: Record<string, unknown>[] = []
+  let from = 0
+  let hasMore = true
+  while (hasMore) {
+    const to = from + PAGE_SIZE - 1
+    const { data, error } = await supabase
+      .from('escritorio_empresas_por_grupo')
+      .select('id, grupo_cliente, nome, cpf_cnpj, categoria, ci, qtd_processos, horas_total, horas_por_ano, created_at, updated_at')
+      .order('grupo_cliente', { ascending: true, nullsFirst: true })
+      .order('nome', { ascending: true })
+      .range(from, to)
+    if (error) throw error
+    const chunk = (data ?? []) as Record<string, unknown>[]
+    allRows.push(...chunk)
+    hasMore = chunk.length === PAGE_SIZE
+    from += PAGE_SIZE
+  }
+  return allRows.map(normalizePessoaRow)
 }
 
 export async function fetchContagemCiPorGrupo(): Promise<ContagemCiPorGrupoRow[]> {
@@ -74,7 +197,7 @@ export async function fetchContagemCiPorGrupo(): Promise<ContagemCiPorGrupoRow[]
     .from('contagem_ci_por_grupo')
     .select('*')
     .order('grupo_cliente', { ascending: true })
-    .limit(MAX_ROWS_ESCRITORIO)
+    .limit(5000)
   if (error) throw error
   const rows = (data ?? []) as Record<string, unknown>[]
   return rows.map(normalizeContagemRow)
@@ -113,6 +236,32 @@ export async function fetchHorasPorGrupo(): Promise<Map<string, HorasGrupo>> {
   return map
 }
 
+/** Resumo do relatório financeiro por pessoa_id (valor aberto, pago e em atraso). */
+export async function fetchRelatorioFinanceiroResumoPorCliente(): Promise<
+  Map<string, { valorAberto: number; valorPago: number; valorEmAtraso: number; parcelasAbertas: number; parcelasPagas: number; parcelasEmAtraso: number }>
+> {
+  const { data, error } = await supabase
+    .from('relatorio_financeiro_resumo_por_cliente')
+    .select('pessoa_id, valor_aberto, valor_pago, valor_em_atraso, parcelas_abertas, parcelas_pagas, parcelas_em_atraso')
+    .limit(10000)
+  if (error) throw error
+  const map = new Map<string, { valorAberto: number; valorPago: number; valorEmAtraso: number; parcelasAbertas: number; parcelasPagas: number; parcelasEmAtraso: number }>()
+  for (const r of data ?? []) {
+    const id = r.pessoa_id
+    if (id) {
+      map.set(id, {
+        valorAberto: Number(r.valor_aberto) || 0,
+        valorPago: Number(r.valor_pago) || 0,
+        valorEmAtraso: Number(r.valor_em_atraso) || 0,
+        parcelasAbertas: Number(r.parcelas_abertas) || 0,
+        parcelasPagas: Number(r.parcelas_pagas) || 0,
+        parcelasEmAtraso: Number(r.parcelas_em_atraso) || 0,
+      })
+    }
+  }
+  return map
+}
+
 /** Normaliza nome do grupo para comparação: minúsculo, um espaço, sem prefixo "Grupo ", barra com espaços. */
 export function normalizarNomeGrupo(nome: string): string {
   return nome
@@ -140,19 +289,53 @@ export function getHorasParaGrupo(map: Map<string, HorasGrupo>, grupo: string): 
   return merged
 }
 
-/** Busca clientes, contagem e timesheets e agrega por grupo para os cards. */
+/** Monta GrupoEscritorio[] para a página a partir do resumo, empresas (só da página) e contagem/horas. */
+export function buildGruposEscritorioParaPagina(
+  resumoPage: GrupoResumoRow[],
+  empresas: ClienteEscritorioRow[],
+  contagemByGrupo: Map<string, ContagemCiPorGrupoRow>,
+  horasPorGrupo: Map<string, HorasGrupo>,
+): GrupoEscritorio[] {
+  const keyToDisplay = (k: string) => (k === '' ? GRUPO_SEM_NOME : k)
+  const byGrupo = new Map<string, ClienteEscritorioRow[]>()
+  for (const c of empresas) {
+    const key = c.grupo_cliente?.trim() ?? ''
+    if (!byGrupo.has(key)) byGrupo.set(key, [])
+    byGrupo.get(key)!.push(c)
+  }
+
+  return resumoPage.map((r) => {
+    const key = r.grupo_cliente
+    const horas = getHorasParaGrupo(horasPorGrupo, key)
+    const lista = (byGrupo.get(key) ?? []).sort((a, b) => (a.nome ?? '').localeCompare(b.nome ?? ''))
+    return {
+      grupo_cliente: keyToDisplay(key),
+      empresas: lista,
+      contagem: contagemByGrupo.get(key) ?? null,
+      horasGrupo: r.horas_total || horas.total,
+      horasPorAno: horas.porAno ?? {},
+      valorAberto: r.valor_aberto,
+      valorPago: r.valor_pago,
+      valorEmAtraso: r.valor_em_atraso,
+    }
+  })
+}
+
+/** Busca clientes, contagem, timesheets e resumo financeiro; agrega por grupo para os cards. */
 export async function fetchGruposEscritorio(): Promise<GrupoEscritorio[]> {
-  const [clientes, contagens, horasPorGrupo] = await Promise.all([
+  const [clientes, contagens, horasPorGrupo, financeiroResumo] = await Promise.all([
     fetchClientesEscritorio(),
     fetchContagemCiPorGrupo(),
     fetchHorasPorGrupo(),
+    fetchRelatorioFinanceiroResumoPorCliente(),
   ])
 
   const byGrupo = new Map<string, { empresas: ClienteEscritorioRow[] }>()
   for (const c of clientes) {
-    const grupo = c.grupo_cliente?.trim() ?? 'Sem grupo'
-    if (!byGrupo.has(grupo)) byGrupo.set(grupo, { empresas: [] })
-    byGrupo.get(grupo)!.empresas.push(c)
+    const grupo = c.grupo_cliente?.trim() ?? GRUPO_SEM_NOME
+    const key = grupo === GRUPO_SEM_NOME ? '' : grupo
+    if (!byGrupo.has(key)) byGrupo.set(key, { empresas: [] })
+    byGrupo.get(key)!.empresas.push(c)
   }
 
   const contagemByGrupo = new Map<string, ContagemCiPorGrupoRow>()
@@ -161,14 +344,29 @@ export async function fetchGruposEscritorio(): Promise<GrupoEscritorio[]> {
   }
 
   const result: GrupoEscritorio[] = []
-  for (const [grupo_cliente, { empresas }] of byGrupo.entries()) {
-    const horas = getHorasParaGrupo(horasPorGrupo, grupo_cliente)
+  for (const [key, { empresas }] of byGrupo.entries()) {
+    const grupoDisplay = key === '' ? GRUPO_SEM_NOME : key
+    const horas = getHorasParaGrupo(horasPorGrupo, grupoDisplay)
+    let valorAberto = 0
+    let valorPago = 0
+    let valorEmAtraso = 0
+    for (const e of empresas) {
+      const resumo = financeiroResumo.get(e.id)
+      if (resumo) {
+        valorAberto += resumo.valorAberto
+        valorPago += resumo.valorPago
+        valorEmAtraso += resumo.valorEmAtraso
+      }
+    }
     result.push({
-      grupo_cliente,
-      empresas: empresas.sort((a, b) => a.razao_social.localeCompare(b.razao_social)),
-      contagem: contagemByGrupo.get(grupo_cliente) ?? null,
+      grupo_cliente: grupoDisplay,
+      empresas: empresas.sort((a, b) => (a.nome ?? '').localeCompare(b.nome ?? '')),
+      contagem: contagemByGrupo.get(key) ?? null,
       horasGrupo: horas.total,
       horasPorAno: horas.porAno ?? {},
+      valorAberto,
+      valorPago,
+      valorEmAtraso,
     })
   }
   result.sort((a, b) => a.grupo_cliente.localeCompare(b.grupo_cliente))

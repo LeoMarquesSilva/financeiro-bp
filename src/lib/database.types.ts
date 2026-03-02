@@ -69,13 +69,13 @@ export interface Database {
           created_at: string
           updated_at: string
           created_by: string | null
-          cliente_escritorio_id: string | null
+          pessoa_id: string | null
         }
         Insert: {
           id?: string
           razao_social: string
           cnpj?: string | null
-          cliente_escritorio_id?: string | null
+          pessoa_id?: string | null
           contato?: string | null
           gestor?: string | null
           area?: string | null
@@ -101,7 +101,7 @@ export interface Database {
           id?: string
           razao_social?: string
           cnpj?: string | null
-          cliente_escritorio_id?: string | null
+          pessoa_id?: string | null
           contato?: string | null
           gestor?: string | null
           area?: string | null
@@ -127,6 +127,7 @@ export interface Database {
           id: string
           cliente_inadimplencia_id: string
           texto: string
+          data_providencia: string | null
           created_at: string
           created_by: string | null
         }
@@ -134,11 +135,13 @@ export interface Database {
           id?: string
           cliente_inadimplencia_id: string
           texto: string
+          data_providencia?: string | null
           created_at?: string
           created_by?: string | null
         }
         Update: {
           texto?: string
+          data_providencia?: string | null
           created_by?: string | null
         }
       }
@@ -218,39 +221,6 @@ export interface Database {
           observacao?: string | null
         }
       }
-      clientes_escritorio: {
-        Row: {
-          id: string
-          grupo_cliente: string | null
-          razao_social: string
-          cnpj: string | null
-          qtd_processos: number | null
-          horas_total: number | null
-          horas_por_ano: Record<string, number> | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          grupo_cliente?: string | null
-          razao_social: string
-          cnpj?: string | null
-          qtd_processos?: number | null
-          horas_total?: number | null
-          horas_por_ano?: Record<string, number> | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          grupo_cliente?: string | null
-          razao_social?: string
-          cnpj?: string | null
-          qtd_processos?: number | null
-          horas_total?: number | null
-          horas_por_ano?: Record<string, number> | null
-          updated_at?: string
-        }
-      }
       timesheets: {
         Row: {
           id: string
@@ -258,6 +228,8 @@ export interface Database {
           grupo_cliente: string | null
           cliente: string
           total_horas: number
+          total_horas_decimal: number | null
+          pessoa_id: string | null
           created_at: string
           updated_at: string
         }
@@ -291,6 +263,7 @@ export interface Database {
           data_vencimento: string
           nro_titulo: string
           cliente: string
+          pessoa_id: string | null
           descricao: string | null
           valor: number
           situacao: string
@@ -310,12 +283,113 @@ export interface Database {
         Insert: unknown
         Update: unknown
       }
+      pessoas: {
+        Row: {
+          id: string
+          ci: string | null
+          cpf_cnpj: string | null
+          nome: string
+          grupo_cliente: string | null
+          categoria: string | null
+          qtd_processos: number | null
+          horas_total: number | null
+          horas_por_ano: Record<string, number> | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          ci?: string | null
+          cpf_cnpj?: string | null
+          nome: string
+          grupo_cliente?: string | null
+          categoria?: string | null
+          qtd_processos?: number | null
+          horas_total?: number | null
+          horas_por_ano?: Record<string, number> | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          ci?: string | null
+          cpf_cnpj?: string | null
+          nome?: string
+          grupo_cliente?: string | null
+          categoria?: string | null
+          qtd_processos?: number | null
+          horas_total?: number | null
+          horas_por_ano?: Record<string, number> | null
+          updated_at?: string
+        }
+      }
+      relatorio_financeiro_resumo_por_cliente: {
+        Row: {
+          pessoa_id: string
+          parcelas_abertas: number
+          parcelas_pagas: number
+          parcelas_em_atraso: number
+          valor_aberto: number
+          valor_pago: number
+          valor_em_atraso: number
+        }
+        Insert: unknown
+        Update: unknown
+      }
+      /** View: pessoas + qtd_processos, horas_total, horas_por_ano (de processos_completo e timesheets). */
+      pessoas_escritorio: {
+        Row: {
+          id: string
+          ci: string | null
+          grupo_cliente: string | null
+          nome: string
+          cpf_cnpj: string | null
+          categoria: string | null
+          created_at: string
+          updated_at: string
+          qtd_processos: number | null
+          horas_total: number | null
+          horas_por_ano: Record<string, number> | null
+        }
+        Insert: unknown
+        Update: unknown
+      }
+      /** View: empresas por grupo; grupo_cliente de pessoas ou, se vazio, de processos_completo. */
+      escritorio_empresas_por_grupo: {
+        Row: {
+          id: string
+          ci: string | null
+          grupo_cliente: string | null
+          nome: string
+          cpf_cnpj: string | null
+          categoria: string | null
+          created_at: string
+          updated_at: string
+          qtd_processos: number | null
+          horas_total: number | null
+          horas_por_ano: Record<string, number> | null
+        }
+        Insert: unknown
+        Update: unknown
+      }
+      /** View: um resumo por grupo (total_empresas, total_geral, horas, valores) para paginação. */
+      escritorio_grupos_resumo: {
+        Row: {
+          grupo_cliente: string
+          total_empresas: number
+          total_geral: number
+          horas_total: number
+          valor_aberto: number
+          valor_pago: number
+          valor_em_atraso: number
+        }
+        Insert: unknown
+        Update: unknown
+      }
     }
   }
 }
 
 export type ClientInadimplenciaRow = Database['public']['Tables']['clients_inadimplencia']['Row']
-export type ClienteEscritorioRow = Database['public']['Tables']['clientes_escritorio']['Row']
 export type TimesheetRow = Database['public']['Tables']['timesheets']['Row']
 export type ContagemCiPorGrupoRow = Database['public']['Tables']['contagem_ci_por_grupo']['Row']
 export type RelatorioFinanceiroRow = Database['public']['Tables']['relatorio_financeiro']['Row']
@@ -323,4 +397,7 @@ export type ProvidenciaRow = Database['public']['Tables']['providencias']['Row']
 export type ProvidenciaFollowUpRow = Database['public']['Tables']['providencia_follow_ups']['Row']
 export type InadimplenciaLogRow = Database['public']['Tables']['inadimplencia_logs']['Row']
 export type InadimplenciaPagamentoRow = Database['public']['Tables']['inadimplencia_pagamentos']['Row']
+export type PessoaRow = Database['public']['Tables']['pessoas']['Row']
+/** @deprecated Use PessoaRow; mantido para compatibilidade durante migração. */
+export type ClienteEscritorioRow = PessoaRow
 export type TeamMember = TeamMemberRow

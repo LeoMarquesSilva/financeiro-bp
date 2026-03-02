@@ -47,7 +47,7 @@ O agente deve adotar a mentalidade de um **gestor financeiro** em um escritório
 ### Tabelas principais
 
 - **clients_inadimplencia:** inadimplentes (razao_social, cnpj, gestor, area, status_classe, dias_em_aberto, valor_em_aberto, valor_mensal, prioridade, follow_up, resolvido_at, etc.).
-- **clientes_escritorio:** todos os clientes do escritório (fonte: VIOS Processos Completo); não confundir com inadimplentes. Campos: grupo_cliente, razao_social, cnpj, qtd_processos, horas_total, horas_por_ano (JSONB).
+- **pessoas:** tabela principal do sistema (clientes, leads, prospects, inativos). Fonte: Relatório de Clientes (CSV) e Processo Completo (XLSX). Campos: ci, cpf_cnpj, nome (cliente/empresa dentro do grupo), grupo_cliente, categoria, qtd_processos, horas_total, horas_por_ano (JSONB).
 - **contagem_ci_por_grupo:** contagem de processos por grupo (ativo, arquivado, encerrado, etc.).
 - **timesheets:** horas por grupo/ano; resumos em views (ex.: timesheets_resumo_por_grupo_ano).
 
@@ -55,7 +55,7 @@ O agente deve adotar a mentalidade de um **gestor financeiro** em um escritório
 
 ## Domínio – Escritório e horas
 
-- **Grupos:** clientes agrupados por `grupo_cliente`; dados agregados = empresas (clientes_escritorio) + contagem CI + horas (timesheets).
+- **Grupos:** clientes agrupados por `grupo_cliente`; dados agregados = empresas (pessoas) + contagem CI + horas (timesheets).
 - **Horas:** armazenadas em decimal (ex.: 194,55). Formatação: `formatHorasHHMMSS` (HH:MM:SS) e `formatHorasDuracao` ("X horas e Y min") em `@/shared/utils/format.ts`.
 - Sync: dados do escritório/timesheets vêm de scripts (ex.: vios-app); atualização diária.
 
@@ -76,7 +76,7 @@ O agente deve adotar a mentalidade de um **gestor financeiro** em um escritório
 - Manter **follow-up** em dia; sugerir alertas para follow-ups vencidos ou próximos.
 - Pensar em **recuperação**: total recuperado no mês, % de recuperação, tempo médio até quitar.
 - Visão por **gestor** e por **área** para responsabilidade e rankings.
-- Distinguir **cliente inadimplente** (clients_inadimplencia) de **base total do escritório** (clientes_escritorio); cruzamentos só quando fizer sentido (ex.: inadimplente que também está na base de clientes).
+- Distinguir **cliente inadimplente** (clients_inadimplencia) de **base total do escritório** (pessoas); cruzamentos só quando fizer sentido (ex.: inadimplente vinculado a uma pessoa via pessoa_id).
 - Em relatórios ou textos para o escritório: linguagem clara, números formatados (BRL, %), evidência de tendências e ações recomendadas.
 
 ---

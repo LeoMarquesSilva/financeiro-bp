@@ -29,7 +29,9 @@ export const FORMAS_PAGAMENTO = [
   'Outro',
 ] as const
 
-export const PESO_DIAS = 2
-export const PESO_VALOR = 1 // score += (valor_em_aberto / 1000) * PESO_VALOR
-export const LIMIAR_URGENTE = 100 // score >= 100 => Urgente
-export const LIMIAR_ATENCAO = 50  // score >= 50 => Atenção; < 50 => Controlado
+/** Regras de prioridade por dias em atraso: controlado <2, atenção 3-5, urgente >5 */
+export const PRIORIDADE_DIAS = {
+  controlado: { max: 2 },
+  atencao: { min: 3, max: 5 },
+  urgente: { min: 6 },
+} as const

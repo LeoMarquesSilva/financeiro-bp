@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { providenciaService, PROVIDENCIA_FOLLOW_UP_TIPO_LABEL } from '../services/providenciaService'
+import { logsService } from '../services/logsService'
 import type { ProvidenciaFollowUpTipo, ProvidenciaRow } from '@/lib/database.types'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -54,10 +55,19 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
       toast.error('Erro ao registrar follow-up')
       return
     }
+    const tipoLabel = PROVIDENCIA_FOLLOW_UP_TIPO_LABEL[tipo]
+    const descResumo = texto.trim() ? texto.trim().slice(0, 60) + (texto.trim().length > 60 ? '…' : '') : null
+    const logTipo = tipo === 'acordo' ? 'acordo' : 'outro'
+    await logsService.create({
+      client_id: clientId,
+      tipo: logTipo,
+      descricao: `Follow-up (${tipoLabel})${descResumo ? `: ${descResumo}` : ''}`,
+    })
     toast.success('Follow-up registrado')
     setTexto('')
     queryClient.invalidateQueries({ queryKey: ['providencias', clientId] })
     queryClient.invalidateQueries({ queryKey: ['providencia-follow-ups', providenciaId] })
+    queryClient.invalidateQueries({ queryKey: ['inadimplencia', 'logs', clientId] })
     onClose()
     onSuccess?.()
   }
@@ -87,7 +97,7 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
               {providencias.map((p: ProvidenciaRow) => (
                 <option key={p.id} value={p.id}>
                   {p.texto.slice(0, 60)}
-                  {p.texto.length > 60 ? '…' : ''} — {formatDate(p.created_at)}
+                  {p.texto.length > 60 ? '…' : ''} — {formatDate(p.data_providencia ?? p.created_at)}
                 </option>
               ))}
             </select>

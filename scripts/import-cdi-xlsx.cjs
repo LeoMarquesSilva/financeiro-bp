@@ -236,10 +236,10 @@ async function main() {
     const valorMensalRaw = idxValorMensal >= 0 ? row[idxValorMensal] : null;
     const valorMensal = valorMensalRaw != null && valorMensalRaw !== '' ? parseValorMonetario(valorMensalRaw) : null;
 
-    // Vincular ao cliente da base do escritório (clientes_escritorio) por razão social
-    let clienteEscritorioId = null;
-    const { data: ceRow } = await supabase.from('clientes_escritorio').select('id').eq('razao_social', razaoSocial.trim()).limit(1).maybeSingle();
-    if (ceRow && ceRow.id) clienteEscritorioId = ceRow.id;
+    // Vincular à pessoa (tabela pessoas) por nome
+    let pessoaId = null;
+    const { data: pRow } = await supabase.from('pessoas').select('id').eq('nome', razaoSocial.trim()).limit(1).maybeSingle();
+    if (pRow && pRow.id) pessoaId = pRow.id;
 
     const payload = {
       razao_social: razaoSocial,
@@ -254,7 +254,7 @@ async function main() {
       data_providencia: dataProvidencia || null,
       follow_up: followUp || null,
       data_follow_up: dataFollowUp || null,
-      cliente_escritorio_id: clienteEscritorioId,
+      pessoa_id: pessoaId,
     };
 
     const { data: existing } = await supabase.from('clients_inadimplencia').select('id').eq('razao_social', razaoSocial).is('resolvido_at', null).limit(1).maybeSingle();

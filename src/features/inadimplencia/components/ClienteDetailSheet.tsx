@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Sheet,
   SheetContent,
@@ -24,7 +24,7 @@ import { useTeamMembers } from '../hooks/useTeamMembers'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Pencil, History, Check, AlertTriangle, ChevronDown, ChevronUp, MessageSquare, FileText, ListChecks } from 'lucide-react'
+import { Pencil, History, Check, AlertTriangle, ChevronDown, ChevronUp, MessageSquare, FileText, ListChecks, CreditCard, CheckCircle2, Clock, AlertCircle, Trash2 } from 'lucide-react'
 import {
   fetchClientesEscritorio,
   fetchContagemCiPorGrupo,
@@ -32,6 +32,9 @@ import {
   getHorasParaGrupo,
   normalizarNomeGrupo,
 } from '@/features/escritorio/services/escritorioService'
+import { fetchParcelasPorCliente, type ParcelaRow } from '../services/parcelasService'
+import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
+import { toast } from 'sonner'
 
 const ULTIMOS_LOGS = 5
 
@@ -77,7 +80,77 @@ function getIniciais(name: string | null | undefined): string {
   return name.slice(0, 2).toUpperCase()
 }
 
-function FollowUpsList({ providenciaId }: { providenciaId: string }) {
+interface ProvidenciaCardProps {
+  p: ProvidenciaRow
+  clientId: string
+  onRefresh?: () => void
+}
+
+function ProvidenciaCard({ p, clientId, onRefresh }: ProvidenciaCardProps) {
+  const queryClient = useQueryClient()
+  const [modalExcluir, setModalExcluir] = useState(false)
+
+  const handleDeleteProvidencia = async () => {
+    const { error } = await providenciaService.deleteProvidencia(p.id)
+    if (error) {
+      toast.error('Erro ao apagar providência')
+      throw error
+    }
+    toast.success('Providência apagada')
+    queryClient.invalidateQueries({ queryKey: ['providencias', clientId] })
+    onRefresh?.()
+  }
+
+  return (
+    <>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+            <FileText className="h-4 w-4 text-slate-600" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs font-medium text-slate-500">
+                Providência — {formatDate(p.data_providencia ?? p.created_at)}
+              </p>
+              <button
+                type="button"
+                onClick={() => setModalExcluir(true)}
+                className="shrink-0 rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                title="Apagar providência"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="mt-1 text-sm font-medium text-slate-900 leading-snug">
+              {p.texto}
+            </p>
+            <FollowUpsList providenciaId={p.id} clientId={clientId} onRefresh={onRefresh} />
+          </div>
+        </div>
+      </div>
+      <ModalConfirmacao
+        open={modalExcluir}
+        onClose={() => setModalExcluir(false)}
+        title="Apagar providência"
+        description="Apagar esta providência? Os follow-ups vinculados também serão removidos."
+        confirmLabel="Apagar"
+        variant="destructive"
+        onConfirm={handleDeleteProvidencia}
+      />
+    </>
+  )
+}
+
+interface FollowUpsListProps {
+  providenciaId: string
+  clientId: string
+  onRefresh?: () => void
+}
+
+function FollowUpsList({ providenciaId, clientId, onRefresh }: FollowUpsListProps) {
+  const queryClient = useQueryClient()
+  const [fuParaExcluir, setFuParaExcluir] = useState<ProvidenciaFollowUpRow | null>(null)
   const { data: list = [] } = useQuery({
     queryKey: ['providencia-follow-ups', providenciaId],
     queryFn: async () => {
@@ -86,27 +159,62 @@ function FollowUpsList({ providenciaId }: { providenciaId: string }) {
       return data ?? []
     },
   })
+
+  const handleDeleteFollowUp = async () => {
+    if (!fuParaExcluir) return
+    const { error } = await providenciaService.deleteFollowUp(fuParaExcluir.id)
+    if (error) {
+      toast.error('Erro ao apagar follow-up')
+      throw error
+    }
+    toast.success('Follow-up apagado')
+    queryClient.invalidateQueries({ queryKey: ['providencias', clientId] })
+    queryClient.invalidateQueries({ queryKey: ['providencia-follow-ups', providenciaId] })
+    onRefresh?.()
+  }
+
   if (list.length === 0) return null
   return (
-    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Follow-ups</p>
-      <ul className="space-y-2">
-        {list.map((fu: ProvidenciaFollowUpRow) => (
-          <li
-            key={fu.id}
-            className="flex flex-col gap-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Badge variant="secondary" className="text-xs font-medium">
-                {PROVIDENCIA_FOLLOW_UP_TIPO_LABEL[fu.tipo]}
-              </Badge>
-              <span className="text-xs text-slate-400">{formatDate(fu.created_at)}</span>
-            </div>
-            <p className="min-w-0 text-slate-800 whitespace-pre-wrap">{fu.texto || '–'}</p>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <>
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Follow-ups</p>
+        <ul className="space-y-2">
+          {list.map((fu: ProvidenciaFollowUpRow) => (
+            <li
+              key={fu.id}
+              className="flex flex-col gap-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Badge variant="secondary" className="text-xs font-medium">
+                  {PROVIDENCIA_FOLLOW_UP_TIPO_LABEL[fu.tipo]}
+                </Badge>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">{formatDate(fu.created_at)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFuParaExcluir(fu)}
+                    className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                    title="Apagar follow-up"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <p className="min-w-0 text-slate-800 whitespace-pre-wrap">{fu.texto || '–'}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <ModalConfirmacao
+        open={!!fuParaExcluir}
+        onClose={() => setFuParaExcluir(null)}
+        title="Apagar follow-up"
+        description="Apagar este follow-up?"
+        confirmLabel="Apagar"
+        variant="destructive"
+        onConfirm={handleDeleteFollowUp}
+      />
+    </>
   )
 }
 
@@ -150,8 +258,8 @@ export function ClienteDetailSheet({
     enabled: open,
   })
   const linkedEscritorio =
-    client?.cliente_escritorio_id != null
-      ? clientesEscritorio.find((ce: ClienteEscritorioRow) => ce.id === client.cliente_escritorio_id)
+    client?.pessoa_id != null
+      ? clientesEscritorio.find((ce: ClienteEscritorioRow) => ce.id === client.pessoa_id)
       : null
   const grupoCliente = linkedEscritorio?.grupo_cliente ?? null
   const empresasDoGrupo =
@@ -198,6 +306,16 @@ export function ClienteDetailSheet({
       return data
     },
     enabled: open && !!client?.id,
+  })
+
+  const { data: parcelasData } = useQuery({
+    queryKey: ['parcelas-cliente', client?.pessoa_id, client?.razao_social],
+    queryFn: () =>
+      fetchParcelasPorCliente({
+        pessoa_id: client?.pessoa_id ?? null,
+        razao_social: client?.razao_social ?? '',
+      }),
+    enabled: open && !!(client?.pessoa_id || client?.razao_social?.trim()),
   })
 
   const closeAndRefresh = () => {
@@ -295,6 +413,106 @@ export function ClienteDetailSheet({
               </div>
             </section>
 
+            {/* Parcelas: últimas pagas, em atraso, próximas a vencer */}
+            {parcelasData && (parcelasData.pagas.length > 0 || parcelasData.emAtraso.length > 0 || parcelasData.aVencer.length > 0) && (
+              <section className="mb-6">
+                <h3 className="mb-3 text-sm font-medium text-slate-600 flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Parcelas
+                </h3>
+                <div className="space-y-4">
+                  {parcelasData.emAtraso.length > 0 && (
+                    <div className="rounded-lg border border-red-200 bg-red-50/50 p-4">
+                      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-red-700">
+                        <AlertCircle className="h-4 w-4" />
+                        Em atraso ({parcelasData.emAtraso.length})
+                      </p>
+                      <ul className="space-y-1.5">
+                        {parcelasData.emAtraso.map((p: ParcelaRow) => (
+                          <li key={p.id} className="rounded border border-red-100 bg-white px-3 py-2 text-sm">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="min-w-0 flex-1 font-medium text-slate-800">
+                                {p.descricao || p.tipo || p.nro_titulo}
+                              </span>
+                              <span className="shrink-0 font-medium text-red-700 tabular-nums">{formatCurrency(Number(p.valor))}</span>
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                              {p.competencia && <span>Competência: {p.competencia}</span>}
+                              {p.parcela && <span>Parcela {p.parcela}{p.parcelas ? ` de ${p.parcelas}` : ''}</span>}
+                              <span>Venc.: {formatDate(p.data_vencimento)}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {parcelasData.aVencer.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+                      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-amber-800">
+                        <Clock className="h-4 w-4" />
+                        Próximas a vencer ({parcelasData.aVencer.length})
+                      </p>
+                      <ul className="space-y-1.5">
+                        {parcelasData.aVencer.map((p: ParcelaRow) => (
+                          <li key={p.id} className="rounded border border-amber-100 bg-white px-3 py-2 text-sm">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="min-w-0 flex-1 font-medium text-slate-800">
+                                {p.descricao || p.tipo || p.nro_titulo}
+                              </span>
+                              <span className="shrink-0 font-medium text-slate-900 tabular-nums">{formatCurrency(Number(p.valor))}</span>
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                              {p.competencia && <span>Competência: {p.competencia}</span>}
+                              {p.parcela && <span>Parcela {p.parcela}{p.parcelas ? ` de ${p.parcelas}` : ''}</span>}
+                              <span>Venc.: {formatDate(p.data_vencimento)}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {parcelasData.pagas.length > 0 && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        Últimas parcelas pagas ({parcelasData.pagas.length})
+                      </p>
+                      <ul className="space-y-1.5">
+                        {parcelasData.pagas.map((p: ParcelaRow) => (
+                          <li key={p.id} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="min-w-0 flex-1 font-medium text-slate-800">
+                                {p.descricao || p.tipo || p.nro_titulo}
+                              </span>
+                              <span className="shrink-0 font-medium text-slate-900 tabular-nums">
+                                {p.valor_pago != null ? formatCurrency(Number(p.valor_pago)) : formatCurrency(Number(p.valor))}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                              {p.competencia && <span>Competência: {p.competencia}</span>}
+                              {p.parcela && <span>Parcela {p.parcela}{p.parcelas ? ` de ${p.parcelas}` : ''}</span>}
+                              <span>Baixa: {formatDate(p.data_baixa)}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+            {parcelasData && parcelasData.pagas.length === 0 && parcelasData.emAtraso.length === 0 && parcelasData.aVencer.length === 0 && (
+              <section className="mb-6">
+                <h3 className="mb-2 text-sm font-medium text-slate-600 flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Parcelas
+                </h3>
+                <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  Nenhuma parcela encontrada na base financeira. Verifique se o cliente está vinculado e se o relatório foi sincronizado.
+                </p>
+              </section>
+            )}
+
             {/* Providências e follow-ups – destaque para o dia a dia */}
             <section className="mb-6">
               <div className="mb-3 flex items-center gap-2">
@@ -307,25 +525,12 @@ export function ClienteDetailSheet({
               <div className="space-y-4">
                 {providencias.length > 0 ? (
                   providencias.map((p: ProvidenciaRow) => (
-                    <div
+                    <ProvidenciaCard
                       key={p.id}
-                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-                          <FileText className="h-4 w-4 text-slate-600" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-slate-500">
-                            Providência — {formatDate(p.created_at)}
-                          </p>
-                          <p className="mt-1 text-sm font-medium text-slate-900 leading-snug">
-                            {p.texto}
-                          </p>
-                          <FollowUpsList providenciaId={p.id} />
-                        </div>
-                      </div>
-                    </div>
+                      p={p}
+                      clientId={client.id}
+                      onRefresh={onRefresh}
+                    />
                   ))
                 ) : client.ultima_providencia ? (
                   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -398,7 +603,7 @@ export function ClienteDetailSheet({
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <ul className="max-h-32 overflow-y-auto list-inside list-disc space-y-0.5 text-sm text-slate-700">
                     {empresasDoGrupo.map((ce: ClienteEscritorioRow) => (
-                      <li key={ce.id}>{ce.razao_social}</li>
+                      <li key={ce.id}>{ce.nome}</li>
                     ))}
                   </ul>
                 </div>
@@ -506,9 +711,11 @@ export function ClienteDetailSheet({
                     {(ultimosLogs as InadimplenciaLogRow[]).map((log) => (
                       <li
                         key={log.id}
-                        className="flex items-start gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                        className="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                       >
-                        <span className="shrink-0 font-medium text-slate-700">{getTipoLabel(log.tipo)}</span>
+                        <Badge variant="secondary" className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium">
+                          {getTipoLabel(log.tipo)}
+                        </Badge>
                         <span className="min-w-0 flex-1 truncate text-slate-500">{log.descricao || '–'}</span>
                         <span className="shrink-0 text-xs text-slate-400">{formatDate(log.data_acao)}</span>
                       </li>

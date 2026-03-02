@@ -11,6 +11,7 @@ const navLinks = [
   { to: '/financeiro/inadimplencia', label: 'Inadimplência' },
   { to: '/financeiro/inadimplencia/dashboard', label: 'Dashboard' },
   { to: '/financeiro/escritorio', label: 'Escritório' },
+  { to: '/financeiro/gestores', label: 'Gestores' },
 ]
 
 function NavItems({ onLinkClick }: { onLinkClick?: () => void }) {

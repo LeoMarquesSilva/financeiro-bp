@@ -6,6 +6,7 @@ import { FinanceiroLayout } from './layouts/FinanceiroLayout'
 import { InadimplenciaPage } from '@/features/inadimplencia/pages/InadimplenciaPage'
 import { InadimplenciaDashboardPage } from '@/features/inadimplencia/pages/InadimplenciaDashboardPage'
 import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
+import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(false)
@@ -36,6 +37,7 @@ function App() {
           <Route path="inadimplencia" element={<InadimplenciaPage />} />
           <Route path="inadimplencia/dashboard" element={<InadimplenciaDashboardPage />} />
           <Route path="escritorio" element={<EscritorioPage />} />
+          <Route path="gestores" element={<TeamMembersPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/financeiro/inadimplencia" replace />} />
       </Routes>

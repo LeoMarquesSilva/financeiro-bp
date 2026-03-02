@@ -15,6 +15,7 @@ export const clienteInadimplenciaFormSchema = z.object({
   area: z.string().optional(),
   status_classe: classeSchema.default('A'),
   valor_em_aberto: z.coerce.number().min(0, 'Valor deve ser >= 0'),
+  observacoes_gerais: z.string().optional(),
 })
 export type ClienteInadimplenciaForm = z.infer<typeof clienteInadimplenciaFormSchema>
 

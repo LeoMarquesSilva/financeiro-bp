@@ -11,13 +11,14 @@ type ClientUpdate = Database['public']['Tables']['clients_inadimplencia']['Updat
 export interface CreateClienteInput {
   razao_social: string
   cnpj?: string | null
-  /** Vincula ao cliente da base do escritório (clientes_escritorio). */
-  cliente_escritorio_id?: string | null
+  /** Vincula à pessoa na base principal (pessoas). */
+  pessoa_id?: string | null
   gestor?: string | null
   area?: string | null
   valor_em_aberto: number
   /** Classificação definida na reunião (caso a caso). Se não informada, usa sugestão por dias. */
   status_classe?: InadimplenciaClasse
+  observacoes_gerais?: string | null
   created_by?: string | null
 }
 
@@ -33,7 +34,7 @@ function buildListQuery(params: {
   orderDesc?: boolean
 }) {
   let query = supabase
-    .from('clients_inadimplencia')
+    .from('clients_inadimplencia_list')
     .select('*', { count: 'exact' })
     .is('resolvido_at', null)
 
@@ -141,13 +142,14 @@ export const inadimplenciaService = {
     const insert: ClientInsert = {
       razao_social: input.razao_social,
       cnpj: input.cnpj ?? null,
-      cliente_escritorio_id: input.cliente_escritorio_id ?? null,
+      pessoa_id: input.pessoa_id ?? null,
       gestor: input.gestor ?? null,
       area: input.area ?? null,
       valor_em_aberto: input.valor_em_aberto,
       data_vencimento: null,
       dias_em_aberto: diasEmAberto,
       status_classe: statusClasse,
+      observacoes_gerais: input.observacoes_gerais?.trim() || null,
       created_by: input.created_by ?? null,
     }
 
@@ -169,7 +171,7 @@ export const inadimplenciaService = {
     return { data: client, error }
   },
 
-  async update(id: string, input: Partial<CreateClienteInput> & { status_classe?: InadimplenciaClasse; cliente_escritorio_id?: string | null; data_vencimento?: string | null; contato?: string | null; observacoes_gerais?: string; ultima_providencia?: string; data_providencia?: string; follow_up?: string; data_follow_up?: string }) {
+  async update(id: string, input: Partial<CreateClienteInput> & { status_classe?: InadimplenciaClasse; pessoa_id?: string | null; data_vencimento?: string | null; contato?: string | null; observacoes_gerais?: string; ultima_providencia?: string; data_providencia?: string; follow_up?: string; data_follow_up?: string }) {
     let diasEmAberto: number | undefined
     if (input.data_vencimento !== undefined) {
       diasEmAberto = calcularDiasEmAberto(input.data_vencimento)
@@ -178,7 +180,7 @@ export const inadimplenciaService = {
     const update: ClientUpdate = {}
     if (input.razao_social !== undefined) update.razao_social = input.razao_social
     if (input.cnpj !== undefined) update.cnpj = input.cnpj
-    if (input.cliente_escritorio_id !== undefined) update.cliente_escritorio_id = input.cliente_escritorio_id
+    if (input.pessoa_id !== undefined) update.pessoa_id = input.pessoa_id
     if (input.contato !== undefined) update.contato = input.contato
     if (input.gestor !== undefined) update.gestor = input.gestor
     if (input.area !== undefined) update.area = input.area

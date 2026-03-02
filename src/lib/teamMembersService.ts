@@ -11,6 +11,13 @@ export function getLocalAvatarPath(email: string, ext: 'jpg' | 'png' = 'jpg'): s
   return `/team/${getLocalAvatarSlug(email)}.${ext}`
 }
 
+export interface CreateTeamMemberInput {
+  email: string
+  full_name: string
+  area: string
+  avatar_url?: string | null
+}
+
 export const teamMembersService = {
   async list(): Promise<TeamMember[]> {
     const { data, error } = await supabase
@@ -19,6 +26,26 @@ export const teamMembersService = {
       .order('full_name', { ascending: true })
     if (error) throw error
     return data ?? []
+  },
+
+  async create(input: CreateTeamMemberInput): Promise<TeamMember> {
+    const { data, error } = await supabase
+      .from('team_members')
+      .insert({
+        email: input.email.trim().toLowerCase(),
+        full_name: input.full_name.trim(),
+        area: input.area.trim(),
+        avatar_url: input.avatar_url?.trim() || null,
+      })
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async delete(id: string): Promise<void> {
+    const { error } = await supabase.from('team_members').delete().eq('id', id)
+    if (error) throw error
   },
 }
 

@@ -1,10 +1,10 @@
 /**
  * Mapeia DADOS.xlsx com os clientes da tabela clients_inadimplencia (CDI).
  * Atualiza: qtd_processos, horas_total, horas_por_ano (timesheet dos advogados)
- * e cliente_escritorio_id (vínculo com clientes_escritorio).
+ * e pessoa_id (vínculo com a tabela pessoas).
  *
  * O nome do cliente em DADOS.xlsx é o nome correto: atualizamos razao_social
- * em clients_inadimplencia para ficar igual ao DADOS e usamos para vincular a clientes_escritorio.
+ * em clients_inadimplencia para ficar igual ao DADOS e usamos para vincular a pessoas.
  *
  * Estrutura esperada em DADOS.xlsx (primeira aba):
  * - Coluna Cliente / Razão Social / Cliente/Grupo (nome correto para Supabase)
@@ -183,7 +183,7 @@ async function main() {
 
   const { data: clientes, error: errClientes } = await supabase
     .from('clients_inadimplencia')
-    .select('id, razao_social, cliente_escritorio_id')
+    .select('id, razao_social, pessoa_id')
     .is('resolvido_at', null);
 
   if (errClientes) {
@@ -191,16 +191,16 @@ async function main() {
     process.exit(1);
   }
 
-  const { data: escritorioList, error: errEscritorio } = await supabase
-    .from('clientes_escritorio')
-    .select('id, razao_social, grupo_cliente');
+  const { data: pessoasList, error: errPessoas } = await supabase
+    .from('pessoas')
+    .select('id, nome, grupo_cliente');
 
-  if (errEscritorio) {
-    console.error('Erro ao buscar clientes_escritorio:', errEscritorio.message);
+  if (errPessoas) {
+    console.error('Erro ao buscar pessoas:', errPessoas.message);
     process.exit(1);
   }
 
-  const listaEscritorio = escritorioList || [];
+  const listaEscritorio = pessoasList || [];
   const listaInadimplentes = clientes || [];
 
   let updated = 0;
@@ -226,27 +226,27 @@ async function main() {
     const horasPorAnoJson =
       Object.keys(horasPorAno).length > 0 ? horasPorAno : null;
 
-    // Nome em DADOS pode ser grupo ou empresa: casar com clientes_escritorio (grupo_cliente ou razao_social)
-    const candidatosEscritorio = listaEscritorio.filter(
-      (ce) =>
-        matchCliente(nomePlanilha, ce.razao_social) ||
-        matchCliente(nomePlanilha, ce.grupo_cliente || '') ||
-        matchGrupoExato(nomePlanilha, ce.grupo_cliente || '') ||
-        matchGrupoExato(nomePlanilha, ce.razao_social)
+    // Nome em DADOS pode ser grupo ou empresa: casar com pessoas (grupo_cliente ou nome)
+    const candidatosPessoas = listaEscritorio.filter(
+      (p) =>
+        matchCliente(nomePlanilha, p.nome || '') ||
+        matchCliente(nomePlanilha, p.grupo_cliente || '') ||
+        matchGrupoExato(nomePlanilha, p.grupo_cliente || '') ||
+        matchGrupoExato(nomePlanilha, p.nome || '')
     );
 
     // Inadimplentes que batem com esta linha do DADOS: por nome direto, por vínculo já existente, ou por nome de empresa do grupo
-    const idsEscritorioCandidatos = new Set(candidatosEscritorio.map((ce) => ce.id));
+    const idsPessoasCandidatos = new Set(candidatosPessoas.map((p) => p.id));
     const inadimplentesParaAtualizar = listaInadimplentes.filter((c) => {
       if (matchCliente(nomePlanilha, c.razao_social)) return true;
       if (matchGrupoExato(nomePlanilha, c.razao_social)) return true;
-      if (c.cliente_escritorio_id && idsEscritorioCandidatos.has(c.cliente_escritorio_id)) return true;
-      const ceLinked = listaEscritorio.find((ce) => ce.id === c.cliente_escritorio_id);
-      if (ceLinked && (matchCliente(nomePlanilha, ceLinked.grupo_cliente || '') || matchCliente(nomePlanilha, ceLinked.razao_social)))
+      if (c.pessoa_id && idsPessoasCandidatos.has(c.pessoa_id)) return true;
+      const pLinked = listaEscritorio.find((p) => p.id === c.pessoa_id);
+      if (pLinked && (matchCliente(nomePlanilha, pLinked.grupo_cliente || '') || matchCliente(nomePlanilha, pLinked.nome || '')))
         return true;
-      if (ceLinked && (matchGrupoExato(nomePlanilha, ceLinked.grupo_cliente || '') || matchGrupoExato(nomePlanilha, ceLinked.razao_social)))
+      if (pLinked && (matchGrupoExato(nomePlanilha, pLinked.grupo_cliente || '') || matchGrupoExato(nomePlanilha, pLinked.nome || '')))
         return true;
-      return candidatosEscritorio.some((ce) => matchCliente(c.razao_social, ce.razao_social));
+      return candidatosPessoas.some((p) => matchCliente(c.razao_social, p.nome || ''));
     });
 
     if (inadimplentesParaAtualizar.length === 0) {
@@ -257,22 +257,22 @@ async function main() {
 
     const nomeCorreto = nomePadraoGrupoExato(nomePlanilha) || nomePlanilha.trim();
     const nomeSemGrupo = stripGrupo(nomePlanilha).trim();
-    let clienteEscritorioId = null;
-    const ceExato = listaEscritorio.find((ce) => ce.razao_social === nomeCorreto || ce.razao_social === nomeSemGrupo || (ce.grupo_cliente && (ce.grupo_cliente === nomeCorreto || ce.grupo_cliente === nomeSemGrupo)));
-    if (ceExato) clienteEscritorioId = ceExato.id;
-    else if (candidatosEscritorio.length > 0) clienteEscritorioId = candidatosEscritorio[0].id;
+    let pessoaId = null;
+    const pExato = listaEscritorio.find((p) => (p.nome || '') === nomeCorreto || (p.nome || '') === nomeSemGrupo || (p.grupo_cliente && (p.grupo_cliente === nomeCorreto || p.grupo_cliente === nomeSemGrupo)));
+    if (pExato) pessoaId = pExato.id;
+    else if (candidatosPessoas.length > 0) pessoaId = candidatosPessoas[0].id;
 
     for (const client of inadimplentesParaAtualizar) {
-      let idEscritorio = clienteEscritorioId;
-      if (!idEscritorio && client.cliente_escritorio_id) idEscritorio = client.cliente_escritorio_id;
-      const melhorCe = candidatosEscritorio.find((ce) => matchCliente(client.razao_social, ce.razao_social));
-      if (melhorCe) idEscritorio = melhorCe.id;
+      let idPessoa = pessoaId;
+      if (!idPessoa && client.pessoa_id) idPessoa = client.pessoa_id;
+      const melhorP = candidatosPessoas.find((p) => matchCliente(client.razao_social, p.nome || ''));
+      if (melhorP) idPessoa = melhorP.id;
 
       const payload = { razao_social: nomeCorreto };
       if (qtdProcessos != null) payload.qtd_processos = Math.max(0, Math.round(qtdProcessos));
       if (horasTotal != null) payload.horas_total = Math.max(0, horasTotal);
       if (horasPorAnoJson != null) payload.horas_por_ano = horasPorAnoJson;
-      if (idEscritorio != null) payload.cliente_escritorio_id = idEscritorio;
+      if (idPessoa != null) payload.pessoa_id = idPessoa;
 
       const { error } = await supabase
         .from('clients_inadimplencia')
@@ -283,7 +283,7 @@ async function main() {
         console.error('Erro ao atualizar', client.razao_social, error.message);
       } else {
         updated++;
-        if (idEscritorio) vinculados++;
+        if (idPessoa) vinculados++;
         const nomeAlterado = client.razao_social !== nomeCorreto ? ` (era: ${client.razao_social})` : '';
         console.log('OK:', nomeCorreto + nomeAlterado, payload);
       }
@@ -292,7 +292,7 @@ async function main() {
 
   console.log('\n--- Resumo ---');
   console.log('Atualizados:', updated);
-  console.log('Vinculados a clientes_escritorio:', vinculados);
+  console.log('Vinculados a pessoas:', vinculados);
   console.log('Ignorados (sem nome ou sem dados):', skipped);
   console.log('Não encontrados na base:', notFound);
 }

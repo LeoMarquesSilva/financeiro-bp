@@ -21,7 +21,7 @@ export const TEAM_BY_EMAIL: Record<string, TeamMemberAvatar> = {
     name: 'Gustavo Bismarchi',
   },
   'ricardo@bpplaw.com.br': {
-    avatar: `${BASE_URL}/socios/ricardo-pires.jpg`,
+    avatar: `${BASE_URL}/ricardo-pires.jpg`,
     tag: 'Sócio',
     name: 'Ricardo Viscardi Pires',
   },
@@ -101,7 +101,7 @@ export const TEAM_BY_EMAIL: Record<string, TeamMemberAvatar> = {
     name: 'Felipe Camargo',
   },
   'lavinia.ferraz@bpplaw.com.br': {
-    avatar: `${BASE_URL}/legal-ops/lavinia-ferraz-crispim.jpg`,
+    avatar: 'https://www.bismarchipires.com.br/img/team/legal-ops/lavinia-ferraz-crispim.jpg',
     tag: 'Operações Legais',
     name: 'Lavínia Ferraz Crispim',
   },
@@ -158,6 +158,17 @@ export function getSolicitanteOptions(): Array<{
 export function getAreaByEmail(email: string | null | undefined): string | null {
   const m = getTeamMember(email)
   return m?.tag ?? null
+}
+
+/**
+ * Lista de áreas (tags) únicas, ordenada.
+ */
+export function getAreaTags(): string[] {
+  const set = new Set<string>()
+  Object.values(TEAM_BY_EMAIL).forEach((m) => {
+    if (m.tag?.trim()) set.add(m.tag.trim())
+  })
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
 }
 
 /**

@@ -19,7 +19,7 @@ export function ClienteEscritorioCard({ cliente }: ClienteEscritorioCardProps) {
           <div className="min-w-0 flex-1">
             <CardTitle className="flex items-center gap-2 text-base text-slate-900">
               <Building2 className="h-5 w-5 shrink-0 text-slate-500" />
-              <span className="truncate">{cliente.razao_social}</span>
+              <span className="truncate">{cliente.nome}</span>
             </CardTitle>
             {grupo && (
               <p className="mt-1 text-sm font-medium text-slate-500">{grupo}</p>
@@ -38,9 +38,9 @@ export function ClienteEscritorioCard({ cliente }: ClienteEscritorioCardProps) {
             <strong>{formatHorasDuracao(horas)}</strong>
           </span>
         </div>
-        {cliente.cnpj && (
+        {cliente.cpf_cnpj && (
           <p className="text-xs text-slate-400 font-mono">
-            CNPJ {formatCnpj(cliente.cnpj)}
+            CNPJ {formatCnpj(cliente.cpf_cnpj)}
           </p>
         )}
       </CardContent>

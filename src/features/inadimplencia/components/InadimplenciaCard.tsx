@@ -100,8 +100,8 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
     queryKey: ['clientes-escritorio'],
     queryFn: fetchClientesEscritorio,
   })
-  const linkedEscritorio = client.cliente_escritorio_id
-    ? clientesEscritorio.find((ce: ClienteEscritorioRow) => ce.id === client.cliente_escritorio_id)
+  const linkedEscritorio = client.pessoa_id
+    ? clientesEscritorio.find((ce: ClienteEscritorioRow) => ce.id === client.pessoa_id)
     : null
   const grupoCliente = linkedEscritorio?.grupo_cliente ?? null
   const empresasDoGrupo =
@@ -228,8 +228,8 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
               <p className="text-xs font-medium text-slate-500">Empresas</p>
               <ul className="mt-1 max-h-20 overflow-y-auto list-inside list-disc space-y-0.5 text-xs text-slate-700">
                 {empresasDoGrupo.map((ce: ClienteEscritorioRow) => (
-                  <li key={ce.id} className="truncate" title={ce.razao_social}>
-                    {ce.razao_social}
+                  <li key={ce.id} className="truncate" title={ce.nome ?? ''}>
+                    {ce.nome}
                   </li>
                 ))}
               </ul>
@@ -405,7 +405,7 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
                 </p>
                 <p className="mt-0.5 text-xs text-slate-400">
                   {ultimaProvidencia
-                    ? formatDate(ultimaProvidencia.created_at)
+                    ? formatDate(ultimaProvidencia.data_providencia ?? ultimaProvidencia.created_at)
                     : client.data_providencia
                       ? formatDate(client.data_providencia)
                       : null}
