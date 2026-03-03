@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { clienteInadimplenciaFormSchema } from '../types/inadimplencia.types'
 import { useInadimplenciaMutations } from '../hooks/useInadimplenciaMutations'
+import { inadimplenciaService } from '../services/inadimplenciaService'
+import { useAuth } from '@/lib/AuthContext'
 import { useTeamMembers } from '../hooks/useTeamMembers'
 import type { InadimplenciaClasse } from '@/lib/database.types'
 import type { ClienteEscritorioRow } from '@/lib/database.types'
@@ -70,7 +72,8 @@ const initialForm: FormState = {
 }
 
 export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) {
-  const { createCliente } = useInadimplenciaMutations()
+  const { fullName } = useAuth()
+  const { createCliente, reabrirCliente } = useInadimplenciaMutations()
   const { teamMembers } = useTeamMembers()
   const areas = useMemo(() => getAreasFromTeam(teamMembers), [teamMembers])
   const [form, setForm] = useState<FormState>(initialForm)
@@ -208,6 +211,35 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
       return
     }
     const data = parsed.data
+
+    const existenteResolvido = await inadimplenciaService.findResolvidoByGrupo(data.razao_social)
+
+    if (existenteResolvido) {
+      const updateFields: Record<string, unknown> = {}
+      if (data.gestores && data.gestores.length > 0) updateFields.gestor = data.gestores
+      if (data.areas && data.areas.length > 0) updateFields.area = data.areas
+      updateFields.status_classe = data.status_classe
+      updateFields.valor_em_aberto = data.valor_em_aberto
+      if (data.observacoes_gerais?.trim()) updateFields.observacoes_gerais = data.observacoes_gerais.trim()
+
+      if (Object.keys(updateFields).length > 0) {
+        await inadimplenciaService.update(existenteResolvido.id, updateFields)
+      }
+
+      const result = await reabrirCliente.mutateAsync({ id: existenteResolvido.id, createdBy: fullName })
+      if (result && typeof result === 'object' && 'error' in result && result.error) {
+        const errMsg = typeof result.error === 'object' && result.error !== null && 'message' in result.error ? (result.error as { message: string }).message : 'Erro ao reabrir'
+        setSubmitError(errMsg)
+        toast.error('Erro ao reabrir inadimplente')
+        return
+      }
+      setForm(initialForm)
+      toast.success('Inadimplente reaberto no comitê (histórico mantido)')
+      onClose()
+      onSuccess()
+      return
+    }
+
     const { error } = await createCliente.mutateAsync({
       razao_social: data.razao_social,
       cnpj: null,

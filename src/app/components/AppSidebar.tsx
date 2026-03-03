@@ -1,6 +1,6 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
-import { AlertTriangle, BarChart3, Building2, Users, LogOut } from 'lucide-react'
+import { AlertTriangle, BarChart3, Building2, Users, LogOut, UserCog } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -37,6 +37,7 @@ function getInitials(name: string | null): string {
 export function AppSidebar() {
   const { role, fullName, avatarUrl, signOut } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const visibleItems = useMemo(
     () => navItems.filter((item) => role && item.roles.includes(role)),
@@ -102,18 +103,37 @@ export function AppSidebar() {
         <div className="flex flex-col items-center gap-2 py-3">
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="cursor-default">
+              <button
+                type="button"
+                onClick={() => navigate('/financeiro/perfil')}
+                className="cursor-pointer rounded-full transition-all hover:ring-2 hover:ring-sales/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                aria-label="Meu perfil"
+              >
                 <Avatar className="h-7 w-7 ring-2 ring-white/10">
                   {avatarUrl && <AvatarImage src={avatarUrl} alt="" referrerPolicy="no-referrer" />}
                   <AvatarFallback className="bg-sidebar-accent text-[10px] text-white">
                     {getInitials(fullName)}
                   </AvatarFallback>
                 </Avatar>
-              </div>
+              </button>
             </TooltipTrigger>
             <TooltipContent side="right" className="font-medium">
-              {fullName}
+              {fullName} · Meu Perfil
             </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => navigate('/financeiro/perfil')}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                aria-label="Configurações"
+              >
+                <UserCog className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Perfil</TooltipContent>
           </Tooltip>
 
           <Tooltip>

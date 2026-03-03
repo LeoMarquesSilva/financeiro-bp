@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { providenciaService } from '../services/providenciaService'
 import { logsService } from '../services/logsService'
+import { useAuth } from '@/lib/AuthContext'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
@@ -24,6 +25,7 @@ function hojeISO() {
 }
 
 export function ModalNovaProvidencia({ open, onClose, clientId, onSuccess }: ModalNovaProvidenciaProps) {
+  const { fullName } = useAuth()
   const queryClient = useQueryClient()
   const [texto, setTexto] = useState('')
   const [dataProvidencia, setDataProvidencia] = useState(hojeISO())
@@ -41,7 +43,7 @@ export function ModalNovaProvidencia({ open, onClose, clientId, onSuccess }: Mod
       return
     }
     setSubmitting(true)
-    const { error } = await providenciaService.create(clientId, t, { dataProvidencia: dataProvidencia || null })
+    const { error } = await providenciaService.create(clientId, t, { dataProvidencia: dataProvidencia || null, createdBy: fullName })
     setSubmitting(false)
     if (error) {
       toast.error('Erro ao criar providência')
@@ -53,6 +55,7 @@ export function ModalNovaProvidencia({ open, onClose, clientId, onSuccess }: Mod
       tipo: 'outro',
       descricao: `Providência criada: ${t.slice(0, 80)}${t.length > 80 ? '…' : ''}`,
       data_acao: dataAcao,
+      usuario: fullName ?? undefined,
     })
     toast.success('Providência criada')
     setTexto('')

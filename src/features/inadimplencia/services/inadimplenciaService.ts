@@ -28,6 +28,7 @@ function buildListQuery(params: {
   area?: string
   classe?: string
   prioridade?: 'urgente' | 'atencao' | 'controlado'
+  incluirResolvidos?: boolean
   page?: number
   pageSize?: number
   orderBy?: 'created_at' | 'dias_em_aberto' | 'valor_em_aberto' | 'razao_social'
@@ -36,7 +37,12 @@ function buildListQuery(params: {
   let query = supabase
     .from('clients_inadimplencia_list')
     .select('*', { count: 'exact' })
-    .is('resolvido_at', null)
+
+  if (params.incluirResolvidos) {
+    query = query.not('resolvido_at', 'is', null)
+  } else {
+    query = query.is('resolvido_at', null)
+  }
 
   const busca = params.busca?.trim()
   if (busca && busca.length > 0) {
@@ -204,15 +210,22 @@ export const inadimplenciaService = {
     return { data, error }
   },
 
-  async marcarComoResolvido(id: string) {
+  async marcarComoResolvido(id: string, createdBy?: string | null) {
+    const now = new Date().toISOString()
     const { data, error } = await supabase
       .from('clients_inadimplencia')
-      .update({ resolvido_at: new Date().toISOString() } as never)
+      .update({ resolvido_at: now } as never)
       .eq('id', id)
       .select()
       .single()
 
     if (!error && data) {
+      await supabase.from('inadimplencia_ciclos').insert({
+        cliente_inadimplencia_id: id,
+        tipo: 'resolvido',
+        data_evento: now,
+        created_by: createdBy ?? null,
+      } as never)
       await logsService.create({
         client_id: id,
         descricao: 'Cliente marcado como resolvido',
@@ -221,5 +234,42 @@ export const inadimplenciaService = {
     }
 
     return { data, error }
+  },
+
+  async reabrir(id: string, createdBy?: string | null) {
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('clients_inadimplencia')
+      .update({ resolvido_at: null, reaberto_at: now } as never)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (!error && data) {
+      await supabase.from('inadimplencia_ciclos').insert({
+        cliente_inadimplencia_id: id,
+        tipo: 'reaberto',
+        data_evento: now,
+        created_by: createdBy ?? null,
+      } as never)
+      await logsService.create({
+        client_id: id,
+        descricao: 'Cliente reaberto no comitê de inadimplência',
+        tipo: 'outro',
+      })
+    }
+
+    return { data, error }
+  },
+
+  async findResolvidoByGrupo(razaoSocial: string): Promise<{ id: string; razao_social: string; resolvido_at: string | null } | null> {
+    const { data } = await supabase
+      .from('clients_inadimplencia')
+      .select('id, razao_social, resolvido_at')
+      .eq('razao_social', razaoSocial)
+      .not('resolvido_at', 'is', null)
+      .order('resolvido_at', { ascending: false })
+      .limit(1)
+    return (data && data.length > 0) ? data[0] as { id: string; razao_social: string; resolvido_at: string | null } : null
   },
 }

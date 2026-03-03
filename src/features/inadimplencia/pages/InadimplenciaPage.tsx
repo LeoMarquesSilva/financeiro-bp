@@ -22,7 +22,7 @@ import { EmptyState } from '../components/EmptyState'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Plus, Download, LayoutGrid, Columns3, Users } from 'lucide-react'
+import { Plus, Download, LayoutGrid, Columns3, Users, Archive } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { InadimplenciaClasse } from '@/lib/database.types'
 
@@ -85,6 +85,7 @@ export function InadimplenciaPage() {
   const [resolvingId, setResolvingId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [selectedClient, setSelectedClient] = useState<ClientInadimplenciaRow | null>(null)
+  const [mostrarResolvidos, setMostrarResolvidos] = useState(false)
 
   const [searchParams, setSearchParams] = useSearchParams()
   const { teamMembers } = useTeamMembers()
@@ -111,11 +112,13 @@ export function InadimplenciaPage() {
   ])
   const { data: clientes, total, loading, error, refetch } = useInadimplencia({
     ...listagemParams,
+    incluirResolvidos: mostrarResolvidos,
     page,
     pageSize: PAGE_SIZE,
   })
   const { data: dashboardData, loading: dashboardLoading } = useDashboard()
-  const { marcarResolvido } = useInadimplenciaMutations()
+  const { fullName } = useAuth()
+  const { marcarResolvido, reabrirCliente } = useInadimplenciaMutations()
 
   const handleExport = async () => {
     setExporting(true)
@@ -142,9 +145,21 @@ export function InadimplenciaPage() {
 
   const handleMarcarResolvido = (id: string) => setResolvingId(id)
 
+  const handleReabrir = (id: string) => {
+    reabrirCliente.mutate({ id, createdBy: fullName }, {
+      onSuccess: () => {
+        toast.success('Cliente reaberto com sucesso')
+        refetch()
+      },
+      onError: () => {
+        toast.error('Erro ao reabrir cliente')
+      },
+    })
+  }
+
   const handleConfirmarResolver = () => {
     if (!resolvingId) return
-    marcarResolvido.mutate(resolvingId, {
+    marcarResolvido.mutate({ id: resolvingId, createdBy: fullName }, {
       onSuccess: () => {
         toast.success('Cliente marcado como resolvido')
         setResolvingId(null)
@@ -173,6 +188,16 @@ export function InadimplenciaPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={mostrarResolvidos ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setMostrarResolvidos((v) => !v)}
+            className={cn('gap-2', mostrarResolvidos && 'bg-emerald-700 hover:bg-emerald-800')}
+          >
+            <Archive className="h-4 w-4" />
+            {mostrarResolvidos ? 'Mostrando resolvidos' : 'Ver resolvidos'}
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -308,6 +333,7 @@ export function InadimplenciaPage() {
                   key={client.id}
                   client={client}
                   onMarcarResolvido={handleMarcarResolvido}
+                  onReabrir={handleReabrir}
                   onRefresh={refetch}
                   onSelectClient={setSelectedClient}
                 />
@@ -435,6 +461,7 @@ export function InadimplenciaPage() {
         onClose={() => setSelectedClient(null)}
         client={selectedClient}
         onMarcarResolvido={handleMarcarResolvido}
+        onReabrir={handleReabrir}
         onRefresh={refetch}
       />
       <ConfirmarResolverModal

@@ -25,7 +25,7 @@ import { useTeamMembers } from '../hooks/useTeamMembers'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Pencil, History, Check, AlertTriangle, ChevronDown, ChevronRight, MessageSquare, FileText, ListChecks, CreditCard, CheckCircle2, Clock, AlertCircle, Trash2, DollarSign, CalendarDays, Building2, Briefcase } from 'lucide-react'
+import { Pencil, History, Check, AlertTriangle, ChevronDown, ChevronRight, MessageSquare, FileText, ListChecks, CheckCircle2, Clock, AlertCircle, Trash2, DollarSign, CalendarDays, Building2, Briefcase, RotateCcw } from 'lucide-react'
 import {
   fetchClientesEscritorio,
   fetchContagemCiPorGrupo,
@@ -129,15 +129,9 @@ function CollapsibleSection({
 function ParcelaItem({ p, valueColor = 'text-slate-900' }: { p: ParcelaRow; valueColor?: string }) {
   return (
     <li className="flex items-center justify-between gap-3 rounded-lg border border-slate-200/60 bg-white px-3 py-2.5">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-slate-800">
-          {p.parcela ? `Parcela ${p.parcela}${p.parcelas ? `/${p.parcelas}` : ''}` : p.descricao || p.tipo || 'Parcela'}
-        </p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
-          {p.competencia && <span>Comp. {p.competencia}</span>}
-          <span>Venc. {formatDate(p.data_vencimento)}</span>
-        </div>
-      </div>
+      <span className="text-sm font-semibold text-slate-800">
+        {formatDate(p.data_vencimento)}
+      </span>
       <span className={cn('shrink-0 text-sm font-bold tabular-nums', valueColor)}>
         {p.valor_pago != null ? formatCurrency(Number(p.valor_pago)) : formatCurrency(Number(p.valor))}
       </span>
@@ -164,8 +158,12 @@ function MetricCard({ icon: Icon, label, value, iconClass }: { icon: React.Eleme
 function ProvidenciaCard({ p, clientId, onRefresh }: { p: ProvidenciaRow; clientId: string; onRefresh?: () => void }) {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
+  const { teamMembers } = useTeamMembers()
   const queryClient = useQueryClient()
   const [modalExcluir, setModalExcluir] = useState(false)
+
+  const author = p.created_by ? teamMembers.find((m: { full_name: string; email: string }) => m.full_name === p.created_by || m.email === p.created_by) ?? null : null
+  const authorAvatar = author ? getTeamMember(author.email)?.avatar ?? author.avatar_url : null
 
   const handleDelete = async () => {
     const { error } = await providenciaService.deleteProvidencia(p.id)
@@ -179,14 +177,24 @@ function ProvidenciaCard({ p, clientId, onRefresh }: { p: ProvidenciaRow; client
     <>
       <div className="rounded-xl border border-slate-200/60 bg-white p-4">
         <div className="flex items-start gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-dark/5">
-            <FileText className="h-4 w-4 text-primary-dark" />
-          </div>
+          {author ? (
+            <Avatar className="h-8 w-8 shrink-0">
+              {authorAvatar && <AvatarImage src={authorAvatar} alt={author.full_name} />}
+              <AvatarFallback className="text-[10px] bg-primary-dark/10 text-primary-dark">{getIniciais(author.full_name)}</AvatarFallback>
+            </Avatar>
+          ) : (
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-dark/5">
+              <FileText className="h-4 w-4 text-primary-dark" />
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                {formatDate(p.data_providencia ?? p.created_at)}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  {formatDate(p.data_providencia ?? p.created_at)}
+                </p>
+                {author && <span className="text-[11px] text-slate-500">{author.full_name}</span>}
+              </div>
               {canEdit && (
                 <button type="button" onClick={() => setModalExcluir(true)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Apagar">
                   <Trash2 className="h-3.5 w-3.5" />
@@ -276,10 +284,11 @@ export interface ClienteDetailSheetProps {
   onClose: () => void
   client: ClientInadimplenciaRow | null
   onMarcarResolvido: (id: string) => void
+  onReabrir?: (id: string) => void
   onRefresh?: () => void
 }
 
-export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, onRefresh }: ClienteDetailSheetProps) {
+export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, onReabrir, onRefresh }: ClienteDetailSheetProps) {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
   const { teamMembers } = useTeamMembers()
@@ -321,6 +330,22 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
   }, [processosPorArea])
 
   const { data: providencias = [] } = useQuery({ queryKey: ['providencias', client?.id], queryFn: async () => { if (!client?.id) return []; const { data, error } = await providenciaService.listByCliente(client.id); if (error) throw error; return data }, enabled: open && !!client?.id })
+
+  const { data: ciclos = [] } = useQuery({
+    queryKey: ['inadimplencia-ciclos', client?.id],
+    queryFn: async () => {
+      if (!client?.id) return []
+      const { supabase } = await import('@/lib/supabaseClient')
+      const { data, error } = await supabase
+        .from('inadimplencia_ciclos')
+        .select('*')
+        .eq('cliente_inadimplencia_id', client.id)
+        .order('data_evento', { ascending: false })
+      if (error) throw error
+      return data ?? []
+    },
+    enabled: open && !!client?.id,
+  })
 
   const grupoPessoaIds = useMemo(() => empresasDoGrupo.length > 0 ? empresasDoGrupo.map((ce: ClienteEscritorioRow) => ce.id) : [], [empresasDoGrupo])
   const { data: parcelasData } = useQuery({
@@ -406,8 +431,8 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
               {hasParcelas && (
                 <section className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-slate-500" />
-                    <h3 className="text-sm font-bold text-slate-800">Parcelas</h3>
+                    <CalendarDays className="h-4 w-4 text-slate-500" />
+                    <h3 className="text-sm font-bold text-slate-800">Vencimento Parcela</h3>
                   </div>
 
                   {parcelasData.emAtraso.length > 0 && (
@@ -439,8 +464,8 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
               {parcelasData && !hasParcelas && (
                 <section>
                   <div className="flex items-center gap-2 mb-2">
-                    <CreditCard className="h-4 w-4 text-slate-400" />
-                    <h3 className="text-sm font-bold text-slate-700">Parcelas</h3>
+                    <CalendarDays className="h-4 w-4 text-slate-400" />
+                    <h3 className="text-sm font-bold text-slate-700">Vencimento Parcela</h3>
                   </div>
                   <p className="rounded-xl border border-dashed border-slate-300/60 bg-white px-4 py-3 text-sm text-slate-500">
                     Nenhuma parcela encontrada. Verifique se o cliente está vinculado e se o relatório foi sincronizado.
@@ -562,6 +587,40 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
                 </section>
               )}
 
+              {/* ── Timeline de ciclos ── */}
+              {ciclos.length > 0 && (
+                <section>
+                  <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800"><RotateCcw className="h-4 w-4 text-slate-500" />Histórico de status</h3>
+                  <div className="space-y-0">
+                    {ciclos.map((ciclo: { id: string; tipo: string; data_evento: string; created_by: string | null; observacao: string | null }, idx: number) => {
+                      const isLast = idx === ciclos.length - 1
+                      const icon = ciclo.tipo === 'resolvido' ? Check : ciclo.tipo === 'reaberto' ? RotateCcw : FileText
+                      const IconComp = icon
+                      const colors = ciclo.tipo === 'resolvido' ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : ciclo.tipo === 'reaberto' ? 'bg-blue-100 text-blue-600 border-blue-200' : 'bg-slate-100 text-slate-500 border-slate-200'
+                      const label = ciclo.tipo === 'resolvido' ? 'Resolvido' : ciclo.tipo === 'reaberto' ? 'Reaberto' : 'Inserido'
+                      return (
+                        <div key={ciclo.id} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full border', colors)}>
+                              <IconComp className="h-3.5 w-3.5" />
+                            </div>
+                            {!isLast && <div className="w-px flex-1 bg-slate-200" />}
+                          </div>
+                          <div className="pb-4 min-w-0">
+                            <p className="text-sm font-semibold text-slate-800">{label}</p>
+                            <p className="text-xs text-slate-500">
+                              {formatDate(ciclo.data_evento)}
+                              {ciclo.created_by && <span className="ml-1">· {ciclo.created_by}</span>}
+                            </p>
+                            {ciclo.observacao && <p className="mt-0.5 text-xs text-slate-400">{ciclo.observacao}</p>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+              )}
+
               {/* ── Últimas ações ── */}
               <section>
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800"><History className="h-4 w-4 text-slate-500" />Últimas ações</h3>
@@ -586,13 +645,18 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
           {/* ── Footer ── */}
           <footer className="shrink-0 border-t border-slate-200/60 bg-white px-5 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              {canEdit && <Button variant="outline" size="sm" onClick={() => setModalProvidencia(true)} className="gap-1.5 rounded-lg"><FileText className="h-3.5 w-3.5" />Providência</Button>}
-              <Button variant="outline" size="sm" onClick={() => setModalFollowUp(true)} className="gap-1.5 rounded-lg"><MessageSquare className="h-3.5 w-3.5" />Follow-up</Button>
-              {canEdit && <Button variant="outline" size="sm" onClick={() => setModalEditar(true)} className="gap-1.5 rounded-lg"><Pencil className="h-3.5 w-3.5" />Editar</Button>}
+              <Button variant="outline" size="sm" onClick={() => setModalProvidencia(true)} className="gap-1.5 rounded-lg border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700"><FileText className="h-3.5 w-3.5" />Providência</Button>
+              <Button variant="outline" size="sm" onClick={() => setModalFollowUp(true)} className="gap-1.5 rounded-lg border-violet-200 text-violet-600 hover:bg-violet-50 hover:text-violet-700"><MessageSquare className="h-3.5 w-3.5" />Follow-up</Button>
+              {canEdit && <Button variant="outline" size="sm" onClick={() => setModalEditar(true)} className="gap-1.5 rounded-lg border-amber-200 text-amber-600 hover:bg-amber-50 hover:text-amber-700"><Pencil className="h-3.5 w-3.5" />Editar</Button>}
               <Button variant="outline" size="sm" onClick={() => setModalHistorico(true)} className="gap-1.5 rounded-lg"><History className="h-3.5 w-3.5" />Histórico</Button>
-              {canEdit && (
+              {canEdit && !client.resolvido_at && (
                 <button type="button" onClick={() => onMarcarResolvido(client.id)} className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow">
                   <Check className="h-3.5 w-3.5" />Resolver
+                </button>
+              )}
+              {canEdit && client.resolvido_at && onReabrir && (
+                <button type="button" onClick={() => onReabrir(client.id)} className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow">
+                  <RotateCcw className="h-3.5 w-3.5" />Reabrir
                 </button>
               )}
             </div>

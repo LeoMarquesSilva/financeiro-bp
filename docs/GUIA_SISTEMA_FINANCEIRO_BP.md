@@ -50,11 +50,11 @@ O sistema possui **3 perfis** com diferentes níveis de permissão:
 
 ---
 
-### COMITÊ — Visualização e follow-ups
+### COMITÊ — Visualização, providências e follow-ups
 
 | Módulo             | Permissão                                         |
 |--------------------|---------------------------------------------------|
-| Inadimplência      | **Somente visualizar** + criar follow-ups          |
+| Inadimplência      | Visualizar + criar providências e follow-ups       |
 | Dashboard          | Visualizar todos os KPIs e gráficos               |
 | Escritório         | **Sem acesso**                                     |
 | Gestores           | **Sem acesso**                                     |
@@ -63,7 +63,6 @@ O sistema possui **3 perfis** com diferentes níveis de permissão:
 **O que o Comitê NÃO pode fazer:**
 - Incluir novos inadimplentes
 - Editar dados de clientes
-- Criar providências
 - Marcar como resolvido
 - Excluir providências ou follow-ups
 

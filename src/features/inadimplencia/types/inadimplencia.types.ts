@@ -52,6 +52,7 @@ export interface ListagemParams {
   area?: string
   classe?: InadimplenciaClasse
   prioridade?: PrioridadeTipo
+  incluirResolvidos?: boolean
   page?: number
   pageSize?: number
   orderBy?: OrderByInadimplencia

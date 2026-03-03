@@ -2,11 +2,13 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/AuthContext'
 import type { AppRole } from '@/lib/database.types'
 import { Login } from './Login'
+import { ResetPassword } from './ResetPassword'
 import { FinanceiroLayout } from './layouts/FinanceiroLayout'
 import { InadimplenciaPage } from '@/features/inadimplencia/pages/InadimplenciaPage'
 import { InadimplenciaDashboardPage } from '@/features/inadimplencia/pages/InadimplenciaDashboardPage'
 import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
 import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
+import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 
 function ProtectedRoute({
   allowedRoles,
@@ -34,7 +36,14 @@ function AppRoutes() {
   }
 
   if (!user || !role) {
-    return <Login />
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </BrowserRouter>
+    )
   }
 
   return (
@@ -60,7 +69,9 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           />
+          <Route path="perfil" element={<PerfilPage />} />
         </Route>
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="*" element={<Navigate to="/financeiro/inadimplencia" replace />} />
       </Routes>
     </BrowserRouter>

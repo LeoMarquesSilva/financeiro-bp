@@ -6,6 +6,9 @@ export const PROVIDENCIA_FOLLOW_UP_TIPO_LABEL: Record<ProvidenciaFollowUpTipo, s
   devolutiva: 'Devolutiva',
   cobranca: 'Cobrança',
   acordo: 'Acordo',
+  validar_acordo_comite: 'Validar Acordo Comitê',
+  avaliar_devolutiva_comite: 'Avaliar Devolutiva Comitê',
+  andamento_negociacao: 'Andamento de Negociação',
 }
 
 export const providenciaService = {

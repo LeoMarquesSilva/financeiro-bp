@@ -11,7 +11,7 @@ export type InadimplenciaTipoAcao =
   | 'outro'
 
 /** Tipo de follow-up de uma providência (comitê de inadimplência) */
-export type ProvidenciaFollowUpTipo = 'devolutiva' | 'cobranca' | 'acordo'
+export type ProvidenciaFollowUpTipo = 'devolutiva' | 'cobranca' | 'acordo' | 'validar_acordo_comite' | 'avaliar_devolutiva_comite' | 'andamento_negociacao'
 
 export interface TeamMemberRow {
   id: string
@@ -20,6 +20,7 @@ export interface TeamMemberRow {
   area: string
   avatar_url: string | null
   role: AppRole | null
+  password_changed: boolean
   created_at: string
   updated_at: string
 }
@@ -71,6 +72,7 @@ export interface Database {
           follow_up: string | null
           data_follow_up: string | null
           resolvido_at: string | null
+          reaberto_at: string | null
           created_at: string
           updated_at: string
           created_by: string | null
@@ -98,6 +100,7 @@ export interface Database {
           follow_up?: string | null
           data_follow_up?: string | null
           resolvido_at?: string | null
+          reaberto_at?: string | null
           created_at?: string
           updated_at?: string
           created_by?: string | null
@@ -124,6 +127,7 @@ export interface Database {
           follow_up?: string | null
           data_follow_up?: string | null
           resolvido_at?: string | null
+          reaberto_at?: string | null
           updated_at?: string
         }
       }

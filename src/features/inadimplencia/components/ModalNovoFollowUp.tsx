@@ -17,7 +17,7 @@ const inputClass =
 const selectClass =
   'flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2'
 
-const TIPOS: ProvidenciaFollowUpTipo[] = ['devolutiva', 'cobranca', 'acordo']
+const TIPOS: ProvidenciaFollowUpTipo[] = ['validar_acordo_comite', 'avaliar_devolutiva_comite', 'andamento_negociacao']
 
 interface ModalNovoFollowUpProps {
   open: boolean
@@ -30,7 +30,7 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
   const queryClient = useQueryClient()
   const { fullName } = useAuth()
   const [providenciaId, setProvidenciaId] = useState('')
-  const [tipo, setTipo] = useState<ProvidenciaFollowUpTipo>('devolutiva')
+  const [tipo, setTipo] = useState<ProvidenciaFollowUpTipo>('validar_acordo_comite')
   const [texto, setTexto] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -79,7 +79,7 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
   return (
     <ModalBase open={open} onClose={onClose} title="Novo follow-up">
       <p className="mb-3 text-sm text-slate-500">
-        Registre um follow-up vinculado a uma providência (gestor). Escolha o tipo: devolutiva, cobrança ou acordo.
+        Registre um follow-up vinculado a uma providência. Escolha o tipo adequado.
       </p>
       {semProvidencias ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">

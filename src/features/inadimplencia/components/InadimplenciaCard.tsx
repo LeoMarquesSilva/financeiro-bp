@@ -17,12 +17,13 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
-import { Pencil, Check, AlertTriangle, MessageSquare, FileText, Calendar } from 'lucide-react'
+import { Pencil, Check, AlertTriangle, MessageSquare, FileText, Calendar, RotateCcw } from 'lucide-react'
 import { fetchClientesEscritorio } from '@/features/escritorio/services/escritorioService'
 
 interface InadimplenciaCardProps {
   client: ClientInadimplenciaRow
   onMarcarResolvido: (id: string) => void
+  onReabrir?: (id: string) => void
   onRefresh?: () => void
   onSelectClient?: (client: ClientInadimplenciaRow) => void
 }
@@ -60,7 +61,7 @@ function getIniciais(name: string | null | undefined): string {
   return name.slice(0, 2).toUpperCase()
 }
 
-export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSelectClient }: InadimplenciaCardProps) {
+export function InadimplenciaCard({ client, onMarcarResolvido, onReabrir, onRefresh, onSelectClient }: InadimplenciaCardProps) {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
   const { teamMembers } = useTeamMembers()
@@ -118,7 +119,7 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
       <Card
         className={cn(
           'group relative flex h-full flex-col overflow-hidden border-slate-200/60 bg-white shadow-sm transition-all duration-200 hover:shadow-md',
-          followUpVencido && 'border-l-[3px] border-l-red-400',
+          client.resolvido_at ? 'opacity-75 border-l-[3px] border-l-emerald-400' : followUpVencido && 'border-l-[3px] border-l-red-400',
         )}
       >
         {/* Clickable area */}
@@ -151,12 +152,19 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
                 </div>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5">
+                {client.resolvido_at && (
+                  <Badge className="rounded-full bg-emerald-100 text-emerald-700 text-[11px]">
+                    <Check className="mr-0.5 h-3 w-3" /> Resolvido
+                  </Badge>
+                )}
                 <Badge variant={BADGE_VARIANT_CLASSE[client.status_classe]} className="rounded-full text-[11px]">
                   Classe {client.status_classe}
                 </Badge>
-                <Badge variant={BADGE_VARIANT_PRIORIDADE[prioridade]} className="rounded-full text-[11px]">
-                  {PRIORIDADE_LABEL[prioridade]}
-                </Badge>
+                {!client.resolvido_at && (
+                  <Badge variant={BADGE_VARIANT_PRIORIDADE[prioridade]} className="rounded-full text-[11px]">
+                    {PRIORIDADE_LABEL[prioridade]}
+                  </Badge>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -250,28 +258,26 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
 
         {/* Footer: icon-only actions + Resolver CTA */}
         <CardFooter className="mt-auto flex items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/40 px-4 py-2">
-          <div className="flex items-center gap-1">
-            {canEdit && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setModalProvidencia(true) }}
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                    aria-label="Nova providência"
-                  >
-                    <FileText className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Providência</TooltipContent>
-              </Tooltip>
-            )}
+          <div className="flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setModalProvidencia(true) }}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700"
+                  aria-label="Nova providência"
+                >
+                  <FileText className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Providência</TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setModalFollowUp(true) }}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-violet-500 transition-colors hover:bg-violet-50 hover:text-violet-700"
                   aria-label="Novo follow-up"
                 >
                   <MessageSquare className="h-4 w-4" />
@@ -285,7 +291,7 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setModalEditar(true) }}
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
                     aria-label="Editar"
                   >
                     <Pencil className="h-4 w-4" />
@@ -295,7 +301,7 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
               </Tooltip>
             )}
           </div>
-          {canEdit && (
+          {canEdit && !client.resolvido_at && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onMarcarResolvido(client.id) }}
@@ -303,6 +309,16 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onRefresh, onSele
             >
               <Check className="h-3.5 w-3.5" />
               Resolver
+            </button>
+          )}
+          {canEdit && client.resolvido_at && onReabrir && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onReabrir(client.id) }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-blue-700 hover:shadow"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reabrir
             </button>
           )}
         </CardFooter>

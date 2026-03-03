@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 const BACKGROUND_IMAGE = '/escritorio%20dia.png'
 const LOGO_URL = '/team/logo-azul.png'
@@ -12,6 +13,8 @@ export function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [forgotMode, setForgotMode] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,7 +28,7 @@ export function Login() {
     }
 
     setLoading(true)
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { error: authError } = await (supabase.auth as any).signInWithPassword({
       email: emailTrim,
       password: passwordTrim,
     })
@@ -34,6 +37,27 @@ export function Login() {
       setError('E-mail ou senha incorretos.')
       setLoading(false)
     }
+  }
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const emailTrim = email.trim().toLowerCase()
+    if (!emailTrim) {
+      setError('Informe seu e-mail.')
+      return
+    }
+    setForgotLoading(true)
+    setError(null)
+    const { error: resetError } = await (supabase.auth as any).resetPasswordForEmail(emailTrim, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setForgotLoading(false)
+    if (resetError) {
+      setError('Erro ao enviar e-mail. Tente novamente.')
+      return
+    }
+    toast.success('E-mail de recuperação enviado! Verifique sua caixa de entrada.')
+    setForgotMode(false)
   }
 
   return (
@@ -80,94 +104,141 @@ export function Login() {
             Financeiro BP
           </h1>
           <p className="mt-1 text-center text-sm text-slate-500">
-            Entre com suas credenciais para acessar o sistema.
+            {forgotMode ? 'Informe seu e-mail para recuperar a senha.' : 'Entre com suas credenciais para acessar o sistema.'}
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            {error && (
-              <div
-                className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
-                role="alert"
-              >
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="login-email" className="sr-only">
-                E-mail
-              </label>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  <Mail className="h-5 w-5" />
-                </span>
-                <input
-                  id="login-email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="E-mail"
-                  disabled={loading}
-                  className={cn(
-                    'w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-slate-900',
-                    'placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none',
-                    'disabled:opacity-60'
-                  )}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="login-password" className="sr-only">
-                Senha
-              </label>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  <Lock className="h-5 w-5" />
-                </span>
-                <input
-                  id="login-password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Senha"
-                  disabled={loading}
-                  className={cn(
-                    'w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-10 pr-12 text-slate-900',
-                    'placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none',
-                    'disabled:opacity-60'
-                  )}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/20 rounded p-1"
-                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                  tabIndex={0}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className={cn(
-                'w-full rounded-lg py-3 font-semibold text-white transition',
-                'bg-primary hover:bg-primary-dark focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:outline-none',
-                'disabled:opacity-70 disabled:cursor-not-allowed'
+          {forgotMode ? (
+            <form onSubmit={handleForgotPassword} className="mt-6 space-y-4">
+              {error && (
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+                  {error}
+                </div>
               )}
-            >
-              {loading ? 'Entrando...' : 'Entrar'}
-            </button>
-          </form>
+              <div>
+                <label htmlFor="forgot-email" className="sr-only">E-mail</label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Mail className="h-5 w-5" />
+                  </span>
+                  <input
+                    id="forgot-email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="E-mail"
+                    disabled={forgotLoading}
+                    className={cn(
+                      'w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-slate-900',
+                      'placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none',
+                      'disabled:opacity-60'
+                    )}
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={forgotLoading}
+                className={cn(
+                  'w-full rounded-lg py-3 font-semibold text-white transition',
+                  'bg-primary hover:bg-primary-dark focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:outline-none',
+                  'disabled:opacity-70 disabled:cursor-not-allowed'
+                )}
+              >
+                {forgotLoading ? 'Enviando…' : 'Enviar e-mail de recuperação'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setForgotMode(false); setError(null) }}
+                className="w-full text-center text-sm text-slate-500 hover:text-primary transition"
+              >
+                Voltar ao login
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              {error && (
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="login-email" className="sr-only">E-mail</label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Mail className="h-5 w-5" />
+                  </span>
+                  <input
+                    id="login-email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="E-mail"
+                    disabled={loading}
+                    className={cn(
+                      'w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-slate-900',
+                      'placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none',
+                      'disabled:opacity-60'
+                    )}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="login-password" className="sr-only">Senha</label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Lock className="h-5 w-5" />
+                  </span>
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Senha"
+                    disabled={loading}
+                    className={cn(
+                      'w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-10 pr-12 text-slate-900',
+                      'placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none',
+                      'disabled:opacity-60'
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/20 rounded p-1"
+                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    tabIndex={0}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className={cn(
+                  'w-full rounded-lg py-3 font-semibold text-white transition',
+                  'bg-primary hover:bg-primary-dark focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:outline-none',
+                  'disabled:opacity-70 disabled:cursor-not-allowed'
+                )}
+              >
+                {loading ? 'Entrando...' : 'Entrar'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setForgotMode(true); setError(null) }}
+                className="w-full text-center text-sm text-slate-500 hover:text-primary transition"
+              >
+                Esqueci minha senha
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </div>

@@ -25,7 +25,14 @@ export function useInadimplenciaMutations() {
   })
 
   const marcarResolvido = useMutation({
-    mutationFn: (id: string) => inadimplenciaService.marcarComoResolvido(id),
+    mutationFn: ({ id, createdBy }: { id: string; createdBy?: string | null }) =>
+      inadimplenciaService.marcarComoResolvido(id, createdBy),
+    onSuccess: () => invalidate(),
+  })
+
+  const reabrirCliente = useMutation({
+    mutationFn: ({ id, createdBy }: { id: string; createdBy?: string | null }) =>
+      inadimplenciaService.reabrir(id, createdBy),
     onSuccess: () => invalidate(),
   })
 
@@ -91,6 +98,7 @@ export function useInadimplenciaMutations() {
     createCliente,
     updateCliente,
     marcarResolvido,
+    reabrirCliente,
     registrarAcao,
     registrarPagamento,
     invalidate,
