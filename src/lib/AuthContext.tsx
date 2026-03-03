@@ -8,7 +8,7 @@ import {
 } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
-import type { AppRole } from './database.types'
+import type { AppRole, TeamMemberRow } from './database.types'
 
 interface AuthState {
   user: User | null
@@ -25,11 +25,14 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
-async function fetchTeamMemberRole(email: string) {
+type TeamMemberProfile = Pick<TeamMemberRow, 'role' | 'full_name' | 'avatar_url'>
+
+async function fetchTeamMemberRole(email: string): Promise<TeamMemberProfile | null> {
   const { data } = await supabase
     .from('team_members')
     .select('role, full_name, avatar_url')
     .eq('email', email)
+    .returns<TeamMemberProfile>()
     .single()
 
   return data

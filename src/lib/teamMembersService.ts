@@ -44,9 +44,10 @@ export const teamMembersService = {
   },
 
   async updateRole(id: string, role: AppRole | null): Promise<void> {
-    const { error } = await supabase
-      .from('team_members')
-      .update({ role, updated_at: new Date().toISOString() } as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase-js infers Update as never for some schema versions
+    const query = supabase.from('team_members') as any
+    const { error } = await query
+      .update({ role, updated_at: new Date().toISOString() })
       .eq('id', id)
     if (error) throw error
   },
