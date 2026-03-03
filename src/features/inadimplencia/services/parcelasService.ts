@@ -28,20 +28,28 @@ const HOJE = new Date().toISOString().slice(0, 10)
 
 /**
  * Busca parcelas do cliente inadimplente.
- * Prioridade: pessoa_id (vinculado à base pessoas). Fallback: cliente ilike razao_social.
+ * Aceita múltiplos pessoa_ids (para grupos com várias empresas).
+ * Fallback: cliente ilike razao_social.
  */
 export async function fetchParcelasPorCliente(params: {
   pessoa_id: string | null
+  pessoa_ids?: string[]
   razao_social: string
 }): Promise<ParcelasPorCliente> {
-  const { pessoa_id, razao_social } = params
+  const { pessoa_id, pessoa_ids, razao_social } = params
+
+  const ids = pessoa_ids && pessoa_ids.length > 0
+    ? pessoa_ids
+    : pessoa_id
+      ? [pessoa_id]
+      : []
 
   let query = supabase
     .from('financeiro_parcelas')
     .select('id, pessoa_id, nro_titulo, parcela, parcelas, data_vencimento, data_baixa, situacao, valor, valor_pago, descricao, competencia, tipo, forma, cliente')
 
-  if (pessoa_id) {
-    query = query.eq('pessoa_id', pessoa_id)
+  if (ids.length > 0) {
+    query = query.in('pessoa_id', ids)
   } else if (razao_social?.trim()) {
     const term = `%${razao_social.trim().replace(/%/g, '\\%')}%`
     query = query.ilike('cliente', term)

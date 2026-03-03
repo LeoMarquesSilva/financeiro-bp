@@ -25,8 +25,8 @@ export function ModalBase({ open, onClose, title, description, children, classNa
         className={cn('max-h-[85vh] overflow-hidden flex flex-col p-0', className)}
       >
         <DialogHeader>
-          <DialogTitle id="modal-title">{title}</DialogTitle>
-          <DialogDescription id="modal-desc" className="sr-only">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className={description ? 'text-sm text-slate-500' : 'sr-only'}>
             {description ?? 'Conteúdo do diálogo.'}
           </DialogDescription>
         </DialogHeader>

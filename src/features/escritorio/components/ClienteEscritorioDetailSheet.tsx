@@ -32,12 +32,16 @@ export function ClienteEscritorioDetailSheet({
       <SheetContent side="right" className="flex w-full max-w-2xl flex-col p-0 sm:max-w-2xl">
         <SheetHeader className="border-b border-slate-200 px-6 py-4">
           <SheetTitle className="pr-8 text-xl text-slate-900">{cliente.nome}</SheetTitle>
-          {grupo && (
-            <SheetDescription className="flex items-center gap-2 text-slate-500">
-              <Building2 className="h-4 w-4 shrink-0" />
-              {grupo}
-            </SheetDescription>
-          )}
+          <SheetDescription className={grupo ? 'flex items-center gap-2 text-slate-500' : 'sr-only'}>
+            {grupo ? (
+              <>
+                <Building2 className="h-4 w-4 shrink-0" />
+                {grupo}
+              </>
+            ) : (
+              'Detalhes do cliente'
+            )}
+          </SheetDescription>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">

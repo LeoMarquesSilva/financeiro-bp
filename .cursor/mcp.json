@@ -11,6 +11,10 @@
     "page-design-guide": {
       "command": "npx",
       "args": ["-y", "page-design-guide-mcp"]
+    },
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "supabase-mcp-server@latest", "--project-id", "wvbptgcevwvubtnetojz"]
     }
   }
 }

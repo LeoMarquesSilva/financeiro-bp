@@ -53,7 +53,8 @@ export function InadimplenciaCardCompact({
   const { teamMembers } = useTeamMembers()
 
   const prioridade: PrioridadeTipo = getPrioridade(client.dias_em_aberto, Number(client.valor_em_aberto))
-  const gestorMember = resolveTeamMember(client.gestor ?? null, teamMembers)
+  const gestorEmails: string[] = Array.isArray(client.gestor) ? client.gestor : client.gestor ? [client.gestor] : []
+  const gestorMember = gestorEmails.length > 0 ? resolveTeamMember(gestorEmails[0], teamMembers) : null
   const gestorAvatarUrl = gestorMember
     ? getTeamMember(gestorMember.email)?.avatar ?? gestorMember.avatar_url
     : null

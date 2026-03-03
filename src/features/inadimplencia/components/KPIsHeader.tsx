@@ -1,6 +1,6 @@
-import { Card, CardContent } from '@/components/ui/card'
 import { formatCurrency } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
+import { DollarSign, TrendingUp, AlertTriangle, AlertCircle, ShieldCheck } from 'lucide-react'
 
 interface KPIsHeaderProps {
   totalEmAberto: number
@@ -13,65 +13,37 @@ interface KPIsHeaderProps {
   loading?: boolean
 }
 
-const cardBase = 'min-w-[140px]'
-
-const kpiVariants = {
-  default: '',
-  blue: 'border-blue-200/80 bg-blue-50/50',
-  amber: 'border-amber-200/80 bg-amber-50/50',
-  red: 'border-red-200/80 bg-red-50/50',
-} as const
-
-const labelVariants = {
-  default: 'text-slate-500',
-  blue: 'text-blue-700',
-  amber: 'text-amber-700',
-  red: 'text-red-700',
-} as const
-
-const valueVariants = {
-  default: 'text-slate-900',
-  blue: 'text-blue-900',
-  amber: 'text-amber-900',
-  red: 'text-red-900',
-} as const
-
-function KPICard({
-  label,
-  value,
-  variant = 'default',
-}: {
+interface KPIItemProps {
+  icon: React.ElementType
   label: string
   value: string
-  variant?: keyof typeof kpiVariants
-}) {
+  iconColor: string
+  valueColor?: string
+}
+
+function KPIItem({ icon: Icon, label, value, iconColor, valueColor = 'text-slate-900' }: KPIItemProps) {
   return (
-    <Card className={cn(cardBase, kpiVariants[variant])}>
-      <CardContent className="p-4 pt-4">
-        <p
-          className={cn(
-            'text-xs font-medium uppercase tracking-wider',
-            labelVariants[variant]
-          )}
-        >
-          {label}
-        </p>
-        <p className={cn('mt-1 text-xl font-bold', valueVariants[variant])}>
-          {value}
-        </p>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
+      <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', iconColor)}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
+        <p className={cn('mt-0.5 text-lg font-bold tabular-nums leading-tight', valueColor)}>{value}</p>
+      </div>
+    </div>
   )
 }
 
-function KPICardSkeleton() {
+function KPISkeleton() {
   return (
-    <Card className={cn(cardBase, 'h-20 overflow-hidden')}>
-      <CardContent className="h-full p-4">
-        <div className="h-3 w-20 animate-pulse rounded bg-slate-200" />
-        <div className="mt-2 h-6 w-24 animate-pulse rounded bg-slate-200" />
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
+      <div className="h-10 w-10 animate-pulse rounded-lg bg-slate-100" />
+      <div>
+        <div className="h-3 w-16 animate-pulse rounded bg-slate-100" />
+        <div className="mt-2 h-5 w-20 animate-pulse rounded bg-slate-100" />
+      </div>
+    </div>
   )
 }
 
@@ -85,40 +57,47 @@ export function KPIsHeader({
 }: KPIsHeaderProps) {
   if (loading) {
     return (
-      <div className="mb-4 flex flex-wrap gap-4">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <KPICardSkeleton key={i} />
-        ))}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {[1, 2, 3, 4, 5].map((i) => <KPISkeleton key={i} />)}
       </div>
     )
   }
 
   return (
-    <div className="mb-4 flex flex-wrap gap-4">
-      <KPICard
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <KPIItem
+        icon={DollarSign}
         label="Total em aberto"
         value={formatCurrency(totalEmAberto)}
-        variant="default"
+        iconColor="bg-slate-100 text-slate-600"
       />
-      <KPICard
+      <KPIItem
+        icon={AlertCircle}
         label="Classe A"
         value={formatCurrency(totalClasseA)}
-        variant="blue"
+        iconColor="bg-blue-50 text-blue-600"
+        valueColor="text-blue-800"
       />
-      <KPICard
+      <KPIItem
+        icon={AlertTriangle}
         label="Classe B"
         value={formatCurrency(totalClasseB)}
-        variant="amber"
+        iconColor="bg-amber-50 text-amber-600"
+        valueColor="text-amber-800"
       />
-      <KPICard
+      <KPIItem
+        icon={ShieldCheck}
         label="Classe C"
         value={formatCurrency(totalClasseC)}
-        variant="red"
+        iconColor="bg-red-50 text-red-600"
+        valueColor="text-red-800"
       />
-      <KPICard
-        label="Taxa de recuperação"
+      <KPIItem
+        icon={TrendingUp}
+        label="Recuperação"
         value={`${taxaRecuperacao.toFixed(1)}%`}
-        variant="default"
+        iconColor="bg-emerald-50 text-emerald-600"
+        valueColor="text-emerald-800"
       />
     </div>
   )

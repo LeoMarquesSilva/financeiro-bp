@@ -8,6 +8,7 @@ import { providenciaService, PROVIDENCIA_FOLLOW_UP_TIPO_LABEL } from '../service
 import { logsService } from '../services/logsService'
 import type { ProvidenciaFollowUpTipo, ProvidenciaRow } from '@/lib/database.types'
 import { useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/lib/AuthContext'
 import { toast } from 'sonner'
 import { formatDate } from '@/shared/utils/format'
 
@@ -27,6 +28,7 @@ interface ModalNovoFollowUpProps {
 
 export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalNovoFollowUpProps) {
   const queryClient = useQueryClient()
+  const { fullName } = useAuth()
   const [providenciaId, setProvidenciaId] = useState('')
   const [tipo, setTipo] = useState<ProvidenciaFollowUpTipo>('devolutiva')
   const [texto, setTexto] = useState('')
@@ -49,7 +51,7 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
       return
     }
     setSubmitting(true)
-    const { error } = await providenciaService.addFollowUp(providenciaId, tipo, texto.trim() || null)
+    const { error } = await providenciaService.addFollowUp(providenciaId, tipo, texto.trim() || null, fullName || null)
     setSubmitting(false)
     if (error) {
       toast.error('Erro ao registrar follow-up')

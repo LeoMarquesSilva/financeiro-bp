@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { isAuthenticated } from '@/lib/auth'
+import { AuthProvider, useAuth } from '@/lib/AuthContext'
+import type { AppRole } from '@/lib/database.types'
 import { Login } from './Login'
 import { FinanceiroLayout } from './layouts/FinanceiroLayout'
 import { InadimplenciaPage } from '@/features/inadimplencia/pages/InadimplenciaPage'
@@ -8,16 +8,24 @@ import { InadimplenciaDashboardPage } from '@/features/inadimplencia/pages/Inadi
 import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
 import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
 
-function App() {
-  const [loggedIn, setLoggedIn] = useState(false)
-  const [authChecked, setAuthChecked] = useState(false)
+function ProtectedRoute({
+  allowedRoles,
+  children,
+}: {
+  allowedRoles: AppRole[]
+  children: React.ReactNode
+}) {
+  const { role } = useAuth()
+  if (!role || !allowedRoles.includes(role)) {
+    return <Navigate to="/financeiro/inadimplencia" replace />
+  }
+  return <>{children}</>
+}
 
-  useEffect(() => {
-    setLoggedIn(isAuthenticated())
-    setAuthChecked(true)
-  }, [])
+function AppRoutes() {
+  const { user, role, loading } = useAuth()
 
-  if (!authChecked) {
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100">
         <p className="text-slate-600">Carregando...</p>
@@ -25,8 +33,8 @@ function App() {
     )
   }
 
-  if (!loggedIn) {
-    return <Login onSuccess={() => setLoggedIn(true)} />
+  if (!user || !role) {
+    return <Login />
   }
 
   return (
@@ -36,12 +44,34 @@ function App() {
         <Route path="/financeiro" element={<FinanceiroLayout />}>
           <Route path="inadimplencia" element={<InadimplenciaPage />} />
           <Route path="inadimplencia/dashboard" element={<InadimplenciaDashboardPage />} />
-          <Route path="escritorio" element={<EscritorioPage />} />
-          <Route path="gestores" element={<TeamMembersPage />} />
+          <Route
+            path="escritorio"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
+                <EscritorioPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="gestores"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <TeamMembersPage />
+              </ProtectedRoute>
+            }
+          />
         </Route>
         <Route path="*" element={<Navigate to="/financeiro/inadimplencia" replace />} />
       </Routes>
     </BrowserRouter>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   )
 }
 

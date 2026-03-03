@@ -1,43 +1,37 @@
 import { useState } from 'react'
-import { User, Lock, Eye, EyeOff } from 'lucide-react'
-import { getExpectedLogin, getExpectedPassword, setAuthenticated } from '@/lib/auth'
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { supabase } from '@/lib/supabaseClient'
 import { cn } from '@/lib/utils'
 
-// Arquivo em public/escritorio dia.png – espaço na URL como %20 para carregar certo
 const BACKGROUND_IMAGE = '/escritorio%20dia.png'
 const LOGO_URL = '/team/logo-azul.png'
 
-interface LoginProps {
-  onSuccess: () => void
-}
-
-export function Login({ onSuccess }: LoginProps) {
-  const [login, setLogin] = useState('')
+export function Login() {
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const expectedLogin = getExpectedLogin()
-  const expectedPassword = getExpectedPassword()
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    const loginTrim = login.trim()
+    const emailTrim = email.trim().toLowerCase()
     const passwordTrim = password.trim()
 
-    if (!loginTrim || !passwordTrim) {
-      setError('Preencha usuário e senha.')
+    if (!emailTrim || !passwordTrim) {
+      setError('Preencha e-mail e senha.')
       return
     }
 
     setLoading(true)
-    if (loginTrim === expectedLogin && passwordTrim === expectedPassword) {
-      setAuthenticated()
-      onSuccess()
-    } else {
-      setError('Usuário ou senha incorretos.')
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: emailTrim,
+      password: passwordTrim,
+    })
+
+    if (authError) {
+      setError('E-mail ou senha incorretos.')
       setLoading(false)
     }
   }
@@ -51,13 +45,11 @@ export function Login({ onSuccess }: LoginProps) {
         backgroundPosition: 'center',
       }}
     >
-      {/* Overlay escuro */}
       <div
         className="absolute inset-0 bg-primary-dark/75"
         aria-hidden
       />
 
-      {/* Grid sutil */}
       <div
         className="absolute inset-0 opacity-[0.08]"
         style={{
@@ -102,20 +94,20 @@ export function Login({ onSuccess }: LoginProps) {
             )}
 
             <div>
-              <label htmlFor="login-user" className="sr-only">
-                Usuário
+              <label htmlFor="login-email" className="sr-only">
+                E-mail
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  <User className="h-5 w-5" />
+                  <Mail className="h-5 w-5" />
                 </span>
                 <input
-                  id="login-user"
-                  type="text"
-                  autoComplete="username"
-                  value={login}
-                  onChange={(e) => setLogin(e.target.value)}
-                  placeholder="Usuário"
+                  id="login-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="E-mail"
                   disabled={loading}
                   className={cn(
                     'w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-slate-900',
@@ -173,7 +165,7 @@ export function Login({ onSuccess }: LoginProps) {
                 'disabled:opacity-70 disabled:cursor-not-allowed'
               )}
             >
-              {loading ? 'Entrando…' : 'Entrar'}
+              {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
         </div>

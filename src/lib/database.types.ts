@@ -1,3 +1,5 @@
+export type AppRole = 'admin' | 'financeiro' | 'comite'
+
 export type InadimplenciaClasse = 'A' | 'B' | 'C'
 
 export type InadimplenciaTipoAcao =
@@ -17,6 +19,7 @@ export interface TeamMemberRow {
   full_name: string
   area: string
   avatar_url: string | null
+  role: AppRole | null
   created_at: string
   updated_at: string
 }
@@ -32,6 +35,7 @@ export interface Database {
           full_name: string
           area: string
           avatar_url?: string | null
+          role?: AppRole | null
           created_at?: string
           updated_at?: string
         }
@@ -40,6 +44,7 @@ export interface Database {
           full_name?: string
           area?: string
           avatar_url?: string | null
+          role?: AppRole | null
           updated_at?: string
         }
       }
@@ -49,8 +54,8 @@ export interface Database {
           razao_social: string
           cnpj: string | null
           contato: string | null
-          gestor: string | null
-          area: string | null
+          gestor: string[] | null
+          area: string[] | null
           status_classe: InadimplenciaClasse
           dias_em_aberto: number
           valor_em_aberto: number
@@ -77,8 +82,8 @@ export interface Database {
           cnpj?: string | null
           pessoa_id?: string | null
           contato?: string | null
-          gestor?: string | null
-          area?: string | null
+          gestor?: string[] | null
+          area?: string[] | null
           status_classe?: InadimplenciaClasse
           dias_em_aberto?: number
           valor_em_aberto?: number
@@ -103,8 +108,8 @@ export interface Database {
           cnpj?: string | null
           pessoa_id?: string | null
           contato?: string | null
-          gestor?: string | null
-          area?: string | null
+          gestor?: string[] | null
+          area?: string[] | null
           status_classe?: InadimplenciaClasse
           dias_em_aberto?: number
           valor_em_aberto?: number

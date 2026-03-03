@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Sheet,
@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/sheet'
 import { formatCurrency, formatCnpj, formatDate, formatHorasDuracao } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/AuthContext'
 import type { ClientInadimplenciaRow, InadimplenciaClasse, InadimplenciaLogRow, ClienteEscritorioRow, ContagemCiPorGrupoRow, ProvidenciaRow, ProvidenciaFollowUpRow } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
@@ -24,13 +25,15 @@ import { useTeamMembers } from '../hooks/useTeamMembers'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Pencil, History, Check, AlertTriangle, ChevronDown, ChevronUp, MessageSquare, FileText, ListChecks, CreditCard, CheckCircle2, Clock, AlertCircle, Trash2 } from 'lucide-react'
+import { Pencil, History, Check, AlertTriangle, ChevronDown, ChevronRight, MessageSquare, FileText, ListChecks, CreditCard, CheckCircle2, Clock, AlertCircle, Trash2, DollarSign, CalendarDays, Building2, Briefcase } from 'lucide-react'
 import {
   fetchClientesEscritorio,
   fetchContagemCiPorGrupo,
   fetchHorasPorGrupo,
   getHorasParaGrupo,
   normalizarNomeGrupo,
+  fetchProcessosPorAreaDoGrupo,
+  type ProcessosPorAreaItem,
 } from '@/features/escritorio/services/escritorioService'
 import { fetchParcelasPorCliente, type ParcelaRow } from '../services/parcelasService'
 import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
@@ -74,28 +77,99 @@ const BADGE_VARIANT_PRIORIDADE: Record<PrioridadeTipo, 'urgente' | 'atencao' | '
 function getIniciais(name: string | null | undefined): string {
   if (!name || !name.trim()) return '–'
   const parts = name.trim().split(/\s+/)
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-  }
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
   return name.slice(0, 2).toUpperCase()
 }
 
-interface ProvidenciaCardProps {
-  p: ProvidenciaRow
-  clientId: string
-  onRefresh?: () => void
+/* ── Collapsible section ── */
+function CollapsibleSection({
+  icon: Icon,
+  title,
+  count,
+  variant = 'default',
+  defaultOpen = false,
+  children,
+}: {
+  icon: React.ElementType
+  title: string
+  count: number
+  variant?: 'danger' | 'warning' | 'success' | 'default'
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  const styles = {
+    danger: { bg: 'bg-red-50/60', border: 'border-red-200/60', iconBg: 'bg-red-100 text-red-600', text: 'text-red-800', badge: 'bg-red-100 text-red-700' },
+    warning: { bg: 'bg-amber-50/60', border: 'border-amber-200/60', iconBg: 'bg-amber-100 text-amber-600', text: 'text-amber-800', badge: 'bg-amber-100 text-amber-700' },
+    success: { bg: 'bg-emerald-50/40', border: 'border-slate-200/60', iconBg: 'bg-emerald-100 text-emerald-600', text: 'text-slate-800', badge: 'bg-emerald-100 text-emerald-700' },
+    default: { bg: 'bg-slate-50/60', border: 'border-slate-200/60', iconBg: 'bg-slate-100 text-slate-500', text: 'text-slate-800', badge: 'bg-slate-100 text-slate-600' },
+  }
+  const s = styles[variant]
+
+  return (
+    <div className={cn('rounded-xl border', s.border, s.bg)}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-black/[0.02]"
+      >
+        <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', s.iconBg)}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <span className={cn('flex-1 text-sm font-semibold', s.text)}>{title}</span>
+        <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold tabular-nums', s.badge)}>{count}</span>
+        {open ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+      </button>
+      {open && <div className="border-t border-inherit px-4 pb-4 pt-3">{children}</div>}
+    </div>
+  )
 }
 
-function ProvidenciaCard({ p, clientId, onRefresh }: ProvidenciaCardProps) {
+/* ── Parcela item ── */
+function ParcelaItem({ p, valueColor = 'text-slate-900' }: { p: ParcelaRow; valueColor?: string }) {
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-lg border border-slate-200/60 bg-white px-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-slate-800">
+          {p.parcela ? `Parcela ${p.parcela}${p.parcelas ? `/${p.parcelas}` : ''}` : p.descricao || p.tipo || 'Parcela'}
+        </p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
+          {p.competencia && <span>Comp. {p.competencia}</span>}
+          <span>Venc. {formatDate(p.data_vencimento)}</span>
+        </div>
+      </div>
+      <span className={cn('shrink-0 text-sm font-bold tabular-nums', valueColor)}>
+        {p.valor_pago != null ? formatCurrency(Number(p.valor_pago)) : formatCurrency(Number(p.valor))}
+      </span>
+    </li>
+  )
+}
+
+/* ── Metric card ── */
+function MetricCard({ icon: Icon, label, value, iconClass }: { icon: React.ElementType; label: string; value: string; iconClass: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white p-3.5">
+      <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', iconClass)}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className="mt-0.5 text-base font-bold tabular-nums leading-tight text-slate-900">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+/* ── ProvidenciaCard ── */
+function ProvidenciaCard({ p, clientId, onRefresh }: { p: ProvidenciaRow; clientId: string; onRefresh?: () => void }) {
+  const { role } = useAuth()
+  const canEdit = role === 'admin' || role === 'financeiro'
   const queryClient = useQueryClient()
   const [modalExcluir, setModalExcluir] = useState(false)
 
-  const handleDeleteProvidencia = async () => {
+  const handleDelete = async () => {
     const { error } = await providenciaService.deleteProvidencia(p.id)
-    if (error) {
-      toast.error('Erro ao apagar providência')
-      throw error
-    }
+    if (error) { toast.error('Erro ao apagar providência'); throw error }
     toast.success('Providência apagada')
     queryClient.invalidateQueries({ queryKey: ['providencias', clientId] })
     onRefresh?.()
@@ -103,52 +177,37 @@ function ProvidenciaCard({ p, clientId, onRefresh }: ProvidenciaCardProps) {
 
   return (
     <>
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-slate-200/60 bg-white p-4">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-            <FileText className="h-4 w-4 text-slate-600" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-dark/5">
+            <FileText className="h-4 w-4 text-primary-dark" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-xs font-medium text-slate-500">
-                Providência — {formatDate(p.data_providencia ?? p.created_at)}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                {formatDate(p.data_providencia ?? p.created_at)}
               </p>
-              <button
-                type="button"
-                onClick={() => setModalExcluir(true)}
-                className="shrink-0 rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                title="Apagar providência"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              {canEdit && (
+                <button type="button" onClick={() => setModalExcluir(true)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Apagar">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
-            <p className="mt-1 text-sm font-medium text-slate-900 leading-snug">
-              {p.texto}
-            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-slate-800">{p.texto}</p>
             <FollowUpsList providenciaId={p.id} clientId={clientId} onRefresh={onRefresh} />
           </div>
         </div>
       </div>
-      <ModalConfirmacao
-        open={modalExcluir}
-        onClose={() => setModalExcluir(false)}
-        title="Apagar providência"
-        description="Apagar esta providência? Os follow-ups vinculados também serão removidos."
-        confirmLabel="Apagar"
-        variant="destructive"
-        onConfirm={handleDeleteProvidencia}
-      />
+      <ModalConfirmacao open={modalExcluir} onClose={() => setModalExcluir(false)} title="Apagar providência" description="Apagar esta providência e seus follow-ups?" confirmLabel="Apagar" variant="destructive" onConfirm={handleDelete} />
     </>
   )
 }
 
-interface FollowUpsListProps {
-  providenciaId: string
-  clientId: string
-  onRefresh?: () => void
-}
-
-function FollowUpsList({ providenciaId, clientId, onRefresh }: FollowUpsListProps) {
+/* ── FollowUpsList ── */
+function FollowUpsList({ providenciaId, clientId, onRefresh }: { providenciaId: string; clientId: string; onRefresh?: () => void }) {
+  const { role } = useAuth()
+  const canEdit = role === 'admin' || role === 'financeiro'
+  const { teamMembers } = useTeamMembers()
   const queryClient = useQueryClient()
   const [fuParaExcluir, setFuParaExcluir] = useState<ProvidenciaFollowUpRow | null>(null)
   const { data: list = [] } = useQuery({
@@ -160,13 +219,10 @@ function FollowUpsList({ providenciaId, clientId, onRefresh }: FollowUpsListProp
     },
   })
 
-  const handleDeleteFollowUp = async () => {
+  const handleDelete = async () => {
     if (!fuParaExcluir) return
     const { error } = await providenciaService.deleteFollowUp(fuParaExcluir.id)
-    if (error) {
-      toast.error('Erro ao apagar follow-up')
-      throw error
-    }
+    if (error) { toast.error('Erro ao apagar follow-up'); throw error }
     toast.success('Follow-up apagado')
     queryClient.invalidateQueries({ queryKey: ['providencias', clientId] })
     queryClient.invalidateQueries({ queryKey: ['providencia-follow-ups', providenciaId] })
@@ -176,47 +232,44 @@ function FollowUpsList({ providenciaId, clientId, onRefresh }: FollowUpsListProp
   if (list.length === 0) return null
   return (
     <>
-      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Follow-ups</p>
-        <ul className="space-y-2">
-          {list.map((fu: ProvidenciaFollowUpRow) => (
-            <li
-              key={fu.id}
-              className="flex flex-col gap-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Badge variant="secondary" className="text-xs font-medium">
-                  {PROVIDENCIA_FOLLOW_UP_TIPO_LABEL[fu.tipo]}
-                </Badge>
+      <div className="mt-3 space-y-1.5">
+        {list.map((fu: ProvidenciaFollowUpRow) => {
+          const author = fu.created_by ? teamMembers.find((m: { full_name: string; email: string }) => m.full_name === fu.created_by || m.email === fu.created_by) ?? null : null
+          const authorAvatar = author ? getTeamMember(author.email)?.avatar ?? author.avatar_url : null
+          return (
+            <div key={fu.id} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400">{formatDate(fu.created_at)}</span>
-                  <button
-                    type="button"
-                    onClick={() => setFuParaExcluir(fu)}
-                    className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                    title="Apagar follow-up"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {author && (
+                    <Avatar className="h-5 w-5">
+                      {authorAvatar && <AvatarImage src={authorAvatar} alt={author.full_name} />}
+                      <AvatarFallback className="text-[9px] bg-slate-200 text-slate-600">{getIniciais(author.full_name)}</AvatarFallback>
+                    </Avatar>
+                  )}
+                  <Badge variant="secondary" className="text-[10px]">{PROVIDENCIA_FOLLOW_UP_TIPO_LABEL[fu.tipo]}</Badge>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-400">{formatDate(fu.created_at)}</span>
+                  {canEdit && (
+                    <button type="button" onClick={() => setFuParaExcluir(fu)} className="rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
               </div>
-              <p className="min-w-0 text-slate-800 whitespace-pre-wrap">{fu.texto || '–'}</p>
-            </li>
-          ))}
-        </ul>
+              <p className="mt-1 text-sm text-slate-700 whitespace-pre-wrap">{fu.texto || '–'}</p>
+            </div>
+          )
+        })}
       </div>
-      <ModalConfirmacao
-        open={!!fuParaExcluir}
-        onClose={() => setFuParaExcluir(null)}
-        title="Apagar follow-up"
-        description="Apagar este follow-up?"
-        confirmLabel="Apagar"
-        variant="destructive"
-        onConfirm={handleDeleteFollowUp}
-      />
+      <ModalConfirmacao open={!!fuParaExcluir} onClose={() => setFuParaExcluir(null)} title="Apagar follow-up" description="Apagar este follow-up?" confirmLabel="Apagar" variant="destructive" onConfirm={handleDelete} />
     </>
   )
 }
+
+/* ══════════════════════════════════════════════════════ */
+/*  MAIN COMPONENT                                       */
+/* ══════════════════════════════════════════════════════ */
 
 export interface ClienteDetailSheetProps {
   open: boolean
@@ -226,558 +279,331 @@ export interface ClienteDetailSheetProps {
   onRefresh?: () => void
 }
 
-export function ClienteDetailSheet({
-  open,
-  onClose,
-  client,
-  onMarcarResolvido,
-  onRefresh,
-}: ClienteDetailSheetProps) {
+export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, onRefresh }: ClienteDetailSheetProps) {
+  const { role } = useAuth()
+  const canEdit = role === 'admin' || role === 'financeiro'
   const { teamMembers } = useTeamMembers()
   const [modalEditar, setModalEditar] = useState(false)
   const [modalHistorico, setModalHistorico] = useState(false)
   const [modalProvidencia, setModalProvidencia] = useState(false)
   const [modalFollowUp, setModalFollowUp] = useState(false)
-  const [processosHorasAberto, setProcessosHorasAberto] = useState(true)
+  const [processosAberto, setProcessosAberto] = useState(true)
 
+  /* ── Queries ── */
   const { data: logs } = useQuery({
     queryKey: ['inadimplencia', 'logs', client?.id],
-    queryFn: async () => {
-      if (!client?.id) return []
-      const { data, error } = await logsService.listByClientId(client.id)
-      if (error) throw error
-      return data ?? []
-    },
+    queryFn: async () => { if (!client?.id) return []; const { data, error } = await logsService.listByClientId(client.id); if (error) throw error; return data ?? [] },
     enabled: !!client?.id && open,
   })
   const ultimosLogs = (logs ?? []).slice(0, ULTIMOS_LOGS)
 
-  const { data: clientesEscritorio = [] } = useQuery({
-    queryKey: ['clientes-escritorio'],
-    queryFn: fetchClientesEscritorio,
-    enabled: open,
-  })
-  const linkedEscritorio =
-    client?.pessoa_id != null
-      ? clientesEscritorio.find((ce: ClienteEscritorioRow) => ce.id === client.pessoa_id)
-      : null
+  const { data: clientesEscritorio = [] } = useQuery({ queryKey: ['clientes-escritorio'], queryFn: fetchClientesEscritorio, enabled: open })
+  const linkedEscritorio = client?.pessoa_id != null ? clientesEscritorio.find((ce: ClienteEscritorioRow) => ce.id === client.pessoa_id) : null
   const grupoCliente = linkedEscritorio?.grupo_cliente ?? null
-  const empresasDoGrupo =
-    grupoCliente != null && grupoCliente !== ''
-      ? clientesEscritorio.filter((ce: ClienteEscritorioRow) => (ce.grupo_cliente ?? '') === grupoCliente)
-      : []
+  const empresasDoGrupo = grupoCliente != null && grupoCliente !== '' ? clientesEscritorio.filter((ce: ClienteEscritorioRow) => (ce.grupo_cliente ?? '') === grupoCliente) : []
 
-  const { data: horasPorGrupoMap } = useQuery({
-    queryKey: ['horas-por-grupo'],
-    queryFn: fetchHorasPorGrupo,
-    enabled: open,
-  })
-  const horasDoGrupo =
-    grupoCliente && horasPorGrupoMap
-      ? getHorasParaGrupo(horasPorGrupoMap, grupoCliente)
-      : { total: 0, porAno: {} as Record<string, number> }
-
-  // Processos: do cliente escritório quando vinculado, senão da inadimplência. Horas: só da tabela TimeSheets (por grupo)
+  const { data: horasPorGrupoMap } = useQuery({ queryKey: ['horas-por-grupo'], queryFn: fetchHorasPorGrupo, enabled: open })
+  const horasDoGrupo = grupoCliente && horasPorGrupoMap ? getHorasParaGrupo(horasPorGrupoMap, grupoCliente) : { total: 0, porAno: {} as Record<string, number> }
   const qtdProcessos = linkedEscritorio?.qtd_processos ?? client?.qtd_processos
-  const horasTotal =
-    grupoCliente && horasDoGrupo.total > 0 ? horasDoGrupo.total : null
-  const horasPorAno =
-    grupoCliente && horasDoGrupo.porAno && Object.keys(horasDoGrupo.porAno).length > 0
-      ? horasDoGrupo.porAno
-      : null
+  const horasTotal = grupoCliente && horasDoGrupo.total > 0 ? horasDoGrupo.total : null
+  const horasPorAno = grupoCliente && horasDoGrupo.porAno && Object.keys(horasDoGrupo.porAno).length > 0 ? horasDoGrupo.porAno : null
 
-  const { data: contagemList = [] } = useQuery({
-    queryKey: ['contagem-ci-por-grupo'],
-    queryFn: fetchContagemCiPorGrupo,
-    enabled: open,
-  })
-  const contagemCi =
-    grupoCliente && contagemList.length > 0
-      ? contagemList.find((c: ContagemCiPorGrupoRow) => c.grupo_cliente.trim() === grupoCliente.trim()) ??
-        contagemList.find((c: ContagemCiPorGrupoRow) => normalizarNomeGrupo(c.grupo_cliente) === normalizarNomeGrupo(grupoCliente))
-      : null
+  const { data: contagemList = [] } = useQuery({ queryKey: ['contagem-ci-por-grupo'], queryFn: fetchContagemCiPorGrupo, enabled: open })
+  const contagemCi = grupoCliente && contagemList.length > 0
+    ? contagemList.find((c: ContagemCiPorGrupoRow) => c.grupo_cliente.trim() === grupoCliente.trim()) ?? contagemList.find((c: ContagemCiPorGrupoRow) => normalizarNomeGrupo(c.grupo_cliente) === normalizarNomeGrupo(grupoCliente))
+    : null
 
-  const { data: providencias = [] } = useQuery({
-    queryKey: ['providencias', client?.id],
-    queryFn: async () => {
-      if (!client?.id) return []
-      const { data, error } = await providenciaService.listByCliente(client.id)
-      if (error) throw error
-      return data
-    },
-    enabled: open && !!client?.id,
-  })
+  const { data: processosPorArea = [] } = useQuery({ queryKey: ['processos-por-area', grupoCliente], queryFn: () => fetchProcessosPorAreaDoGrupo(grupoCliente!), enabled: open && !!grupoCliente })
+  const areasProcessos = useMemo(() => {
+    const map = new Map<string, { situacao: string; total: number }[]>()
+    for (const item of processosPorArea as ProcessosPorAreaItem[]) { if (!map.has(item.area)) map.set(item.area, []); map.get(item.area)!.push({ situacao: item.situacao_processo, total: Number(item.total) }) }
+    return Array.from(map.entries()).map(([area, situacoes]) => ({ area, situacoes, totalArea: situacoes.reduce((s, x) => s + x.total, 0) })).sort((a, b) => a.area.localeCompare(b.area, 'pt-BR'))
+  }, [processosPorArea])
 
+  const { data: providencias = [] } = useQuery({ queryKey: ['providencias', client?.id], queryFn: async () => { if (!client?.id) return []; const { data, error } = await providenciaService.listByCliente(client.id); if (error) throw error; return data }, enabled: open && !!client?.id })
+
+  const grupoPessoaIds = useMemo(() => empresasDoGrupo.length > 0 ? empresasDoGrupo.map((ce: ClienteEscritorioRow) => ce.id) : [], [empresasDoGrupo])
   const { data: parcelasData } = useQuery({
-    queryKey: ['parcelas-cliente', client?.pessoa_id, client?.razao_social],
-    queryFn: () =>
-      fetchParcelasPorCliente({
-        pessoa_id: client?.pessoa_id ?? null,
-        razao_social: client?.razao_social ?? '',
-      }),
-    enabled: open && !!(client?.pessoa_id || client?.razao_social?.trim()),
+    queryKey: ['parcelas-cliente', client?.pessoa_id, grupoPessoaIds, client?.razao_social],
+    queryFn: () => fetchParcelasPorCliente({ pessoa_id: client?.pessoa_id ?? null, pessoa_ids: grupoPessoaIds.length > 0 ? grupoPessoaIds : undefined, razao_social: client?.razao_social ?? '' }),
+    enabled: open && !!(client?.pessoa_id || grupoPessoaIds.length > 0 || client?.razao_social?.trim()),
   })
 
-  const closeAndRefresh = () => {
-    setModalEditar(false)
-    setModalHistorico(false)
-    setModalProvidencia(false)
-    setModalFollowUp(false)
-    onRefresh?.()
-  }
+  const closeAndRefresh = () => { setModalEditar(false); setModalHistorico(false); setModalProvidencia(false); setModalFollowUp(false); onRefresh?.() }
 
   if (!client) return null
 
   const prioridade: PrioridadeTipo = getPrioridade(client.dias_em_aberto, Number(client.valor_em_aberto))
-  const followUpVencido =
-    client.data_follow_up && new Date(client.data_follow_up) < new Date()
-  const gestorMember = resolveTeamMember(client.gestor ?? null, teamMembers)
+  const followUpVencido = client.data_follow_up && new Date(client.data_follow_up) < new Date()
+  const gestorEmails: string[] = Array.isArray(client.gestor) ? client.gestor : client.gestor ? [client.gestor] : []
+  const gestorMembers = gestorEmails.map((g) => resolveTeamMember(g, teamMembers)).filter((m): m is NonNullable<typeof m> => m !== null)
   const cnpjExibir = (linkedEscritorio?.cnpj ?? client.cnpj) || null
-  const subinfo = [client.area, cnpjExibir ? formatCnpj(cnpjExibir) : null].filter(Boolean).join(' · ') || null
-  const gestorAvatarUrl = gestorMember
-    ? getTeamMember(gestorMember.email)?.avatar ?? gestorMember.avatar_url
-    : null
+  const areasList: string[] = Array.isArray(client.area) ? client.area : client.area ? [client.area] : []
+  const subinfo = [cnpjExibir ? formatCnpj(cnpjExibir) : null].filter(Boolean).join(' · ') || null
+  const hasParcelas = parcelasData && (parcelasData.pagas.length > 0 || parcelasData.emAtraso.length > 0 || parcelasData.aVencer.length > 0)
 
   return (
     <>
       <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
         <SheetContent
           side="right"
-          className="flex w-full max-w-2xl flex-col overflow-hidden p-0 sm:max-w-2xl rounded-l-xl border-l border-slate-200 bg-white shadow-xl"
+          className="flex w-full max-w-2xl flex-col overflow-hidden p-0 sm:max-w-2xl rounded-l-2xl border-l border-slate-200/60 bg-slate-50 shadow-2xl"
         >
-          {/* Header */}
-          <header className="shrink-0 border-b border-slate-200 bg-white px-6 pt-5 pb-4 pr-12">
-            <SheetTitle className="text-xl font-semibold text-slate-900 leading-tight">
+          {/* ── Header ── */}
+          <header className="shrink-0 bg-gradient-to-br from-primary-dark to-[#0a1420] px-6 pt-6 pb-5 pr-12">
+            <SheetTitle className="text-lg font-bold text-white leading-tight">
               {grupoCliente || client.razao_social}
             </SheetTitle>
-            {(subinfo || empresasDoGrupo.length > 0) && (
-              <SheetDescription className="mt-1 text-sm text-slate-500">
-                {subinfo}
-                {subinfo && empresasDoGrupo.length > 0 && ' · '}
-                {empresasDoGrupo.length > 0 &&
-                  `${empresasDoGrupo.length} ${empresasDoGrupo.length === 1 ? 'empresa' : 'empresas'}`}
-              </SheetDescription>
-            )}
+            <SheetDescription className={cn('mt-1 text-sm text-slate-300', !(subinfo || empresasDoGrupo.length > 0) && 'sr-only')}>
+              {subinfo || empresasDoGrupo.length > 0 ? (
+                <>
+                  {subinfo}
+                  {subinfo && empresasDoGrupo.length > 0 && ' · '}
+                  {empresasDoGrupo.length > 0 && `${empresasDoGrupo.length} ${empresasDoGrupo.length === 1 ? 'empresa' : 'empresas'}`}
+                </>
+              ) : 'Detalhes do cliente inadimplente'}
+            </SheetDescription>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Badge variant={BADGE_VARIANT_CLASSE[client.status_classe]} className="rounded-full">
-                Classe {client.status_classe}
-              </Badge>
-              <Badge variant={BADGE_VARIANT_PRIORIDADE[prioridade]} className="rounded-full">
-                {PRIORIDADE_LABEL[prioridade]}
-              </Badge>
+              <Badge variant={BADGE_VARIANT_CLASSE[client.status_classe]} className="rounded-full">{`Classe ${client.status_classe}`}</Badge>
+              <Badge variant={BADGE_VARIANT_PRIORIDADE[prioridade]} className="rounded-full">{PRIORIDADE_LABEL[prioridade]}</Badge>
+              {areasList.map((a) => <Badge key={a} variant="outline" className="rounded-full border-white/20 text-white/80">{a}</Badge>)}
             </div>
           </header>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            {/* Resumo financeiro (contexto rápido) */}
-            <section className="mb-6">
-              <h3 className="mb-3 text-sm font-medium text-slate-600">Resumo financeiro</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-medium text-slate-500">Valor em aberto</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900 tabular-nums">
-                    {formatCurrency(Number(client.valor_em_aberto))}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-medium text-slate-500">Dias em atraso</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900 tabular-nums">{client.dias_em_aberto}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-medium text-slate-500">Valor mensal</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900 tabular-nums">
-                    {client.valor_mensal != null ? formatCurrency(Number(client.valor_mensal)) : '–'}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-medium text-slate-500">Gestor</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    {gestorMember ? (
-                      <>
-                        <Avatar className="h-7 w-7">
-                          {gestorAvatarUrl && (
-                            <AvatarImage src={gestorAvatarUrl} alt={gestorMember.full_name} />
-                          )}
-                          <AvatarFallback className="text-xs bg-slate-300 text-slate-700">
-                            {getIniciais(gestorMember.full_name)}
-                          </AvatarFallback>
+          {/* ── Body ── */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="space-y-5 px-5 py-5">
+
+              {/* Metrics grid */}
+              <section className="grid grid-cols-2 gap-3">
+                <MetricCard icon={DollarSign} label="Valor em aberto" value={formatCurrency(Number(client.valor_em_aberto))} iconClass="bg-red-50 text-red-500" />
+                <MetricCard icon={CalendarDays} label="Dias em atraso" value={String(client.dias_em_aberto)} iconClass="bg-amber-50 text-amber-500" />
+                <MetricCard icon={DollarSign} label="Valor mensal" value={client.valor_mensal != null ? formatCurrency(Number(client.valor_mensal)) : '–'} iconClass="bg-slate-100 text-slate-500" />
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white p-3.5">
+                  <div className="flex -space-x-1.5">
+                    {gestorMembers.length > 0 ? gestorMembers.slice(0, 3).map((gm) => {
+                      const url = getTeamMember(gm.email)?.avatar ?? gm.avatar_url
+                      return (
+                        <Avatar key={gm.email} className="h-9 w-9 border-2 border-white">
+                          {url && <AvatarImage src={url} alt={gm.full_name} />}
+                          <AvatarFallback className="text-[10px] bg-primary-dark/10 text-primary-dark">{getIniciais(gm.full_name)}</AvatarFallback>
                         </Avatar>
-                        <span className="text-sm font-medium text-slate-900 truncate">{gestorMember.full_name}</span>
-                      </>
-                    ) : (
-                      <span className="text-sm text-slate-500">–</span>
+                      )
+                    }) : (
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100"><Briefcase className="h-4 w-4 text-slate-400" /></div>
                     )}
                   </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Parcelas: últimas pagas, em atraso, próximas a vencer */}
-            {parcelasData && (parcelasData.pagas.length > 0 || parcelasData.emAtraso.length > 0 || parcelasData.aVencer.length > 0) && (
-              <section className="mb-6">
-                <h3 className="mb-3 text-sm font-medium text-slate-600 flex items-center gap-2">
-                  <CreditCard className="h-4 w-4" />
-                  Parcelas
-                </h3>
-                <div className="space-y-4">
-                  {parcelasData.emAtraso.length > 0 && (
-                    <div className="rounded-lg border border-red-200 bg-red-50/50 p-4">
-                      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-red-700">
-                        <AlertCircle className="h-4 w-4" />
-                        Em atraso ({parcelasData.emAtraso.length})
-                      </p>
-                      <ul className="space-y-1.5">
-                        {parcelasData.emAtraso.map((p: ParcelaRow) => (
-                          <li key={p.id} className="rounded border border-red-100 bg-white px-3 py-2 text-sm">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="min-w-0 flex-1 font-medium text-slate-800">
-                                {p.descricao || p.tipo || p.nro_titulo}
-                              </span>
-                              <span className="shrink-0 font-medium text-red-700 tabular-nums">{formatCurrency(Number(p.valor))}</span>
-                            </div>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-                              {p.competencia && <span>Competência: {p.competencia}</span>}
-                              {p.parcela && <span>Parcela {p.parcela}{p.parcelas ? ` de ${p.parcelas}` : ''}</span>}
-                              <span>Venc.: {formatDate(p.data_vencimento)}</span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {parcelasData.aVencer.length > 0 && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
-                      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-amber-800">
-                        <Clock className="h-4 w-4" />
-                        Próximas a vencer ({parcelasData.aVencer.length})
-                      </p>
-                      <ul className="space-y-1.5">
-                        {parcelasData.aVencer.map((p: ParcelaRow) => (
-                          <li key={p.id} className="rounded border border-amber-100 bg-white px-3 py-2 text-sm">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="min-w-0 flex-1 font-medium text-slate-800">
-                                {p.descricao || p.tipo || p.nro_titulo}
-                              </span>
-                              <span className="shrink-0 font-medium text-slate-900 tabular-nums">{formatCurrency(Number(p.valor))}</span>
-                            </div>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-                              {p.competencia && <span>Competência: {p.competencia}</span>}
-                              {p.parcela && <span>Parcela {p.parcela}{p.parcelas ? ` de ${p.parcelas}` : ''}</span>}
-                              <span>Venc.: {formatDate(p.data_vencimento)}</span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {parcelasData.pagas.length > 0 && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        Últimas parcelas pagas ({parcelasData.pagas.length})
-                      </p>
-                      <ul className="space-y-1.5">
-                        {parcelasData.pagas.map((p: ParcelaRow) => (
-                          <li key={p.id} className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="min-w-0 flex-1 font-medium text-slate-800">
-                                {p.descricao || p.tipo || p.nro_titulo}
-                              </span>
-                              <span className="shrink-0 font-medium text-slate-900 tabular-nums">
-                                {p.valor_pago != null ? formatCurrency(Number(p.valor_pago)) : formatCurrency(Number(p.valor))}
-                              </span>
-                            </div>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-                              {p.competencia && <span>Competência: {p.competencia}</span>}
-                              {p.parcela && <span>Parcela {p.parcela}{p.parcelas ? ` de ${p.parcelas}` : ''}</span>}
-                              <span>Baixa: {formatDate(p.data_baixa)}</span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
-            {parcelasData && parcelasData.pagas.length === 0 && parcelasData.emAtraso.length === 0 && parcelasData.aVencer.length === 0 && (
-              <section className="mb-6">
-                <h3 className="mb-2 text-sm font-medium text-slate-600 flex items-center gap-2">
-                  <CreditCard className="h-4 w-4" />
-                  Parcelas
-                </h3>
-                <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                  Nenhuma parcela encontrada na base financeira. Verifique se o cliente está vinculado e se o relatório foi sincronizado.
-                </p>
-              </section>
-            )}
-
-            {/* Providências e follow-ups – destaque para o dia a dia */}
-            <section className="mb-6">
-              <div className="mb-3 flex items-center gap-2">
-                <ListChecks className="h-5 w-5 text-slate-600" aria-hidden />
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900">Providências e follow-ups</h3>
-                  <p className="text-xs text-slate-500">Acompanhamento e próximos passos</p>
-                </div>
-              </div>
-              <div className="space-y-4">
-                {providencias.length > 0 ? (
-                  providencias.map((p: ProvidenciaRow) => (
-                    <ProvidenciaCard
-                      key={p.id}
-                      p={p}
-                      clientId={client.id}
-                      onRefresh={onRefresh}
-                    />
-                  ))
-                ) : client.ultima_providencia ? (
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-                        <FileText className="h-4 w-4 text-slate-600" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-slate-500">
-                          Providência — {client.data_providencia ? formatDate(client.data_providencia) : '–'}
-                        </p>
-                        <p className="mt-1 text-sm font-medium text-slate-900 leading-snug">
-                          {client.ultima_providencia}
-                        </p>
-                        {(client.follow_up || client.data_follow_up) && (
-                          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                              Follow-up
-                            </p>
-                            <div
-                              className={cn(
-                                'rounded-md border px-3 py-2',
-                                followUpVencido ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'
-                              )}
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                {followUpVencido && (
-                                  <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
-                                    <AlertTriangle className="h-3.5 w-3.5" />
-                                    Vencido
-                                  </span>
-                                )}
-                                <span className="text-xs text-slate-400">
-                                  {client.data_follow_up ? formatDate(client.data_follow_up) : ''}
-                                </span>
-                              </div>
-                              <p className="mt-1 text-sm text-slate-800">{client.follow_up}</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 text-center">
-                    <FileText className="mx-auto h-10 w-10 text-slate-300" />
-                    <p className="mt-2 text-sm font-medium text-slate-600">Nenhuma providência</p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      Adicione uma providência para acompanhar este cliente.
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Gestores</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-900 truncate">
+                      {gestorMembers.length > 0 ? (gestorMembers.length === 1 ? gestorMembers[0].full_name : `${gestorMembers.length} gestores`) : '–'}
                     </p>
                   </div>
-                )}
-              </div>
-            </section>
-
-            {/* Observações gerais */}
-            {client.observacoes_gerais && (
-              <section className="mb-6">
-                <h3 className="mb-2 text-sm font-medium text-slate-600">Observações gerais</h3>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm text-slate-800 whitespace-pre-wrap">{client.observacoes_gerais}</p>
                 </div>
               </section>
-            )}
 
-            {/* Empresas (nome do grupo já está no título do painel) */}
-            {linkedEscritorio && empresasDoGrupo.length > 0 && (
-              <section className="mb-6">
-                <h3 className="mb-2 text-sm font-medium text-slate-600">Empresas</h3>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <ul className="max-h-32 overflow-y-auto list-inside list-disc space-y-0.5 text-sm text-slate-700">
-                    {empresasDoGrupo.map((ce: ClienteEscritorioRow) => (
-                      <li key={ce.id}>{ce.nome}</li>
-                    ))}
-                  </ul>
+              {/* ── Parcelas (collapsible) ── */}
+              {hasParcelas && (
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-slate-500" />
+                    <h3 className="text-sm font-bold text-slate-800">Parcelas</h3>
+                  </div>
+
+                  {parcelasData.emAtraso.length > 0 && (
+                    <CollapsibleSection icon={AlertCircle} title="Em atraso" count={parcelasData.emAtraso.length} variant="danger">
+                      <ul className="space-y-2">
+                        {parcelasData.emAtraso.map((p: ParcelaRow) => <ParcelaItem key={p.id} p={p} valueColor="text-red-700" />)}
+                      </ul>
+                    </CollapsibleSection>
+                  )}
+
+                  {parcelasData.aVencer.length > 0 && (
+                    <CollapsibleSection icon={Clock} title="Próximas a vencer" count={parcelasData.aVencer.length} variant="warning">
+                      <ul className="space-y-2">
+                        {parcelasData.aVencer.map((p: ParcelaRow) => <ParcelaItem key={p.id} p={p} valueColor="text-amber-700" />)}
+                      </ul>
+                    </CollapsibleSection>
+                  )}
+
+                  {parcelasData.pagas.length > 0 && (
+                    <CollapsibleSection icon={CheckCircle2} title="Últimas pagas" count={parcelasData.pagas.length} variant="success">
+                      <ul className="space-y-2">
+                        {parcelasData.pagas.map((p: ParcelaRow) => <ParcelaItem key={p.id} p={p} valueColor="text-emerald-700" />)}
+                      </ul>
+                    </CollapsibleSection>
+                  )}
+                </section>
+              )}
+
+              {parcelasData && !hasParcelas && (
+                <section>
+                  <div className="flex items-center gap-2 mb-2">
+                    <CreditCard className="h-4 w-4 text-slate-400" />
+                    <h3 className="text-sm font-bold text-slate-700">Parcelas</h3>
+                  </div>
+                  <p className="rounded-xl border border-dashed border-slate-300/60 bg-white px-4 py-3 text-sm text-slate-500">
+                    Nenhuma parcela encontrada. Verifique se o cliente está vinculado e se o relatório foi sincronizado.
+                  </p>
+                </section>
+              )}
+
+              {/* ── Providências ── */}
+              <section>
+                <div className="mb-3 flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-slate-500" />
+                  <h3 className="text-sm font-bold text-slate-800">Providências e follow-ups</h3>
+                </div>
+                <div className="space-y-3">
+                  {providencias.length > 0 ? (
+                    providencias.map((p: ProvidenciaRow) => <ProvidenciaCard key={p.id} p={p} clientId={client.id} onRefresh={onRefresh} />)
+                  ) : client.ultima_providencia ? (
+                    <div className="rounded-xl border border-slate-200/60 bg-white p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-dark/5">
+                          <FileText className="h-4 w-4 text-primary-dark" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            {client.data_providencia ? formatDate(client.data_providencia) : '–'}
+                          </p>
+                          <p className="mt-1.5 text-sm leading-relaxed text-slate-800">{client.ultima_providencia}</p>
+                          {(client.follow_up || client.data_follow_up) && (
+                            <div className={cn('mt-3 rounded-lg border px-3 py-2', followUpVencido ? 'border-red-200 bg-red-50' : 'border-slate-100 bg-slate-50')}>
+                              <div className="flex items-center justify-between gap-2">
+                                {followUpVencido && <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600"><AlertTriangle className="h-3 w-3" />Vencido</span>}
+                                <span className="text-[11px] text-slate-400">{client.data_follow_up ? formatDate(client.data_follow_up) : ''}</span>
+                              </div>
+                              <p className="mt-1 text-sm text-slate-700">{client.follow_up}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-300/60 bg-white py-6 text-center">
+                      <FileText className="mx-auto h-8 w-8 text-slate-300" />
+                      <p className="mt-2 text-sm font-medium text-slate-600">Nenhuma providência</p>
+                      <p className="mt-0.5 text-xs text-slate-400">Adicione para acompanhar este cliente.</p>
+                    </div>
+                  )}
                 </div>
               </section>
-            )}
 
-            {/* Processos, horas e contagem por grupo (visível ao abrir o painel) */}
-            {(qtdProcessos != null ||
-              horasTotal != null ||
-              (horasPorAno && Object.keys(horasPorAno).length > 0) ||
-              (contagemCi && grupoCliente)) && (
-              <section className="mb-6">
-                <h3 className="mb-3 text-sm font-medium text-slate-600">Processos (escritório) · Horas (TimeSheets)</h3>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <button
-                    type="button"
-                    onClick={() => setProcessosHorasAberto((v) => !v)}
-                    className="flex w-full items-center justify-between gap-2 rounded-md py-1 text-left text-sm font-medium text-slate-700 hover:text-slate-900"
-                  >
-                    <span>
-                      {qtdProcessos != null && qtdProcessos} processos ·{' '}
-                      {horasTotal != null && formatHorasDuracao(Number(horasTotal))}
-                    </span>
-                    {processosHorasAberto ? (
-                      <ChevronUp className="h-4 w-4 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
-                    )}
+              {/* ── Observações ── */}
+              {client.observacoes_gerais && (
+                <section>
+                  <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800"><MessageSquare className="h-4 w-4 text-slate-500" />Observações</h3>
+                  <div className="rounded-xl border border-slate-200/60 bg-white p-4">
+                    <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">{client.observacoes_gerais}</p>
+                  </div>
+                </section>
+              )}
+
+              {/* ── Empresas ── */}
+              {linkedEscritorio && empresasDoGrupo.length > 0 && (
+                <section>
+                  <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800"><Building2 className="h-4 w-4 text-slate-500" />Empresas do grupo</h3>
+                  <div className="rounded-xl border border-slate-200/60 bg-white p-3">
+                    <ul className="max-h-32 space-y-1 overflow-y-auto">
+                      {empresasDoGrupo.map((ce: ClienteEscritorioRow) => (
+                        <li key={ce.id} className="rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-700">{ce.nome}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </section>
+              )}
+
+              {/* ── Processos / Horas ── */}
+              {(qtdProcessos != null || horasTotal != null || areasProcessos.length > 0 || (contagemCi && grupoCliente)) && (
+                <section>
+                  <button type="button" onClick={() => setProcessosAberto((v) => !v)} className="mb-2 flex w-full items-center gap-2 text-left">
+                    <Briefcase className="h-4 w-4 text-slate-500" />
+                    <h3 className="flex-1 text-sm font-bold text-slate-800">Processos · Horas</h3>
+                    {processosAberto ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
                   </button>
-                  {processosHorasAberto && (
-                    <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
-                      <table className="w-full text-left text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50">
-                            <th className="px-3 py-2 font-medium text-slate-600">Processos</th>
-                            <th className="px-3 py-2 font-medium text-slate-600">Horas total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td className="px-3 py-2 text-slate-900">
-                              {qtdProcessos != null ? qtdProcessos : '–'}
-                            </td>
-                            <td className="px-3 py-2 text-slate-900">
-                              {horasTotal != null
-                                ? formatHorasDuracao(Number(horasTotal))
-                                : '–'}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                      {horasPorAno && Object.keys(horasPorAno).length > 0 && (
-                        <div className="border-t border-slate-200 px-3 py-2">
-                          <p className="mb-1.5 text-xs font-medium text-slate-500">Horas por ano</p>
-                          <table className="w-full text-left text-sm">
-                            <tbody>
-                              {Object.entries(horasPorAno)
-                                .sort(([a], [b]) => b.localeCompare(a))
-                                .map(([ano, horas]) => (
-                                  <tr key={ano} className="border-t border-slate-100 first:border-0">
-                                    <td className="py-1 text-slate-700">{ano}</td>
-                                    <td className="py-1 text-slate-700 font-medium text-right">
-                                      {formatHorasDuracao(Number(horas))}
-                                    </td>
-                                  </tr>
+                  {processosAberto && (
+                    <div className="space-y-3">
+                      {areasProcessos.length > 0 && (
+                        <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white">
+                          {areasProcessos.map((ap, idx) => (
+                            <div key={ap.area} className={cn(idx > 0 && 'border-t border-slate-100')}>
+                              <div className="flex items-center justify-between bg-slate-50/80 px-4 py-2">
+                                <span className="text-sm font-semibold text-slate-800">{ap.area}</span>
+                                <Badge variant="secondary" className="text-xs">{ap.totalArea}</Badge>
+                              </div>
+                              <ul className="px-4 py-2 space-y-0.5">
+                                {ap.situacoes.map((s) => (
+                                  <li key={s.situacao} className="flex justify-between text-sm text-slate-600"><span>{s.situacao}</span><strong className="tabular-nums text-slate-800">{s.total}</strong></li>
                                 ))}
-                            </tbody>
-                          </table>
+                              </ul>
+                            </div>
+                          ))}
                         </div>
                       )}
-                      {contagemCi && grupoCliente && (
-                        <div className="border-t border-slate-200 px-3 py-2">
-                          <p className="mb-1.5 text-xs font-medium text-slate-500">Processos por situação (grupo)</p>
-                          <p className="mt-0.5 text-sm font-medium text-slate-800">
-                            Total geral: {contagemCi.total_geral} {contagemCi.total_geral === 1 ? 'processo' : 'processos'}
-                          </p>
-                          <ul className="mt-1 space-y-0.5 text-sm text-slate-700">
-                            {Object.entries(LABELS_CONTAGEM_CI).map(([key, label]) => {
-                              const val = contagemCi[key as keyof typeof contagemCi]
-                              if (typeof val !== 'number' || val <= 0) return null
-                              return (
-                                <li key={key} className="flex justify-between gap-2">
-                                  <span>{label}</span>
-                                  <strong>{val}</strong>
-                                </li>
-                              )
-                            })}
+                      {areasProcessos.length === 0 && contagemCi && grupoCliente && (
+                        <div className="rounded-xl border border-slate-200/60 bg-white px-4 py-3">
+                          <p className="text-sm font-medium text-slate-800">Total: {contagemCi.total_geral} {contagemCi.total_geral === 1 ? 'processo' : 'processos'}</p>
+                          <ul className="mt-1.5 space-y-0.5 text-sm text-slate-600">
+                            {Object.entries(LABELS_CONTAGEM_CI).map(([key, label]) => { const val = contagemCi[key as keyof typeof contagemCi]; if (typeof val !== 'number' || val <= 0) return null; return <li key={key} className="flex justify-between"><span>{label}</span><strong>{val}</strong></li> })}
                           </ul>
                         </div>
                       )}
+                      {horasPorAno && Object.keys(horasPorAno).length > 0 && (
+                        <div className="rounded-xl border border-slate-200/60 bg-white px-4 py-3">
+                          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Horas por ano</p>
+                          {Object.entries(horasPorAno).sort(([a], [b]) => b.localeCompare(a)).map(([ano, horas]) => (
+                            <div key={ano} className="flex justify-between border-t border-slate-50 py-1 text-sm"><span className="text-slate-600">{ano}</span><span className="font-medium text-slate-800">{formatHorasDuracao(Number(horas))}</span></div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              </section>
-            )}
+                </section>
+              )}
 
-            {/* Últimas ações */}
-            <section>
-              <h3 className="mb-3 text-sm font-medium text-slate-600">Últimas ações</h3>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              {/* ── Últimas ações ── */}
+              <section>
+                <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800"><History className="h-4 w-4 text-slate-500" />Últimas ações</h3>
                 {ultimosLogs.length === 0 ? (
-                  <p className="text-sm text-slate-500">Nenhuma ação registrada.</p>
+                  <p className="rounded-xl border border-dashed border-slate-300/60 bg-white px-4 py-3 text-sm text-slate-500">Nenhuma ação registrada.</p>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="space-y-1.5">
                     {(ultimosLogs as InadimplenciaLogRow[]).map((log) => (
-                      <li
-                        key={log.id}
-                        className="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                      >
-                        <Badge variant="secondary" className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium">
-                          {getTipoLabel(log.tipo)}
-                        </Badge>
-                        <span className="min-w-0 flex-1 truncate text-slate-500">{log.descricao || '–'}</span>
-                        <span className="shrink-0 text-xs text-slate-400">{formatDate(log.data_acao)}</span>
+                      <li key={log.id} className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white px-3 py-2.5">
+                        <Badge variant="secondary" className="shrink-0 text-[10px]">{getTipoLabel(log.tipo)}</Badge>
+                        <span className="min-w-0 flex-1 truncate text-sm text-slate-600">{log.descricao || '–'}</span>
+                        <span className="shrink-0 text-[11px] text-slate-400">{formatDate(log.data_acao)}</span>
                       </li>
                     ))}
                   </ul>
                 )}
-              </div>
-            </section>
+              </section>
+
+            </div>
           </div>
 
-          {/* Footer – ações */}
-          <footer className="shrink-0 border-t border-slate-200 bg-slate-50 px-6 py-4">
+          {/* ── Footer ── */}
+          <footer className="shrink-0 border-t border-slate-200/60 bg-white px-5 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setModalProvidencia(true)} className="gap-1.5">
-                <FileText className="h-4 w-4" />
-                Providência
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setModalFollowUp(true)} className="gap-1.5">
-                <MessageSquare className="h-4 w-4" />
-                Follow-up
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setModalEditar(true)} className="gap-1.5">
-                <Pencil className="h-4 w-4" />
-                Editar
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setModalHistorico(true)} className="gap-1.5">
-                <History className="h-4 w-4" />
-                Histórico
-              </Button>
-              <Button
-                variant="success"
-                size="sm"
-                onClick={() => onMarcarResolvido(client.id)}
-                className="ml-auto gap-1.5"
-              >
-                <Check className="h-4 w-4" />
-                Resolver
-              </Button>
+              {canEdit && <Button variant="outline" size="sm" onClick={() => setModalProvidencia(true)} className="gap-1.5 rounded-lg"><FileText className="h-3.5 w-3.5" />Providência</Button>}
+              <Button variant="outline" size="sm" onClick={() => setModalFollowUp(true)} className="gap-1.5 rounded-lg"><MessageSquare className="h-3.5 w-3.5" />Follow-up</Button>
+              {canEdit && <Button variant="outline" size="sm" onClick={() => setModalEditar(true)} className="gap-1.5 rounded-lg"><Pencil className="h-3.5 w-3.5" />Editar</Button>}
+              <Button variant="outline" size="sm" onClick={() => setModalHistorico(true)} className="gap-1.5 rounded-lg"><History className="h-3.5 w-3.5" />Histórico</Button>
+              {canEdit && (
+                <button type="button" onClick={() => onMarcarResolvido(client.id)} className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 hover:shadow">
+                  <Check className="h-3.5 w-3.5" />Resolver
+                </button>
+              )}
             </div>
           </footer>
         </SheetContent>
       </Sheet>
 
-      <ModalEditarCliente
-        open={modalEditar}
-        onClose={() => setModalEditar(false)}
-        client={client}
-        onSuccess={closeAndRefresh}
-      />
+      <ModalEditarCliente open={modalEditar} onClose={() => setModalEditar(false)} client={client} onSuccess={closeAndRefresh} />
       <ModalHistorico open={modalHistorico} onClose={() => setModalHistorico(false)} clientId={client.id} />
-      <ModalNovaProvidencia
-        open={modalProvidencia}
-        onClose={() => setModalProvidencia(false)}
-        clientId={client.id}
-        onSuccess={closeAndRefresh}
-      />
-      <ModalNovoFollowUp
-        open={modalFollowUp}
-        onClose={() => setModalFollowUp(false)}
-        clientId={client.id}
-        onSuccess={closeAndRefresh}
-      />
+      <ModalNovaProvidencia open={modalProvidencia} onClose={() => setModalProvidencia(false)} clientId={client.id} onSuccess={closeAndRefresh} />
+      <ModalNovoFollowUp open={modalFollowUp} onClose={() => setModalFollowUp(false)} clientId={client.id} onSuccess={closeAndRefresh} />
     </>
   )
 }

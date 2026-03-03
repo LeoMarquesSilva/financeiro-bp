@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient'
-import type { TeamMember } from './database.types'
+import type { TeamMember, AppRole } from './database.types'
 
-/** Slug do e-mail para nome de arquivo em public/team/ (ex.: gustavo@bpplaw.com.br → gustavo) */
+/** Slug do e-mail para nome de arquivo em public/team/ (ex.: gustavo@bismarchipires.com.br → gustavo) */
 export function getLocalAvatarSlug(email: string): string {
   return email.split('@')[0]?.replace(/\./g, '-') ?? ''
 }
@@ -16,6 +16,7 @@ export interface CreateTeamMemberInput {
   full_name: string
   area: string
   avatar_url?: string | null
+  role?: AppRole | null
 }
 
 export const teamMembersService = {
@@ -34,11 +35,20 @@ export const teamMembersService = {
       full_name: input.full_name.trim(),
       area: input.area.trim(),
       avatar_url: input.avatar_url?.trim() || null,
+      role: input.role ?? null,
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client infers Insert as never for some schemas
     const { data, error } = await supabase.from('team_members').insert(insertData as any).select().single()
     if (error) throw error
     return data
+  },
+
+  async updateRole(id: string, role: AppRole | null): Promise<void> {
+    const { error } = await supabase
+      .from('team_members')
+      .update({ role, updated_at: new Date().toISOString() } as any)
+      .eq('id', id)
+    if (error) throw error
   },
 
   async delete(id: string): Promise<void> {
@@ -52,27 +62,27 @@ export const teamMembersService = {
  * Use para import e para resolver gestor em exibição quando o campo ainda for texto.
  */
 export const GESTOR_PLANILHA_TO_EMAIL: Record<string, string> = {
-  GIAN: 'giancarlo@bpplaw.com.br',
-  Giancarlo: 'giancarlo@bpplaw.com.br',
-  LEONARDO: 'leonardo@bpplaw.com.br',
-  Leonardo: 'leonardo@bpplaw.com.br',
-  Gustavo: 'gustavo@bpplaw.com.br',
-  Ricardo: 'ricardo@bpplaw.com.br',
-  Gabriela: 'gabriela.consul@bpplaw.com.br',
-  Daniel: 'daniel@bpplaw.com.br',
-  Renato: 'renato@bpplaw.com.br',
-  Michel: 'michel.malaquias@bpplaw.com.br',
-  Emanueli: 'emanueli.lourenco@bpplaw.com.br',
-  Ariany: 'ariany.bispo@bpplaw.com.br',
-  Jorge: 'jorge@bpplaw.com.br',
-  Ligia: 'ligia@bpplaw.com.br',
-  Wagner: 'wagner.armani@bpplaw.com.br',
-  Jansonn: 'jansonn@bpplaw.com.br',
-  Henrique: 'henrique.nascimento@bpplaw.com.br',
-  Felipe: 'felipe@bpplaw.com.br',
-  'Lavínia': 'lavinia.ferraz@bpplaw.com.br',
-  Lavinia: 'lavinia.ferraz@bpplaw.com.br',
-  Francisco: 'francisco.zanin@bpplaw.com.br',
+  GIAN: 'giancarlo@bismarchipires.com.br',
+  Giancarlo: 'giancarlo@bismarchipires.com.br',
+  LEONARDO: 'leonardo@bismarchipires.com.br',
+  Leonardo: 'leonardo@bismarchipires.com.br',
+  Gustavo: 'gustavo@bismarchipires.com.br',
+  Ricardo: 'ricardo@bismarchipires.com.br',
+  Gabriela: 'gabriela.consul@bismarchipires.com.br',
+  Daniel: 'daniel@bismarchipires.com.br',
+  Renato: 'renato@bismarchipires.com.br',
+  Michel: 'michel.malaquias@bismarchipires.com.br',
+  Emanueli: 'emanueli.lourenco@bismarchipires.com.br',
+  Ariany: 'ariany.bispo@bismarchipires.com.br',
+  Jorge: 'jorge@bismarchipires.com.br',
+  Ligia: 'ligia@bismarchipires.com.br',
+  Wagner: 'wagner.armani@bismarchipires.com.br',
+  Jansonn: 'jansonn@bismarchipires.com.br',
+  Henrique: 'henrique.nascimento@bismarchipires.com.br',
+  Felipe: 'felipe@bismarchipires.com.br',
+  'Lavínia': 'lavinia.ferraz@bismarchipires.com.br',
+  Lavinia: 'lavinia.ferraz@bismarchipires.com.br',
+  Francisco: 'francisco.zanin@bismarchipires.com.br',
 }
 
 /** Para um e-mail, retorna todos os valores de gestor que devem ser considerados (e-mail + nomes da planilha). */

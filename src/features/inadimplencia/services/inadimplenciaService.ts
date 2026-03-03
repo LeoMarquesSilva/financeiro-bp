@@ -13,8 +13,8 @@ export interface CreateClienteInput {
   cnpj?: string | null
   /** Vincula à pessoa na base principal (pessoas). */
   pessoa_id?: string | null
-  gestor?: string | null
-  area?: string | null
+  gestor?: string[] | null
+  area?: string[] | null
   valor_em_aberto: number
   /** Classificação definida na reunião (caso a caso). Se não informada, usa sugestão por dias. */
   status_classe?: InadimplenciaClasse
@@ -47,10 +47,10 @@ function buildListQuery(params: {
 
   if (params.gestor) {
     const gestorValues = getGestorFilterValues(params.gestor)
-    if (gestorValues.length === 1) query = query.eq('gestor', gestorValues[0])
-    else query = query.in('gestor', gestorValues)
+    if (gestorValues.length === 1) query = query.contains('gestor', [gestorValues[0]])
+    else query = query.overlaps('gestor', gestorValues)
   }
-  if (params.area) query = query.eq('area', params.area)
+  if (params.area) query = query.contains('area', [params.area])
   if (params.classe) query = query.eq('status_classe', params.classe)
   if (params.prioridade) query = query.eq('prioridade', params.prioridade)
 

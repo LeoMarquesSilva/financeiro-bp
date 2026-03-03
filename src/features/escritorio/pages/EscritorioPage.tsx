@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { ClienteEscritorioRow } from '@/lib/database.types'
 import type { GrupoEscritorio, FiltroFinanceiro, OrdenacaoEscritorio } from '../services/escritorioService'
 import { GrupoEscritorioCard } from '../components/GrupoEscritorioCard'
@@ -19,8 +20,17 @@ const GRUPOS_POR_PAGINA = 12
 const DEBOUNCE_BUSCA_MS = 350
 
 export function EscritorioPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [busca, setBusca] = useState('')
   const debouncedBusca = useDebounce(busca, DEBOUNCE_BUSCA_MS)
+
+  useEffect(() => {
+    const buscaParam = searchParams.get('busca')
+    if (buscaParam) {
+      setBusca(buscaParam)
+      setSearchParams({}, { replace: true })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [filtroFinanceiro, setFiltroFinanceiro] = useState<FiltroFinanceiro>('todos')
   const [minValorStr, setMinValorStr] = useState('')
   const [ordenacao, setOrdenacao] = useState<OrdenacaoEscritorio>('nome')
@@ -51,7 +61,7 @@ export function EscritorioPage() {
   }, [debouncedBusca, filtroFinanceiro, minValor, ordenacao])
 
   return (
-    <div className="space-y-6 px-6 py-6 sm:px-8 sm:py-8">
+    <div className="space-y-6">
       <header>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
           <Building2 className="h-7 w-7 shrink-0 text-slate-600" />

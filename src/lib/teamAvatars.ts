@@ -1,7 +1,7 @@
 /**
  * Avatares e dados de exibição da equipe (gestores).
  * Fotos hospedadas em https://www.bismarchipires.com.br/img/team/ ou URL completa.
- * E-mails @bismarchipires.com.br são normalizados para @bpplaw.com.br na busca.
+ * E-mails padronizados como @bismarchipires.com.br.
  */
 
 const BASE_URL = 'https://www.bismarchipires.com.br/img/team'
@@ -12,101 +12,101 @@ export interface TeamMemberAvatar {
   name: string
 }
 
-/** Chave = e-mail @bpplaw; avatar = URL completa (BASE_URL + path ou URL absoluta) */
+/** Chave = e-mail @bismarchipires; avatar = URL completa (BASE_URL + path ou URL absoluta) */
 export const TEAM_BY_EMAIL: Record<string, TeamMemberAvatar> = {
   // Sócio
-  'gustavo@bpplaw.com.br': {
+  'gustavo@bismarchipires.com.br': {
     avatar: `${BASE_URL}/socios/gustavo-site.png`,
     tag: 'Sócio',
     name: 'Gustavo Bismarchi',
   },
-  'ricardo@bpplaw.com.br': {
+  'ricardo@bismarchipires.com.br': {
     avatar: `${BASE_URL}/ricardo-pires.jpg`,
     tag: 'Sócio',
     name: 'Ricardo Viscardi Pires',
   },
   // Cível
-  'gabriela.consul@bpplaw.com.br': {
+  'gabriela.consul@bismarchipires.com.br': {
     avatar: `${BASE_URL}/civel/gabriela-consul.jpg`,
     tag: 'Cível',
     name: 'Gabriela Consul',
   },
-  'giancarlo@bpplaw.com.br': {
+  'giancarlo@bismarchipires.com.br': {
     avatar: `${BASE_URL}/civel/giancarlo.jpg`,
     tag: 'Cível',
     name: 'Giancarlo Zotini',
   },
   // Trabalhista
-  'daniel@bpplaw.com.br': {
+  'daniel@bismarchipires.com.br': {
     avatar: `${BASE_URL}/trabalhista/daniel-pressato-fernandes.jpg`,
     tag: 'Trabalhista',
     name: 'Daniel Pressatto Fernandes',
   },
-  'renato@bpplaw.com.br': {
+  'renato@bismarchipires.com.br': {
     avatar: `${BASE_URL}/trabalhista/renato-rossetti.jpg`,
     tag: 'Trabalhista',
     name: 'Renato Vallim',
   },
   // Distressed Deals
-  'michel.malaquias@bpplaw.com.br': {
+  'michel.malaquias@bismarchipires.com.br': {
     avatar: `${BASE_URL}/distressed-deals/michel.jpg`,
     tag: 'Distressed Deals',
     name: 'Michel Malaquias',
   },
-  'emanueli.lourenco@bpplaw.com.br': {
+  'emanueli.lourenco@bismarchipires.com.br': {
     avatar: `${BASE_URL}/distressed-deals/emanueli-lourenco.png`,
     tag: 'Distressed Deals',
     name: 'Emanueli Lourenço',
   },
-  'ariany.bispo@bpplaw.com.br': {
+  'ariany.bispo@bismarchipires.com.br': {
     avatar: `${BASE_URL}/distressed-deals/ariany-bispo.png`,
     tag: 'Distressed Deals',
     name: 'Ariany Bispo',
   },
   // Reestruturação
-  'jorge@bpplaw.com.br': {
+  'jorge@bismarchipires.com.br': {
     avatar: `${BASE_URL}/reestruturacao/jorge-pecht-souza.jpg`,
     tag: 'Reestruturação',
     name: 'Jorge Pecht Souza',
   },
-  'leonardo@bpplaw.com.br': {
+  'leonardo@bismarchipires.com.br': {
     avatar: `${BASE_URL}/reestruturacao/leo-loureiro.png`,
     tag: 'Reestruturação',
     name: 'Leonardo Loureiro Basso',
   },
-  'ligia@bpplaw.com.br': {
+  'ligia@bismarchipires.com.br': {
     avatar: `${BASE_URL}/reestruturacao/ligia-gilberti-lopes.jpg`,
     tag: 'Reestruturação',
     name: 'Ligia Lopes',
   },
-  'wagner.armani@bpplaw.com.br': {
+  'wagner.armani@bismarchipires.com.br': {
     avatar: `${BASE_URL}/reestruturacao/wagner.jpg`,
     tag: 'Societário e Contratos',
     name: 'Wagner Armani',
   },
-  'jansonn@bpplaw.com.br': {
+  'jansonn@bismarchipires.com.br': {
     avatar: `${BASE_URL}/reestruturacao/jansonn.jpg`,
     tag: 'Societário e Contratos',
     name: 'Jansonn Mendonça Batista',
   },
-  'henrique.nascimento@bpplaw.com.br': {
+  'henrique.nascimento@bismarchipires.com.br': {
     avatar: 'https://www.bismarchipires.com.br/blog/wp-content/uploads/2026/02/Henrique-Franco-Nascimento.jpeg',
     tag: 'Societário e Contratos',
     name: 'Henrique Franco Nascimento',
   },
   // Operações Legais
-  'felipe@bpplaw.com.br': {
+  'felipe@bismarchipires.com.br': {
     avatar: `${BASE_URL}/legal-ops/felipe-carmargo.jpg`,
     tag: 'Operações Legais',
     name: 'Felipe Camargo',
   },
-  'lavinia.ferraz@bpplaw.com.br': {
+  'lavinia.ferraz@bismarchipires.com.br': {
     avatar: 'https://www.bismarchipires.com.br/img/team/legal-ops/lavinia-ferraz-crispim.jpg',
     tag: 'Operações Legais',
     name: 'Lavínia Ferraz Crispim',
   },
   // Tributário
-  'francisco.zanin@bpplaw.com.br': {
+  'francisco.zanin@bismarchipires.com.br': {
     avatar: 'https://www.bismarchipires.com.br/blog/wp-content/uploads/2026/01/Captura-de-tela-2026-01-27-180946.png',
     tag: 'Tributário',
     name: 'Francisco Zanin',
@@ -114,15 +114,11 @@ export const TEAM_BY_EMAIL: Record<string, TeamMemberAvatar> = {
 }
 
 /**
- * Normaliza e-mail para lookup: @bismarchipires.com.br → @bpplaw.com.br
+ * Normaliza e-mail para lookup (lowercase + trim).
  */
 export function normalizeEmailForLookup(email: string): string {
   if (!email || typeof email !== 'string') return ''
-  const trimmed = email.trim().toLowerCase()
-  if (trimmed.endsWith('@bismarchipires.com.br')) {
-    return trimmed.replace('@bismarchipires.com.br', '@bpplaw.com.br')
-  }
-  return trimmed
+  return email.trim().toLowerCase()
 }
 
 /**
@@ -172,7 +168,7 @@ export function getAreaTags(): string[] {
 }
 
 /**
- * Retorna a chave normalizada para agrupamento (e-mail @bpplaw).
+ * Retorna a chave normalizada para agrupamento.
  */
 export function getSolicitanteKey(email: string | null | undefined): string {
   return normalizeEmailForLookup(email ?? '')

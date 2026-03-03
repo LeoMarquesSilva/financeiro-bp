@@ -374,3 +374,21 @@ export async function fetchGruposEscritorio(): Promise<GrupoEscritorio[]> {
   result.sort((a, b) => a.grupo_cliente.localeCompare(b.grupo_cliente))
   return result
 }
+
+export interface ProcessosPorAreaItem {
+  area: string
+  situacao_processo: string
+  total: number
+}
+
+export async function fetchProcessosPorAreaDoGrupo(
+  grupoCliente: string
+): Promise<ProcessosPorAreaItem[]> {
+  const { data, error } = await supabase
+    .rpc('processos_por_area_grupo' as never, { p_grupo: grupoCliente } as never)
+  if (error) {
+    console.error('[escritorioService] fetchProcessosPorAreaDoGrupo:', error)
+    return []
+  }
+  return (data ?? []) as ProcessosPorAreaItem[]
+}

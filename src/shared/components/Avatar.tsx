@@ -16,10 +16,11 @@ interface AvatarProps {
   alt?: string
   fullName: string
   className?: string
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
 }
 
 const sizeClasses = {
+  xs: 'h-5 w-5 text-[10px]',
   sm: 'h-6 w-6 text-xs',
   md: 'h-7 w-7 text-xs',
   lg: 'h-9 w-9 text-sm',

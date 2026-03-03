@@ -1,12 +1,12 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { formatCnpj, formatCurrency, formatCurrencyInput, parseCurrencyBr } from '@/shared/utils/format'
-import { TeamMemberSelect } from '@/shared/components/TeamMemberSelect'
+import { formatCurrency } from '@/shared/utils/format'
+import { TeamMemberMultiSelect } from '@/shared/components/TeamMemberMultiSelect'
 import { ModalBase } from './ModalBase'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { clienteInadimplenciaFormSchema } from '../types/inadimplencia.types'
 import { useInadimplenciaMutations } from '../hooks/useInadimplenciaMutations'
 import { useTeamMembers } from '../hooks/useTeamMembers'
@@ -20,14 +20,21 @@ import {
 } from '@/features/escritorio/services/escritorioService'
 import { toast } from 'sonner'
 import { CLASSES, CLASS_LABELS } from '@/shared/constants/inadimplencia'
-import { Search, ChevronDown, X } from 'lucide-react'
+import { Search, ChevronDown, X, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const inputSelectClass =
   'flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2'
 
-/** Máximo de clientes exibidos no dropdown para não travar (sem virtualização). */
-const MAX_CLIENTES_DROPDOWN = 50
+const MAX_GRUPOS_DROPDOWN = 50
+
+interface GrupoInfo {
+  nome: string
+  pessoas: ClienteEscritorioRow[]
+  totalEmpresas: number
+  valorEmAtraso: number
+  pessoaIdPrincipal: string | null
+}
 
 function getAreasFromTeam(teamMembers: { area: string }[]): string[] {
   const set = new Set(teamMembers.map((m) => m.area))
@@ -42,13 +49,23 @@ interface ModalCadastroProps {
   onSuccess: () => void
 }
 
-const initialForm = {
-  razao_social: '',
-  cnpj: '',
-  gestor: '',
-  area: '',
-  status_classe: 'A' as InadimplenciaClasse,
-  valor_em_aberto: '',
+interface FormState {
+  grupo: string
+  pessoaIdPrincipal: string | null
+  gestores: string[]
+  areas: string[]
+  status_classe: InadimplenciaClasse
+  valorEmAtraso: number
+  observacoes_gerais: string
+}
+
+const initialForm: FormState = {
+  grupo: '',
+  pessoaIdPrincipal: null,
+  gestores: [],
+  areas: [],
+  status_classe: 'A',
+  valorEmAtraso: 0,
   observacoes_gerais: '',
 }
 
@@ -56,12 +73,14 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
   const { createCliente } = useInadimplenciaMutations()
   const { teamMembers } = useTeamMembers()
   const areas = useMemo(() => getAreasFromTeam(teamMembers), [teamMembers])
-  const [form, setForm] = useState(initialForm)
+  const [form, setForm] = useState<FormState>(initialForm)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [clienteSearch, setClienteSearch] = useState('')
-  const [clienteDropdownOpen, setClienteDropdownOpen] = useState(false)
-  const clienteListRef = useRef<HTMLDivElement>(null)
+  const [grupoSearch, setGrupoSearch] = useState('')
+  const [grupoDropdownOpen, setGrupoDropdownOpen] = useState(false)
+  const [areasDropdownOpen, setAreasDropdownOpen] = useState(false)
+  const grupoListRef = useRef<HTMLDivElement>(null)
+  const areasRef = useRef<HTMLDivElement>(null)
 
   const { data: clientes = [], isLoading: loadingClientes } = useQuery({
     queryKey: ['clientes-escritorio'],
@@ -75,105 +94,108 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
     enabled: open,
   })
 
-  const selectedCliente: ClienteEscritorioRow | null = useMemo(() => {
-    if (!form.razao_social) return null
-    return clientes.find(
-      (c: ClienteEscritorioRow) =>
-        (c.nome ?? '') === form.razao_social &&
-        (c.cpf_cnpj ?? '') === (form.cnpj ?? '')
-    ) ?? null
-  }, [clientes, form.razao_social, form.cnpj])
-
-  /** Mesma lógica da página Escritório: busca por grupo, nome (razão social) ou CNPJ. Limitado para não travar o dropdown. */
-  const { filteredClientes, totalFiltrado, excedeuLimite } = useMemo(() => {
-    const b = clienteSearch.trim().toLowerCase()
-    let lista: ClienteEscritorioRow[]
-    if (!b) {
-      lista = clientes.slice(0, MAX_CLIENTES_DROPDOWN)
-      return {
-        filteredClientes: lista,
-        totalFiltrado: clientes.length,
-        excedeuLimite: clientes.length > MAX_CLIENTES_DROPDOWN,
-      }
-    }
-    const filtrado = clientes.filter((c: ClienteEscritorioRow) => {
-      const nomeGrupo = (c.grupo_cliente ?? '').trim() || GRUPO_SEM_NOME
-      const grupoNorm = normalizarNomeGrupo(nomeGrupo)
-      const buscaNorm = normalizarNomeGrupo(b)
-      const matchGrupo = grupoNorm.includes(buscaNorm) || buscaNorm.includes(grupoNorm)
-      const matchNome = (c.nome ?? '').toLowerCase().includes(b)
-      const cnpjDigits = (c.cpf_cnpj ?? '').replace(/\D/g, '')
-      const buscaDigits = b.replace(/\D/g, '')
-      const matchCnpj = buscaDigits.length >= 2 && cnpjDigits.includes(buscaDigits)
-      return matchGrupo || matchNome || matchCnpj
-    })
-    const total = filtrado.length
-    lista = filtrado.slice(0, MAX_CLIENTES_DROPDOWN)
-    return {
-      filteredClientes: lista,
-      totalFiltrado: total,
-      excedeuLimite: total > MAX_CLIENTES_DROPDOWN,
-    }
-  }, [clientes, clienteSearch])
-
-  /** Agrupa clientes (já limitados) por grupo (A–Z); dentro de cada grupo, clientes ordenados A–Z por nome. */
-  const clientesPorGrupo = useMemo(() => {
+  const grupos: GrupoInfo[] = useMemo(() => {
     const map = new Map<string, ClienteEscritorioRow[]>()
-    for (const c of filteredClientes) {
+    for (const c of clientes) {
       const grupo = (c.grupo_cliente ?? '').trim() || GRUPO_SEM_NOME
       if (!map.has(grupo)) map.set(grupo, [])
       map.get(grupo)!.push(c)
     }
-    const grupos = Array.from(map.keys()).sort((a, b) => a.localeCompare(b, 'pt-BR'))
-    return grupos.map((grupo) => {
-      const lista = (map.get(grupo) ?? []).sort((a, b) =>
-        (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR')
-      )
-      return { grupo, clientes: lista }
+    return Array.from(map.entries())
+      .map(([nome, pessoas]) => {
+        const valorEmAtraso = pessoas.reduce((sum, p) => {
+          const resumo = financeiroResumo?.get(p.id)
+          return sum + (resumo?.valorEmAtraso ?? 0)
+        }, 0)
+        return {
+          nome,
+          pessoas,
+          totalEmpresas: pessoas.length,
+          valorEmAtraso,
+          pessoaIdPrincipal: pessoas[0]?.id ?? null,
+        }
+      })
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  }, [clientes, financeiroResumo])
+
+  const { filteredGrupos, totalFiltrado, excedeuLimite } = useMemo(() => {
+    const b = grupoSearch.trim().toLowerCase()
+    let lista: GrupoInfo[]
+    if (!b) {
+      lista = grupos.slice(0, MAX_GRUPOS_DROPDOWN)
+      return { filteredGrupos: lista, totalFiltrado: grupos.length, excedeuLimite: grupos.length > MAX_GRUPOS_DROPDOWN }
+    }
+    const buscaNorm = normalizarNomeGrupo(b)
+    const filtrado = grupos.filter((g) => {
+      const grupoNorm = normalizarNomeGrupo(g.nome)
+      return grupoNorm.includes(buscaNorm) || buscaNorm.includes(grupoNorm)
     })
-  }, [filteredClientes])
+    const total = filtrado.length
+    lista = filtrado.slice(0, MAX_GRUPOS_DROPDOWN)
+    return { filteredGrupos: lista, totalFiltrado: total, excedeuLimite: total > MAX_GRUPOS_DROPDOWN }
+  }, [grupos, grupoSearch])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (clienteListRef.current && !clienteListRef.current.contains(e.target as Node)) {
-        setClienteDropdownOpen(false)
+      if (grupoListRef.current && !grupoListRef.current.contains(e.target as Node)) {
+        setGrupoDropdownOpen(false)
       }
     }
-    if (clienteDropdownOpen) document.addEventListener('click', handleClickOutside)
+    if (grupoDropdownOpen) document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
-  }, [clienteDropdownOpen])
+  }, [grupoDropdownOpen])
 
-  const handleSelectCliente = (c: ClienteEscritorioRow) => {
-    const resumo = financeiroResumo?.get(c.id)
-    const valorEmAtraso = resumo?.valorEmAtraso ?? 0
-    const valorAbertoStr =
-      valorEmAtraso > 0
-        ? formatCurrencyInput(String(Math.round(valorEmAtraso * 100)))
-        : ''
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (areasRef.current && !areasRef.current.contains(e.target as Node)) {
+        setAreasDropdownOpen(false)
+      }
+    }
+    if (areasDropdownOpen) document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [areasDropdownOpen])
+
+  const handleSelectGrupo = (g: GrupoInfo) => {
     setForm((f) => ({
       ...f,
-      razao_social: c.nome ?? '',
-      cnpj: c.cpf_cnpj ?? '',
-      valor_em_aberto: valorAbertoStr,
+      grupo: g.nome,
+      pessoaIdPrincipal: g.pessoaIdPrincipal,
+      valorEmAtraso: g.valorEmAtraso,
     }))
-    setClienteSearch('')
-    setClienteDropdownOpen(false)
+    setGrupoSearch('')
+    setGrupoDropdownOpen(false)
   }
 
-  const handleClearCliente = () => {
-    setForm((f) => ({ ...f, razao_social: '', cnpj: '' }))
-    setClienteSearch('')
+  const handleClearGrupo = () => {
+    setForm((f) => ({ ...f, grupo: '', pessoaIdPrincipal: null, valorEmAtraso: 0 }))
+    setGrupoSearch('')
+  }
+
+  const toggleArea = (area: string) => {
+    setForm((f) => {
+      const current = f.areas
+      if (current.includes(area)) {
+        return { ...f, areas: current.filter((a) => a !== area) }
+      }
+      return { ...f, areas: [...current, area] }
+    })
+  }
+
+  const removeArea = (area: string) => {
+    setForm((f) => ({ ...f, areas: f.areas.filter((a) => a !== area) }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitError(null)
     setErrors({})
-    const valorNumerico = parseCurrencyBr(form.valor_em_aberto)
+
     const parsed = clienteInadimplenciaFormSchema.safeParse({
-      ...form,
-      valor_em_aberto: valorNumerico,
+      razao_social: form.grupo,
+      gestores: form.gestores.length > 0 ? form.gestores : undefined,
+      areas: form.areas.length > 0 ? form.areas : undefined,
       status_classe: form.status_classe,
+      valor_em_aberto: form.valorEmAtraso,
       observacoes_gerais: form.observacoes_gerais || undefined,
     })
     if (!parsed.success) {
@@ -188,21 +210,21 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
     const data = parsed.data
     const { error } = await createCliente.mutateAsync({
       razao_social: data.razao_social,
-      cnpj: data.cnpj && data.cnpj.length === 14 ? data.cnpj : null,
-      pessoa_id: selectedCliente?.id ?? null,
-      gestor: data.gestor || null,
-      area: data.area || null,
+      cnpj: null,
+      pessoa_id: form.pessoaIdPrincipal,
+      gestor: data.gestores && data.gestores.length > 0 ? data.gestores : null,
+      area: data.areas && data.areas.length > 0 ? data.areas : null,
       status_classe: data.status_classe,
       valor_em_aberto: data.valor_em_aberto,
       observacoes_gerais: data.observacoes_gerais?.trim() || null,
     })
     if (error) {
       setSubmitError(error.message)
-      toast.error('Erro ao registrar inadimplência')
+      toast.error('Erro ao incluir inadimplente')
       return
     }
     setForm(initialForm)
-    toast.success('Inadimplência registrada')
+    toast.success('Inadimplente incluído no comitê')
     onClose()
     onSuccess()
   }
@@ -211,8 +233,8 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
     <ModalBase
       open={open}
       onClose={onClose}
-      title="Registrar inadimplência"
-      description="Formulário para registrar um novo cliente inadimplente. Busque o cliente por nome, grupo ou CNPJ."
+      title="Incluir Inadimplente no Comitê"
+      description="Busque o grupo do cliente para incluí-lo no comitê de inadimplência."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {submitError && (
@@ -221,25 +243,24 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
           </p>
         )}
 
-        {/* Seletor de cliente (base escritório) */}
-        <div className="space-y-2" ref={clienteListRef}>
-          <Label>Cliente *</Label>
-          {selectedCliente ? (
+        {/* Seletor de GRUPO */}
+        <div className="space-y-2" ref={grupoListRef}>
+          <Label>Grupo *</Label>
+          {form.grupo ? (
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-slate-900">{selectedCliente.nome}</p>
+                <p className="font-medium text-slate-900">{form.grupo}</p>
                 <p className="text-xs text-slate-500">
-                  {selectedCliente.grupo_cliente && `${selectedCliente.grupo_cliente} · `}
-                  {selectedCliente.cpf_cnpj ? formatCnpj(selectedCliente.cpf_cnpj) : 'Sem CNPJ'}
+                  {grupos.find((g) => g.nome === form.grupo)?.totalEmpresas ?? 0} empresa(s)
                 </p>
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={handleClearCliente}
+                onClick={handleClearGrupo}
                 className="h-8 w-8 shrink-0 p-0"
-                aria-label="Trocar cliente"
+                aria-label="Trocar grupo"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -251,71 +272,61 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
                 <Input
                   type="search"
                   autoComplete="off"
-                  value={clienteSearch}
+                  value={grupoSearch}
                   onChange={(e) => {
-                    setClienteSearch(e.target.value)
-                    setClienteDropdownOpen(true)
+                    setGrupoSearch(e.target.value)
+                    setGrupoDropdownOpen(true)
                   }}
-                  onFocus={() => setClienteDropdownOpen(true)}
-                  placeholder="Buscar por grupo, razão social ou CNPJ..."
+                  onFocus={() => setGrupoDropdownOpen(true)}
+                  placeholder="Buscar por nome do grupo..."
                   className="pl-9 pr-9"
                 />
                 <ChevronDown
                   className={cn(
                     'absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition-transform',
-                    clienteDropdownOpen && 'rotate-180'
+                    grupoDropdownOpen && 'rotate-180'
                   )}
                 />
               </div>
-              {clienteDropdownOpen && (
+              {grupoDropdownOpen && (
                 <div
                   className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
                   onMouseDown={(e) => e.stopPropagation()}
                 >
                   {loadingClientes ? (
-                    <div className="p-4 text-center text-sm text-slate-500">Carregando clientes...</div>
-                  ) : filteredClientes.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-slate-500">Carregando grupos...</div>
+                  ) : filteredGrupos.length === 0 ? (
                     <div className="p-4 text-center text-sm text-slate-500">
-                      Nenhum cliente encontrado. Verifique a base em Escritório.
+                      Nenhum grupo encontrado.
                     </div>
                   ) : (
                     <>
                       <ul className="py-1 list-none">
-                        {clientesPorGrupo.map(({ grupo, clientes: lista }) => (
-                          <li key={grupo} className="py-0">
-                            <div className="sticky top-0 z-10 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
-                              {grupo}
-                            </div>
-                            <ul className="py-0 list-none">
-                              {lista.map((c: ClienteEscritorioRow) => {
-                                const emAtraso = financeiroResumo?.get(c.id)?.valorEmAtraso ?? 0
-                                return (
-                                  <li key={c.id}>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSelectCliente(c)}
-                                      className="flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left hover:bg-slate-50"
-                                    >
-                                      <span className="font-medium text-slate-900">{c.nome}</span>
-                                      <span className="text-xs text-slate-500">
-                                        {c.cpf_cnpj ? formatCnpj(c.cpf_cnpj) : 'Sem CNPJ'}
-                                        {emAtraso > 0 && (
-                                          <span className="ml-1.5 font-medium text-red-600">
-                                            · {formatCurrency(emAtraso)} em atraso
-                                          </span>
-                                        )}
-                                      </span>
-                                    </button>
-                                  </li>
-                                )
-                              })}
-                            </ul>
+                        {filteredGrupos.map((g) => (
+                          <li key={g.nome}>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectGrupo(g)}
+                              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-50"
+                            >
+                              <div className="min-w-0">
+                                <span className="font-medium text-slate-900">{g.nome}</span>
+                                <span className="ml-2 text-xs text-slate-500">
+                                  {g.totalEmpresas} empresa{g.totalEmpresas !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              {g.valorEmAtraso > 0 && (
+                                <span className="shrink-0 text-xs font-medium text-red-600">
+                                  {formatCurrency(g.valorEmAtraso)}
+                                </span>
+                              )}
+                            </button>
                           </li>
                         ))}
                       </ul>
                       {excedeuLimite && (
                         <p className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                          Mostrando até {MAX_CLIENTES_DROPDOWN} de {totalFiltrado}. Digite para refinar a busca.
+                          Mostrando até {MAX_GRUPOS_DROPDOWN} de {totalFiltrado}. Digite para refinar a busca.
                         </p>
                       )}
                     </>
@@ -329,30 +340,82 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
           )}
         </div>
 
+        {/* Multi-select de Gestores */}
         <div className="space-y-2">
-          <Label>Gestor</Label>
-          <TeamMemberSelect
-            value={form.gestor}
-            onChange={(email) => setForm((f) => ({ ...f, gestor: email }))}
+          <Label>Gestores</Label>
+          <TeamMemberMultiSelect
+            value={form.gestores}
+            onChange={(emails) => setForm((f) => ({ ...f, gestores: emails }))}
             teamMembers={teamMembers}
-            placeholder="Selecione"
+            placeholder="Selecione os gestores responsáveis"
           />
         </div>
-        <div className="space-y-2">
-          <Label>Área</Label>
-          <select
-            value={form.area}
-            onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))}
-            className={inputSelectClass}
+
+        {/* Multi-select de Áreas */}
+        <div className="space-y-2" ref={areasRef}>
+          <Label>Áreas</Label>
+          <button
+            type="button"
+            onClick={() => setAreasDropdownOpen((o) => !o)}
+            className={cn(
+              inputSelectClass,
+              'flex min-h-9 flex-wrap items-center gap-1.5 py-1.5'
+            )}
           >
-            <option value="">Selecione</option>
-            {areas.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
+            {form.areas.length > 0 ? (
+              form.areas.map((a) => (
+                <span
+                  key={a}
+                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium"
+                >
+                  {a}
+                  <button
+                    type="button"
+                    className="rounded-full p-0.5 hover:bg-slate-200"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeArea(a)
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))
+            ) : (
+              <span className="text-slate-500">Selecione as áreas</span>
+            )}
+            <span className="ml-auto shrink-0 pl-1 text-slate-400" aria-hidden>
+              {areasDropdownOpen ? '▲' : '▼'}
+            </span>
+          </button>
+          {areasDropdownOpen && (
+            <ul className="z-50 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg list-none">
+              {areas.map((a) => {
+                const isSelected = form.areas.includes(a)
+                return (
+                  <li
+                    key={a}
+                    className={cn(
+                      'flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-slate-100',
+                      isSelected && 'bg-slate-50'
+                    )}
+                    onClick={() => toggleArea(a)}
+                  >
+                    <div className={cn(
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                      isSelected ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300'
+                    )}>
+                      {isSelected && <Check className="h-3 w-3" />}
+                    </div>
+                    {a}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
+
+        {/* Classificação (Grau) - single select */}
         <div className="space-y-2">
           <Label>Classificação (Grau)</Label>
           <select
@@ -368,29 +431,24 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
           </select>
           <p className="text-xs text-slate-500">Definida na reunião, conforme histórico do cliente.</p>
         </div>
+
+        {/* Valor em atraso - somente leitura */}
         <div className="space-y-2">
-          <Label>Valor em atraso (R$) *</Label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">R$</span>
-            <Input
-              type="text"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={form.valor_em_aberto}
-              onChange={(e) => {
-                const formatted = formatCurrencyInput(e.target.value)
-                setForm((f) => ({ ...f, valor_em_aberto: formatted }))
-              }}
-              className="pl-9"
-            />
+          <Label>Valor em atraso (R$)</Label>
+          <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <span className={cn(
+              'text-sm font-medium',
+              form.valorEmAtraso > 0 ? 'text-red-600' : 'text-slate-400'
+            )}>
+              {form.grupo ? formatCurrency(form.valorEmAtraso) : '--'}
+            </span>
           </div>
           <p className="text-xs text-slate-500">
-            Valor das parcelas vencidas. Ao selecionar o cliente, é preenchido com o valor em atraso do relatório financeiro. Usado no cálculo de prioridade e KPIs.
+            Calculado automaticamente a partir das parcelas em atraso do grupo selecionado.
           </p>
-          {errors.valor_em_aberto && (
-            <p className="text-xs text-red-600">{errors.valor_em_aberto}</p>
-          )}
         </div>
+
+        {/* Observações */}
         <div className="space-y-2">
           <Label htmlFor="obs-gerais">Observações</Label>
           <Textarea
@@ -402,12 +460,14 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
             className="resize-none"
           />
         </div>
+
+        {/* Botões */}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
           <Button type="submit" disabled={createCliente.isPending}>
-            {createCliente.isPending ? 'Salvando...' : 'Registrar'}
+            {createCliente.isPending ? 'Salvando...' : 'Incluir'}
           </Button>
         </div>
       </form>

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { ClientInadimplenciaRow } from '../types/inadimplencia.types'
 import type { TeamMember } from '@/lib/database.types'
+import { useAuth } from '@/lib/AuthContext'
 import { useFiltros } from '../hooks/useFiltros'
 import { useInadimplencia } from '../hooks/useInadimplencia'
 import { useDashboard } from '../hooks/useDashboard'
@@ -48,8 +50,16 @@ function groupByGestor(
 ): Array<{ label: string; member: TeamMember | null; clients: ClientInadimplenciaRow[] }> {
   const map = new Map<string, { member: TeamMember | null; clients: ClientInadimplenciaRow[] }>()
   for (const c of clientes) {
-    const member = resolveTeamMember(c.gestor ?? null, teamMembers)
-    const label = member ? member.full_name : (c.gestor?.trim() || 'Sem gestor')
+    const gestorArr: string[] = Array.isArray(c.gestor) ? c.gestor : c.gestor ? [c.gestor] : []
+    if (gestorArr.length === 0) {
+      const entry = map.get('Sem gestor')
+      if (entry) entry.clients.push(c)
+      else map.set('Sem gestor', { member: null, clients: [c] })
+      continue
+    }
+    const firstGestor = gestorArr[0]
+    const member = resolveTeamMember(firstGestor, teamMembers)
+    const label = member ? member.full_name : (firstGestor?.trim() || 'Sem gestor')
     const entry = map.get(label)
     if (entry) {
       entry.clients.push(c)
@@ -67,15 +77,27 @@ function groupByGestor(
 }
 
 export function InadimplenciaPage() {
+  const { role } = useAuth()
+  const canEdit = role === 'admin' || role === 'financeiro'
+
   const [modalCadastroOpen, setModalCadastroOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [resolvingId, setResolvingId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [selectedClient, setSelectedClient] = useState<ClientInadimplenciaRow | null>(null)
 
+  const [searchParams, setSearchParams] = useSearchParams()
   const { teamMembers } = useTeamMembers()
   const { listagemParams, orderBy, orderDesc, ...filtrosHandlers } = useFiltros(400)
   const [page, setPage] = useState(1)
+
+  useEffect(() => {
+    const buscaParam = searchParams.get('busca')
+    if (buscaParam) {
+      filtrosHandlers.setBusca(buscaParam)
+      setSearchParams({}, { replace: true })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     setPage(1)
   }, [
@@ -139,21 +161,22 @@ export function InadimplenciaPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1
 
   return (
-    <div className="space-y-8 px-6 py-6 sm:px-8 sm:py-8">
-      {/* Cabeçalho da página */}
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-6">
+    <div className="space-y-6">
+      {/* Page header */}
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
             Inadimplência
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-0.5 text-sm text-slate-500">
             Acompanhe e gerencie clientes inadimplentes
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"
+            size="sm"
             onClick={handleExport}
             disabled={exporting || loading}
             className="gap-2"
@@ -161,14 +184,17 @@ export function InadimplenciaPage() {
             <Download className="h-4 w-4" />
             {exporting ? 'Exportando…' : 'Exportar CSV'}
           </Button>
-          <Button
-            type="button"
-            onClick={() => setModalCadastroOpen(true)}
-            className="gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Nova inadimplência
-          </Button>
+          {canEdit && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setModalCadastroOpen(true)}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Incluir Inadimplente no Comitê
+            </Button>
+          )}
         </div>
       </header>
 
@@ -183,7 +209,7 @@ export function InadimplenciaPage() {
         loading={dashboardLoading}
       />
 
-      <section className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
+      <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
         <FiltrosInadimplencia
           filtros={filtrosHandlers.filtros}
           orderBy={orderBy}
@@ -250,9 +276,9 @@ export function InadimplenciaPage() {
       )}
 
       {loading && (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="h-64 animate-pulse rounded-xl bg-slate-200" />
+            <div key={i} className="h-52 animate-pulse rounded-xl bg-slate-200/60" />
           ))}
         </div>
       )}
@@ -276,7 +302,7 @@ export function InadimplenciaPage() {
       {!loading && clientes.length > 0 && (
         <>
           {viewMode === 'grid' && (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {clientes.map((client: ClientInadimplenciaRow) => (
                 <InadimplenciaCard
                   key={client.id}

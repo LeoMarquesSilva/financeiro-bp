@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+
 @layer utilities {
   @keyframes card-in {
     from {
@@ -15,5 +16,25 @@
   }
   .animate-card-in {
     animation: card-in 0.25s ease-out forwards;
+  }
+}
+
+@layer components {
+  .glass-sidebar {
+    background: linear-gradient(180deg, #101f2e 0%, #0a1420 50%, #070d14 100%);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .glass-item {
+    backdrop-filter: blur(12px);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .glass-item-active {
+    backdrop-filter: blur(16px);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 20px rgba(213, 177, 112, 0.08);
   }
 }
