@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+import { CalendarIcon } from 'lucide-react'
 import { ModalBase } from './ModalBase'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { providenciaService, PROVIDENCIA_FOLLOW_UP_TIPO_LABEL } from '../services/providenciaService'
 import { logsService } from '../services/logsService'
 import type { ProvidenciaFollowUpTipo, ProvidenciaRow } from '@/lib/database.types'
@@ -11,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/AuthContext'
 import { toast } from 'sonner'
 import { formatDate } from '@/shared/utils/format'
+import { cn } from '@/lib/utils'
 
 const inputClass =
   'flex min-h-[60px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2'
@@ -31,6 +37,7 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
   const { fullName } = useAuth()
   const [providenciaId, setProvidenciaId] = useState('')
   const [tipo, setTipo] = useState<ProvidenciaFollowUpTipo>('validar_acordo_comite')
+  const [dataFollowUp, setDataFollowUp] = useState<Date | undefined>(undefined)
   const [texto, setTexto] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -51,7 +58,14 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
       return
     }
     setSubmitting(true)
-    const { error } = await providenciaService.addFollowUp(providenciaId, tipo, texto.trim() || null, fullName || null)
+    const dataParaBanco = dataFollowUp ? format(dataFollowUp, 'yyyy-MM-dd') : undefined
+    const { error } = await providenciaService.addFollowUp(
+      providenciaId,
+      tipo,
+      texto.trim() || null,
+      fullName || null,
+      dataParaBanco
+    )
     setSubmitting(false)
     if (error) {
       toast.error('Erro ao registrar follow-up')
@@ -67,6 +81,7 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
     })
     toast.success('Follow-up registrado')
     setTexto('')
+    setDataFollowUp(undefined)
     queryClient.invalidateQueries({ queryKey: ['providencias', clientId] })
     queryClient.invalidateQueries({ queryKey: ['providencia-follow-ups', providenciaId] })
     queryClient.invalidateQueries({ queryKey: ['inadimplencia', 'logs', clientId] })
@@ -117,6 +132,34 @@ export function ModalNovoFollowUp({ open, onClose, clientId, onSuccess }: ModalN
                 </option>
               ))}
             </select>
+          </div>
+          <div className="space-y-2">
+            <Label>Data (opcional)</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    'w-full justify-start text-left font-normal h-9',
+                    !dataFollowUp && 'text-slate-500'
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dataFollowUp ? (
+                    format(dataFollowUp, "dd/MM/yyyy", { locale: ptBR })
+                  ) : (
+                    <span>DD/MM/AAAA</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dataFollowUp}
+                  onSelect={setDataFollowUp}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
           <div className="space-y-2">
             <Label>Observação (opcional)</Label>

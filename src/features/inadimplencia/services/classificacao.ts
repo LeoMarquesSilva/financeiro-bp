@@ -1,4 +1,5 @@
 import type { InadimplenciaClasse } from '@/lib/database.types'
+import { parseDateAsLocal } from '@/shared/utils/format'
 
 /**
  * Sugestão de classificação por dias (apenas fallback no cadastro).
@@ -13,13 +14,15 @@ export function calcularClasse(diasEmAberto: number): InadimplenciaClasse {
 
 /**
  * Calcula dias em aberto a partir da data de vencimento (até hoje).
+ * Usa parseDateAsLocal para YYYY-MM-DD e evitar deslocamento de -1 dia (UTC).
  */
 export function calcularDiasEmAberto(dataVencimento: string | null | undefined): number {
   if (!dataVencimento) return 0
-  const venci = new Date(dataVencimento)
+  const venci = parseDateAsLocal(dataVencimento)
+  if (!venci) return 0
   const hoje = new Date()
-  venci.setHours(0, 0, 0, 0)
   hoje.setHours(0, 0, 0, 0)
-  const diff = Math.floor((hoje.getTime() - venci.getTime()) / (1000 * 60 * 60 * 24))
+  const venciMidnight = new Date(venci.getFullYear(), venci.getMonth(), venci.getDate())
+  const diff = Math.floor((hoje.getTime() - venciMidnight.getTime()) / (1000 * 60 * 60 * 24))
   return Math.max(0, diff)
 }

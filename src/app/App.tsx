@@ -8,6 +8,7 @@ import { InadimplenciaPage } from '@/features/inadimplencia/pages/InadimplenciaP
 import { InadimplenciaDashboardPage } from '@/features/inadimplencia/pages/InadimplenciaDashboardPage'
 import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
 import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
+import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 
 function ProtectedRoute({
@@ -66,6 +67,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <TeamMembersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="configuracoes"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <ConfiguracoesPage />
               </ProtectedRoute>
             }
           />

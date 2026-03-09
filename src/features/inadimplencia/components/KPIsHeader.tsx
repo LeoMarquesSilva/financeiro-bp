@@ -2,12 +2,17 @@ import { formatCurrency } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { DollarSign, TrendingUp, AlertTriangle, AlertCircle, ShieldCheck } from 'lucide-react'
 
+const DATA_CORTE_COMITE = '05/02/2026'
+
 interface KPIsHeaderProps {
   totalEmAberto: number
   totalClasseA: number
   totalClasseB: number
   totalClasseC: number
+  /** % recuperação do mês (usado quando taxaRecuperacaoComite não é passado). */
   taxaRecuperacao: number
+  /** % recuperação desde início do comitê (05/02/2026). Quando informado, exibe este no KPI e a ressalva da data de corte. */
+  taxaRecuperacaoComite?: number
   followUpVencidos?: number
   followUpAVencer?: number
   loading?: boolean
@@ -53,6 +58,7 @@ export function KPIsHeader({
   totalClasseB,
   totalClasseC,
   taxaRecuperacao,
+  taxaRecuperacaoComite,
   loading,
 }: KPIsHeaderProps) {
   if (loading) {
@@ -63,42 +69,52 @@ export function KPIsHeader({
     )
   }
 
+  const percentualRecuperacao = taxaRecuperacaoComite ?? taxaRecuperacao
+  const isComite = taxaRecuperacaoComite !== undefined
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      <KPIItem
-        icon={DollarSign}
-        label="Total em aberto"
-        value={formatCurrency(totalEmAberto)}
-        iconColor="bg-slate-100 text-slate-600"
-      />
-      <KPIItem
-        icon={AlertCircle}
-        label="Classe A"
-        value={formatCurrency(totalClasseA)}
-        iconColor="bg-blue-50 text-blue-600"
-        valueColor="text-blue-800"
-      />
-      <KPIItem
-        icon={AlertTriangle}
-        label="Classe B"
-        value={formatCurrency(totalClasseB)}
-        iconColor="bg-amber-50 text-amber-600"
-        valueColor="text-amber-800"
-      />
-      <KPIItem
-        icon={ShieldCheck}
-        label="Classe C"
-        value={formatCurrency(totalClasseC)}
-        iconColor="bg-red-50 text-red-600"
-        valueColor="text-red-800"
-      />
-      <KPIItem
-        icon={TrendingUp}
-        label="Recuperação"
-        value={`${taxaRecuperacao.toFixed(1)}%`}
-        iconColor="bg-emerald-50 text-emerald-600"
-        valueColor="text-emerald-800"
-      />
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <KPIItem
+          icon={DollarSign}
+          label="Total em aberto"
+          value={formatCurrency(totalEmAberto)}
+          iconColor="bg-slate-100 text-slate-600"
+        />
+        <KPIItem
+          icon={AlertCircle}
+          label="Classe A"
+          value={formatCurrency(totalClasseA)}
+          iconColor="bg-blue-50 text-blue-600"
+          valueColor="text-blue-800"
+        />
+        <KPIItem
+          icon={AlertTriangle}
+          label="Classe B"
+          value={formatCurrency(totalClasseB)}
+          iconColor="bg-amber-50 text-amber-600"
+          valueColor="text-amber-800"
+        />
+        <KPIItem
+          icon={ShieldCheck}
+          label="Classe C"
+          value={formatCurrency(totalClasseC)}
+          iconColor="bg-red-50 text-red-600"
+          valueColor="text-red-800"
+        />
+        <KPIItem
+          icon={TrendingUp}
+          label={isComite ? 'Recuperação (comitê)' : 'Recuperação'}
+          value={`${percentualRecuperacao.toFixed(1)}%`}
+          iconColor="bg-emerald-50 text-emerald-600"
+          valueColor="text-emerald-800"
+        />
+      </div>
+      {isComite && (
+        <p className="text-xs text-slate-500">
+          Data de corte do comitê: {DATA_CORTE_COMITE}. Pagamentos a partir desta data entram na % de recuperação.
+        </p>
+      )}
     </div>
   )
 }

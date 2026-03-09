@@ -49,6 +49,11 @@ export interface Database {
           updated_at?: string
         }
       }
+      app_settings: {
+        Row: { key: string; value: unknown }
+        Insert: { key: string; value?: unknown }
+        Update: { value?: unknown }
+      }
       clients_inadimplencia: {
         Row: {
           id: string
@@ -160,6 +165,7 @@ export interface Database {
           providencia_id: string
           tipo: ProvidenciaFollowUpTipo
           texto: string | null
+          data_follow_up: string | null
           created_at: string
           created_by: string | null
         }
@@ -168,12 +174,14 @@ export interface Database {
           providencia_id: string
           tipo: ProvidenciaFollowUpTipo
           texto?: string | null
+          data_follow_up?: string | null
           created_at?: string
           created_by?: string | null
         }
         Update: {
           tipo?: ProvidenciaFollowUpTipo
           texto?: string | null
+          data_follow_up?: string | null
           created_by?: string | null
         }
       }

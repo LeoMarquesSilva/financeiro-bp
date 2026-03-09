@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/AuthContext'
 import { useFiltros } from '../hooks/useFiltros'
 import { useInadimplencia } from '../hooks/useInadimplencia'
 import { useDashboard } from '../hooks/useDashboard'
+import { useExibirTaxaRecuperacaoComite } from '@/features/configuracoes/hooks/useExibirTaxaRecuperacaoComite'
 import { useInadimplenciaMutations } from '../hooks/useInadimplenciaMutations'
 import { inadimplenciaService } from '../services/inadimplenciaService'
 import { useTeamMembers } from '../hooks/useTeamMembers'
@@ -117,6 +118,7 @@ export function InadimplenciaPage() {
     pageSize: PAGE_SIZE,
   })
   const { data: dashboardData, loading: dashboardLoading } = useDashboard()
+  const { exibirTaxaRecuperacaoComite } = useExibirTaxaRecuperacaoComite()
   const { fullName } = useAuth()
   const { marcarResolvido, reabrirCliente } = useInadimplenciaMutations()
 
@@ -229,6 +231,7 @@ export function InadimplenciaPage() {
         totalClasseB={totais?.totalClasseB ?? 0}
         totalClasseC={totais?.totalClasseC ?? 0}
         taxaRecuperacao={totais?.percentualRecuperacao ?? 0}
+        taxaRecuperacaoComite={exibirTaxaRecuperacaoComite ? dashboardData?.taxaRecuperacaoComite?.percentualRecuperacaoComite : undefined}
         followUpVencidos={dashboardData?.followUpAlerts?.vencidos}
         followUpAVencer={dashboardData?.followUpAlerts?.aVencerEm7Dias}
         loading={dashboardLoading}

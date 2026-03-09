@@ -29,6 +29,9 @@ export const FORMAS_PAGAMENTO = [
   'Outro',
 ] as const
 
+/** Data de início do comitê de inadimplência. Pagamentos a partir desta data entram na taxa de recuperação. */
+export const DATA_INICIO_COMITE = '2026-02-05'
+
 /** Regras de prioridade por dias em atraso: controlado <2, atenção 3-5, urgente >5 */
 export const PRIORIDADE_DIAS = {
   controlado: { max: 2 },

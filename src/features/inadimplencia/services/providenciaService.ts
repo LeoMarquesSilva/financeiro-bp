@@ -56,7 +56,8 @@ export const providenciaService = {
     providenciaId: string,
     tipo: ProvidenciaFollowUpTipo,
     texto: string | null,
-    createdBy?: string | null
+    createdBy?: string | null,
+    dataFollowUp?: string | null
   ) {
     const { data, error } = await supabase
       .from('providencia_follow_ups')
@@ -64,6 +65,7 @@ export const providenciaService = {
         providencia_id: providenciaId,
         tipo,
         texto: texto ?? null,
+        data_follow_up: dataFollowUp ?? null,
         created_by: createdBy ?? null,
       } as never)
       .select()

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 import { startOfMonth, endOfMonth } from 'date-fns'
+import { DATA_INICIO_COMITE } from '@/shared/constants/inadimplencia'
 
 export interface DashboardTotais {
   totalEmAberto: number
@@ -21,8 +22,20 @@ export interface FollowUpAlerts {
   aVencerEm7Dias: number
 }
 
+/** Taxa de recuperação desde o início do comitê (05/02/2026). Pagamentos a partir dessa data entram na porcentagem. */
+export interface TaxaRecuperacaoComite {
+  totalRecuperadoDesdeComite: number
+  valorTotalEmAbertoInicioComite: number
+  percentualRecuperacaoComite: number
+  /** Total recuperado desde 05/02 por gestor (nome = gestor key). */
+  recuperadoPorGestor: RankingItem[]
+  /** Total recuperado desde 05/02 por área. */
+  recuperadoPorArea: RankingItem[]
+}
+
 export interface DashboardData {
   totais: DashboardTotais
+  taxaRecuperacaoComite: TaxaRecuperacaoComite
   rankingGestores: RankingItem[]
   rankingAreas: RankingItem[]
   valorEmAbertoPorGestor: RankingItem[]
@@ -35,9 +48,15 @@ type RowValorEmAberto = { valor_em_aberto: number }
 type RowClasseValor = { status_classe: string; valor_em_aberto: number }
 type RowValorPago = { valor_pago: number }
 type RowPagamentoClient = { client_id: string; valor_pago: number }
-type RowClientGestor = { id: string; gestor: string | null }
-type RowClientArea = { id: string; area: string | null }
+type RowClientGestor = { id: string; gestor: string[] | string | null }
+type RowClientArea = { id: string; area: string[] | string | null }
 type RowResolvido = { created_at: string; resolvido_at: string | null }
+
+/** Normaliza gestor/area (array ou string) para string única, evitando chaves duplicadas nas listas. */
+function normKey(value: string[] | string | null | undefined): string {
+  if (value == null) return 'Não informado'
+  return Array.isArray(value) ? (value[0] ?? 'Não informado') : String(value)
+}
 
 async function getTotalEmAberto(): Promise<number> {
   const { data, error } = await supabase
@@ -98,11 +117,11 @@ async function getRankingGestores(): Promise<RankingItem[]> {
   const byGestor = new Map<string, { valor: number; qty: number }>()
   for (const p of pagamentosRows) {
     const client = clientsRows.find((c) => c.id === p.client_id)
-    const gestor = client?.gestor ?? 'Não informado'
-    const cur = byGestor.get(gestor) ?? { valor: 0, qty: 0 }
+    const gestorKey = normKey(client?.gestor)
+    const cur = byGestor.get(gestorKey) ?? { valor: 0, qty: 0 }
     cur.valor += Number(p.valor_pago)
     cur.qty += 1
-    byGestor.set(gestor, cur)
+    byGestor.set(gestorKey, cur)
   }
 
   return Array.from(byGestor.entries())
@@ -115,11 +134,11 @@ async function getValorEmAbertoPorGestor(): Promise<RankingItem[]> {
     .from('clients_inadimplencia')
     .select('gestor, valor_em_aberto')
     .is('resolvido_at', null)
-  const rows = (data ?? []) as { gestor: string | null; valor_em_aberto: number }[]
+  const rows = (data ?? []) as { gestor: string[] | string | null; valor_em_aberto: number }[]
   if (error || !rows.length) return []
   const byGestor = new Map<string, number>()
   for (const r of rows) {
-    const nome = r.gestor ?? 'Não informado'
+    const nome = normKey(r.gestor)
     byGestor.set(nome, (byGestor.get(nome) ?? 0) + Number(r.valor_em_aberto))
   }
   return Array.from(byGestor.entries())
@@ -132,11 +151,11 @@ async function getValorEmAbertoPorArea(): Promise<RankingItem[]> {
     .from('clients_inadimplencia')
     .select('area, valor_em_aberto')
     .is('resolvido_at', null)
-  const rows = (data ?? []) as { area: string | null; valor_em_aberto: number }[]
+  const rows = (data ?? []) as { area: string[] | string | null; valor_em_aberto: number }[]
   if (error || !rows.length) return []
   const byArea = new Map<string, number>()
   for (const r of rows) {
-    const nome = r.area ?? 'Não informado'
+    const nome = normKey(r.area)
     byArea.set(nome, (byArea.get(nome) ?? 0) + Number(r.valor_em_aberto))
   }
   return Array.from(byArea.entries())
@@ -166,11 +185,11 @@ async function getRankingAreas(): Promise<RankingItem[]> {
   const byArea = new Map<string, { valor: number; qty: number }>()
   for (const p of pagamentosRows) {
     const client = clientsRows.find((c) => c.id === p.client_id)
-    const area = client?.area ?? 'Não informado'
-    const cur = byArea.get(area) ?? { valor: 0, qty: 0 }
+    const areaKey = normKey(client?.area)
+    const cur = byArea.get(areaKey) ?? { valor: 0, qty: 0 }
     cur.valor += Number(p.valor_pago)
     cur.qty += 1
-    byArea.set(area, cur)
+    byArea.set(areaKey, cur)
   }
 
   return Array.from(byArea.entries())
@@ -217,12 +236,98 @@ async function getFollowUpAlerts(): Promise<FollowUpAlerts> {
   }
 }
 
+/** Taxa de recuperação desde o início do comitê (05/02/2026). Pagamentos a partir dessa data entram na porcentagem.
+ * Fontes: inadimplencia_pagamentos (registros manuais) + financeiro_parcelas (parcelas com data_baixa >= 05/02), vinculadas por pessoa_id. */
+async function getTaxaRecuperacaoComite(): Promise<TaxaRecuperacaoComite> {
+  const [clientsRes, paymentsRes] = await Promise.all([
+    supabase
+      .from('clients_inadimplencia')
+      .select('id, valor_em_aberto, pessoa_id, gestor, area'),
+    supabase
+      .from('inadimplencia_pagamentos')
+      .select('client_id, valor_pago')
+      .gte('data_pagamento', DATA_INICIO_COMITE),
+  ])
+
+  const clients = (clientsRes.data ?? []) as {
+    id: string
+    valor_em_aberto: number
+    pessoa_id: string | null
+    gestor: string[] | string | null
+    area: string[] | string | null
+  }[]
+  const payments = (paymentsRes.data ?? []) as { client_id: string; valor_pago: number }[]
+
+  const pessoaIdsComite = [...new Set(clients.map((c) => c.pessoa_id).filter(Boolean))] as string[]
+  let parcelas: { pessoa_id: string | null; valor: number; valor_pago: number | null }[] = []
+  if (pessoaIdsComite.length > 0) {
+    const parcelasRes = await supabase
+      .from('financeiro_parcelas')
+      .select('pessoa_id, valor, valor_pago')
+      .not('data_baixa', 'is', null)
+      .gte('data_baixa', DATA_INICIO_COMITE)
+      .in('pessoa_id', pessoaIdsComite)
+    parcelas = (parcelasRes.data ?? []) as { pessoa_id: string | null; valor: number; valor_pago: number | null }[]
+  }
+
+  const pagamentosPorCliente = new Map<string, number>()
+  for (const p of payments) {
+    const v = Number(p.valor_pago)
+    pagamentosPorCliente.set(p.client_id, (pagamentosPorCliente.get(p.client_id) ?? 0) + v)
+  }
+
+  const recuperadoPorPessoaId = new Map<string, number>()
+  for (const row of parcelas) {
+    if (!row.pessoa_id) continue
+    const v = Number(row.valor_pago ?? row.valor ?? 0)
+    recuperadoPorPessoaId.set(row.pessoa_id, (recuperadoPorPessoaId.get(row.pessoa_id) ?? 0) + v)
+  }
+
+  const byGestor = new Map<string, number>()
+  const byArea = new Map<string, number>()
+  let totalRecuperadoDesdeComite = 0
+  let valorTotalEmAbertoInicioComite = 0
+  for (const c of clients) {
+    const emAberto = Number(c.valor_em_aberto)
+    const pagoInadimplencia = pagamentosPorCliente.get(c.id) ?? 0
+    const pagoParcelas = (c.pessoa_id ? recuperadoPorPessoaId.get(c.pessoa_id) ?? 0 : 0)
+    const pagoDesdeComite = pagoInadimplencia + pagoParcelas
+    totalRecuperadoDesdeComite += pagoDesdeComite
+    valorTotalEmAbertoInicioComite += emAberto + pagoDesdeComite
+    const gKey = normKey(c.gestor)
+    const aKey = normKey(c.area)
+    byGestor.set(gKey, (byGestor.get(gKey) ?? 0) + pagoDesdeComite)
+    byArea.set(aKey, (byArea.get(aKey) ?? 0) + pagoDesdeComite)
+  }
+
+  const percentualRecuperacaoComite =
+    valorTotalEmAbertoInicioComite > 0
+      ? (totalRecuperadoDesdeComite / valorTotalEmAbertoInicioComite) * 100
+      : 0
+
+  const recuperadoPorGestor = Array.from(byGestor.entries())
+    .map(([nome, valor]) => ({ nome, valor, quantidade: 0 }))
+    .sort((a, b) => b.valor - a.valor)
+  const recuperadoPorArea = Array.from(byArea.entries())
+    .map(([nome, valor]) => ({ nome, valor, quantidade: 0 }))
+    .sort((a, b) => b.valor - a.valor)
+
+  return {
+    totalRecuperadoDesdeComite,
+    valorTotalEmAbertoInicioComite,
+    percentualRecuperacaoComite,
+    recuperadoPorGestor,
+    recuperadoPorArea,
+  }
+}
+
 export const dashboardService = {
   async getDashboard(): Promise<DashboardData> {
     const [
       emAberto,
       porClasse,
       recuperadoMes,
+      taxaRecuperacaoComite,
       rankingGestores,
       rankingAreas,
       valorPorGestor,
@@ -233,6 +338,7 @@ export const dashboardService = {
       getTotalEmAberto(),
       getTotaisPorClasse(),
       getTotalRecuperadoNoMes(),
+      getTaxaRecuperacaoComite(),
       getRankingGestores(),
       getRankingAreas(),
       getValorEmAbertoPorGestor(),
@@ -254,6 +360,7 @@ export const dashboardService = {
         totalRecuperadoMes: recuperadoMes,
         percentualRecuperacao,
       },
+      taxaRecuperacaoComite,
       rankingGestores,
       rankingAreas,
       valorEmAbertoPorGestor: valorPorGestor,

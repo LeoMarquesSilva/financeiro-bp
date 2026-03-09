@@ -256,8 +256,15 @@ function FollowUpsList({ providenciaId, clientId, onRefresh }: { providenciaId: 
                   )}
                   <Badge variant="secondary" className="text-[10px]">{PROVIDENCIA_FOLLOW_UP_TIPO_LABEL[fu.tipo]}</Badge>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-slate-400">{formatDate(fu.created_at)}</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {fu.data_follow_up && (
+                    <span className="text-[11px] text-slate-600" title="Data em que o follow-up foi realizado (ex.: reunião com o cliente)">
+                      Realizado em {formatDate(fu.data_follow_up)}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-400" title="Data em que o registro foi feito no sistema">
+                    Registrado em {formatDate(fu.created_at)}
+                  </span>
                   {canEdit && (
                     <button type="button" onClick={() => setFuParaExcluir(fu)} className="rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
                       <Trash2 className="h-3 w-3" />

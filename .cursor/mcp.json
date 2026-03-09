@@ -12,9 +12,13 @@
       "command": "npx",
       "args": ["-y", "page-design-guide-mcp"]
     },
-    "supabase": {
+    "supabase-financeiro-bp": {
       "command": "npx",
-      "args": ["-y", "supabase-mcp-server@latest", "--project-id", "wvbptgcevwvubtnetojz"]
+      "args": ["-y", "@supabase/mcp-server-supabase@latest"],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "sbp_4b38390a6ee7f4347252309d9c9c3bb335af4164",
+        "SUPABASE_PROJECT_ID": "wvbptgcevwvubtnetojz"
+      }
     }
   }
 }

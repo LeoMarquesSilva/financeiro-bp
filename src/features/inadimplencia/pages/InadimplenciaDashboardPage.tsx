@@ -5,10 +5,12 @@ import { Avatar } from '@/shared/components/Avatar'
 import type { RankingItem } from '../services/dashboardService'
 import { useDashboard } from '../hooks/useDashboard'
 import { useTeamMembers } from '../hooks/useTeamMembers'
+import { useExibirTaxaRecuperacaoComite } from '@/features/configuracoes/hooks/useExibirTaxaRecuperacaoComite'
 
 export function InadimplenciaDashboardPage() {
   const { data, loading, error } = useDashboard()
   const { teamMembers } = useTeamMembers()
+  const { exibirTaxaRecuperacaoComite } = useExibirTaxaRecuperacaoComite()
 
   if (loading) {
     return (
@@ -36,6 +38,7 @@ export function InadimplenciaDashboardPage() {
 
   const {
     totais,
+    taxaRecuperacaoComite,
     rankingGestores,
     rankingAreas,
     valorEmAbertoPorGestor,
@@ -74,6 +77,78 @@ export function InadimplenciaDashboardPage() {
         </div>
       </section>
 
+      {exibirTaxaRecuperacaoComite && (
+      <section>
+        <h2 className="mb-3 text-lg font-semibold text-slate-800">Taxa de recuperação (desde início do comitê)</h2>
+        <p className="mb-1 text-sm text-slate-500">
+          Pagamentos a partir de 05/02/2026 entram na porcentagem. O valor total em aberto no início é reconstruído (em aberto atual + total pago desde 05/02).
+        </p>
+        <p className="mb-3 text-xs font-medium text-slate-400">
+          Data de corte do comitê: 05/02/2026.
+        </p>
+        <div className="grid gap-5 sm:grid-cols-3">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-medium text-slate-500">Total recuperado desde 05/02</p>
+            <p className="text-2xl font-bold text-emerald-700">{formatCurrency(taxaRecuperacaoComite.totalRecuperadoDesdeComite)}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-medium text-slate-500">Valor total em aberto (início comitê)</p>
+            <p className="text-2xl font-bold text-slate-900">{formatCurrency(taxaRecuperacaoComite.valorTotalEmAbertoInicioComite)}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-medium text-slate-500">% Recuperação comitê</p>
+            <p className="text-2xl font-bold text-slate-900">{taxaRecuperacaoComite.percentualRecuperacaoComite.toFixed(1)}%</p>
+          </div>
+        </div>
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-3 font-semibold text-slate-800">Total recuperado desde 05/02 por gestor</h3>
+            {taxaRecuperacaoComite.recuperadoPorGestor.length === 0 ? (
+              <p className="text-sm text-slate-500">Nenhum dado.</p>
+            ) : (
+              <ul className="space-y-2">
+                {taxaRecuperacaoComite.recuperadoPorGestor.slice(0, 8).map((item: RankingItem, i: number) => {
+                  const member = resolveTeamMember(item.nome, teamMembers)
+                  return (
+                    <li key={`comite-gestor-${i}-${item.nome}`} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-3 py-2">
+                      <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-slate-700">
+                        {member && (
+                          <Avatar
+                            src={getTeamMember(member.email)?.avatar ?? member.avatar_url}
+                            fullName={member.full_name}
+                            size="md"
+                          />
+                        )}
+                        <span className="truncate">
+                          {i + 1}. {member ? `${member.full_name} (${member.area})` : item.nome}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-medium text-emerald-700">{formatCurrency(item.valor)}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-3 font-semibold text-slate-800">Total recuperado desde 05/02 por área</h3>
+            {taxaRecuperacaoComite.recuperadoPorArea.length === 0 ? (
+              <p className="text-sm text-slate-500">Nenhum dado.</p>
+            ) : (
+              <ul className="space-y-2">
+                {taxaRecuperacaoComite.recuperadoPorArea.slice(0, 8).map((item: RankingItem, i: number) => (
+                  <li key={`comite-area-${i}-${item.nome}`} className="flex items-center justify-between rounded bg-slate-50 px-3 py-2">
+                    <span className="text-sm font-medium text-slate-700">{i + 1}. {item.nome}</span>
+                    <span className="font-medium text-emerald-700">{formatCurrency(item.valor)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
+      )}
+
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="mb-3 font-semibold text-slate-800">Total por classe (em aberto)</h3>
@@ -109,7 +184,7 @@ export function InadimplenciaDashboardPage() {
               {rankingGestores.slice(0, 8).map((item: RankingItem, i: number) => {
                 const member = resolveTeamMember(item.nome, teamMembers)
                 return (
-                  <li key={item.nome} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-3 py-2">
+                  <li key={`gestor-${i}-${item.nome}`} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-3 py-2">
                     <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-slate-700">
                       {member && (
                         <Avatar
@@ -138,7 +213,7 @@ export function InadimplenciaDashboardPage() {
         ) : (
           <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {rankingAreas.slice(0, 9).map((item: RankingItem, i: number) => (
-              <li key={item.nome} className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2">
+              <li key={`area-${i}-${item.nome}`} className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2">
                 <span className="text-sm font-medium text-slate-700">
                   {i + 1}. {item.nome}
                 </span>
@@ -156,11 +231,11 @@ export function InadimplenciaDashboardPage() {
             <p className="text-sm text-slate-500">Nenhum dado.</p>
           ) : (
             <div className="space-y-2">
-              {valorEmAbertoPorGestor.slice(0, 8).map((item: RankingItem) => {
+              {valorEmAbertoPorGestor.slice(0, 8).map((item: RankingItem, i: number) => {
                 const member = resolveTeamMember(item.nome, teamMembers)
                 const displayName = member ? `${member.full_name} (${member.area})` : item.nome
                 return (
-                  <div key={item.nome} className="flex items-center gap-2">
+                  <div key={`aberto-gestor-${i}-${item.nome}`} className="flex items-center gap-2">
                     <span className="flex min-w-0 shrink-0 items-center gap-2">
                       {member && (
                         <Avatar
@@ -200,8 +275,8 @@ export function InadimplenciaDashboardPage() {
             <p className="text-sm text-slate-500">Nenhum dado.</p>
           ) : (
             <div className="space-y-2">
-              {valorEmAbertoPorArea.slice(0, 8).map((item: RankingItem) => (
-                <div key={item.nome} className="flex items-center gap-2">
+              {valorEmAbertoPorArea.slice(0, 8).map((item: RankingItem, i: number) => (
+                <div key={`aberto-area-${i}-${item.nome}`} className="flex items-center gap-2">
                   <span className="w-32 truncate text-sm font-medium text-slate-700">{item.nome}</span>
                   <div className="flex-1 overflow-hidden rounded bg-slate-100">
                     <div

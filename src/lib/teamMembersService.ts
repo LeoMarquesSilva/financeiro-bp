@@ -102,8 +102,8 @@ export function resolveTeamMember(
   gestorText: string | null | undefined,
   teamMembers: TeamMember[]
 ): TeamMember | null {
-  if (!gestorText?.trim() || !teamMembers.length) return null
-  const t = gestorText.trim()
+  const t = typeof gestorText === 'string' ? gestorText.trim() : ''
+  if (!t || !teamMembers.length) return null
   const byEmail = teamMembers.find((m) => m.email.toLowerCase() === t.toLowerCase())
   if (byEmail) return byEmail
   const emailFromPlanilha = GESTOR_PLANILHA_TO_EMAIL[t] ?? GESTOR_PLANILHA_TO_EMAIL[t.split(' ')[0]]

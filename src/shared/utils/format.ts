@@ -5,15 +5,55 @@ export function formatCurrency(value: number): string {
   }).format(value)
 }
 
+/**
+ * Parsea string YYYY-MM-DD como data local (meia-noite no fuso do usuário).
+ * Evita o deslocamento de -1 dia quando new Date(str) interpreta "YYYY-MM-DD" como UTC.
+ */
+export function parseDateAsLocal(dateStr: string | null | undefined): Date | null {
+  if (!dateStr) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim())
+  if (!m) return null
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Formata data para exibição (DD/MM/AAAA).
+ * Strings YYYY-MM-DD são tratadas como data local para evitar d-1 por timezone.
+ */
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '–'
-  const d = new Date(dateStr)
+  const d = parseDateAsLocal(dateStr) ?? new Date(dateStr)
   if (Number.isNaN(d.getTime())) return '–'
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
   }).format(d)
+}
+
+/** Formata o valor digitado como DD/MM/AAAA (máscara em tempo real). */
+export function formatDateInputBR(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+}
+
+/** Converte DD/MM/AAAA para YYYY-MM-DD (para envio ao banco). Retorna undefined se inválido ou incompleto. */
+export function parseDateBRToISO(br: string | null | undefined): string | undefined {
+  if (!br || typeof br !== 'string') return undefined
+  const trimmed = br.trim()
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmed)
+  if (!match) return undefined
+  const [, d, m, y] = match
+  const day = Number(d)
+  const month = Number(m)
+  const year = Number(y)
+  if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > 2100) return undefined
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return undefined
+  return `${year}-${m}-${d}`
 }
 
 export function formatCnpj(value: string): string {
