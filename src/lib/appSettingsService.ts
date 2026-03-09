@@ -10,14 +10,14 @@ export const appSettingsService = {
       .eq('key', KEY_EXIBIR_TAXA_RECUPERACAO_COMITE)
       .maybeSingle()
     if (error || !data) return true
-    const v = data.value
+    const v = (data as { value: unknown }).value
     return v === true || v === 'true'
   },
 
   async setExibirTaxaRecuperacaoComite(value: boolean): Promise<void> {
     const { error } = await supabase
       .from('app_settings')
-      .upsert({ key: KEY_EXIBIR_TAXA_RECUPERACAO_COMITE, value }, { onConflict: 'key' })
+      .upsert({ key: KEY_EXIBIR_TAXA_RECUPERACAO_COMITE, value } as never, { onConflict: 'key' })
     if (error) throw error
   },
 }

@@ -71,17 +71,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data }) => {
+      const session = data?.session ?? null
       hydrateRole(session?.user ?? null, session)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         hydrateRole(session?.user ?? null, session)
       },
     )
+    
+    const subscription = data?.subscription
 
-    return () => subscription.unsubscribe()
+    return () => {
+      if (subscription) subscription.unsubscribe()
+    }
   }, [hydrateRole])
 
   const signOut = useCallback(async () => {
