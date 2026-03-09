@@ -60,7 +60,7 @@ function normKey(value: string[] | string | null | undefined): string {
 
 async function getTotalEmAberto(): Promise<number> {
   const { data, error } = await supabase
-    .from('clients_inadimplencia')
+    .from('clients_inadimplencia_list')
     .select('valor_em_aberto')
     .is('resolvido_at', null)
   if (error) return 0
@@ -70,7 +70,7 @@ async function getTotalEmAberto(): Promise<number> {
 
 async function getTotaisPorClasse(): Promise<{ A: number; B: number; C: number }> {
   const { data, error } = await supabase
-    .from('clients_inadimplencia')
+    .from('clients_inadimplencia_list')
     .select('status_classe, valor_em_aberto')
     .is('resolvido_at', null)
   if (error) return { A: 0, B: 0, C: 0 }
@@ -131,7 +131,7 @@ async function getRankingGestores(): Promise<RankingItem[]> {
 
 async function getValorEmAbertoPorGestor(): Promise<RankingItem[]> {
   const { data, error } = await supabase
-    .from('clients_inadimplencia')
+    .from('clients_inadimplencia_list')
     .select('gestor, valor_em_aberto')
     .is('resolvido_at', null)
   const rows = (data ?? []) as { gestor: string[] | string | null; valor_em_aberto: number }[]
@@ -148,7 +148,7 @@ async function getValorEmAbertoPorGestor(): Promise<RankingItem[]> {
 
 async function getValorEmAbertoPorArea(): Promise<RankingItem[]> {
   const { data, error } = await supabase
-    .from('clients_inadimplencia')
+    .from('clients_inadimplencia_list')
     .select('area, valor_em_aberto')
     .is('resolvido_at', null)
   const rows = (data ?? []) as { area: string[] | string | null; valor_em_aberto: number }[]
@@ -241,7 +241,7 @@ async function getFollowUpAlerts(): Promise<FollowUpAlerts> {
 async function getTaxaRecuperacaoComite(): Promise<TaxaRecuperacaoComite> {
   const [clientsRes, paymentsRes] = await Promise.all([
     supabase
-      .from('clients_inadimplencia')
+      .from('clients_inadimplencia_list')
       .select('id, valor_em_aberto, pessoa_id, gestor, area'),
     supabase
       .from('inadimplencia_pagamentos')

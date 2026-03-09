@@ -134,9 +134,13 @@ Há um exemplo completo em **`scripts/para-vios-app/TimeSheets-exemplo.cjs`** (e
 
 Por padrão, o sync **substitui** no Supabase todas as linhas cujas datas existem no arquivo (evita duplicar ao re-rodar). Para apenas inserir sem apagar: `runSyncTimeSheets(caminho, { replaceDateRange: false })`.
 
-## Relatório Financeiro (tabela `relatorio_financeiro`)
+## Relatório Financeiro (tabela `financeiro_parcelas`)
 
-O **Relatório de Parcelas** (financeiro) do VIOS pode ser baixado e sincronizado para a tabela **relatorio_financeiro**. Use o script **`FinanceiroRelatorioParcelas.js`** na pasta `scripts/para-vios-app/`: ele faz login no VIOS, gera o CSV do relatório de parcelas, baixa em memória e chama **`runSyncRelatorioFinanceiro(csvData)`** (aceita caminho de arquivo ou string com conteúdo CSV). Copie esse script e o `sync-vios-to-supabase.js` para a pasta do vios-app onde roda a automação (ex.: mesma pasta do FinanceiroRelatorioParcelas.js).
+O **Relatório de Parcelas** (financeiro) do VIOS pode ser baixado e sincronizado para a tabela **financeiro_parcelas**. Use o script **`FinanceiroRelatorioParcelas.js`** na pasta `scripts/vios-app/` (ou `scripts/para-vios-app/` se existir): ele faz login no VIOS, gera o CSV do relatório de parcelas, baixa em memória e chama **`runSyncRelatorioFinanceiro(csvData)`** (aceita caminho de arquivo ou string com conteúdo CSV). Copie esse script e o `sync-vios-to-supabase.js` para a pasta do vios-app onde roda a automação.
+
+**Estratégia replace (fonte da verdade):** o sync usa a RPC `sync_relatorio_financeiro_replace`, que em uma transação (1) remove da tabela todos os registros cujo `ci_titulo` **não** está no relatório atual, (2) faz upsert das linhas do arquivo e (3) executa a vinculação com pessoas. Assim, **parcelas/faturas excluídas no VIOS passam a sumir do banco** no próximo sync. É essencial que o relatório exportado seja o **conjunto completo** de parcelas; se no futuro houver exportação parcial, será necessário outro critério (ex.: escopo por cliente ou data) para não apagar dados que não fazem parte do relatório.
+
+**Migrações:** a função `sync_relatorio_financeiro_replace` está definida no arquivo `supabase/migrations/20260309170100_sync_relatorio_financeiro_replace.sql`. Para aplicar migrações no projeto, use o **MCP do Supabase** (Cursor): ferramenta `apply_migration` com `project_id`, `name` (ex.: `sync_relatorio_financeiro_replace`) e `query` (conteúdo SQL). A migration já foi aplicada via MCP no projeto configurado em `.cursor/mcp.json`.
 
 ## Credenciais (nunca no código)
 

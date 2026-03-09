@@ -6,7 +6,8 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
-import { formatCurrency, formatCnpj, formatDate, formatHorasDuracao } from '@/shared/utils/format'
+import { formatCurrency, formatCnpj, formatDate, formatHorasDuracao, parseDateAsLocal } from '@/shared/utils/format'
+import { differenceInDays } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/AuthContext'
 import type { ClientInadimplenciaRow, InadimplenciaClasse, InadimplenciaLogRow, ClienteEscritorioRow, ContagemCiPorGrupoRow, ProvidenciaRow, ProvidenciaFollowUpRow } from '@/lib/database.types'
@@ -40,6 +41,17 @@ import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
 import { toast } from 'sonner'
 
 const ULTIMOS_LOGS = 5
+
+/** Limites em dias para classificar atraso no pagamento: ≤0 ok, 1–30 atrasado, >30 muito atrasado */
+const DIAS_ATRASO_OK = 0
+const DIAS_ATRASO_ALERTA = 30
+
+function getDiasAtraso(dataVencimento: string, dataBaixa: string): number | null {
+  const venc = parseDateAsLocal(dataVencimento)
+  const baixa = parseDateAsLocal(dataBaixa)
+  if (!venc || !baixa) return null
+  return differenceInDays(baixa, venc)
+}
 
 function getTipoLabel(tipo: string) {
   return TIPOS_ACAO.find((t) => t.value === tipo)?.label ?? tipo
@@ -127,11 +139,45 @@ function CollapsibleSection({
 
 /* ── Parcela item ── */
 function ParcelaItem({ p, valueColor = 'text-slate-900' }: { p: ParcelaRow; valueColor?: string }) {
+  const diasAtraso = p.data_baixa ? getDiasAtraso(p.data_vencimento, p.data_baixa) : null
+  const atrasoVariant =
+    diasAtraso === null
+      ? null
+      : diasAtraso <= DIAS_ATRASO_OK
+        ? 'ok'
+        : diasAtraso <= DIAS_ATRASO_ALERTA
+          ? 'atrasado'
+          : 'muitoAtrasado'
+
+  const atrasoStyles = {
+    ok: 'text-emerald-600',
+    atrasado: 'text-amber-600',
+    muitoAtrasado: 'text-red-600',
+  }
+
   return (
     <li className="flex items-center justify-between gap-3 rounded-lg border border-slate-200/60 bg-white px-3 py-2.5">
-      <span className="text-sm font-semibold text-slate-800">
-        {formatDate(p.data_vencimento)}
-      </span>
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="text-sm">
+          <span className="font-medium text-slate-500">Vencimento: </span>
+          <span className="text-base font-semibold text-slate-800">{formatDate(p.data_vencimento)}</span>
+        </p>
+        {p.data_baixa && (
+          <>
+            <p className="text-sm">
+              <span className="font-medium text-slate-500">Data baixa: </span>
+              <span className="font-semibold text-slate-700">{formatDate(p.data_baixa)}</span>
+            </p>
+            {diasAtraso !== null && (
+              <p className={cn('text-xs font-medium tabular-nums', atrasoVariant && atrasoStyles[atrasoVariant])}>
+                {diasAtraso <= DIAS_ATRASO_OK
+                  ? 'Pagamento no prazo'
+                  : `Pagou ${diasAtraso} ${diasAtraso === 1 ? 'dia' : 'dias'} após o vencimento`}
+              </p>
+            )}
+          </>
+        )}
+      </div>
       <span className={cn('shrink-0 text-sm font-bold tabular-nums', valueColor)}>
         {p.valor_pago != null ? formatCurrency(Number(p.valor_pago)) : formatCurrency(Number(p.valor))}
       </span>

@@ -5,7 +5,7 @@
  * Use este se o vios-app for todo em JS com import/export (ESM).
  * - runSync(filePath): Processo Completo (pessoas) — espera .xlsx
  * - runSyncTimeSheets(filePath): relatório de horas (timesheets) — espera .xlsx/.csv
- * - runSyncRelatorioFinanceiro(filePathOuCsvString): relatório de parcelas (relatorio_financeiro) — espera .xlsx, .csv ou string CSV
+ * - runSyncRelatorioFinanceiro(filePathOuCsvString): relatório de parcelas (financeiro_parcelas, sync replace) — espera .xlsx, .csv ou string CSV
  * - runSyncPessoas(filePathOuCsvString): relatório de clientes/pessoas (pessoas) — espera .csv ou string CSV
  *
  * No vios-app:
@@ -800,10 +800,13 @@ function readRelatorioFinanceiroFile(filePathOrContent) {
 }
  
 /**
- * Sincroniza o relatório de parcelas (CSV ou Excel) para a tabela relatorio_financeiro.
- * Usa upsert por ci_titulo; duplicatas no mesmo arquivo são removidas por ci_titulo (fica a última).
+ * Sincroniza o relatório de parcelas (CSV ou Excel) para a tabela financeiro_parcelas.
+ * Estratégia replace: chama a RPC sync_relatorio_financeiro_replace, que em uma transação
+ * remove do banco os ci_titulo que não estão no relatório, faz upsert das linhas e roda a vinculação.
+ * Assim, parcelas/faturas excluídas no VIOS passam a sumir do banco. Relatório = fonte da verdade.
+ * Duplicatas no mesmo arquivo são removidas por ci_titulo (fica a última).
  * @param {string} filePathOrCsvContent - Caminho do arquivo (.csv ou .xlsx) OU string com o conteúdo CSV (ex.: após axios.get em memória).
- * @returns {Promise<{ upserted: number, errors: number }>}
+ * @returns {Promise<{ upserted: number, deleted: number, errors: number }>}
  */
 export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
   const url = process.env.VITE_SUPABASE_URL;
@@ -910,42 +913,26 @@ export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
     console.log('[Sync Supabase] financeiro_parcelas duplicatas removidas por ci_titulo:', rows.length, '->', rowsDedup.length);
   }
 
-  console.log('[Sync Supabase] Linhas válidas para upsert:', rowsDedup.length);
-  let upserted = 0;
-  let errors = 0;
-  const BATCH = 200;
-  for (let i = 0; i < rowsDedup.length; i += BATCH) {
-    const chunk = rowsDedup.slice(i, i + BATCH);
-    const batchNum = Math.floor(i / BATCH) + 1;
-    const { error } = await supabase
-      .from('financeiro_parcelas')
-      .upsert(chunk, { onConflict: 'ci_titulo' });
-    if (error) {
-      console.error('[Sync Supabase] financeiro_parcelas upsert error (lote ' + batchNum + '):', error.message);
-      if (error.details) console.error('[Sync Supabase] details:', error.details);
-      if (error.hint) console.error('[Sync Supabase] hint:', error.hint);
-      console.error('[Sync Supabase] objeto completo:', JSON.stringify(error, null, 2));
-      errors++;
-    } else {
-      upserted += chunk.length;
-      if (batchNum % 5 === 0 || i + BATCH >= rowsDedup.length) {
-        console.log('[Sync Supabase] Progresso: ' + upserted + '/' + rowsDedup.length + ' linhas enviadas.');
-      }
-    }
+  const p_ci_titulos = rowsDedup.map((r) => r.ci_titulo);
+  console.log('[Sync Supabase] Linhas válidas para sync replace:', rowsDedup.length);
+
+  const { data: result, error } = await supabase.rpc('sync_relatorio_financeiro_replace', {
+    p_ci_titulos,
+    p_rows: rowsDedup,
+  });
+
+  if (error) {
+    console.error('[Sync Supabase] sync_relatorio_financeiro_replace error:', error.message);
+    if (error.details) console.error('[Sync Supabase] details:', error.details);
+    if (error.hint) console.error('[Sync Supabase] hint:', error.hint);
+    throw new Error('Erro ao sincronizar relatório financeiro (replace): ' + error.message);
   }
 
-  console.log('[Sync Supabase] financeiro_parcelas | Linhas processadas:', rowsDedup.length, '| Upserted:', upserted, '| Erros:', errors);
+  const deleted = result?.deleted ?? 0;
+  const upserted = result?.upserted ?? rowsDedup.length;
+  console.log('[Sync Supabase] financeiro_parcelas | Deleted:', deleted, '| Upserted:', upserted, '| Vinculação executada na RPC.');
 
-  if (upserted > 0 || rowsDedup.length > 0) {
-    const { data: vinculados, error: errVinculo } = await supabase.rpc('financeiro_parcelas_vinculacao_pessoa');
-    if (errVinculo) {
-      console.warn('[Sync Supabase] Aviso ao rodar vinculação pessoa:', errVinculo.message);
-    } else {
-      console.log('[Sync Supabase] Vínculo pessoa (em lote):', vinculados ?? 0, 'linhas atualizadas.');
-    }
-  }
-
-  return { upserted, errors };
+  return { upserted, deleted, errors: 0 };
 }
  
 /**
