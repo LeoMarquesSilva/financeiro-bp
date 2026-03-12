@@ -1,7 +1,12 @@
+import { useEffect, useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { useExibirTaxaRecuperacaoComite } from '../hooks/useExibirTaxaRecuperacaoComite'
+import { usePrioridadeConfig } from '../hooks/usePrioridadeConfig'
+import type { PrioridadeConfig } from '@/features/inadimplencia/services/prioridade'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -13,6 +18,26 @@ export function ConfiguracoesPage() {
     isUpdating,
   } = useExibirTaxaRecuperacaoComite()
 
+  const {
+    config: prioridadeConfig,
+    isLoading: prioridadeLoading,
+    updateConfig: updatePrioridadeConfig,
+    isUpdating: prioridadeUpdating,
+  } = usePrioridadeConfig()
+
+  const [prioridadeForm, setPrioridadeForm] = useState<PrioridadeConfig>({
+    controlado_max: 2,
+    atencao_min: 3,
+    atencao_max: 5,
+    urgente_min: 6,
+  })
+
+  useEffect(() => {
+    if (!prioridadeLoading && prioridadeConfig) {
+      setPrioridadeForm(prioridadeConfig)
+    }
+  }, [prioridadeLoading, prioridadeConfig])
+
   const handleToggle = async () => {
     try {
       await setExibirTaxaRecuperacaoComite(!exibirTaxaRecuperacaoComite)
@@ -23,6 +48,30 @@ export function ConfiguracoesPage() {
       )
     } catch {
       toast.error('Erro ao atualizar configuração')
+    }
+  }
+
+  const handlePrioridadeChange = (field: keyof PrioridadeConfig, value: number) => {
+    setPrioridadeForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handlePrioridadeSave = async () => {
+    const { controlado_max, atencao_min, atencao_max, urgente_min } = prioridadeForm
+    if (
+      controlado_max >= atencao_min ||
+      atencao_min > atencao_max ||
+      atencao_max >= urgente_min
+    ) {
+      toast.error(
+        'Valores inválidos: Controlado (máx) < Atenção (mín) ≤ Atenção (máx) < Urgente (mín)'
+      )
+      return
+    }
+    try {
+      await updatePrioridadeConfig(prioridadeForm)
+      toast.success('Configuração de urgência salva. A prioridade dos clientes será recalculada.')
+    } catch {
+      toast.error('Erro ao salvar configuração de urgência')
     }
   }
 
@@ -75,6 +124,82 @@ export function ConfiguracoesPage() {
           <p className="text-xs text-slate-400">
             {exibirTaxaRecuperacaoComite ? 'Ativado' : 'Desativado'} – {exibirTaxaRecuperacaoComite ? 'todos veem o KPI e a seção no Dashboard.' : 'apenas % Recuperação do mês é exibido.'}
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Prioridade (urgência)</CardTitle>
+          <p className="text-sm font-normal text-slate-500">
+            Define os limites de <strong>dias em atraso</strong> para exibir cada nível de prioridade nos cards e no detalhe do cliente. A prioridade é calculada apenas com base nos dias; o valor em aberto não entra no cálculo.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <Label htmlFor="controlado_max">Controlado (máx. dias)</Label>
+              <Input
+                id="controlado_max"
+                type="number"
+                min={0}
+                value={prioridadeForm.controlado_max}
+                onChange={(e) =>
+                  handlePrioridadeChange('controlado_max', parseInt(e.target.value, 10) || 0)
+                }
+                disabled={prioridadeLoading}
+              />
+              <p className="text-xs text-slate-400">0 a X dias = Controlado</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="atencao_min">Atenção (mín. dias)</Label>
+              <Input
+                id="atencao_min"
+                type="number"
+                min={0}
+                value={prioridadeForm.atencao_min}
+                onChange={(e) =>
+                  handlePrioridadeChange('atencao_min', parseInt(e.target.value, 10) || 0)
+                }
+                disabled={prioridadeLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="atencao_max">Atenção (máx. dias)</Label>
+              <Input
+                id="atencao_max"
+                type="number"
+                min={0}
+                value={prioridadeForm.atencao_max}
+                onChange={(e) =>
+                  handlePrioridadeChange('atencao_max', parseInt(e.target.value, 10) || 0)
+                }
+                disabled={prioridadeLoading}
+              />
+              <p className="text-xs text-slate-400">Atenção = entre mín e máx</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="urgente_min">Urgente (mín. dias)</Label>
+              <Input
+                id="urgente_min"
+                type="number"
+                min={0}
+                value={prioridadeForm.urgente_min}
+                onChange={(e) =>
+                  handlePrioridadeChange('urgente_min', parseInt(e.target.value, 10) || 0)
+                }
+                disabled={prioridadeLoading}
+              />
+              <p className="text-xs text-slate-400">≥ X dias = Urgente</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handlePrioridadeSave}
+              disabled={prioridadeLoading || prioridadeUpdating}
+            >
+              {prioridadeUpdating ? 'Salvando...' : 'Salvar configuração de urgência'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

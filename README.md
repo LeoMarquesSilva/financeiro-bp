@@ -1,4 +1,4 @@
-# Financeiro BP - Módulo de Inadimplência
+# SIOE (Sistema Integrado de Operações Estratégicas) - Módulo de Inadimplência
 
 Sistema interno de controle de inadimplência para escritório de advocacia, com classificação automática de risco (Classe A/B/C), régua de cobrança e dashboard estratégico.
 

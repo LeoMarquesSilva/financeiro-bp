@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
-import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut, UserCog } from 'lucide-react'
+import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -121,20 +121,6 @@ export function AppSidebar() {
             <TooltipContent side="right" className="font-medium">
               {fullName} · Meu Perfil
             </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => navigate('/financeiro/perfil')}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-                aria-label="Configurações"
-              >
-                <UserCog className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Perfil</TooltipContent>
           </Tooltip>
 
           <Tooltip>

@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/AuthContext'
 import type { ClientInadimplenciaRow, InadimplenciaClasse, ClienteEscritorioRow, ProvidenciaFollowUpRow } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
-import { getPrioridade } from '../services/prioridade'
+import { usePrioridadeConfig } from '@/features/configuracoes/hooks/usePrioridadeConfig'
 import type { PrioridadeTipo } from '../types/inadimplencia.types'
 import { ModalEditarCliente } from './ModalEditarCliente'
 import { ModalNovaProvidencia } from './ModalNovaProvidencia'
@@ -65,6 +65,7 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onReabrir, onRefr
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
   const { teamMembers } = useTeamMembers()
+  const { getPrioridade } = usePrioridadeConfig()
   const [modalEditar, setModalEditar] = useState(false)
   const [modalProvidencia, setModalProvidencia] = useState(false)
   const [modalFollowUp, setModalFollowUp] = useState(false)

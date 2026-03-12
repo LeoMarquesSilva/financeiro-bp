@@ -13,7 +13,7 @@ import { useAuth } from '@/lib/AuthContext'
 import type { ClientInadimplenciaRow, InadimplenciaClasse, InadimplenciaLogRow, ClienteEscritorioRow, ContagemCiPorGrupoRow, ProvidenciaRow, ProvidenciaFollowUpRow } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
-import { getPrioridade } from '../services/prioridade'
+import { usePrioridadeConfig } from '@/features/configuracoes/hooks/usePrioridadeConfig'
 import type { PrioridadeTipo } from '../types/inadimplencia.types'
 import { TIPOS_ACAO } from '@/shared/constants/inadimplencia'
 import { logsService } from '../services/logsService'
@@ -345,6 +345,7 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
   const { teamMembers } = useTeamMembers()
+  const { getPrioridade } = usePrioridadeConfig()
   const [modalEditar, setModalEditar] = useState(false)
   const [modalHistorico, setModalHistorico] = useState(false)
   const [modalProvidencia, setModalProvidencia] = useState(false)

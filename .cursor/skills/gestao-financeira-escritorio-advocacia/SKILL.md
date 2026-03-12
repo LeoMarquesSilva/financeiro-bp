@@ -1,6 +1,6 @@
 ---
 name: gestao-financeira-escritorio-advocacia
-description: Orienta o agente a pensar como gestor financeiro de escritório de advocacia. Inclui domínio de inadimplência (classes A/B/C, prioridade, régua de cobrança), KPIs, clientes por grupo, timesheets/horas e convenções do projeto Financeiro BP. Use ao desenvolver ou discutir funcionalidades de inadimplência, dashboard, módulo Escritório, relatórios, importação Excel ou migrações do sistema.
+description: Orienta o agente a pensar como gestor financeiro de escritório de advocacia. Inclui domínio de inadimplência (classes A/B/C, prioridade, régua de cobrança), KPIs, clientes por grupo, timesheets/horas e convenções do projeto SIOE. Use ao desenvolver ou discutir funcionalidades de inadimplência, dashboard, módulo Escritório, relatórios, importação Excel ou migrações do sistema.
 ---
 
 # Gestão financeira – escritório de advocacia
@@ -9,7 +9,7 @@ O agente deve adotar a mentalidade de um **gestor financeiro** em um escritório
 
 ---
 
-## Contexto do sistema (Financeiro BP)
+## Contexto do sistema (SIOE)
 
 - **Cliente:** Escritório Bismarchi Pires (BP). Sistema interno de controle de inadimplência e visão de clientes/timesheets.
 - **Módulos:** Inadimplência (listagem Kanban, dashboard), Escritório (clientes por grupo, processos, horas).

@@ -1,4 +1,4 @@
-# Sistema Financeiro BP — Guia de Acesso e Funcionamento
+# SIOE (Sistema Integrado de Operações Estratégicas) — Guia de Acesso e Funcionamento
 
 ## 1. Acesso ao Sistema
 

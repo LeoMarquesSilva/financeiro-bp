@@ -1,4 +1,4 @@
-# Sistema Financeiro BP — Apresentação Executiva
+# SIOE — Apresentação Executiva
 
 **Para:** Sócios e gestores do escritório  
 **Objetivo:** Visão geral do sistema de controle de inadimplência e gestão financeira  
@@ -6,7 +6,7 @@
 
 ---
 
-## O que é o Sistema Financeiro BP?
+## O que é o SIOE?
 
 Sistema interno desenvolvido para o **Escritório Bismarchi Pires** com foco em:
 
@@ -102,7 +102,7 @@ Sistema interno desenvolvido para o **Escritório Bismarchi Pires** com foco em:
 - **Senha primeiro acesso: ** Bp@2026!
 
 
-O **Sistema Financeiro BP** centraliza o controle de inadimplência do escritório em um único lugar:
+O **SIOE** centraliza o controle de inadimplência do escritório em um único lugar:
 
 - **Comitê:** reunião semanal → providências definidas → follow-ups ao longo da semana
 - **Priorização:** urgente > atenção > controlado, com base em dias e valor

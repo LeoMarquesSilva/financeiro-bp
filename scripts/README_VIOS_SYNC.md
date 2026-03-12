@@ -38,13 +38,13 @@ Instruções detalhadas estão em **`scripts/para-vios-app/README.md`**.
 
 ---
 
-## Opção alternativa: rodar no financeiro-bp (local)
+## Opção alternativa: rodar no SIOE (local)
 
-Se em algum momento você rodar a automação a partir do **financeiro-bp** (por exemplo no seu PC):
+Se em algum momento você rodar a automação a partir do **SIOE** (por exemplo no seu PC):
 
 ### Tudo em um (download + Supabase)
 
-No projeto **financeiro-bp**:
+No projeto **SIOE** (este repositório):
 
 ```bash
 pnpm install   # instala playwright e axios se ainda não tiver
@@ -145,4 +145,4 @@ O **Relatório de Parcelas** (financeiro) do VIOS pode ser baixado e sincronizad
 ## Credenciais (nunca no código)
 
 - **No vios-app (servidor):** arquivo `.env` na raiz do vios-app (ou na pasta do script) com `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. VIOS (usuário/senha) só se a automação de download rodar lá.
-- **No financeiro-bp (local):** `.env` na raiz com as mesmas variáveis se for usar os scripts locais (vios:baixar-e-sync, sync:vios).
+- **No SIOE (local):** `.env` na raiz com as mesmas variáveis se for usar os scripts locais (vios:baixar-e-sync, sync:vios).

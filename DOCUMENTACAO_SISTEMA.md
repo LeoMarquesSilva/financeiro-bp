@@ -1,4 +1,4 @@
-# Documentação do Sistema Financeiro BP
+# Documentação do SIOE
 
 > Documentação completa para inclusão no ClickUp — ferramentas, arquitetura, funcionalidades e guias de uso.
 
@@ -6,7 +6,7 @@
 
 ## 1. Visão Geral
 
-**Nome:** Financeiro BP  
+**Nome:** SIOE (Sistema Integrado de Operações Estratégicas)  
 **Tipo:** Sistema interno de controle de inadimplência  
 **Cliente:** Escritório de Advocacia Bismarchi Pires (BP)  
 **Objetivo:** Gerenciar clientes inadimplentes, classificação por risco, régua de cobrança e dashboard estratégico.
@@ -309,7 +309,7 @@ O sistema mantém os campos legados `ultima_providencia` e `data_providencia` em
 
 ## 14. Resumo para ClickUp
 
-**Projeto:** Financeiro BP – Módulo de Inadimplência  
+**Projeto:** SIOE – Módulo de Inadimplência  
 
 **Stack:** React 18 + TypeScript + Vite + Supabase (PostgreSQL) + Tailwind CSS + React Query + Radix UI  
 

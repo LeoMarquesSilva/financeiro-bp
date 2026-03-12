@@ -2,7 +2,7 @@ import { formatCurrency } from '@/shared/utils/format'
 import type { ClientInadimplenciaRow, InadimplenciaClasse } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
-import { getPrioridade } from '../services/prioridade'
+import { usePrioridadeConfig } from '@/features/configuracoes/hooks/usePrioridadeConfig'
 import type { PrioridadeTipo } from '../types/inadimplencia.types'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -51,6 +51,7 @@ export function InadimplenciaCardCompact({
   onRefresh: _onRefresh,
 }: InadimplenciaCardCompactProps) {
   const { teamMembers } = useTeamMembers()
+  const { getPrioridade } = usePrioridadeConfig()
 
   const prioridade: PrioridadeTipo = getPrioridade(client.dias_em_aberto, Number(client.valor_em_aberto))
   const gestorEmails: string[] = Array.isArray(client.gestor) ? client.gestor : client.gestor ? [client.gestor] : []

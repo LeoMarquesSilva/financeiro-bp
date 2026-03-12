@@ -101,7 +101,7 @@ export function Login() {
             />
           </div>
           <h1 className="text-center text-xl font-bold tracking-tight text-slate-900">
-            Financeiro BP
+            SIOE (Sistema Integrado de Operações Estratégicas)
           </h1>
           <p className="mt-1 text-center text-sm text-slate-500">
             {forgotMode ? 'Informe seu e-mail para recuperar a senha.' : 'Entre com suas credenciais para acessar o sistema.'}
