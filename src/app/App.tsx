@@ -66,7 +66,7 @@ function AppRoutes() {
           <Route
             path="cobranca"
             element={
-              <ProtectedRoute allowedRoles={['financeiro']}>
+              <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
                 <CobrancaPage />
               </ProtectedRoute>
             }

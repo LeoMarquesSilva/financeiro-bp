@@ -47,7 +47,7 @@ function previewTexto(texto: string | null): string {
 export function WhatsappNotificationsProvider({ children }: { children: ReactNode }) {
   const { role } = useAuth()
   const navigate = useNavigate()
-  const enabled = role === 'financeiro'
+  const enabled = role === 'admin' || role === 'financeiro'
 
   const [unreadTotal, setUnreadTotal] = useState(0)
   const ultimoSomRef = useRef(0)
