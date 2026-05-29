@@ -21,6 +21,7 @@ export interface TeamMemberRow {
   avatar_url: string | null
   role: AppRole | null
   password_changed: boolean
+  is_active: boolean
   created_at: string
   updated_at: string
 }
@@ -37,6 +38,7 @@ export interface Database {
           area: string
           avatar_url?: string | null
           role?: AppRole | null
+          is_active?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -46,6 +48,7 @@ export interface Database {
           area?: string
           avatar_url?: string | null
           role?: AppRole | null
+          is_active?: boolean
           updated_at?: string
         }
       }
@@ -402,9 +405,168 @@ export interface Database {
         Insert: unknown
         Update: unknown
       }
+      cobranca_eventos: {
+        Row: {
+          id: string
+          parcela_id: string
+          pessoa_id: string | null
+          canal: 'whatsapp' | 'email'
+          status: 'enviado' | 'erro'
+          destino: string | null
+          mensagem: string | null
+          provider_message_id: string | null
+          erro: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          parcela_id: string
+          pessoa_id?: string | null
+          canal: 'whatsapp' | 'email'
+          status?: 'enviado' | 'erro'
+          destino?: string | null
+          mensagem?: string | null
+          provider_message_id?: string | null
+          erro?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          status?: 'enviado' | 'erro'
+          erro?: string | null
+        }
+      }
+      cobranca_arquivamentos: {
+        Row: {
+          parcela_id: string
+          motivo: string | null
+          arquivado_by: string | null
+          arquivado_at: string
+        }
+        Insert: {
+          parcela_id: string
+          motivo?: string | null
+          arquivado_by?: string | null
+          arquivado_at?: string
+        }
+        Update: {
+          motivo?: string | null
+        }
+      }
+      whatsapp_chats: {
+        Row: {
+          remote_jid: string
+          instance: string | null
+          push_name: string | null
+          profile_pic_url: string | null
+          last_message_at: string | null
+          last_message_preview: string | null
+          unread_count: number
+          updated_at: string
+        }
+        Insert: unknown
+        Update: unknown
+      }
+      whatsapp_mensagens: {
+        Row: {
+          id: string
+          instance: string | null
+          remote_jid: string
+          message_id: string | null
+          from_me: boolean
+          tipo: string | null
+          conteudo: string | null
+          timestamp: string | null
+          raw: Record<string, unknown> | null
+          created_at: string
+        }
+        Insert: unknown
+        Update: unknown
+      }
+      /** View: painel de cobranca (parcelas vencidas D+1, nao arquivadas, com status por canal). */
+      cobranca_painel: {
+        Row: {
+          parcela_id: string
+          pessoa_id: string | null
+          cliente: string
+          nro_titulo: string | null
+          parcela: string | null
+          parcelas: string | null
+          descricao: string | null
+          plano_contas: string | null
+          data_vencimento: string
+          valor: number
+          dias_atraso: number
+          pessoa_nome: string | null
+          grupo_cliente: string | null
+          pessoa_telefone: string | null
+          pessoa_email: string | null
+          tem_whatsapp: boolean
+          tem_email: boolean
+          cobrancas_total: number
+          ultima_cobranca_at: string | null
+          concluido: boolean
+        }
+        Insert: unknown
+        Update: unknown
+      }
+      /** View: todos os titulos em aberto por cliente (vencidos e a vencer). */
+      cobranca_titulos_abertos: {
+        Row: {
+          parcela_id: string
+          pessoa_id: string | null
+          cliente: string
+          nro_titulo: string | null
+          parcela: string | null
+          parcelas: string | null
+          descricao: string | null
+          plano_contas: string | null
+          data_vencimento: string
+          valor: number
+          dias_atraso: number
+          a_vencer: boolean
+          pessoa_nome: string | null
+          grupo_cliente: string | null
+          pessoa_telefone: string | null
+          pessoa_email: string | null
+          telefone_digits: string
+          tem_whatsapp: boolean
+          tem_email: boolean
+          cobrancas_total: number
+          ultima_cobranca_at: string | null
+          arquivado: boolean
+        }
+        Insert: unknown
+        Update: unknown
+      }
+      /** View: indicador de Efetividade na Cobrança Inicial (D+1). */
+      cobranca_kpi: {
+        Row: {
+          titulos_vencidos: number
+          titulos_cobrados: number
+          titulos_pendentes: number
+          com_whatsapp: number
+          com_email: number
+          concluidos: number
+          valor_vencido: number
+          valor_cobrado: number
+          valor_pendente: number
+          efetividade_pct: number
+        }
+        Insert: unknown
+        Update: unknown
+      }
     }
   }
 }
+
+export type CobrancaPainelRow = Database['public']['Tables']['cobranca_painel']['Row']
+export type CobrancaTituloAbertoRow = Database['public']['Tables']['cobranca_titulos_abertos']['Row']
+export type CobrancaKpiRow = Database['public']['Tables']['cobranca_kpi']['Row']
+export type CobrancaEventoRow = Database['public']['Tables']['cobranca_eventos']['Row']
+export type WhatsappChatRow = Database['public']['Tables']['whatsapp_chats']['Row']
+export type WhatsappMensagemRow = Database['public']['Tables']['whatsapp_mensagens']['Row']
 
 export type ClientInadimplenciaRow = Database['public']['Tables']['clients_inadimplencia']['Row']
 export type TimesheetRow = Database['public']['Tables']['timesheets']['Row']

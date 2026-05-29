@@ -36,6 +36,7 @@ export const teamMembersService = {
       area: input.area.trim(),
       avatar_url: input.avatar_url?.trim() || null,
       role: input.role ?? null,
+      is_active: true,
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client infers Insert as never for some schemas
     const { data, error } = await supabase.from('team_members').insert(insertData as any).select().single()
@@ -52,10 +53,24 @@ export const teamMembersService = {
     if (error) throw error
   },
 
+  async updateActive(id: string, isActive: boolean): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase-js infers Update as never for some schema versions
+    const query = supabase.from('team_members') as any
+    const { error } = await query
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) throw error
+  },
+
   async delete(id: string): Promise<void> {
     const { error } = await supabase.from('team_members').delete().eq('id', id)
     if (error) throw error
   },
+}
+
+/** Membros ativos para seleção em formulários e filtros. */
+export function filterActiveTeamMembers(members: TeamMember[]): TeamMember[] {
+  return members.filter((m) => m.is_active !== false)
 }
 
 /**

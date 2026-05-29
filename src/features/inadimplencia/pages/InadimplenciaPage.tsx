@@ -89,14 +89,20 @@ export function InadimplenciaPage() {
   const [mostrarResolvidos, setMostrarResolvidos] = useState(false)
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const { teamMembers } = useTeamMembers()
+  const { allTeamMembers } = useTeamMembers()
   const { listagemParams, orderBy, orderDesc, ...filtrosHandlers } = useFiltros(400)
   const [page, setPage] = useState(1)
 
   useEffect(() => {
     const buscaParam = searchParams.get('busca')
+    const resolvidosParam = searchParams.get('resolvidos')
     if (buscaParam) {
       filtrosHandlers.setBusca(buscaParam)
+    }
+    if (resolvidosParam === '1') {
+      setMostrarResolvidos(true)
+    }
+    if (buscaParam || resolvidosParam) {
       setSearchParams({}, { replace: true })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -242,7 +248,7 @@ export function InadimplenciaPage() {
           filtros={filtrosHandlers.filtros}
           orderBy={orderBy}
           orderDesc={orderDesc}
-          teamMembers={teamMembers}
+          teamMembers={allTeamMembers}
           onBuscaChange={filtrosHandlers.setBusca}
           onGestorChange={filtrosHandlers.setGestor}
           onAreaChange={filtrosHandlers.setArea}
@@ -377,7 +383,7 @@ export function InadimplenciaPage() {
 
           {viewMode === 'kanban-gestor' && (
             <div className="-mx-2 flex snap-x snap-mandatory gap-5 overflow-x-auto overflow-y-hidden pb-2 px-2 sm:-mx-4 sm:px-4 md:gap-6">
-              {groupByGestor(clientes, teamMembers).map(({ label, member, clients: items }) => {
+              {groupByGestor(clientes, allTeamMembers).map(({ label, member, clients: items }) => {
                 const avatarUrl = member
                   ? getTeamMember(member.email)?.avatar ?? member.avatar_url
                   : null

@@ -1,18 +1,33 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import type { ClienteEscritorioRow } from '@/lib/database.types'
 import type { GrupoEscritorio, FiltroFinanceiro, OrdenacaoEscritorio } from '../services/escritorioService'
 import { GrupoEscritorioCard } from '../components/GrupoEscritorioCard'
 import { ClienteEscritorioDetailSheet } from '../components/ClienteEscritorioDetailSheet'
 import { useGruposEscritorioPaginado } from '../hooks/useGruposEscritorioPaginado'
+import { useInadimplenciaGruposIndex } from '../hooks/useInadimplenciaGruposIndex'
+import {
+  getInadimplenciaStatusForGrupo,
+  countInadimplenciaFromResumo,
+  type FiltroInadimplencia,
+  type InadimplenciaGrupoStatus,
+} from '../services/inadimplenciaGruposIndex'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatCurrency, parseCurrencyBr } from '@/shared/utils/format'
-import { Search, Building2, Loader2, RefreshCw, Filter, ArrowUpDown, AlertTriangle, CircleDollarSign, Banknote, CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Building2, Loader2, RefreshCw, Filter, ArrowUpDown, AlertTriangle, CircleDollarSign, Banknote, CalendarClock, ChevronLeft, ChevronRight, Scale, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+import type { ClienteEscritorioRow } from '@/lib/database.types'
+
+interface SheetContext {
+  cliente: ClienteEscritorioRow
+  empresas: ClienteEscritorioRow[]
+  escopoGrupoInicial: boolean
+  inadimplencia: InadimplenciaGrupoStatus | null
+}
 
 export type { FiltroFinanceiro, OrdenacaoEscritorio }
 
@@ -32,18 +47,22 @@ export function EscritorioPage() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [filtroFinanceiro, setFiltroFinanceiro] = useState<FiltroFinanceiro>('todos')
+  const [filtroInadimplencia, setFiltroInadimplencia] = useState<FiltroInadimplencia>('todos')
   const [minValorStr, setMinValorStr] = useState('')
   const [ordenacao, setOrdenacao] = useState<OrdenacaoEscritorio>('nome')
-  const [selectedCliente, setSelectedCliente] = useState<ClienteEscritorioRow | null>(null)
+  const [selectedContext, setSelectedContext] = useState<SheetContext | null>(null)
 
   const minValor = useMemo(() => (minValorStr.trim() ? parseCurrencyBr(minValorStr) : 0), [minValorStr])
   const filtros = useMemo(
-    () => ({ busca: debouncedBusca, filtroFinanceiro, minValor, ordenacao }),
-    [debouncedBusca, filtroFinanceiro, minValor, ordenacao],
+    () => ({ busca: debouncedBusca, filtroFinanceiro, filtroInadimplencia, minValor, ordenacao }),
+    [debouncedBusca, filtroFinanceiro, filtroInadimplencia, minValor, ordenacao],
   )
+
+  const { index: inadimplenciaIndex } = useInadimplenciaGruposIndex()
 
   const {
     grupos: filtrado,
+    resumoAll,
     totalCount,
     totalPages,
     page,
@@ -54,11 +73,37 @@ export function EscritorioPage() {
     loadingEmpresas,
     error,
     refetch,
-  } = useGruposEscritorioPaginado(filtros, GRUPOS_POR_PAGINA)
+  } = useGruposEscritorioPaginado(filtros, GRUPOS_POR_PAGINA, inadimplenciaIndex)
+
+  const inadimplenciaCounts = useMemo(() => {
+    if (!inadimplenciaIndex || resumoAll.length === 0) return { inadimplentes: 0, resolvidos: 0 }
+    return countInadimplenciaFromResumo(resumoAll, inadimplenciaIndex)
+  }, [resumoAll, inadimplenciaIndex])
+
+  const openGrupoSheet = (grupo: GrupoEscritorio, empresa: ClienteEscritorioRow, escopoGrupoInicial: boolean) => {
+    const inadimplencia = inadimplenciaIndex
+      ? getInadimplenciaStatusForGrupo(grupo, inadimplenciaIndex)
+      : null
+    setSelectedContext({
+      cliente: empresa,
+      empresas: grupo.empresas,
+      escopoGrupoInicial,
+      inadimplencia,
+    })
+  }
+
+  const handleSelectEmpresa = (grupo: GrupoEscritorio, empresa: ClienteEscritorioRow) => {
+    openGrupoSheet(grupo, empresa, false)
+  }
+
+  const handleOpenGrupo = (grupo: GrupoEscritorio) => {
+    if (grupo.empresas.length === 0) return
+    openGrupoSheet(grupo, grupo.empresas[0], grupo.empresas.length > 1)
+  }
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedBusca, filtroFinanceiro, minValor, ordenacao])
+  }, [debouncedBusca, filtroFinanceiro, filtroInadimplencia, minValor, ordenacao])
 
   return (
     <div className="space-y-6">
@@ -171,6 +216,34 @@ export function EscritorioPage() {
             </Button>
           ))}
         </div>
+        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-200 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 sm:w-auto">
+          <Scale className="h-4 w-4 shrink-0 text-slate-500" />
+          <span className="text-sm font-medium text-slate-600">Inadimplência:</span>
+          {(
+            [
+              { value: 'todos' as const, label: 'Todos', icon: undefined, count: resumoAll.length },
+              { value: 'inadimplentes' as const, label: 'Só inadimplentes', icon: Scale, count: inadimplenciaCounts.inadimplentes },
+              { value: 'resolvidos' as const, label: 'Resolvidos', icon: CheckCircle2, count: inadimplenciaCounts.resolvidos },
+            ]
+          ).map(({ value, label, icon: Icon, count }) => (
+            <Button
+              key={value}
+              type="button"
+              variant={filtroInadimplencia === value ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroInadimplencia(value)}
+              className={cn(
+                'shrink-0',
+                filtroInadimplencia === value && 'ring-1 ring-slate-400',
+                value === 'inadimplentes' && filtroInadimplencia === value && 'bg-red-700 hover:bg-red-800',
+                value === 'resolvidos' && filtroInadimplencia === value && 'bg-slate-600 hover:bg-slate-700'
+              )}
+            >
+              {Icon != null && <Icon className="mr-1 h-3.5 w-3.5" />}
+              {`${label} (${count})`}
+            </Button>
+          ))}
+        </div>
         {filtroFinanceiro !== 'todos' && (
           <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
             <Label htmlFor="min-valor-escritorio" className="whitespace-nowrap text-sm font-medium text-slate-600">
@@ -275,7 +348,11 @@ export function EscritorioPage() {
               <GrupoEscritorioCard
                 key={grupo.grupo_cliente}
                 grupo={grupo}
-                onSelectCliente={setSelectedCliente}
+                inadimplencia={
+                  inadimplenciaIndex ? getInadimplenciaStatusForGrupo(grupo, inadimplenciaIndex) : null
+                }
+                onSelectCliente={handleSelectEmpresa}
+                onOpenGrupo={handleOpenGrupo}
               />
             ))}
           </div>
@@ -283,9 +360,15 @@ export function EscritorioPage() {
       )}
 
       <ClienteEscritorioDetailSheet
-        open={!!selectedCliente}
-        onClose={() => setSelectedCliente(null)}
-        cliente={selectedCliente}
+        open={!!selectedContext}
+        onClose={() => setSelectedContext(null)}
+        cliente={selectedContext?.cliente ?? null}
+        grupoEmpresas={selectedContext?.empresas ?? []}
+        onClienteChange={(c) =>
+          setSelectedContext((ctx) => (ctx ? { ...ctx, cliente: c } : null))
+        }
+        inadimplencia={selectedContext?.inadimplencia ?? null}
+        escopoGrupoInicial={selectedContext?.escopoGrupoInicial ?? false}
       />
     </div>
   )

@@ -9,7 +9,7 @@ import { useExibirTaxaRecuperacaoComite } from '@/features/configuracoes/hooks/u
 
 export function InadimplenciaDashboardPage() {
   const { data, loading, error } = useDashboard()
-  const { teamMembers } = useTeamMembers()
+  const { allTeamMembers } = useTeamMembers()
   const { exibirTaxaRecuperacaoComite } = useExibirTaxaRecuperacaoComite()
 
   if (loading) {
@@ -108,7 +108,7 @@ export function InadimplenciaDashboardPage() {
             ) : (
               <ul className="space-y-2">
                 {taxaRecuperacaoComite.recuperadoPorGestor.slice(0, 8).map((item: RankingItem, i: number) => {
-                  const member = resolveTeamMember(item.nome, teamMembers)
+                  const member = resolveTeamMember(item.nome, allTeamMembers)
                   return (
                     <li key={`comite-gestor-${i}-${item.nome}`} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-3 py-2">
                       <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-slate-700">
@@ -182,7 +182,7 @@ export function InadimplenciaDashboardPage() {
           ) : (
             <ul className="space-y-2">
               {rankingGestores.slice(0, 8).map((item: RankingItem, i: number) => {
-                const member = resolveTeamMember(item.nome, teamMembers)
+                const member = resolveTeamMember(item.nome, allTeamMembers)
                 return (
                   <li key={`gestor-${i}-${item.nome}`} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-3 py-2">
                     <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-slate-700">
@@ -232,7 +232,7 @@ export function InadimplenciaDashboardPage() {
           ) : (
             <div className="space-y-2">
               {valorEmAbertoPorGestor.slice(0, 8).map((item: RankingItem, i: number) => {
-                const member = resolveTeamMember(item.nome, teamMembers)
+                const member = resolveTeamMember(item.nome, allTeamMembers)
                 const displayName = member ? `${member.full_name} (${member.area})` : item.nome
                 return (
                   <div key={`aberto-gestor-${i}-${item.nome}`} className="flex items-center gap-2">

@@ -7,6 +7,7 @@ import { FinanceiroLayout } from './layouts/FinanceiroLayout'
 import { InadimplenciaPage } from '@/features/inadimplencia/pages/InadimplenciaPage'
 import { InadimplenciaDashboardPage } from '@/features/inadimplencia/pages/InadimplenciaDashboardPage'
 import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
+import { CobrancaPage } from '@/features/cobranca/pages/CobrancaPage'
 import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
 import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
@@ -59,6 +60,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
                 <EscritorioPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="cobranca"
+            element={
+              <ProtectedRoute allowedRoles={['financeiro']}>
+                <CobrancaPage />
               </ProtectedRoute>
             }
           />

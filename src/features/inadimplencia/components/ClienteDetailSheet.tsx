@@ -204,11 +204,11 @@ function MetricCard({ icon: Icon, label, value, iconClass }: { icon: React.Eleme
 function ProvidenciaCard({ p, clientId, onRefresh }: { p: ProvidenciaRow; clientId: string; onRefresh?: () => void }) {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
-  const { teamMembers } = useTeamMembers()
+  const { allTeamMembers } = useTeamMembers()
   const queryClient = useQueryClient()
   const [modalExcluir, setModalExcluir] = useState(false)
 
-  const author = p.created_by ? teamMembers.find((m: { full_name: string; email: string }) => m.full_name === p.created_by || m.email === p.created_by) ?? null : null
+  const author = p.created_by ? allTeamMembers.find((m: { full_name: string; email: string }) => m.full_name === p.created_by || m.email === p.created_by) ?? null : null
   const authorAvatar = author ? getTeamMember(author.email)?.avatar ?? author.avatar_url : null
 
   const handleDelete = async () => {
@@ -261,7 +261,7 @@ function ProvidenciaCard({ p, clientId, onRefresh }: { p: ProvidenciaRow; client
 function FollowUpsList({ providenciaId, clientId, onRefresh }: { providenciaId: string; clientId: string; onRefresh?: () => void }) {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
-  const { teamMembers } = useTeamMembers()
+  const { allTeamMembers } = useTeamMembers()
   const queryClient = useQueryClient()
   const [fuParaExcluir, setFuParaExcluir] = useState<ProvidenciaFollowUpRow | null>(null)
   const { data: list = [] } = useQuery({
@@ -288,7 +288,7 @@ function FollowUpsList({ providenciaId, clientId, onRefresh }: { providenciaId: 
     <>
       <div className="mt-3 space-y-1.5">
         {list.map((fu: ProvidenciaFollowUpRow) => {
-          const author = fu.created_by ? teamMembers.find((m: { full_name: string; email: string }) => m.full_name === fu.created_by || m.email === fu.created_by) ?? null : null
+          const author = fu.created_by ? allTeamMembers.find((m: { full_name: string; email: string }) => m.full_name === fu.created_by || m.email === fu.created_by) ?? null : null
           const authorAvatar = author ? getTeamMember(author.email)?.avatar ?? author.avatar_url : null
           return (
             <div key={fu.id} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
@@ -344,7 +344,7 @@ export interface ClienteDetailSheetProps {
 export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, onReabrir, onRefresh }: ClienteDetailSheetProps) {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
-  const { teamMembers } = useTeamMembers()
+  const { allTeamMembers } = useTeamMembers()
   const { getPrioridade } = usePrioridadeConfig()
   const [modalEditar, setModalEditar] = useState(false)
   const [modalHistorico, setModalHistorico] = useState(false)
@@ -415,7 +415,7 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
   const prioridade: PrioridadeTipo = getPrioridade(client.dias_em_aberto, Number(client.valor_em_aberto))
   const followUpVencido = client.data_follow_up && new Date(client.data_follow_up) < new Date()
   const gestorEmails: string[] = Array.isArray(client.gestor) ? client.gestor : client.gestor ? [client.gestor] : []
-  const gestorMembers = gestorEmails.map((g) => resolveTeamMember(g, teamMembers)).filter((m): m is NonNullable<typeof m> => m !== null)
+  const gestorMembers = gestorEmails.map((g) => resolveTeamMember(g, allTeamMembers)).filter((m): m is NonNullable<typeof m> => m !== null)
   const cnpjExibir = (linkedEscritorio?.cnpj ?? client.cnpj) || null
   const areasList: string[] = Array.isArray(client.area) ? client.area : client.area ? [client.area] : []
   const subinfo = [cnpjExibir ? formatCnpj(cnpjExibir) : null].filter(Boolean).join(' · ') || null

@@ -10,6 +10,8 @@ import {
   GRUPO_SEM_NOME,
   type GrupoResumoRow,
 } from '../services/escritorioService'
+import type { FiltroInadimplencia, InadimplenciaGruposIndex } from '../services/inadimplenciaGruposIndex'
+import { resumoMatchesInadimplencia } from '../services/inadimplenciaGruposIndex'
 
 const STALE_TIME_MS = 30 * 60 * 1000
 const DEFAULT_PAGE_SIZE = 12
@@ -17,6 +19,7 @@ const DEFAULT_PAGE_SIZE = 12
 export interface FiltrosEscritorio {
   busca: string
   filtroFinanceiro: FiltroFinanceiro
+  filtroInadimplencia: FiltroInadimplencia
   minValor: number
   ordenacao: OrdenacaoEscritorio
 }
@@ -70,7 +73,11 @@ function ordenaResumo(list: GrupoResumoRow[], ordenacao: OrdenacaoEscritorio): G
   }
 }
 
-export function useGruposEscritorioPaginado(filtros: FiltrosEscritorio, pageSize = DEFAULT_PAGE_SIZE) {
+export function useGruposEscritorioPaginado(
+  filtros: FiltrosEscritorio,
+  pageSize = DEFAULT_PAGE_SIZE,
+  inadimplenciaIndex: InadimplenciaGruposIndex | null = null,
+) {
   const [page, setPage] = useState(1)
 
   const { data: resumoData, error: resumoError, isLoading: loadingResumo, isFetching: fetchingResumo, refetch: refetchResumo } = useQuery({
@@ -97,8 +104,21 @@ export function useGruposEscritorioPaginado(filtros: FiltrosEscritorio, pageSize
     })
     list = list.filter((r: GrupoResumoRow) => aplicaFiltroFinanceiroResumo(r, filtros.filtroFinanceiro))
     list = list.filter((r: GrupoResumoRow) => passaFiltroMinimoResumo(r, filtros.filtroFinanceiro, filtros.minValor))
+    if (inadimplenciaIndex && filtros.filtroInadimplencia !== 'todos') {
+      list = list.filter((r: GrupoResumoRow) =>
+        resumoMatchesInadimplencia(r, inadimplenciaIndex, filtros.filtroInadimplencia)
+      )
+    }
     return ordenaResumo(list, filtros.ordenacao)
-  }, [resumoData?.resumo, filtros.busca, filtros.filtroFinanceiro, filtros.minValor, filtros.ordenacao])
+  }, [
+    resumoData?.resumo,
+    filtros.busca,
+    filtros.filtroFinanceiro,
+    filtros.filtroInadimplencia,
+    filtros.minValor,
+    filtros.ordenacao,
+    inadimplenciaIndex,
+  ])
 
   const totalCount = filtrado.length
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
@@ -155,6 +175,7 @@ export function useGruposEscritorioPaginado(filtros: FiltrosEscritorio, pageSize
 
   return {
     grupos,
+    resumoAll: resumoData?.resumo ?? [],
     totalCount,
     totalPages,
     page: safePage,

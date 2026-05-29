@@ -64,7 +64,7 @@ function getIniciais(name: string | null | undefined): string {
 export function InadimplenciaCard({ client, onMarcarResolvido, onReabrir, onRefresh, onSelectClient }: InadimplenciaCardProps) {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
-  const { teamMembers } = useTeamMembers()
+  const { allTeamMembers } = useTeamMembers()
   const { getPrioridade } = usePrioridadeConfig()
   const [modalEditar, setModalEditar] = useState(false)
   const [modalProvidencia, setModalProvidencia] = useState(false)
@@ -103,7 +103,7 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onReabrir, onRefr
   const followUpVencido = client.data_follow_up && new Date(client.data_follow_up) < new Date()
   const gestorEmails: string[] = Array.isArray(client.gestor) ? client.gestor : client.gestor ? [client.gestor] : []
   const gestorMembers = gestorEmails
-    .map((g) => resolveTeamMember(g, teamMembers))
+    .map((g) => resolveTeamMember(g, allTeamMembers))
     .filter((m): m is NonNullable<typeof m> => m !== null)
   const cnpjExibir = (linkedEscritorio?.cnpj ?? client.cnpj) || null
   const areasList: string[] = Array.isArray(client.area) ? client.area : client.area ? [client.area] : []

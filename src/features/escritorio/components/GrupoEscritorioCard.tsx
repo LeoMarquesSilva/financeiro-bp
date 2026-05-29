@@ -1,5 +1,7 @@
 import type { GrupoEscritorio } from '../services/escritorioService'
 import type { ClienteEscritorioRow } from '@/lib/database.types'
+import type { InadimplenciaGrupoStatus } from '../services/inadimplenciaGruposIndex'
+import { InadimplenciaGrupoBadges } from './InadimplenciaGrupoBadges'
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card'
 import { formatHorasHHMMSS, formatCurrency } from '@/shared/utils/format'
 import { Building2, Briefcase, Clock, ChevronDown, ChevronUp, ChevronRight, Banknote, CircleDollarSign, AlertTriangle } from 'lucide-react'
@@ -19,13 +21,16 @@ const LABELS_CONTAGEM: Record<string, string> = {
 
 interface GrupoEscritorioCardProps {
   grupo: GrupoEscritorio
-  onSelectCliente?: (cliente: ClienteEscritorioRow) => void
+  inadimplencia?: InadimplenciaGrupoStatus | null
+  onSelectCliente?: (grupo: GrupoEscritorio, cliente: ClienteEscritorioRow) => void
+  onOpenGrupo?: (grupo: GrupoEscritorio) => void
 }
 
-export function GrupoEscritorioCard({ grupo, onSelectCliente }: GrupoEscritorioCardProps) {
+export function GrupoEscritorioCard({ grupo, inadimplencia, onSelectCliente, onOpenGrupo }: GrupoEscritorioCardProps) {
   const [maisInfosAberto, setMaisInfosAberto] = useState(false)
   const { grupo_cliente, empresas, contagem, horasGrupo, horasPorAno, valorAberto, valorPago, valorEmAtraso } = grupo
   const totalGeral = contagem?.total_geral ?? 0
+  const hasInadimplencia = !!(inadimplencia?.ativa || inadimplencia?.resolvida)
   const anosOrdenados = Object.keys(horasPorAno ?? {})
     .filter((y) => Number(horasPorAno[y]) > 0)
     .sort()
@@ -41,33 +46,57 @@ export function GrupoEscritorioCard({ grupo, onSelectCliente }: GrupoEscritorioC
   }
 
   return (
-    <Card className="transition-shadow hover:shadow-md">
+    <Card
+      className={cn(
+        'transition-shadow hover:shadow-md',
+        inadimplencia?.ativa && 'border-red-200/80 ring-1 ring-red-100',
+        !inadimplencia?.ativa && inadimplencia?.resolvida && 'border-slate-300/80 ring-1 ring-slate-100'
+      )}
+    >
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-base font-semibold text-slate-900">
           <Building2 className="h-5 w-5 shrink-0 text-slate-500" />
-          <span>{grupo_cliente}</span>
+          {onOpenGrupo && empresas.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => onOpenGrupo(grupo)}
+              className="min-w-0 flex-1 truncate rounded text-left hover:text-primary focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1"
+            >
+              {grupo_cliente}
+            </button>
+          ) : (
+            <span className="min-w-0 flex-1">{grupo_cliente}</span>
+          )}
+          {hasInadimplencia && (
+            <InadimplenciaGrupoBadges
+              ativa={inadimplencia?.ativa}
+              resolvida={inadimplencia?.resolvida}
+              grupoNome={grupo_cliente}
+            />
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-0">
-        {/* Empresas do grupo */}
         <div>
           <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
             Empresas do grupo ({empresas.length})
           </p>
-          <ul className={cn(
-            'space-y-0.5 overflow-y-auto rounded border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-700',
-            empresas.length > 15 ? 'max-h-[70vh]' : 'max-h-40'
-          )}>
+          <ul
+            className={cn(
+              'space-y-0.5 overflow-y-auto rounded border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-700',
+              empresas.length > 15 ? 'max-h-[70vh]' : 'max-h-40'
+            )}
+          >
             {empresas.length === 0 ? (
-              <li className="py-1 text-slate-400 italic">Nenhuma empresa neste grupo</li>
+              <li className="py-1 italic text-slate-400">Nenhuma empresa neste grupo</li>
             ) : (
               empresas.map((e) => (
                 <li key={e.id}>
                   <button
                     type="button"
-                    onClick={() => onSelectCliente?.(e)}
+                    onClick={() => onSelectCliente?.(grupo, e)}
                     className={cn(
-                      'flex w-full items-center justify-between gap-2 truncate text-left hover:bg-slate-100/80 rounded px-2 py-1 -mx-2 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-inset',
+                      '-mx-2 flex w-full items-center justify-between gap-2 truncate rounded px-2 py-1 text-left hover:bg-slate-100/80 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-inset',
                       onSelectCliente && 'cursor-pointer'
                     )}
                   >
@@ -80,7 +109,6 @@ export function GrupoEscritorioCard({ grupo, onSelectCliente }: GrupoEscritorioC
           </ul>
         </div>
 
-        {/* Total geral (processos), Horas (timesheets) e Relatório financeiro */}
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <span className="flex items-center gap-1.5 text-slate-600">
             <Briefcase className="h-4 w-4 text-slate-400" />
@@ -112,7 +140,6 @@ export function GrupoEscritorioCard({ grupo, onSelectCliente }: GrupoEscritorioC
           )}
         </div>
 
-        {/* Horas por ano (TimeSheets) */}
         {anosOrdenados.length > 0 && (
           <div className="rounded border border-slate-200 bg-slate-50/50 px-3 py-2">
             <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -129,8 +156,7 @@ export function GrupoEscritorioCard({ grupo, onSelectCliente }: GrupoEscritorioC
           </div>
         )}
 
-        {/* Mais infos: breakdown por situação */}
-        {itensContagem && itensContagem.length > 0 && (
+        {itensContagem.length > 0 && (
           <div className="rounded border border-slate-200 bg-slate-50/50">
             <button
               type="button"
@@ -138,11 +164,7 @@ export function GrupoEscritorioCard({ grupo, onSelectCliente }: GrupoEscritorioC
               className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100/80"
             >
               Mais infos (tipos no total geral)
-              {maisInfosAberto ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
+              {maisInfosAberto ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
             {maisInfosAberto && (
               <ul className="border-t border-slate-200 px-3 py-2 text-sm text-slate-600">

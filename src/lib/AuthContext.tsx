@@ -15,6 +15,7 @@ interface AuthState {
   session: Session | null
   role: AppRole | null
   fullName: string | null
+  area: string | null
   avatarUrl: string | null
   passwordChanged: boolean
   loading: boolean
@@ -27,12 +28,12 @@ interface AuthContextValue extends AuthState {
   markPasswordChanged: () => void
 }
 
-type TeamMemberProfile = Pick<TeamMemberRow, 'role' | 'full_name' | 'avatar_url'> & { password_changed?: boolean }
+type TeamMemberProfile = Pick<TeamMemberRow, 'role' | 'full_name' | 'avatar_url' | 'is_active' | 'area'> & { password_changed?: boolean }
 
 async function fetchTeamMemberRole(email: string): Promise<TeamMemberProfile | null> {
   const { data } = await supabase
     .from('team_members')
-    .select('role, full_name, avatar_url, password_changed')
+    .select('role, full_name, area, avatar_url, password_changed, is_active')
     .eq('email', email)
     .returns<TeamMemberProfile>()
     .single()
@@ -46,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session: null,
     role: null,
     fullName: null,
+    area: null,
     avatarUrl: null,
     passwordChanged: true,
     loading: true,
@@ -53,17 +55,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hydrateRole = useCallback(async (user: User | null, session: Session | null) => {
     if (!user?.email) {
-      setState({ user: null, session: null, role: null, fullName: null, avatarUrl: null, passwordChanged: true, loading: false })
+      setState({ user: null, session: null, role: null, fullName: null, area: null, avatarUrl: null, passwordChanged: true, loading: false })
       return
     }
 
     const member = await fetchTeamMemberRole(user.email)
+
+    if (member && member.is_active === false) {
+      await supabase.auth.signOut()
+      setState({ user: null, session: null, role: null, fullName: null, area: null, avatarUrl: null, passwordChanged: true, loading: false })
+      return
+    }
 
     setState({
       user,
       session,
       role: (member?.role as AppRole) ?? null,
       fullName: member?.full_name ?? user.user_metadata?.full_name ?? null,
+      area: member?.area ?? null,
       avatarUrl: member?.avatar_url ?? user.user_metadata?.avatar_url ?? null,
       passwordChanged: member?.password_changed ?? false,
       loading: false,
@@ -92,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     localStorage.removeItem('crm_auth')
-    setState({ user: null, session: null, role: null, fullName: null, avatarUrl: null, passwordChanged: true, loading: false })
+    setState({ user: null, session: null, role: null, fullName: null, area: null, avatarUrl: null, passwordChanged: true, loading: false })
   }, [])
 
   const markPasswordChanged = useCallback(() => {

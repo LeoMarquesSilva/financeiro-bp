@@ -1,10 +1,11 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
-import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut } from 'lucide-react'
+import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut, BellRing } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/AuthContext'
+import { useWhatsappNotifications } from '@/features/cobranca/notifications/WhatsappNotificationsProvider'
 import type { AppRole } from '@/lib/database.types'
 
 const LOGO_FENIX = '/fenix.png'
@@ -21,6 +22,7 @@ const navItems: NavItem[] = [
   { to: '/financeiro/inadimplencia', label: 'Inadimplência', icon: AlertTriangle, roles: ['admin', 'financeiro', 'comite'], end: true },
   { to: '/financeiro/inadimplencia/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'financeiro', 'comite'] },
   { to: '/financeiro/escritorio', label: 'Escritório', icon: Building2, roles: ['admin', 'financeiro'] },
+  { to: '/financeiro/cobranca', label: 'Cobrança', icon: BellRing, roles: ['financeiro'] },
   { to: '/financeiro/gestores', label: 'Gestores', icon: Users, roles: ['admin'] },
   { to: '/financeiro/configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
 ]
@@ -37,6 +39,7 @@ function getInitials(name: string | null): string {
 
 export function AppSidebar() {
   const { role, fullName, avatarUrl, signOut } = useAuth()
+  const { unreadTotal } = useWhatsappNotifications()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -71,6 +74,7 @@ export function AppSidebar() {
             const isActive = item.end
               ? location.pathname === item.to
               : location.pathname.startsWith(item.to)
+            const showBadge = item.to === '/financeiro/cobranca' && unreadTotal > 0
 
             return (
               <Tooltip key={item.to}>
@@ -88,10 +92,16 @@ export function AppSidebar() {
                       <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-sales" />
                     )}
                     <Icon className={cn('h-[18px] w-[18px] transition-colors', isActive ? 'text-sales' : 'text-slate-400 group-hover:text-white')} />
+                    {showBadge && (
+                      <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white ring-2 ring-[#0f172a]">
+                        {unreadTotal > 99 ? '99+' : unreadTotal}
+                      </span>
+                    )}
                   </NavLink>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="font-medium">
                   {item.label}
+                  {showBadge && ` · ${unreadTotal} não lida(s)`}
                 </TooltipContent>
               </Tooltip>
             )

@@ -34,7 +34,7 @@ interface ModalEditarClienteProps {
 
 export function ModalEditarCliente({ open, onClose, client, onSuccess }: ModalEditarClienteProps) {
   const { updateCliente } = useInadimplenciaMutations()
-  const { teamMembers } = useTeamMembers()
+  const { teamMembers, allTeamMembers } = useTeamMembers()
   const areas = useMemo(() => getAreasFromTeam(teamMembers), [teamMembers])
   const [razaoSocial, setRazaoSocial] = useState(client.razao_social)
   const [cnpj, setCnpj] = useState(client.cnpj ?? '')
@@ -76,7 +76,7 @@ export function ModalEditarCliente({ open, onClose, client, onSuccess }: ModalEd
       setContato(client.contato ?? '')
       const gestorArr: string[] = Array.isArray(client.gestor) ? client.gestor : client.gestor ? [client.gestor] : []
       const resolvedGestors = gestorArr.map((g) => {
-        const resolved = resolveTeamMember(g, teamMembers)
+        const resolved = resolveTeamMember(g, allTeamMembers)
         return resolved?.email ?? g
       })
       setGestores(resolvedGestors)

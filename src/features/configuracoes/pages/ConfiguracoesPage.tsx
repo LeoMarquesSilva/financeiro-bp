@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Settings } from 'lucide-react'
+import { Settings, BellRing } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useExibirTaxaRecuperacaoComite } from '../hooks/useExibirTaxaRecuperacaoComite'
 import { usePrioridadeConfig } from '../hooks/usePrioridadeConfig'
+import { useCobrancaTemplates } from '@/features/cobranca/hooks/useCobrancaTemplates'
+import type { CobrancaTemplates } from '@/features/cobranca/services/cobrancaTemplatesService'
 import type { PrioridadeConfig } from '@/features/inadimplencia/services/prioridade'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -32,11 +35,34 @@ export function ConfiguracoesPage() {
     urgente_min: 6,
   })
 
+  const { templates, isLoading: templatesLoading, saveTemplates, isSaving: templatesSaving } =
+    useCobrancaTemplates()
+  const [templatesForm, setTemplatesForm] = useState<CobrancaTemplates>({
+    whatsapp: '',
+    emailAssunto: '',
+    emailCorpo: '',
+  })
+
   useEffect(() => {
     if (!prioridadeLoading && prioridadeConfig) {
       setPrioridadeForm(prioridadeConfig)
     }
   }, [prioridadeLoading, prioridadeConfig])
+
+  useEffect(() => {
+    if (!templatesLoading && templates) {
+      setTemplatesForm(templates)
+    }
+  }, [templatesLoading, templates])
+
+  const handleTemplatesSave = async () => {
+    try {
+      await saveTemplates(templatesForm)
+      toast.success('Modelos de cobrança salvos')
+    } catch {
+      toast.error('Erro ao salvar modelos de cobrança')
+    }
+  }
 
   const handleToggle = async () => {
     try {
@@ -198,6 +224,61 @@ export function ConfiguracoesPage() {
               disabled={prioridadeLoading || prioridadeUpdating}
             >
               {prioridadeUpdating ? 'Salvando...' : 'Salvar configuração de urgência'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BellRing className="h-4 w-4 text-slate-600" />
+            Modelos de cobrança
+          </CardTitle>
+          <p className="text-sm font-normal text-slate-500">
+            Mensagens usadas no módulo de Cobrança. Placeholders disponíveis:{' '}
+            <code className="rounded bg-slate-100 px-1">{'{{nome}}'}</code>{' '}
+            <code className="rounded bg-slate-100 px-1">{'{{titulo}}'}</code>{' '}
+            <code className="rounded bg-slate-100 px-1">{'{{descricao}}'}</code>{' '}
+            <code className="rounded bg-slate-100 px-1">{'{{valor}}'}</code>{' '}
+            <code className="rounded bg-slate-100 px-1">{'{{vencimento}}'}</code>{' '}
+            <code className="rounded bg-slate-100 px-1">{'{{dias_atraso}}'}</code>{' '}
+            <code className="rounded bg-slate-100 px-1">{'{{usuario}}'}</code>
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="tpl-whatsapp">Mensagem de WhatsApp</Label>
+            <Textarea
+              id="tpl-whatsapp"
+              rows={4}
+              value={templatesForm.whatsapp}
+              onChange={(e) => setTemplatesForm((p) => ({ ...p, whatsapp: e.target.value }))}
+              disabled={templatesLoading}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tpl-email-assunto">Assunto do e-mail</Label>
+            <Input
+              id="tpl-email-assunto"
+              value={templatesForm.emailAssunto}
+              onChange={(e) => setTemplatesForm((p) => ({ ...p, emailAssunto: e.target.value }))}
+              disabled={templatesLoading}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tpl-email-corpo">Corpo do e-mail</Label>
+            <Textarea
+              id="tpl-email-corpo"
+              rows={8}
+              value={templatesForm.emailCorpo}
+              onChange={(e) => setTemplatesForm((p) => ({ ...p, emailCorpo: e.target.value }))}
+              disabled={templatesLoading}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleTemplatesSave} disabled={templatesLoading || templatesSaving}>
+              {templatesSaving ? 'Salvando...' : 'Salvar modelos de cobrança'}
             </Button>
           </div>
         </CardContent>
