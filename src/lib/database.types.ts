@@ -479,7 +479,32 @@ export interface Database {
           conteudo: string | null
           timestamp: string | null
           raw: Record<string, unknown> | null
+          status: string | null
+          reaction_to: string | null
+          reactions: { emoji: string; fromMe?: boolean; pushName?: string | null }[]
+          media_meta: {
+            mimetype?: string
+            fileName?: string
+            seconds?: number
+            caption?: string
+            ptt?: boolean
+            cachedAt?: string
+          } | null
           created_at: string
+        }
+        Insert: unknown
+        Update: unknown
+      }
+      whatsapp_group_participants: {
+        Row: {
+          group_jid: string
+          participant_jid: string
+          lid_id: string | null
+          phone_number: string | null
+          display_name: string | null
+          profile_pic_url: string | null
+          admin_role: string | null
+          updated_at: string
         }
         Insert: unknown
         Update: unknown

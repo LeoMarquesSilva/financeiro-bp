@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   useWhatsappChats,
   useWhatsappConversa,
   useTitulosCliente,
   useContatoNomes,
+  useGroupParticipants,
+  useLidContactIndex,
 } from '../hooks/useWhatsapp'
 import { useCobrancaTemplates } from '../hooks/useCobrancaTemplates'
 import { whatsappService } from '../services/whatsappService'
@@ -12,12 +15,10 @@ import { useAuth } from '@/lib/AuthContext'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Search,
-  Send,
   RefreshCw,
   MessageSquare,
   BellRing,
@@ -31,12 +32,25 @@ import {
   Wallet,
   Volume2,
   VolumeX,
+  Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { formatCurrency, formatDate } from '@/shared/utils/format'
 import { applyTemplate, buildTemplateVars, prefixoAtendente } from '../utils/template'
-import { phoneToRemoteJid, phonesMatch, canonicalJid, phoneKey } from '../utils/phone'
+import { phoneToRemoteJid, phonesMatch, canonicalJid } from '../utils/phone'
+import { pickContactLabel } from '../utils/contactNames'
+import { isGroupJid, isLidJid, groupFallbackLabel, chatSubtitle, groupIdFromJid } from '../utils/jid'
+import { resolveChatDisplayName, lidFromJid } from '../utils/lidIndex'
+import {
+  buildMentionMap,
+  buildSenderNamesFromMessages,
+  resolveGroupParticipants,
+  senderLabelFromMessage,
+} from '../utils/participants'
+import { WhatsappMessageBubble } from './WhatsappMessageBubble'
+import { WhatsappComposer } from './WhatsappComposer'
+import { WhatsappGroupMembers } from './WhatsappGroupMembers'
 import { isNotifMuted, setNotifMuted, playNotificationSound } from '../utils/sound'
 import { useWhatsappNotifications } from '../notifications/WhatsappNotificationsProvider'
 import type { PendingWhatsappCobranca } from '../types/cobranca.types'
@@ -53,10 +67,6 @@ interface Props {
 
 function jidToNumber(jid: string): string {
   return canonicalJid(jid).split('@')[0]
-}
-
-function isLid(jid: string): boolean {
-  return jid.includes('@lid')
 }
 
 function initials(name: string): string {
@@ -86,6 +96,12 @@ function formatDiaHora(ts: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(d)
+}
+
+function SafeAvatarImage({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return null
+  return <AvatarImage src={src} alt={alt} onError={() => setFailed(true)} />
 }
 
 function chatFromPending(pending: PendingWhatsappCobranca): WhatsappChatRow {
@@ -183,22 +199,47 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   const [activeCobranca, setActiveCobranca] = useState<PendingWhatsappCobranca | null>(null)
   const [muted, setMuted] = useState(isNotifMuted())
   const { refreshUnread } = useWhatsappNotifications()
+  const queryClient = useQueryClient()
 
-  const { chats, loading: loadingChats } = useWhatsappChats(busca)
+  const { chats, loading: loadingChats, refetch: refetchChats } = useWhatsappChats(busca)
   const nomesPorTelefone = useContatoNomes()
+  const lidIndex = useLidContactIndex()
   const { mensagens, loading: loadingMsgs, refetch: refetchMsgs } = useWhatsappConversa(
     selected?.remote_jid ?? null,
   )
+  const groupJid = selected && isGroupJid(selected.remote_jid) ? selected.remote_jid : null
+  const { members: groupMembersRaw, loading: loadingMembers } = useGroupParticipants(groupJid)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Resolve o nome exibido: cliente (financeiro) > push_name > número.
-  const resolveName = (chat: WhatsappChatRow): string => {
-    if (!isLid(chat.remote_jid)) {
-      const k = phoneKey(jidToNumber(chat.remote_jid))
-      const nome = k ? nomesPorTelefone.get(k) : undefined
-      if (nome) return nome
+  const senderNames = useMemo(
+    () => buildSenderNamesFromMessages(mensagens),
+    [mensagens],
+  )
+  const resolvedMembers = useMemo(
+    () => resolveGroupParticipants(groupMembersRaw, senderNames, nomesPorTelefone),
+    [groupMembersRaw, senderNames, nomesPorTelefone],
+  )
+  const mentionMap = useMemo(() => buildMentionMap(resolvedMembers), [resolvedMembers])
+
+  // Resolve o nome exibido: grupo > cadastro > @lid > push_name > telefone.
+  const resolveName = (chat: WhatsappChatRow): string =>
+    resolveChatDisplayName(
+      chat.remote_jid,
+      chat.push_name,
+      nomesPorTelefone,
+      lidIndex,
+      isGroupJid(chat.remote_jid),
+      groupFallbackLabel,
+    )
+
+  const phoneForTitulos = (chat: WhatsappChatRow | null): string | null => {
+    if (!chat || isGroupJid(chat.remote_jid)) return null
+    if (isLidJid(chat.remote_jid)) {
+      const lid = lidFromJid(chat.remote_jid)
+      const entry = lid ? lidIndex.get(lid) : undefined
+      return entry?.phone_number ? entry.phone_number.split('@')[0] : null
     }
-    return chat.push_name?.trim() || jidToNumber(chat.remote_jid)
+    return jidToNumber(chat.remote_jid)
   }
 
   // Vai para a última mensagem ao abrir a conversa / chegar mensagem nova.
@@ -211,9 +252,7 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   }, [selected?.remote_jid, mensagens.length, loadingMsgs])
 
   // Número da conversa (sem sufixo de dispositivo); vazio para JIDs @lid (número oculto).
-  const numeroConversa = selected && !isLid(selected.remote_jid)
-    ? jidToNumber(selected.remote_jid)
-    : null
+  const numeroConversa = phoneForTitulos(selected)
   const { titulos, refetch: refetchTitulos } = useTitulosCliente(numeroConversa)
 
   useEffect(() => {
@@ -233,8 +272,14 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   }, [pendingCobranca, chats])
 
   const cliente = titulos[0] ?? null
-  const vencidos = useMemo(() => titulos.filter((t) => !t.a_vencer), [titulos])
-  const aVencer = useMemo(() => titulos.filter((t) => t.a_vencer), [titulos])
+  const vencidos = useMemo(
+    () => titulos.filter((t) => !t.a_vencer && !t.arquivado),
+    [titulos],
+  )
+  const aVencer = useMemo(
+    () => titulos.filter((t) => t.a_vencer && !t.arquivado),
+    [titulos],
+  )
   const totalVencido = useMemo(
     () => vencidos.reduce((acc, r) => acc + Number(r.valor ?? 0), 0),
     [vencidos],
@@ -255,6 +300,10 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     setSincronizando(true)
     try {
       const res = await whatsappService.sync()
+      await Promise.all([
+        refetchChats(),
+        queryClient.invalidateQueries({ queryKey: ['whatsapp', 'lid-index'] }),
+      ])
       toast.success(`Conversas sincronizadas${res.conversas != null ? ` (${res.conversas})` : ''}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar conversas')
@@ -275,7 +324,13 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     }
     try {
       await whatsappService.syncConversa(chat.remote_jid)
-      refetchMsgs()
+      const tasks: Promise<unknown>[] = [refetchMsgs(), refetchChats()]
+      if (isGroupJid(chat.remote_jid)) {
+        tasks.push(
+          queryClient.invalidateQueries({ queryKey: ['whatsapp', 'group-members', chat.remote_jid] }),
+        )
+      }
+      await Promise.all(tasks)
     } catch {
       // sincronização é best-effort; mensagens já existentes continuam visíveis
     }
@@ -335,12 +390,58 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
         const corpo = `${prefixoAtendente(fullName)}${texto.trim()}`
         await whatsappService.sendMessage({ remoteJid: selected.remote_jid, text: corpo })
         setTexto('')
-        refetchMsgs()
+        await Promise.all([refetchMsgs(), refetchChats()])
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao enviar mensagem')
     } finally {
       setEnviando(false)
+    }
+  }
+
+  const handleSendAudio = async (base64: string) => {
+    if (!selected) return
+    setEnviando(true)
+    try {
+      await whatsappService.sendAudio({ remoteJid: selected.remote_jid, audio: base64 })
+      await Promise.all([refetchMsgs(), refetchChats()])
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar áudio')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const handleSendFile = async (params: {
+    mediatype: 'image' | 'video' | 'document'
+    media: string
+    mimetype: string
+    fileName: string
+  }) => {
+    if (!selected) return
+    setEnviando(true)
+    try {
+      await whatsappService.sendMediaFile({ remoteJid: selected.remote_jid, ...params })
+      await Promise.all([refetchMsgs(), refetchChats()])
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao enviar arquivo')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const handleReact = async (messageId: string, fromMe: boolean, emoji: string) => {
+    if (!selected || fromMe) return
+    try {
+      await whatsappService.sendReaction({
+        remoteJid: selected.remote_jid,
+        messageId,
+        fromMe,
+        emoji,
+      })
+      await refetchMsgs()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao reagir')
     }
   }
 
@@ -429,6 +530,7 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
               )}
             {chats.map((chat: WhatsappChatRow) => {
               const name = resolveName(chat)
+              const isGroup = isGroupJid(chat.remote_jid)
               const active = selected?.remote_jid === chat.remote_jid
               return (
                 <button
@@ -441,14 +543,31 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                   )}
                 >
                   <Avatar className="h-10 w-10 shrink-0">
-                    {chat.profile_pic_url && <AvatarImage src={chat.profile_pic_url} alt={name} />}
-                    <AvatarFallback className="bg-emerald-100 text-xs text-emerald-700">
-                      {initials(name)}
+                    {chat.profile_pic_url && (
+                      <SafeAvatarImage src={chat.profile_pic_url} alt={name} />
+                    )}
+                    <AvatarFallback
+                      className={cn(
+                        'text-xs',
+                        isGroup ? 'bg-violet-100 text-violet-700' : 'bg-emerald-100 text-emerald-700',
+                      )}
+                    >
+                      {isGroup ? <Users className="h-4 w-4" /> : initials(name)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium text-slate-800">{name}</span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate text-sm font-medium text-slate-800">{name}</span>
+                        {isGroup && (
+                          <Badge
+                            variant="secondary"
+                            className="shrink-0 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide text-violet-700 bg-violet-50"
+                          >
+                            Grupo
+                          </Badge>
+                        )}
+                      </span>
                       <span className="shrink-0 text-[10px] text-slate-400">
                         {formatHora(chat.last_message_at)}
                       </span>
@@ -486,14 +605,37 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
               )}
               <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
                 <Avatar className="h-9 w-9">
-                  {selected.profile_pic_url && <AvatarImage src={selected.profile_pic_url} alt="" />}
-                  <AvatarFallback className="bg-emerald-100 text-xs text-emerald-700">
-                    {initials(resolveName(selected))}
+                  {selected.profile_pic_url && (
+                    <SafeAvatarImage src={selected.profile_pic_url} alt="" />
+                  )}
+                  <AvatarFallback
+                    className={cn(
+                      'text-xs',
+                      isGroupJid(selected.remote_jid)
+                        ? 'bg-violet-100 text-violet-700'
+                        : 'bg-emerald-100 text-emerald-700',
+                    )}
+                  >
+                    {isGroupJid(selected.remote_jid) ? (
+                      <Users className="h-4 w-4" />
+                    ) : (
+                      initials(resolveName(selected))
+                    )}
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-900">{resolveName(selected)}</p>
-                  <p className="truncate text-xs text-slate-400">{jidToNumber(selected.remote_jid)}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-slate-900">{resolveName(selected)}</p>
+                    {isGroupJid(selected.remote_jid) && (
+                      <Badge
+                        variant="secondary"
+                        className="shrink-0 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide text-violet-700 bg-violet-50"
+                      >
+                        Grupo
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="truncate text-xs text-slate-400">{chatSubtitle(selected.remote_jid)}</p>
                 </div>
                 <Button
                   variant="ghost"
@@ -522,54 +664,42 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                   </p>
                 )}
                 <div className="flex flex-col gap-2">
-                  {mensagens.map((m: WhatsappMensagemRow) => (
-                    <div key={m.id} className={cn('flex', m.from_me ? 'justify-end' : 'justify-start')}>
+                  {mensagens.map((m: WhatsappMensagemRow) => {
+                    const senderLabel =
+                      groupJid && !m.from_me ? senderLabelFromMessage(m, mentionMap) : null
+                    return (
                       <div
-                        className={cn(
-                          'max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
-                          m.from_me
-                            ? 'rounded-br-sm bg-emerald-500 text-white'
-                            : 'rounded-bl-sm bg-white text-slate-800',
-                        )}
+                        key={m.id}
+                        className={cn('flex flex-col', m.from_me ? 'items-end' : 'items-start')}
                       >
-                        <p className="whitespace-pre-wrap break-words">{m.conteudo || '(sem texto)'}</p>
-                        <p
-                          className={cn(
-                            'mt-0.5 text-right text-[10px]',
-                            m.from_me ? 'text-emerald-100' : 'text-slate-400',
-                          )}
-                        >
-                          {formatDiaHora(m.timestamp)}
-                        </p>
+                        {senderLabel && (
+                          <span className="mb-0.5 max-w-[75%] truncate px-1 text-[10px] font-medium text-violet-600">
+                            {senderLabel}
+                          </span>
+                        )}
+                        <WhatsappMessageBubble
+                          message={m}
+                          remoteJid={selected.remote_jid}
+                          mentionMap={mentionMap}
+                          onReact={modoCobranca ? undefined : handleReact}
+                        />
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   <div ref={bottomRef} />
                 </div>
               </ScrollArea>
 
-              <div className="flex items-end gap-2 border-t border-slate-200 bg-white p-3">
-                <Textarea
-                  value={texto}
-                  onChange={(e) => setTexto(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSend()
-                    }
-                  }}
-                  placeholder={modoCobranca ? 'Edite a mensagem de cobrança…' : 'Digite uma mensagem…'}
-                  className="min-h-[40px] max-h-32 flex-1 resize-none"
-                />
-                <Button
-                  onClick={handleSend}
-                  disabled={enviando || !texto.trim()}
-                  className="h-10 bg-emerald-600 hover:bg-emerald-700"
-                  title={modoCobranca ? 'Enviar cobrança' : 'Enviar mensagem'}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
+              <WhatsappComposer
+                texto={texto}
+                onTextoChange={setTexto}
+                onSendText={handleSend}
+                onSendAudio={handleSendAudio}
+                onSendFile={handleSendFile}
+                enviando={enviando}
+                modoCobranca={modoCobranca}
+                placeholder={modoCobranca ? 'Edite a mensagem de cobrança…' : 'Digite uma mensagem…'}
+              />
             </>
           )}
         </div>
@@ -581,35 +711,79 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
               <div className="space-y-5 p-4">
                 <div className="flex flex-col items-center gap-2 text-center">
                   <Avatar className="h-16 w-16">
-                    {selected.profile_pic_url && <AvatarImage src={selected.profile_pic_url} alt="" />}
-                    <AvatarFallback className="bg-emerald-100 text-lg text-emerald-700">
-                      {initials(cliente?.pessoa_nome || cliente?.cliente || resolveName(selected))}
+                    {selected.profile_pic_url && (
+                    <SafeAvatarImage src={selected.profile_pic_url} alt="" />
+                  )}
+                    <AvatarFallback
+                      className={cn(
+                        'text-lg',
+                        isGroupJid(selected.remote_jid)
+                          ? 'bg-violet-100 text-violet-700'
+                          : 'bg-emerald-100 text-emerald-700',
+                      )}
+                    >
+                      {isGroupJid(selected.remote_jid) ? (
+                        <Users className="h-6 w-6" />
+                      ) : (
+                        initials(
+                          pickContactLabel(cliente?.pessoa_nome, cliente?.cliente, cliente?.grupo_cliente) ||
+                            resolveName(selected),
+                        )
+                      )}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {cliente?.pessoa_nome || cliente?.cliente || resolveName(selected)}
-                    </p>
-                    {cliente?.grupo_cliente && (
-                      <p className="text-xs text-slate-400">{cliente.grupo_cliente}</p>
+                    <p className="text-sm font-semibold text-slate-900">{resolveName(selected)}</p>
+                    {isGroupJid(selected.remote_jid) ? (
+                      <p className="text-xs text-slate-400">Grupo WhatsApp</p>
+                    ) : (
+                      cliente?.grupo_cliente && (
+                        <p className="text-xs text-slate-400">{cliente.grupo_cliente}</p>
+                      )
                     )}
                   </div>
                 </div>
 
-                {/* Contato */}
+                {/* Contato / Grupo */}
                 <div className="space-y-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Contato</h4>
-                  <div className="flex items-center gap-2 text-sm text-slate-700">
-                    <Phone className="h-4 w-4 text-slate-400" />
-                    <span>{jidToNumber(selected.remote_jid)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-slate-700">
-                    <Mail className="h-4 w-4 text-slate-400" />
-                    <span className="truncate">{cliente?.pessoa_email || 'Não informado'}</span>
-                  </div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    {isGroupJid(selected.remote_jid) ? 'Grupo' : 'Contato'}
+                  </h4>
+                  {isGroupJid(selected.remote_jid) ? (
+                    <>
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <Users className="h-4 w-4 text-violet-500" />
+                        <span className="truncate">{resolveName(selected)}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">ID: {groupIdFromJid(selected.remote_jid)}</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <Phone className="h-4 w-4 text-slate-400" />
+                        <span>{jidToNumber(selected.remote_jid)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-700">
+                        <Mail className="h-4 w-4 text-slate-400" />
+                        <span className="truncate">{cliente?.pessoa_email || 'Não informado'}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                {/* Resumo financeiro */}
+                {isGroupJid(selected.remote_jid) && (
+                  <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3 text-[11px] text-violet-800">
+                    Conversa de grupo. Cobrança individual e vínculo com títulos não se aplicam aqui.
+                  </div>
+                )}
+
+                {isGroupJid(selected.remote_jid) && (
+                  <WhatsappGroupMembers members={resolvedMembers} loading={loadingMembers} />
+                )}
+
+                {/* Resumo financeiro — apenas contatos individuais */}
+                {!isGroupJid(selected.remote_jid) && (
+                <>
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                     Resumo financeiro
@@ -671,6 +845,8 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                       <TituloCard key={t.parcela_id} titulo={t} onCobrar={handleCobrarParcela} />
                     ))}
                   </div>
+                )}
+                </>
                 )}
               </div>
             </ScrollArea>

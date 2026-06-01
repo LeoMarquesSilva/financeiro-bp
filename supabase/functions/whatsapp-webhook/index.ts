@@ -1,5 +1,16 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
+import {
+  extractText,
+  extractMediaMeta,
+  extractReactionTo,
+  mapStatus,
+  canonicalJid,
+  isGroupJid,
+  isInternalBusinessName,
+  mergeReaction,
+  type ReactionEntry,
+} from '../_shared/whatsappMessageUtils.ts'
 
 // Webhook publico da Evolution API. Autenticacao via secret na query (?secret=...).
 // Nao usa JWT (deploy com verify_jwt=false).
@@ -8,6 +19,7 @@ interface EvolutionKey {
   remoteJid?: string
   fromMe?: boolean
   id?: string
+  participant?: string
 }
 
 interface EvolutionMessage {
@@ -16,29 +28,48 @@ interface EvolutionMessage {
   message?: Record<string, unknown>
   messageType?: string
   messageTimestamp?: number | string
+  status?: number | string
 }
 
-function extractText(message: Record<string, unknown> | undefined): string {
-  if (!message) return ''
-  const m = message as Record<string, any>
-  return (
-    m.conversation ??
-    m.extendedTextMessage?.text ??
-    m.imageMessage?.caption ??
-    m.videoMessage?.caption ??
-    m.documentMessage?.caption ??
-    m.buttonsResponseMessage?.selectedDisplayText ??
-    m.listResponseMessage?.title ??
-    ''
-  )
+function labelForType(messageType?: string | null): string {
+  return extractText(undefined, messageType)
 }
 
 function toTimestamp(ts: number | string | undefined): string {
   if (ts == null) return new Date().toISOString()
   const n = typeof ts === 'string' ? Number(ts) : ts
   if (!Number.isFinite(n)) return new Date().toISOString()
-  // Evolution envia em segundos
   return new Date(n * 1000).toISOString()
+}
+
+function extractChatPushName(c: Record<string, any>, remoteJid: string): string | null {
+  if (isGroupJid(remoteJid)) {
+    const subject = (c.subject ?? c.name ?? c.groupName ?? null) as string | null
+    return subject?.trim() || null
+  }
+  const pushName = (c.pushName ?? c.name ?? null) as string | null
+  return pushName && !isInternalBusinessName(pushName) ? pushName : null
+}
+
+async function mergeReactionOnParent(
+  supabase: SupabaseClient,
+  reactionTo: string,
+  emoji: string,
+  fromMe: boolean,
+  pushName?: string | null,
+): Promise<void> {
+  const { data: parent } = await supabase
+    .from('whatsapp_mensagens')
+    .select('reactions')
+    .eq('message_id', reactionTo)
+    .maybeSingle()
+  const reactions = mergeReaction(
+    (parent?.reactions as ReactionEntry[] | null) ?? [],
+    emoji,
+    fromMe,
+    pushName,
+  )
+  await supabase.from('whatsapp_mensagens').update({ reactions }).eq('message_id', reactionTo)
 }
 
 async function handleMessage(
@@ -46,42 +77,80 @@ async function handleMessage(
   instance: string | undefined,
   msg: EvolutionMessage,
 ) {
-  const remoteJid = msg.key?.remoteJid
-  if (!remoteJid) return
-  // Ignora status broadcast
-  if (remoteJid === 'status@broadcast') return
+  const rawJid = msg.key?.remoteJid
+  if (!rawJid) return
+  if (rawJid === 'status@broadcast') return
+  const remoteJid = canonicalJid(rawJid)
 
-  const conteudo = extractText(msg.message)
+  const conteudo = extractText(msg.message, msg.messageType)
   const timestamp = toTimestamp(msg.messageTimestamp)
   const fromMe = !!msg.key?.fromMe
+  const reactionTo = extractReactionTo(msg.message)
+  const mediaMeta = extractMediaMeta(msg.message, msg.messageType)
+  const status = mapStatus((msg as Record<string, unknown>).status)
 
-  await supabase
-    .from('whatsapp_mensagens')
-    .upsert(
-      {
-        instance: instance ?? null,
-        remote_jid: remoteJid,
-        message_id: msg.key?.id ?? null,
-        from_me: fromMe,
-        tipo: msg.messageType ?? null,
-        conteudo,
-        timestamp,
-        raw: msg as unknown as Record<string, unknown>,
-      },
-      { onConflict: 'message_id', ignoreDuplicates: true },
-    )
+  if (msg.messageType === 'reactionMessage' && reactionTo) {
+    const emoji = ((msg.message as Record<string, any>)?.reactionMessage?.text ?? '') as string
+    await mergeReactionOnParent(supabase, reactionTo, emoji, fromMe, msg.pushName)
+  }
+
+  await supabase.from('whatsapp_mensagens').upsert(
+    {
+      instance: instance ?? null,
+      remote_jid: remoteJid,
+      message_id: msg.key?.id ?? null,
+      from_me: fromMe,
+      tipo: msg.messageType ?? null,
+      conteudo,
+      timestamp,
+      raw: msg as unknown as Record<string, unknown>,
+      status,
+      reaction_to: reactionTo,
+      media_meta: mediaMeta,
+    },
+    { onConflict: 'message_id', ignoreDuplicates: false },
+  )
+
+  if (msg.messageType === 'reactionMessage') return
 
   await supabase.from('whatsapp_chats').upsert(
     {
       remote_jid: remoteJid,
       instance: instance ?? null,
-      push_name: msg.pushName ?? null,
+      ...( !fromMe && !isGroupJid(remoteJid) && msg.pushName && !isInternalBusinessName(msg.pushName)
+        ? { push_name: msg.pushName }
+        : {}),
       last_message_at: timestamp,
-      last_message_preview: conteudo.slice(0, 120),
+      last_message_preview: (conteudo || labelForType(msg.messageType)).slice(0, 120) || null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'remote_jid' },
   )
+}
+
+async function handleMessageUpdate(supabase: SupabaseClient, update: Record<string, any>) {
+  const key = update.key as EvolutionKey | undefined
+  if (!key?.id) return
+
+  const patch: Record<string, unknown> = {}
+
+  const statusRaw = update.update?.status ?? update.status
+  if (statusRaw != null) {
+    patch.status = mapStatus(statusRaw)
+  }
+
+  if (Object.keys(patch).length > 0) {
+    await supabase.from('whatsapp_mensagens').update(patch).eq('message_id', key.id)
+  }
+
+  const reactionMsg = update.update?.message?.reactionMessage ?? update.message?.reactionMessage
+  if (reactionMsg) {
+    const reactionTo = reactionMsg.key?.id as string | undefined
+    const emoji = (reactionMsg.text ?? '') as string
+    if (reactionTo) {
+      await mergeReactionOnParent(supabase, reactionTo, emoji, !!key.fromMe, update.pushName)
+    }
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -124,16 +193,23 @@ Deno.serve(async (req: Request) => {
       for (const m of messages) {
         await handleMessage(supabase, instance, m)
       }
+    } else if (event === 'messages.update') {
+      const updates = Array.isArray(data) ? data : data ? [data] : []
+      for (const u of updates) {
+        await handleMessageUpdate(supabase, u)
+      }
     } else if (event === 'chats.upsert' || event === 'chats.update') {
       const chats = Array.isArray(data) ? data : data ? [data] : []
       for (const c of chats) {
-        const remoteJid = c.remoteJid ?? c.id
-        if (!remoteJid || remoteJid === 'status@broadcast') continue
+        const rawJid = c.remoteJid ?? c.id
+        if (!rawJid || rawJid === 'status@broadcast') continue
+        const remoteJid = canonicalJid(rawJid)
+        const chatName = extractChatPushName(c, remoteJid)
         await supabase.from('whatsapp_chats').upsert(
           {
             remote_jid: remoteJid,
             instance: instance ?? null,
-            push_name: c.pushName ?? c.name ?? null,
+            ...(chatName ? { push_name: chatName } : {}),
             unread_count: c.unreadCount ?? undefined,
             updated_at: new Date().toISOString(),
           },

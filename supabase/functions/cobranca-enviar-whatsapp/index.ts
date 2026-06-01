@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { canonicalJid } from '../_shared/whatsappMessageUtils.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -112,6 +113,34 @@ Deno.serve(async (req: Request) => {
       }
 
       const providerId = data?.key?.id ?? data?.messageId ?? null
+      const remoteJid = canonicalJid(data?.key?.remoteJid ?? `${numero}@s.whatsapp.net`)
+      const now = new Date().toISOString()
+
+      await supabase.from('whatsapp_mensagens').upsert(
+        {
+          instance: EVOLUTION_INSTANCE,
+          remote_jid: remoteJid,
+          message_id: providerId,
+          from_me: true,
+          tipo: 'conversation',
+          conteudo: item.mensagem,
+          timestamp: now,
+          raw: data,
+          status: data?.status ?? 'PENDING',
+        },
+        { onConflict: 'message_id', ignoreDuplicates: false },
+      )
+      await supabase.from('whatsapp_chats').upsert(
+        {
+          remote_jid: remoteJid,
+          instance: EVOLUTION_INSTANCE,
+          last_message_at: now,
+          last_message_preview: item.mensagem.slice(0, 120),
+          updated_at: now,
+        },
+        { onConflict: 'remote_jid' },
+      )
+
       await supabase.from('cobranca_eventos').insert({
         parcela_id: item.parcela_id,
         pessoa_id: item.pessoa_id ?? null,

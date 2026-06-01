@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -102,7 +102,15 @@ export function CobrancaPage() {
   const refreshPainel = useCallback(() => {
     refetch()
     queryClient.invalidateQueries({ queryKey: ['cobranca', 'painel-resumo'] })
+    queryClient.invalidateQueries({ queryKey: ['cobranca', 'kpi-rows'] })
   }, [refetch, queryClient])
+
+  useEffect(() => {
+    if (tab !== 'painel' && tab !== 'indicadores') return
+    queryClient.invalidateQueries({ queryKey: ['cobranca', 'painel'] })
+    queryClient.invalidateQueries({ queryKey: ['cobranca', 'painel-resumo'] })
+    queryClient.invalidateQueries({ queryKey: ['cobranca', 'kpi-rows'] })
+  }, [tab, queryClient])
   const { opcoes: planoContasOpcoes } = usePlanoContasOpcoes()
   const { data: arquivados, loading: loadingArquivados, refetch: refetchArquivados } =
     useCobrancaArquivados(verArquivados)
@@ -320,8 +328,11 @@ export function CobrancaPage() {
 
           {/* Lista de arquivados */}
           {verArquivados && (
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-3 text-sm font-semibold text-slate-700">Títulos arquivados</h3>
+            <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 shadow-sm">
+              <h3 className="mb-1 text-sm font-semibold text-amber-900">Títulos arquivados (fora do painel)</h3>
+              <p className="mb-3 text-xs text-amber-800">
+                Estes títulos não entram no valor pendente nem na fila de cobrança ativa.
+              </p>
               {loadingArquivados ? (
                 <p className="text-sm text-slate-400">Carregando…</p>
               ) : arquivados.length === 0 ? (

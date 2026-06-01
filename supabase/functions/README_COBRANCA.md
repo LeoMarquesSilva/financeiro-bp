@@ -8,7 +8,9 @@ Backend do módulo de Cobrança roda em Supabase Edge Functions. As chaves ficam
 | --- | --- | --- |
 | `cobranca-enviar-whatsapp` | true | Envia cobrança por WhatsApp (Evolution `sendText`) e registra em `cobranca_eventos`. |
 | `cobranca-enviar-email` | true | Envia cobrança por e-mail (Microsoft Graph `sendMail`) e registra em `cobranca_eventos`. |
-| `whatsapp-send` | true | Envia mensagem avulsa pela caixa de WhatsApp. |
+| `whatsapp-send` | true | Envia mensagem avulsa (texto, áudio, mídia, reação) pela caixa de WhatsApp. |
+| `whatsapp-media` | true | Baixa mídia de mensagem via Evolution `getBase64FromMediaMessage`. |
+| `whatsapp-read` | true | Marca mensagens como lidas no WhatsApp (`markMessageAsRead`). |
 | `whatsapp-sync` | true | Backfill de conversas/mensagens via `findChats`/`findMessages`. |
 | `whatsapp-webhook` | false | Recebe eventos da Evolution e grava em `whatsapp_chats`/`whatsapp_mensagens`. Protegido por `?secret=`. |
 
@@ -45,7 +47,7 @@ Aponte o webhook da instância para a função `whatsapp-webhook`, incluindo o s
 
 ```
 URL: https://wvbptgcevwvubtnetojz.functions.supabase.co/whatsapp-webhook?secret=<WHATSAPP_WEBHOOK_SECRET>
-Eventos: MESSAGES_UPSERT, CHATS_UPSERT, SEND_MESSAGE
+Eventos: MESSAGES_UPSERT, MESSAGES_UPDATE, CHATS_UPSERT, CHATS_UPDATE, SEND_MESSAGE
 ```
 
 Exemplo de configuração via API:
@@ -58,7 +60,7 @@ curl -X POST "$EVOLUTION_API_URL/webhook/set/FINANCEIRO%20-%20BP" \
     "webhook": {
       "enabled": true,
       "url": "https://wvbptgcevwvubtnetojz.functions.supabase.co/whatsapp-webhook?secret=<WHATSAPP_WEBHOOK_SECRET>",
-      "events": ["MESSAGES_UPSERT", "CHATS_UPSERT", "SEND_MESSAGE"]
+      "events": ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CHATS_UPSERT", "CHATS_UPDATE", "SEND_MESSAGE"]
     }
   }'
 ```

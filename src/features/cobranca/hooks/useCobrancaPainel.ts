@@ -1,10 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { cobrancaService, type PainelFiltros } from '../services/cobrancaService'
 
+const PAINEL_QUERY_OPTS = {
+  staleTime: 0,
+  refetchOnMount: 'always' as const,
+  refetchOnWindowFocus: true,
+}
+
 export function useCobrancaPainel(params: PainelFiltros) {
   const { data, error, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['cobranca', 'painel', params],
     queryFn: () => cobrancaService.listPainel(params),
+    ...PAINEL_QUERY_OPTS,
   })
 
   return {
@@ -21,6 +28,7 @@ export function useCobrancaResumo(params: PainelFiltros) {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['cobranca', 'painel-resumo', params],
     queryFn: () => cobrancaService.getPainelResumo(params),
+    ...PAINEL_QUERY_OPTS,
   })
   return {
     resumo: data ?? { totalValor: 0, qtd: 0, comWhatsapp: 0, comEmail: 0 },

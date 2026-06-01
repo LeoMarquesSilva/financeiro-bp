@@ -53,6 +53,36 @@ function getDiasAtraso(dataVencimento: string, dataBaixa: string): number | null
   return differenceInDays(baixa, venc)
 }
 
+function valorParcela(p: ParcelaRow): number {
+  return p.valor_pago != null ? Number(p.valor_pago) : Number(p.valor)
+}
+
+function formatMesAno(yyyyMm: string): string {
+  const d = parseDateAsLocal(`${yyyyMm}-01`)
+  if (!d) return yyyyMm
+  const label = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(d)
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+function groupParcelasPorMesBaixa(parcelas: ParcelaRow[]): { mes: string; label: string; parcelas: ParcelaRow[]; total: number }[] {
+  const map = new Map<string, ParcelaRow[]>()
+  for (const p of parcelas) {
+    const key = p.data_baixa ? p.data_baixa.slice(0, 7) : ''
+    if (!key) continue
+    const list = map.get(key) ?? []
+    list.push(p)
+    map.set(key, list)
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([mes, items]) => ({
+      mes,
+      label: formatMesAno(mes),
+      parcelas: items.sort((a, b) => (b.data_baixa ?? '').localeCompare(a.data_baixa ?? '')),
+      total: items.reduce((sum, p) => sum + valorParcela(p), 0),
+    }))
+}
+
 function getTipoLabel(tipo: string) {
   return TIPOS_ACAO.find((t) => t.value === tipo)?.label ?? tipo
 }
@@ -133,6 +163,50 @@ function CollapsibleSection({
         {open ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
       </button>
       {open && <div className="border-t border-inherit px-4 pb-4 pt-3">{children}</div>}
+    </div>
+  )
+}
+
+function ParcelasMesCollapsible({
+  label,
+  count,
+  total,
+  defaultOpen = false,
+  children,
+}: {
+  label: string
+  count: number
+  total: number
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <div className="rounded-lg border border-slate-200/60 bg-white/70">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-black/[0.02]"
+      >
+        <span className="min-w-0 flex-1 text-sm font-semibold text-slate-700">
+          {label}
+          {count > 1 && (
+            <span className="ml-2 text-xs font-normal text-slate-400">
+              ({count} parcelas)
+            </span>
+          )}
+        </span>
+        <span className="shrink-0 text-sm font-bold tabular-nums text-emerald-700">
+          {formatCurrency(total)}
+        </span>
+        {open ? <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />}
+      </button>
+      {open && (
+        <div className="border-t border-slate-200/60 px-3 pb-3 pt-2">
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -408,6 +482,11 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
     enabled: open && !!(client?.pessoa_id || grupoPessoaIds.length > 0 || client?.razao_social?.trim()),
   })
 
+  const pagasPorMes = useMemo(
+    () => groupParcelasPorMesBaixa(parcelasData?.pagas ?? []),
+    [parcelasData?.pagas],
+  )
+
   const closeAndRefresh = () => { setModalEditar(false); setModalHistorico(false); setModalProvidencia(false); setModalFollowUp(false); onRefresh?.() }
 
   if (!client) return null
@@ -507,9 +586,23 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
 
                   {parcelasData.pagas.length > 0 && (
                     <CollapsibleSection icon={CheckCircle2} title="Últimas pagas" count={parcelasData.pagas.length} variant="success">
-                      <ul className="space-y-2">
-                        {parcelasData.pagas.map((p: ParcelaRow) => <ParcelaItem key={p.id} p={p} valueColor="text-emerald-700" />)}
-                      </ul>
+                      <div className="space-y-2">
+                        {pagasPorMes.map((grupo, index) => (
+                          <ParcelasMesCollapsible
+                            key={grupo.mes}
+                            label={grupo.label}
+                            count={grupo.parcelas.length}
+                            total={grupo.total}
+                            defaultOpen={index === 0}
+                          >
+                            <ul className="space-y-2">
+                              {grupo.parcelas.map((p) => (
+                                <ParcelaItem key={p.id} p={p} valueColor="text-emerald-700" />
+                              ))}
+                            </ul>
+                          </ParcelasMesCollapsible>
+                        ))}
+                      </div>
                     </CollapsibleSection>
                   )}
                 </section>

@@ -1,10 +1,15 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import {
+  extractText,
+  extractMediaMeta,
+  canonicalJid,
+} from '../_shared/whatsappMessageUtils.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -25,11 +30,74 @@ function normalizePhone(raw: string | null | undefined): string | null {
   return digits || null
 }
 
-interface Payload {
-  // Pode informar remoteJid (ex.: 5511...@s.whatsapp.net) ou number cru.
-  remoteJid?: string
-  number?: string
-  text: string
+function stripBase64Prefix(data: string): string {
+  const idx = data.indexOf('base64,')
+  return idx >= 0 ? data.slice(idx + 7) : data
+}
+
+type Payload =
+  | { kind?: 'text'; remoteJid?: string; number?: string; text: string }
+  | { kind: 'audio'; remoteJid?: string; number?: string; audio: string }
+  | {
+      kind: 'media'
+      remoteJid?: string
+      number?: string
+      mediatype: 'image' | 'video' | 'document'
+      media: string
+      mimetype: string
+      fileName?: string
+      caption?: string
+    }
+  | { kind: 'reaction'; remoteJid: string; messageId: string; fromMe: boolean; emoji: string }
+
+function resolveNumber(payload: { remoteJid?: string; number?: string }): string | null {
+  const jid = payload.remoteJid
+  const isGroup = !!jid?.endsWith('@g.us')
+  const numberFromJid = jid ? canonicalJid(jid).split('@')[0] : null
+  return isGroup ? canonicalJid(jid!) : normalizePhone(payload.number ?? numberFromJid ?? '')
+}
+
+async function persistMessage(
+  supabase: ReturnType<typeof createClient>,
+  instance: string,
+  remoteJid: string,
+  data: Record<string, unknown>,
+  tipo: string,
+  conteudo: string,
+  mediaMeta?: Record<string, unknown> | null,
+) {
+  const messageId = (data?.key as Record<string, unknown> | undefined)?.id as string | null
+  const now = new Date().toISOString()
+  const status = (data.status as string | undefined) ?? 'PENDING'
+
+  await supabase.from('whatsapp_mensagens').upsert(
+    {
+      instance,
+      remote_jid: remoteJid,
+      message_id: messageId,
+      from_me: true,
+      tipo,
+      conteudo,
+      timestamp: now,
+      raw: data,
+      status,
+      media_meta: mediaMeta ?? null,
+    },
+    { onConflict: 'message_id', ignoreDuplicates: false },
+  )
+
+  await supabase.from('whatsapp_chats').upsert(
+    {
+      remote_jid: remoteJid,
+      instance,
+      last_message_at: now,
+      last_message_preview: conteudo.slice(0, 120),
+      updated_at: now,
+    },
+    { onConflict: 'remote_jid' },
+  )
+
+  return { remoteJid, messageId }
 }
 
 Deno.serve(async (req: Request) => {
@@ -54,57 +122,104 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Body inválido.' }, 400)
   }
 
-  const text = (payload.text ?? '').trim()
-  if (!text) return jsonResponse({ error: 'Mensagem vazia.' }, 400)
-
-  const jid = payload.remoteJid
-  const numberFromJid = jid ? jid.split('@')[0] : null
-  const numero = normalizePhone(payload.number ?? numberFromJid ?? '')
-  if (!numero) return jsonResponse({ error: 'Destinatário inválido.' }, 400)
-
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE)
+  const inst = encodeURIComponent(EVOLUTION_INSTANCE)
+  const headers = { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY }
 
   try {
-    const resp = await fetch(
-      `${EVOLUTION_API_URL}/message/sendText/${encodeURIComponent(EVOLUTION_INSTANCE)}`,
-      {
+    if (payload.kind === 'reaction') {
+      const remoteJid = canonicalJid(payload.remoteJid)
+      const resp = await fetch(`${EVOLUTION_API_URL}/message/sendReaction/${inst}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
-        body: JSON.stringify({ number: numero, text }),
-      },
-    )
+        headers,
+        body: JSON.stringify({
+          key: { remoteJid, fromMe: payload.fromMe, id: payload.messageId },
+          reaction: payload.emoji,
+        }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
+      return jsonResponse({ ok: true, data })
+    }
+
+    const numero = resolveNumber(payload)
+    if (!numero) return jsonResponse({ error: 'Destinatário inválido.' }, 400)
+    const jid = payload.remoteJid ? canonicalJid(payload.remoteJid) : `${numero}@s.whatsapp.net`
+
+    if (payload.kind === 'audio') {
+      const audio = stripBase64Prefix(payload.audio.trim())
+      if (!audio) return jsonResponse({ error: 'Áudio vazio.' }, 400)
+      const resp = await fetch(`${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${inst}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ number: numero, audio }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
+      const remoteJid = canonicalJid((data?.key?.remoteJid as string) ?? jid)
+      const meta = extractMediaMeta(data?.message as Record<string, unknown>, 'audioMessage')
+      const result = await persistMessage(
+        supabase,
+        EVOLUTION_INSTANCE,
+        remoteJid,
+        data,
+        'audioMessage',
+        '🎤 Áudio',
+        meta,
+      )
+      return jsonResponse({ ok: true, ...result })
+    }
+
+    if (payload.kind === 'media') {
+      const media = stripBase64Prefix(payload.media.trim())
+      if (!media) return jsonResponse({ error: 'Mídia vazia.' }, 400)
+      const resp = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${inst}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          number: numero,
+          mediatype: payload.mediatype,
+          mimetype: payload.mimetype,
+          media,
+          fileName: payload.fileName,
+          caption: payload.caption,
+        }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
+      const remoteJid = canonicalJid((data?.key?.remoteJid as string) ?? jid)
+      const tipo =
+        payload.mediatype === 'image'
+          ? 'imageMessage'
+          : payload.mediatype === 'video'
+            ? 'videoMessage'
+            : 'documentMessage'
+      const conteudo = extractText(data?.message as Record<string, unknown>, tipo) || payload.caption || '📎 Mídia'
+      const meta = extractMediaMeta(data?.message as Record<string, unknown>, tipo) ?? {
+        mimetype: payload.mimetype,
+        fileName: payload.fileName,
+        caption: payload.caption,
+      }
+      const result = await persistMessage(supabase, EVOLUTION_INSTANCE, remoteJid, data, tipo, conteudo, meta)
+      return jsonResponse({ ok: true, ...result })
+    }
+
+    // Text (default / legacy)
+    const textPayload = payload as { text: string; remoteJid?: string; number?: string }
+    const text = (textPayload.text ?? '').trim()
+    if (!text) return jsonResponse({ error: 'Mensagem vazia.' }, 400)
+
+    const resp = await fetch(`${EVOLUTION_API_URL}/message/sendText/${inst}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ number: numero, text }),
+    })
     const data = await resp.json().catch(() => ({}))
     if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
 
-    const remoteJid = data?.key?.remoteJid ?? jid ?? `${numero}@s.whatsapp.net`
-    const messageId = data?.key?.id ?? null
-    const now = new Date().toISOString()
-
-    await supabase.from('whatsapp_mensagens').upsert(
-      {
-        instance: EVOLUTION_INSTANCE,
-        remote_jid: remoteJid,
-        message_id: messageId,
-        from_me: true,
-        tipo: 'conversation',
-        conteudo: text,
-        timestamp: now,
-        raw: data,
-      },
-      { onConflict: 'message_id', ignoreDuplicates: true },
-    )
-    await supabase.from('whatsapp_chats').upsert(
-      {
-        remote_jid: remoteJid,
-        instance: EVOLUTION_INSTANCE,
-        last_message_at: now,
-        last_message_preview: text.slice(0, 120),
-        updated_at: now,
-      },
-      { onConflict: 'remote_jid' },
-    )
-
-    return jsonResponse({ ok: true, remoteJid, messageId })
+    const remoteJid = canonicalJid((data?.key?.remoteJid as string) ?? jid)
+    const result = await persistMessage(supabase, EVOLUTION_INSTANCE, remoteJid, data, 'conversation', text)
+    return jsonResponse({ ok: true, ...result })
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : String(e) }, 500)
   }

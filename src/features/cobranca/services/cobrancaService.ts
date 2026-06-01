@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
-import { parseEdgeFunctionError, phonesMatch } from '../utils/phone'
+import { parseEdgeFunctionError, phoneKey, phonesMatch } from '../utils/phone'
+import { isInternalContactName, pickContactLabel } from '../utils/contactNames'
 import type {
   CobrancaPainelRow,
   CobrancaTituloAbertoRow,
@@ -278,6 +279,7 @@ export const cobrancaService = {
     const { data, error } = await supabase
       .from('cobranca_titulos_abertos')
       .select('*')
+      .eq('arquivado', false)
       .like('telefone_digits', `%${sub8}`)
       .order('data_vencimento', { ascending: true })
       .limit(300)
@@ -292,18 +294,66 @@ export const cobrancaService = {
 
   /** Nomes de clientes por telefone (para identificar conversas do WhatsApp). */
   async listContatoNomes(): Promise<{ telefone: string; nome: string }[]> {
-    const { data, error } = await supabase
-      .from('pessoas')
-      .select('nome, grupo_cliente, telefone')
-      .not('telefone', 'is', null)
-      .limit(5000)
-    if (error || !data) {
-      console.error('[cobrancaService] listContatoNomes', error)
-      return []
+    const map = new Map<string, string>()
+
+    const registrar = (
+      telefone: string | null | undefined,
+      pessoaNome: string | null | undefined,
+      cliente: string | null | undefined,
+      grupoCliente?: string | null,
+    ) => {
+      const key = phoneKey(telefone)
+      const label = pickContactLabel(pessoaNome, cliente, grupoCliente)
+      if (!key || !label || map.has(key)) return
+      map.set(key, label)
     }
-    return (data as { nome: string | null; grupo_cliente: string | null; telefone: string | null }[])
-      .filter((r) => r.telefone && (r.nome || r.grupo_cliente))
-      .map((r) => ({ telefone: r.telefone as string, nome: (r.nome || r.grupo_cliente) as string }))
+
+    const [{ data: painel }, { data: titulos }, { data: pessoas, error }] = await Promise.all([
+      supabase
+        .from('cobranca_painel')
+        .select('pessoa_telefone, pessoa_nome, cliente, grupo_cliente')
+        .not('pessoa_telefone', 'is', null)
+        .limit(5000),
+      supabase
+        .from('cobranca_titulos_abertos')
+        .select('pessoa_telefone, pessoa_nome, cliente, grupo_cliente')
+        .eq('arquivado', false)
+        .not('pessoa_telefone', 'is', null)
+        .limit(5000),
+      supabase.from('pessoas').select('nome, grupo_cliente, telefone').not('telefone', 'is', null).limit(5000),
+    ])
+
+    if (error) {
+      console.error('[cobrancaService] listContatoNomes', error)
+    }
+
+    for (const r of (painel ?? []) as {
+      pessoa_telefone: string | null
+      pessoa_nome: string | null
+      cliente: string | null
+      grupo_cliente: string | null
+    }[]) {
+      registrar(r.pessoa_telefone, r.pessoa_nome, r.cliente, r.grupo_cliente)
+    }
+    for (const r of (titulos ?? []) as {
+      pessoa_telefone: string | null
+      pessoa_nome: string | null
+      cliente: string | null
+      grupo_cliente: string | null
+    }[]) {
+      registrar(r.pessoa_telefone, r.pessoa_nome, r.cliente, r.grupo_cliente)
+    }
+    for (const r of (pessoas ?? []) as {
+      telefone: string | null
+      nome: string | null
+      grupo_cliente: string | null
+    }[]) {
+      const nome = pickContactLabel(r.nome, r.nome, r.grupo_cliente)
+      if (!nome || isInternalContactName(nome)) continue
+      registrar(r.telefone, r.nome, r.nome, r.grupo_cliente)
+    }
+
+    return Array.from(map.entries()).map(([telefone, nome]) => ({ telefone, nome }))
   },
 
   /** Indicador de Efetividade na Cobrança Inicial (D+1). */
