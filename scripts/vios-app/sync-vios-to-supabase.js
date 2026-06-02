@@ -6,6 +6,7 @@
  * - runSync(filePath): Processo Completo (pessoas) — espera .xlsx
  * - runSyncTimeSheets(filePath): relatório de horas (timesheets) — espera .xlsx/.csv
  * - runSyncRelatorioFinanceiro(filePathOuCsvString): relatório de parcelas (financeiro_parcelas, sync replace) — espera .xlsx, .csv ou string CSV
+ * - runSyncRelatorioFinanceiroItens(filePathOuCsvString): relatório de itens (financeiro_parcelas_itens, sync replace) — espera .csv ou string CSV; requer ci_titulo em financeiro_parcelas
  * - runSyncPessoas(filePathOuCsvString): relatório de clientes/pessoas (pessoas) — espera .csv ou string CSV
  *
  * No vios-app:
@@ -35,7 +36,52 @@ const possibleEnv = [
 if (possibleEnv) {
   dotenv.config({ path: possibleEnv });
 }
- 
+
+/**
+ * VIOS exporta CSV em Windows-1252 / ISO-8859-1. Ler como UTF-8 gera U+FFFD () e perde acentos.
+ * @param {Buffer} buffer
+ * @returns {string}
+ */
+export function decodeViosCsvBuffer(buffer) {
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    return buf.toString('utf8');
+  }
+  return buf.toString('latin1');
+}
+
+/** Lê arquivo CSV do VIOS com encoding correto. */
+export function decodeViosCsvFile(filePath) {
+  return decodeViosCsvBuffer(fs.readFileSync(filePath));
+}
+
+/**
+ * Normaliza texto para UTF-8 NFC após decode latin1.
+ * Corrige mojibake residual (UTF-8 interpretado como latin1: Ã£, Ã§, etc.).
+ */
+export function normalizeViosText(str) {
+  if (str == null || typeof str !== 'string') return '';
+  let s = String(str).trim();
+  if (!s) return '';
+  if (s.includes('\uFFFD')) {
+    return s;
+  }
+  if (/Ã./.test(s)) {
+    try {
+      const fixed = Buffer.from(s, 'latin1').toString('utf8');
+      if (!fixed.includes('\uFFFD')) s = fixed;
+    } catch {
+      /* mantém original */
+    }
+  }
+  return s.normalize('NFC');
+}
+
+/** @deprecated Use normalizeViosText */
+export function normalizeClienteNFC(str) {
+  return normalizeViosText(str);
+}
+
 // ========== CONFIGURAÇÃO (compatível com n8n: "Grupo do Cliente" + "Cliente") ==========
 const SHEET_NAME = null;
 const COLUMN_MAP = {
@@ -687,10 +733,53 @@ function normalizeFinanceiroHeader(cell) {
   return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
  
-/** Normaliza texto para gravar no Supabase (NFC). */
-function normalizeClienteNFC(str) {
+/** Chave sem acentos/pontuação (espelha normalize_plano_contas no Postgres). */
+function normalizePlanoContasKey(str) {
   if (str == null || typeof str !== 'string') return '';
-  return str.trim().normalize('NFC');
+  return str
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w ]/g, '')
+    .replace(/\uFFFD/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+const CANONICAL_PLANO_CONTAS = {
+  'HONORRIOS MENSAIS': 'HONORÁRIOS MENSAIS',
+  'HONORRIOS SPOT': 'HONORÁRIOS SPOT',
+  'HONORRIOS DE SUCUMBNCIA': 'HONORÁRIOS DE SUCUMBÊNCIA',
+  'HONORRIOS DE XITO': 'HONORÁRIOS DE ÊXITO',
+  'HONORRIOS DE MANUTENO': 'HONORÁRIOS DE MANUTENÇÃO',
+  'HONORRIOS POR HORA TRABALHADA': 'HONORÁRIOS POR HORA TRABALHADA',
+  'HONORRIOS ADVOCATCIOS': 'HONORÁRIOS ADVOCATÍCIOS',
+  'HONORARIOS PARCERIAS': 'HONORÁRIOS PARCERIAS',
+  'RECEITAS DE APLICAES FINANCEIRAS': 'RECEITAS DE APLICAÇÕES FINANCEIRAS',
+  'ENTRADAS NO IDENTIFICADAS': 'ENTRADAS NÃO IDENTIFICADAS',
+  'ESTORNOS BANCRIOS': 'ESTORNOS BANCÁRIOS',
+};
+
+const CANONICAL_GRUPO_CONTA = {
+  'ENTRADAS EMPRSTIMOS APLICAES E DEVO': 'ENTRADAS - EMPRÉSTIMOS APLICAÇÕES E DEVO',
+  'RECEITAS NO OPERACIONAIS': 'RECEITAS NÃO OPERACIONAIS',
+};
+
+/** Corrige acentos corrompidos (U+FFFD) antes do sync; RPC também canonicaliza. */
+function canonicalPlanoContas(str) {
+  if (str == null || typeof str !== 'string') return null;
+  const trimmed = str.trim();
+  if (!trimmed) return null;
+  const key = normalizePlanoContasKey(trimmed);
+  return CANONICAL_PLANO_CONTAS[key] ?? trimmed.normalize('NFC');
+}
+
+function canonicalGrupoConta(str) {
+  if (str == null || typeof str !== 'string') return null;
+  const trimmed = str.trim();
+  if (!trimmed) return null;
+  const key = normalizePlanoContasKey(trimmed);
+  return CANONICAL_GRUPO_CONTA[key] ?? trimmed.normalize('NFC');
 }
  
 function buildFinanceiroColumnIndexes(headerRow) {
@@ -786,8 +875,7 @@ function readRelatorioFinanceiroFile(filePathOrContent) {
   const filePath = filePathOrContent;
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.csv') {
-    const raw = fs.readFileSync(filePath, { encoding: 'utf8' });
-    return readRelatorioFinanceiroFile(raw);
+    return readRelatorioFinanceiroFile(decodeViosCsvFile(filePath));
   }
   const workbook = XLSX.readFile(filePath, { cellDates: true, raw: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -870,10 +958,10 @@ export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
       continue;
     }
  
-    const descricao = idx.descricao >= 0 ? String(row[idx.descricao] ?? '').trim() || null : null;
+    const descricao = idx.descricao >= 0 ? normalizeViosText(String(row[idx.descricao] ?? '')) || null : null;
     const dataBaixa = parseDateBR(idx.data_baixa >= 0 ? row[idx.data_baixa] : null);
     const dataVencimentoOrig = idx.data_vencimento_orig >= 0 ? parseDateBR(row[idx.data_vencimento_orig]) : null;
-    const trimOpt = (i) => (i >= 0 && row[i] != null ? String(row[i]).trim() || null : null);
+    const textOpt = (i) => (i >= 0 && row[i] != null ? normalizeViosText(String(row[i])) || null : null);
     const numOpt = (i) => (i >= 0 && row[i] != null && row[i] !== '' ? parseValorBR(row[i]) : null);
 
     rows.push({
@@ -881,16 +969,16 @@ export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
       ci_parcela: ciParcela,
       data_vencimento: dataVencimento,
       data_vencimento_orig: dataVencimentoOrig,
-      competencia: trimOpt(idx.competencia),
-      tipo: trimOpt(idx.tipo),
-      forma: trimOpt(idx.forma),
+      competencia: textOpt(idx.competencia),
+      tipo: textOpt(idx.tipo),
+      forma: textOpt(idx.forma),
       nro_titulo: nroTitulo,
-      parcela: trimOpt(idx.parcela),
-      parcelas: trimOpt(idx.parcelas),
-      nf: trimOpt(idx.nf),
-      cliente: normalizeClienteNFC(cliente),
-      terceiro_titulo: trimOpt(idx.terceiro_titulo),
-      terceiros_itens: trimOpt(idx.terceiros_itens),
+      parcela: textOpt(idx.parcela),
+      parcelas: textOpt(idx.parcelas),
+      nf: textOpt(idx.nf),
+      cliente: normalizeViosText(cliente),
+      terceiro_titulo: textOpt(idx.terceiro_titulo),
+      terceiros_itens: textOpt(idx.terceiros_itens),
       descricao,
       valor: Math.round(valor * 100) / 100,
       valor_atualizado: numOpt(idx.valor_atualizado) != null ? Math.round(numOpt(idx.valor_atualizado) * 100) / 100 : null,
@@ -933,6 +1021,194 @@ export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
   console.log('[Sync Supabase] financeiro_parcelas | Deleted:', deleted, '| Upserted:', upserted, '| Vinculação executada na RPC.');
 
   return { upserted, deleted, errors: 0 };
+}
+
+// ========== Relatório Financeiro Itens (detalhamento por CI Item, vínculo ci_titulo → financeiro_parcelas) ==========
+const RELATORIO_FINANCEIRO_ITENS_COLUMNS = {
+  ci_titulo: ['ci titulo', 'ci título', 'ci_titulo'],
+  ci_item: ['ci item', 'ci_item'],
+  etiquetas_titulo: ['etiquetas titulo', 'etiquetas título'],
+  data_cadastro_titulo: ['data cadastro titulo', 'data cadastro título'],
+  data_cadastro_item: ['data cadastro item'],
+  competencia_titulo: ['data de competencia titulo', 'data de competência título', 'competencia titulo'],
+  escritorio: ['escritorio', 'escritório'],
+  departamento: ['departamento'],
+  tipo: ['tipo'],
+  nro_titulo: ['nro titulo', 'nro título', 'nro. título'],
+  serie_titulo: ['serie titulo', 'série título'],
+  cliente: ['fornecedor cliente', 'fornecedor / cliente', 'cliente'],
+  terceiro_titulo: ['terceiro titulo', 'terceiro título'],
+  terceiros_item: ['terceiros item'],
+  reincidencia_titulo: ['reincidencia titulo', 'reincidência título'],
+  nfse_titulo: ['nfs-e titulo', 'nº nfs-e', 'nfse titulo'],
+  conta_numero: ['conta n', 'conta nº', 'conta numero'],
+  plano_contas: ['plano de contas'],
+  grupo_conta: ['grupo da conta', 'grupo conta'],
+  descricao: ['descrição', 'descricao'],
+  valor_item: ['valor item', 'valor - item'],
+  valor_fluxo_item: ['valor fluxo item', 'valor fluxo - item'],
+  valor_pago_item: ['valor pago item', 'valor pago - item'],
+  valor_bruto_titulo: ['valor bruto titulo', 'valor bruto título', 'valor bruto - titulo'],
+  valor_liquido_titulo: ['valor liquido titulo', 'valor líquido título', 'valor liquido - titulo'],
+  situacao_titulo: ['situacao titulo', 'situação título'],
+  data_vencimento: ['data vencimento'],
+  data_pagamento: ['data pagamento'],
+  contrato: ['contrato'],
+  conta_caixa_banco: ['conta caixa banco', 'conta caixa / banco'],
+  valor_parcial_aberto: ['valor parcial em aberto'],
+};
+
+function compactFinanceiroHeader(h) {
+  return normalizeFinanceiroHeader(h).replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function buildFinanceiroItensColumnIndexes(headerRow) {
+  const normalized = headerRow.map(compactFinanceiroHeader);
+  const idx = {};
+  for (const [key, aliases] of Object.entries(RELATORIO_FINANCEIRO_ITENS_COLUMNS)) {
+    idx[key] = normalized.findIndex((h) => aliases.some((a) => h.includes(a) || a.includes(h)));
+  }
+  if (idx.ci_titulo < 0 && normalized[0]?.includes('ci') && normalized[0]?.includes('tulo')) idx.ci_titulo = 0;
+  if (idx.ci_item < 0 && normalized[1]?.includes('ci') && normalized[1]?.includes('item')) idx.ci_item = 1;
+  return idx;
+}
+
+/**
+ * Sincroniza o relatório de itens (CSV) para financeiro_parcelas_itens.
+ * Estratégia replace por ci_item. Rode runSyncRelatorioFinanceiro antes (FK em ci_titulo).
+ * @param {string} filePathOrCsvContent
+ * @returns {Promise<{ upserted: number, deleted: number, errors: number, skipped: number }>}
+ */
+export async function runSyncRelatorioFinanceiroItens(filePathOrCsvContent) {
+  const url = process.env.VITE_SUPABASE_URL;
+  const key = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error('Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no .env do vios-app.');
+  }
+
+  const sourceLabel =
+    typeof filePathOrCsvContent === 'string' && (filePathOrCsvContent.includes('\n') || filePathOrCsvContent.includes('\r'))
+      ? '(CSV em memória)'
+      : filePathOrCsvContent;
+  console.log('[Sync Supabase] Relatório Financeiro Itens:', sourceLabel);
+
+  const { headerRow, dataRows } = readRelatorioFinanceiroFile(filePathOrCsvContent);
+  const idx = buildFinanceiroItensColumnIndexes(headerRow);
+  if (idx.ci_titulo < 0 || idx.ci_item < 0) {
+    throw new Error(
+      'Relatório Itens: colunas obrigatórias não encontradas (CI Título, CI Item). Cabeçalho: ' +
+        headerRow.slice(0, 4).join('; ')
+    );
+  }
+
+  const supabase = createClient(url, key);
+  const rows = [];
+  let skipped = 0;
+
+  for (const row of dataRows) {
+    const ciTitulo = parseInt(String(row[idx.ci_titulo] ?? '').replace(/\D/g, ''), 10);
+    const ciItem = parseInt(String(row[idx.ci_item] ?? '').replace(/\D/g, ''), 10);
+    if (Number.isNaN(ciTitulo) || Number.isNaN(ciItem)) {
+      skipped++;
+      continue;
+    }
+
+    const textOpt = (i) => (i >= 0 && row[i] != null ? normalizeViosText(String(row[i])) || null : null);
+    const dateOpt = (i) => (i >= 0 ? parseDateBR(row[i]) : null);
+    const numOpt = (i) => {
+      if (i < 0 || row[i] == null || row[i] === '') return null;
+      const n = parseValorBR(row[i]);
+      return n != null ? Math.round(n * 100) / 100 : null;
+    };
+
+    rows.push({
+      ci_item: ciItem,
+      ci_titulo: ciTitulo,
+      etiquetas_titulo: textOpt(idx.etiquetas_titulo),
+      data_cadastro_titulo: dateOpt(idx.data_cadastro_titulo),
+      data_cadastro_item: dateOpt(idx.data_cadastro_item),
+      competencia_titulo: dateOpt(idx.competencia_titulo),
+      escritorio: textOpt(idx.escritorio),
+      departamento: textOpt(idx.departamento),
+      tipo: textOpt(idx.tipo),
+      nro_titulo: textOpt(idx.nro_titulo),
+      serie_titulo: textOpt(idx.serie_titulo),
+      cliente: textOpt(idx.cliente),
+      terceiro_titulo: textOpt(idx.terceiro_titulo),
+      terceiros_item: textOpt(idx.terceiros_item),
+      reincidencia_titulo: textOpt(idx.reincidencia_titulo),
+      nfse_titulo: textOpt(idx.nfse_titulo),
+      conta_numero: textOpt(idx.conta_numero),
+      plano_contas: canonicalPlanoContas(textOpt(idx.plano_contas)),
+      grupo_conta: canonicalGrupoConta(textOpt(idx.grupo_conta)),
+      descricao: textOpt(idx.descricao),
+      valor_item: numOpt(idx.valor_item),
+      valor_fluxo_item: numOpt(idx.valor_fluxo_item),
+      valor_pago_item: numOpt(idx.valor_pago_item),
+      valor_bruto_titulo: numOpt(idx.valor_bruto_titulo),
+      valor_liquido_titulo: numOpt(idx.valor_liquido_titulo),
+      situacao_titulo: textOpt(idx.situacao_titulo),
+      data_vencimento: dateOpt(idx.data_vencimento),
+      data_pagamento: dateOpt(idx.data_pagamento),
+      contrato: textOpt(idx.contrato),
+      conta_caixa_banco: textOpt(idx.conta_caixa_banco),
+      valor_parcial_aberto: numOpt(idx.valor_parcial_aberto),
+    });
+  }
+
+  const byCiItem = new Map();
+  for (const r of rows) byCiItem.set(String(r.ci_item), r);
+  let rowsDedup = [...byCiItem.values()];
+
+  const titulosNoCsv = [...new Set(rowsDedup.map((r) => r.ci_titulo))];
+  const titulosOk = new Set();
+  const TITULO_BATCH = 400;
+  for (let i = 0; i < titulosNoCsv.length; i += TITULO_BATCH) {
+    const chunk = titulosNoCsv.slice(i, i + TITULO_BATCH);
+    const { data: titulosExistentes, error: titulosError } = await supabase
+      .from('financeiro_parcelas')
+      .select('ci_titulo')
+      .in('ci_titulo', chunk);
+    if (titulosError) {
+      throw new Error('Erro ao validar ci_titulo em financeiro_parcelas: ' + titulosError.message);
+    }
+    for (const t of titulosExistentes ?? []) titulosOk.add(t.ci_titulo);
+  }
+  const semParcela = rowsDedup.filter((r) => !titulosOk.has(r.ci_titulo));
+  if (semParcela.length > 0) {
+    const titulosFaltando = [...new Set(semParcela.map((r) => r.ci_titulo))];
+    console.warn(
+      '[Sync Supabase] Itens ignorados (ci_titulo ausente em financeiro_parcelas):',
+      semParcela.length,
+      'linhas |',
+      titulosFaltando.length,
+      'títulos. Rode runSyncRelatorioFinanceiro antes ou inclua esses títulos no relatório de parcelas.'
+    );
+    rowsDedup = rowsDedup.filter((r) => titulosOk.has(r.ci_titulo));
+    skipped += semParcela.length;
+  }
+
+  const p_ci_items = rowsDedup.map((r) => r.ci_item);
+
+  console.log('[Sync Supabase] Itens para sync:', rowsDedup.length, '| Ignoradas:', skipped);
+
+  const { data: result, error } = await supabase.rpc('sync_relatorio_financeiro_itens_replace', {
+    p_ci_items,
+    p_rows: rowsDedup,
+  });
+
+  if (error) {
+    console.error('[Sync Supabase] sync_relatorio_financeiro_itens_replace error:', error.message);
+    if (error.details) console.error('[Sync Supabase] details:', error.details);
+    if (error.hint) console.error('[Sync Supabase] hint:', error.hint);
+    throw new Error('Erro ao sincronizar relatório de itens (replace): ' + error.message);
+  }
+
+  const deleted = result?.deleted ?? 0;
+  const upserted = result?.upserted ?? rowsDedup.length;
+  console.log('[Sync Supabase] financeiro_parcelas_itens | Deleted:', deleted, '| Upserted:', upserted);
+
+  return { upserted, deleted, errors: 0, skipped };
 }
  
 /**
@@ -990,8 +1266,11 @@ function buildPessoasColumnIndexes(headerRow) {
 }
 
 function getPessoasRow(row, idx) {
-  const trim = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : null);
-  const nome = idx.nome >= 0 ? String(row[idx.nome] ?? '').trim() : '';
+  const trim = (v) => {
+    const t = v != null ? normalizeViosText(String(v)) : '';
+    return t || null;
+  };
+  const nome = idx.nome >= 0 ? normalizeViosText(String(row[idx.nome] ?? '')) : '';
   if (!nome) return null;
   const dataCadastro = idx.data_cadastro >= 0 ? parseDateBR(row[idx.data_cadastro]) : null;
   return {
@@ -1045,8 +1324,7 @@ function readPessoasCsvFile(filePathOrContent) {
   const filePath = filePathOrContent;
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.csv') {
-    const raw = fs.readFileSync(filePath, { encoding: 'utf8' });
-    return readPessoasCsvFile(raw);
+    return readPessoasCsvFile(decodeViosCsvFile(filePath));
   }
   throw new Error('runSyncPessoas espera arquivo .csv ou string com conteúdo CSV.');
 }

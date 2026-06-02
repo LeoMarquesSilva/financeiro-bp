@@ -10,6 +10,7 @@ import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
 import { CobrancaPage } from '@/features/cobranca/pages/CobrancaPage'
 import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
 import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesPage'
+import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 
 function ProtectedRoute({
@@ -76,6 +77,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <TeamMembersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="receita"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <ReceitaPage />
               </ProtectedRoute>
             }
           />

@@ -53,9 +53,9 @@ export interface Database {
         }
       }
       app_settings: {
-        Row: { key: string; value: unknown }
-        Insert: { key: string; value?: unknown }
-        Update: { value?: unknown }
+        Row: { key: string; value: unknown; updated_at?: string }
+        Insert: { key: string; value?: unknown; updated_at?: string }
+        Update: { value?: unknown; updated_at?: string }
       }
       clients_inadimplencia: {
         Row: {

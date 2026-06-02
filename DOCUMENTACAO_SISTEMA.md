@@ -233,6 +233,7 @@
 | pessoas | Base de pessoas/empresas e grupos (fonte: VIOS e cadastros) |
 | relatorio_financeiro / relatorio_financeiro_resumo_por_cliente | Parcelas e resumo financeiro por cliente (sync VIOS) |
 | financeiro_parcelas | Parcelas do relatório financeiro (sync) |
+| financeiro_parcelas_itens | Itens/linhas por título (detalhamento VIOS; FK `ci_titulo` → `financeiro_parcelas`) |
 | timesheets | Horas por grupo/ano (sync) |
 | contagem_ci_por_grupo | Contagem de processos por grupo |
 | app_settings | Configurações (ex.: exibir_taxa_recuperacao_comite, prioridade_dias) |
@@ -246,6 +247,8 @@
 - **Processo Completo (XLSX):** Atualiza pessoas, grupos, processos (contagem CI) e horas. Scripts: `sync-vios-to-supabase.cjs`; no servidor pode rodar dentro do vios-app (pasta `scripts/para-vios-app/`).
 - **TimeSheets:** Sync para tabela `timesheets` (data, grupo cliente, cliente, total de horas).
 - **Relatório financeiro (parcelas):** Sync para `financeiro_parcelas`; RPC `sync_relatorio_financeiro_replace` (fonte da verdade: remove registros que não vêm no relatório e faz upsert). Migração: `20260309170100_sync_relatorio_financeiro_replace.sql`.
+- **Relatório financeiro (itens):** Sync para `financeiro_parcelas_itens`; RPC `sync_relatorio_financeiro_itens_replace` (replace por `ci_item`; exige `ci_titulo` já em `financeiro_parcelas`). Migração: `20260602120000_financeiro_parcelas_itens.sql`. Função Node: `runSyncRelatorioFinanceiroItens`.
+- **Módulo Receita (admin):** Rota `/financeiro/receita`; metas em `app_settings.receita_metas`; totais via RPC `receita_totais_mensais(ano)` (recebido = `data_pagamento` + `valor_pago_item`; previsto = `data_vencimento` + `valor_item`; exclui 6 planos de honorários fora do escopo).
 - **Automação local (opcional):** `pnpm vios:baixar-e-sync` (Playwright baixa o Excel; em seguida roda o sync). Variáveis: `VIOS_USER`, `VIOS_PASS`, `VIOS_REPORT_PATH`, `VIOS_HEADLESS`.
 
 Detalhes: `scripts/README_VIOS_SYNC.md`.

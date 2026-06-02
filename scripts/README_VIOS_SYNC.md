@@ -142,6 +142,20 @@ O **Relatório de Parcelas** (financeiro) do VIOS pode ser baixado e sincronizad
 
 **Migrações:** a função `sync_relatorio_financeiro_replace` está definida no arquivo `supabase/migrations/20260309170100_sync_relatorio_financeiro_replace.sql`. Para aplicar migrações no projeto, use o **MCP do Supabase** (Cursor): ferramenta `apply_migration` com `project_id`, `name` (ex.: `sync_relatorio_financeiro_replace`) e `query` (conteúdo SQL). A migration já foi aplicada via MCP no projeto configurado em `.cursor/mcp.json`.
 
+## Relatório Financeiro Itens (tabela `financeiro_parcelas_itens`)
+
+Detalhamento por **CI Item** de cada título (`ci_titulo`), vinculado a `financeiro_parcelas`. CSV com separador `;` (ex.: `financeiro_parcelas_itens.csv`).
+
+```js
+import { runSyncRelatorioFinanceiro, runSyncRelatorioFinanceiroItens } from './sync-vios-to-supabase.js';
+
+// Ordem: parcelas primeiro (FK), depois itens
+await runSyncRelatorioFinanceiro(caminhoParcelas);
+await runSyncRelatorioFinanceiroItens(caminhoItens);
+```
+
+RPC: `sync_relatorio_financeiro_itens_replace` — remove itens cujo `ci_item` não está no relatório e faz upsert. Migração: `supabase/migrations/20260602120000_financeiro_parcelas_itens.sql`.
+
 ## Credenciais (nunca no código)
 
 - **No vios-app (servidor):** arquivo `.env` na raiz do vios-app (ou na pasta do script) com `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. VIOS (usuário/senha) só se a automação de download rodar lá.

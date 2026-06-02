@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
-import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut, BellRing } from 'lucide-react'
+import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut, BellRing, TrendingUp } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,7 @@ const navItems: NavItem[] = [
   { to: '/financeiro/inadimplencia/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'financeiro', 'comite'] },
   { to: '/financeiro/escritorio', label: 'Escritório', icon: Building2, roles: ['admin', 'financeiro'] },
   { to: '/financeiro/cobranca', label: 'Cobrança', icon: BellRing, roles: ['admin', 'financeiro'] },
+  { to: '/financeiro/receita', label: 'Receita', icon: TrendingUp, roles: ['admin'] },
   { to: '/financeiro/gestores', label: 'Gestores', icon: Users, roles: ['admin'] },
   { to: '/financeiro/configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
 ]

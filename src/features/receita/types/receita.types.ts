@@ -1,0 +1,42 @@
+export type ReceitaMetasConfig = {
+  ano: number
+  /** Meses exibidos no gráfico (1–12). */
+  meses: number[]
+  meta: number
+  projetado_base_abril: number
+  /** Chave = número do mês (string "5" … "12"). */
+  projetado_real: Record<string, number>
+}
+
+export type ReceitaMesRow = {
+  mes: number
+  mesLabel: string
+  meta: number
+  projetadoBaseAbril: number
+  projetadoReal: number
+  recebido: number
+  previsto: number
+}
+
+export type ReceitaDashboardData = {
+  ano: number
+  rows: ReceitaMesRow[]
+}
+
+export type ReceitaRecebidoPlanoRow = {
+  plano_contas: string
+  quantidade: number
+  total: number
+}
+
+export type ReceitaRecebidoItemRow = {
+  ci_item: number
+  ci_titulo: number
+  cliente: string | null
+  descricao: string | null
+  nro_titulo: string | null
+  data_pagamento: string | null
+  valor_pago_item: number
+  plano_contas: string
+  situacao_titulo: string | null
+}

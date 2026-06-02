@@ -14,7 +14,7 @@
 import { chromium } from 'playwright';
 import 'dotenv/config';
 import axios from 'axios';
-import { runSyncRelatorioFinanceiro } from './sync-vios-to-supabase.js';
+import { runSyncRelatorioFinanceiro, decodeViosCsvBuffer } from './sync-vios-to-supabase.js';
  
 const config = {
 baseUrl: 'https://bp.vios.com.br',
@@ -106,10 +106,7 @@ console.log('\n✅ CSV baixado para memória.');
  
 console.log('1️⃣5️⃣ Sincronizando com Supabase (relatorio_financeiro)...');
 try {
-  const buffer = Buffer.from(response.data);
-  const csvData = buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf
-    ? buffer.toString('utf-8')
-    : buffer.toString('latin1');
+  const csvData = decodeViosCsvBuffer(Buffer.from(response.data));
   const result = await runSyncRelatorioFinanceiro(csvData);
   console.log(`✅ Supabase atualizado. Linhas processadas: ${result.upserted}, erros: ${result.errors}`);
 } catch (err) {
