@@ -26,7 +26,6 @@ import { WhatsappInbox } from '../components/WhatsappInbox'
 import {
   BellRing,
   MessageCircle,
-  Mail,
   Send,
   Inbox,
   Target,
@@ -56,7 +55,8 @@ const ANO_ATUAL = new Date().getFullYear()
 const ANOS = Array.from({ length: ANO_ATUAL - 2019 + 1 }, (_, i) => ANO_ATUAL - i)
 
 export function CobrancaPage() {
-  const { fullName } = useAuth()
+  const { fullName, role } = useAuth()
+  const canArquivar = role === 'admin'
   const { templates } = useCobrancaTemplates()
   const { unreadTotal } = useWhatsappNotifications()
 
@@ -139,6 +139,10 @@ export function CobrancaPage() {
   }
 
   const handleArquivar = async (row: CobrancaPainelRow) => {
+    if (!canArquivar) {
+      toast.error('Apenas administradores podem remover títulos do painel.')
+      return
+    }
     try {
       await cobrancaService.arquivar(row.parcela_id, null, fullName)
       toast.success('Título removido do painel', {
@@ -162,6 +166,10 @@ export function CobrancaPage() {
   }
 
   const handleDesarquivar = async (parcela_id: string) => {
+    if (!canArquivar) {
+      toast.error('Apenas administradores podem reativar títulos arquivados.')
+      return
+    }
     try {
       await cobrancaService.desarquivar(parcela_id)
       toast.success('Título reativado no painel')
@@ -222,7 +230,7 @@ export function CobrancaPage() {
             Cobrança
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
-            Cobrança automatizada de títulos vencidos por WhatsApp e e-mail
+            Cobrança automatizada de títulos vencidos por WhatsApp
           </p>
         </div>
       </header>
@@ -298,7 +306,9 @@ export function CobrancaPage() {
               setRotinaVencidosOntem((v) => !v)
               resetPage()
             }}
-            onToggleArquivados={() => setVerArquivados((v) => !v)}
+            onToggleArquivados={
+              canArquivar ? () => setVerArquivados((v) => !v) : undefined
+            }
             onLimpar={limparFiltros}
           />
 
@@ -314,15 +324,6 @@ export function CobrancaPage() {
             >
               <MessageCircle className="h-4 w-4" />
               Cobrar por WhatsApp
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => setCanalEnvio('email')}
-              disabled={selectedIds.size === 0}
-              className="gap-2"
-            >
-              <Mail className="h-4 w-4" />
-              Cobrar por e-mail
             </Button>
           </div>
 
@@ -380,6 +381,7 @@ export function CobrancaPage() {
                 onCobrarGrupo={setGrupoParaCobrar}
                 onEditContato={setEditRow}
                 onArquivar={handleArquivar}
+                canArquivar={canArquivar}
               />
               {totalPages > 1 && (
                 <div className="flex items-center justify-center gap-4 pt-2">

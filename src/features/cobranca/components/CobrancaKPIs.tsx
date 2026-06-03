@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card'
 import { formatCurrency } from '@/shared/utils/format'
-import { AlertTriangle, MessageCircle, Mail, ListChecks } from 'lucide-react'
+import { AlertTriangle, MessageCircle, ListChecks } from 'lucide-react'
 import type { PainelResumo } from '../services/cobrancaService'
 
 interface Props {
@@ -9,7 +9,8 @@ interface Props {
 }
 
 export function CobrancaKPIs({ resumo, loading }: Props) {
-  const { totalValor, qtd, comWhatsapp, comEmail } = resumo
+  const { totalValor, qtd, comWhatsapp } = resumo
+  const faltaWhatsapp = Math.max(0, qtd - comWhatsapp)
 
   const cards = [
     {
@@ -19,22 +20,22 @@ export function CobrancaKPIs({ resumo, loading }: Props) {
       color: 'text-red-600',
     },
     {
-      label: 'Títulos pendentes',
+      label: 'Títulos no painel',
       value: String(qtd),
       icon: ListChecks,
       color: 'text-slate-700',
     },
     {
-      label: 'Cobrados no WhatsApp',
+      label: 'Cobrados (WhatsApp)',
       value: `${comWhatsapp}/${qtd}`,
       icon: MessageCircle,
       color: 'text-emerald-600',
     },
     {
-      label: 'Cobrados por e-mail',
-      value: `${comEmail}/${qtd}`,
-      icon: Mail,
-      color: 'text-blue-600',
+      label: 'Aguardando WhatsApp',
+      value: String(faltaWhatsapp),
+      icon: AlertTriangle,
+      color: 'text-amber-600',
     },
   ]
 

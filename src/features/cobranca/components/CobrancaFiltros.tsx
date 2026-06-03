@@ -31,17 +31,14 @@ interface Props {
   onFaixaAtrasoChange: (value: FaixaAtrasoFiltro | null) => void
   onToggleRotinaVencidosOntem: () => void
   onToggleConcluidos: () => void
-  onToggleArquivados: () => void
+  onToggleArquivados?: () => void
   onLimpar: () => void
 }
 
 const STATUS_COBRANCA: Array<{ value: StatusCobrancaFiltro | ''; label: string }> = [
   { value: '', label: 'Status cobrança' },
-  { value: 'falta_ambos', label: 'Falta WhatsApp e e-mail' },
   { value: 'falta_whatsapp', label: 'Falta WhatsApp' },
-  { value: 'falta_email', label: 'Falta e-mail' },
-  { value: 'parcial', label: 'Parcial (1 canal)' },
-  { value: 'concluido', label: 'Concluído (2 canais)' },
+  { value: 'concluido', label: 'Cobrado (WhatsApp)' },
 ]
 
 const FAIXA_ATRASO: Array<{ value: FaixaAtrasoFiltro | ''; label: string }> = [
@@ -187,15 +184,17 @@ export function CobrancaFiltros({
           <CheckCircle2 className="h-4 w-4" />
           {filtros.incluirConcluidos ? 'Mostrando concluídos' : 'Ver concluídos'}
         </Button>
-        <Button
-          variant={filtros.verArquivados ? 'default' : 'outline'}
-          size="sm"
-          onClick={onToggleArquivados}
-          className="gap-2"
-        >
-          <RotateCcw className="h-4 w-4" />
-          {filtros.verArquivados ? 'Ocultar arquivados' : 'Ver arquivados'}
-        </Button>
+        {onToggleArquivados && (
+          <Button
+            variant={filtros.verArquivados ? 'default' : 'outline'}
+            size="sm"
+            onClick={onToggleArquivados}
+            className="gap-2"
+          >
+            <RotateCcw className="h-4 w-4" />
+            {filtros.verArquivados ? 'Ocultar arquivados' : 'Ver arquivados'}
+          </Button>
+        )}
       </div>
     </div>
   )

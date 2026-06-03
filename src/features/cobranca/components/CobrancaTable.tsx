@@ -10,7 +10,8 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { MessageCircle, Mail, Pencil, Archive, Phone, AtSign, ChevronDown, ChevronRight } from 'lucide-react'
+import { MessageCircle, Pencil, Archive, Phone, AtSign, ChevronDown, ChevronRight } from 'lucide-react'
+import { formatPhoneMasked } from '../utils/phoneMask'
 import { formatCurrency, formatDate } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type { CobrancaPainelRow } from '@/lib/database.types'
@@ -23,6 +24,8 @@ interface Props {
   onCobrarGrupo: (rows: CobrancaPainelRow[]) => void
   onEditContato: (row: CobrancaPainelRow) => void
   onArquivar: (row: CobrancaPainelRow) => void
+  /** Somente admin pode remover título do painel. */
+  canArquivar?: boolean
 }
 
 function CanalChip({ ok, label, Icon }: { ok: boolean; label: string; Icon: React.ElementType }) {
@@ -48,6 +51,7 @@ export function CobrancaTable({
   onCobrarGrupo,
   onEditContato,
   onArquivar,
+  canArquivar = false,
 }: Props) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
@@ -63,7 +67,6 @@ export function CobrancaTable({
         valorTotal: number
         maxAtraso: number
         comWhatsapp: number
-        comEmail: number
         comTelefone: number
         comEmailContato: number
       }
@@ -85,7 +88,6 @@ export function CobrancaTable({
           valorTotal: 0,
           maxAtraso: 0,
           comWhatsapp: 0,
-          comEmail: 0,
           comTelefone: 0,
           comEmailContato: 0,
         })
@@ -96,7 +98,6 @@ export function CobrancaTable({
       group.valorTotal += valor
       group.maxAtraso = Math.max(group.maxAtraso, Number(row.dias_atraso ?? 0))
       if (row.tem_whatsapp) group.comWhatsapp += 1
-      if (row.tem_email) group.comEmail += 1
       if (row.pessoa_telefone) group.comTelefone += 1
       if (row.pessoa_email) group.comEmailContato += 1
     }
@@ -166,7 +167,7 @@ export function CobrancaTable({
           <div className="flex flex-col gap-0.5 text-xs">
             <span className={cn('flex items-center gap-1', r.pessoa_telefone ? 'text-slate-600' : 'text-red-400')}>
               <Phone className="h-3 w-3" />
-              {r.pessoa_telefone || 'sem telefone'}
+              {r.pessoa_telefone ? formatPhoneMasked(r.pessoa_telefone) : 'sem telefone'}
             </span>
             <span className={cn('flex items-center gap-1', r.pessoa_email ? 'text-slate-600' : 'text-red-400')}>
               <AtSign className="h-3 w-3" />
@@ -175,9 +176,8 @@ export function CobrancaTable({
           </div>
         </TableCell>
         <TableCell>
-          <div className="flex items-center justify-center gap-1">
+          <div className="flex items-center justify-center">
             <CanalChip ok={r.tem_whatsapp} label="WhatsApp" Icon={MessageCircle} />
-            <CanalChip ok={r.tem_email} label="E-mail" Icon={Mail} />
           </div>
         </TableCell>
         <TableCell>
@@ -201,15 +201,17 @@ export function CobrancaTable({
             >
               <Pencil className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-slate-500 hover:text-red-600"
-              title="Remover do painel"
-              onClick={() => onArquivar(r)}
-            >
-              <Archive className="h-4 w-4" />
-            </Button>
+            {canArquivar && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-slate-500 hover:text-red-600"
+                title="Remover do painel"
+                onClick={() => onArquivar(r)}
+              >
+                <Archive className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </TableCell>
       </TableRow>
@@ -306,9 +308,7 @@ export function CobrancaTable({
                   </TableCell>
                   <TableCell>
                     <div className="text-xs text-slate-500">
-                      WA: {group.comWhatsapp}/{group.rows.length}
-                      <br />
-                      E-mail: {group.comEmail}/{group.rows.length}
+                      WhatsApp: {group.comWhatsapp}/{group.rows.length}
                     </div>
                   </TableCell>
                   <TableCell className="text-right text-xs text-slate-400">

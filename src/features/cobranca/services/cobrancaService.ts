@@ -40,12 +40,7 @@ export interface PainelFiltros {
   pageSize?: number
 }
 
-export type StatusCobrancaFiltro =
-  | 'falta_whatsapp'
-  | 'falta_email'
-  | 'falta_ambos'
-  | 'parcial'
-  | 'concluido'
+export type StatusCobrancaFiltro = 'falta_whatsapp' | 'concluido'
 
 export type FaixaAtrasoFiltro = '1-7' | '8-30' | '31+'
 
@@ -128,7 +123,6 @@ export interface PainelResumo {
   totalValor: number
   qtd: number
   comWhatsapp: number
-  comEmail: number
 }
 
 /** Query base do painel; serve de fonte para o tipo do builder de filtro. */
@@ -165,19 +159,10 @@ function applyPainelFiltros(query: PainelFilterBuilder, params: PainelFiltros): 
 
   switch (params.statusCobranca) {
     case 'falta_whatsapp':
-      q = q.eq('tem_whatsapp', false).eq('concluido', false)
-      break
-    case 'falta_email':
-      q = q.eq('tem_email', false).eq('concluido', false)
-      break
-    case 'falta_ambos':
-      q = q.eq('tem_whatsapp', false).eq('tem_email', false)
-      break
-    case 'parcial':
-      q = q.eq('concluido', false).or('tem_whatsapp.eq.true,tem_email.eq.true')
+      q = q.eq('tem_whatsapp', false)
       break
     case 'concluido':
-      q = q.eq('concluido', true)
+      q = q.eq('tem_whatsapp', true)
       break
   }
 
@@ -231,25 +216,24 @@ export const cobrancaService = {
   async getPainelResumo(params: PainelFiltros): Promise<PainelResumo> {
     const base = supabase
       .from('cobranca_painel')
-      .select('valor, tem_whatsapp, tem_email') as unknown as PainelFilterBuilder
+      .select('valor, tem_whatsapp') as unknown as PainelFilterBuilder
     const query = applyPainelFiltros(base, params).limit(RESUMO_MAX_ROWS)
 
     const { data, error } = await query
     if (error) {
       console.error('[cobrancaService] getPainelResumo', error)
-      return { totalValor: 0, qtd: 0, comWhatsapp: 0, comEmail: 0 }
+      return { totalValor: 0, qtd: 0, comWhatsapp: 0 }
     }
 
-    const rows = (data ?? []) as Array<Pick<CobrancaPainelRow, 'valor' | 'tem_whatsapp' | 'tem_email'>>
+    const rows = (data ?? []) as Array<Pick<CobrancaPainelRow, 'valor' | 'tem_whatsapp'>>
     return rows.reduce<PainelResumo>(
       (acc, r) => {
         acc.totalValor += Number(r.valor ?? 0)
         acc.qtd += 1
         if (r.tem_whatsapp) acc.comWhatsapp += 1
-        if (r.tem_email) acc.comEmail += 1
         return acc
       },
-      { totalValor: 0, qtd: 0, comWhatsapp: 0, comEmail: 0 },
+      { totalValor: 0, qtd: 0, comWhatsapp: 0 },
     )
   },
 

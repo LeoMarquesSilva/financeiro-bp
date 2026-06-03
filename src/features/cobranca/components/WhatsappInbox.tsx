@@ -161,16 +161,7 @@ function TituloCard({
           )}
         >
           {t.tem_whatsapp ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
-          WhatsApp
-        </span>
-        <span
-          className={cn(
-            'inline-flex items-center gap-1',
-            t.tem_email ? 'text-emerald-600' : 'text-slate-400',
-          )}
-        >
-          {t.tem_email ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
-          E-mail
+          Cobrança registrada
         </span>
       </div>
 

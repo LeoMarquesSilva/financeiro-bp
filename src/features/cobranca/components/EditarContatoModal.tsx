@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cobrancaService } from '../services/cobrancaService'
+import { formatPhoneMasked, maskPhoneOnChange, parsePhoneForStorage } from '../utils/phoneMask'
 import { toast } from 'sonner'
 import type { CobrancaPainelRow } from '@/lib/database.types'
 
@@ -21,7 +22,7 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
 
   useEffect(() => {
     if (row) {
-      setTelefone(row.pessoa_telefone ?? '')
+      setTelefone(formatPhoneMasked(row.pessoa_telefone))
       setEmail(row.pessoa_email ?? '')
     }
   }, [row])
@@ -34,7 +35,7 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
     setSaving(true)
     try {
       await cobrancaService.updateContato(row.pessoa_id, {
-        telefone: telefone.trim() || null,
+        telefone: parsePhoneForStorage(telefone),
         email: email.trim() || null,
       })
       toast.success('Contato atualizado')
@@ -64,11 +65,16 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
           <Label htmlFor="contato-telefone">Telefone (WhatsApp)</Label>
           <Input
             id="contato-telefone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
             value={telefone}
-            onChange={(e) => setTelefone(e.target.value)}
-            placeholder="(11) 99999-9999"
+            onChange={(e) => setTelefone(maskPhoneOnChange(e.target.value))}
+            placeholder="+55 (11) 99999-9999"
           />
-          <p className="text-xs text-slate-400">Será normalizado com DDI 55 no envio.</p>
+          <p className="text-xs text-slate-400">
+            País (DDI), DDD e número. Salvo com DDI 55 para envio no WhatsApp.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="contato-email">E-mail</Label>

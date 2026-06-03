@@ -5,7 +5,6 @@ import { formatCurrency } from '@/shared/utils/format'
 import {
   Target,
   MessageCircle,
-  Mail,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -53,16 +52,16 @@ type Kpi = {
 
 function agregar(rows: CobrancaPainelKpiRow[]): Kpi {
   const total = rows.length
-  const cobrados = rows.filter((r) => r.tem_whatsapp || r.tem_email)
+  const cobrados = rows.filter((r) => r.tem_whatsapp)
   const valorVencido = rows.reduce((s, r) => s + Number(r.valor || 0), 0)
   const valorCobrado = cobrados.reduce((s, r) => s + Number(r.valor || 0), 0)
   return {
     titulos_vencidos: total,
     titulos_cobrados: cobrados.length,
     titulos_pendentes: total - cobrados.length,
-    com_whatsapp: rows.filter((r) => r.tem_whatsapp).length,
-    com_email: rows.filter((r) => r.tem_email).length,
-    concluidos: rows.filter((r) => r.concluido).length,
+    com_whatsapp: cobrados.length,
+    com_email: 0,
+    concluidos: cobrados.length,
     valor_vencido: valorVencido,
     valor_cobrado: valorCobrado,
     valor_pendente: valorVencido - valorCobrado,
@@ -171,7 +170,7 @@ export function CobrancaDashboard() {
       if (planosSelecionados.length > 0 && !planosSelecionados.includes(r.plano_contas ?? '')) return false
       if (gruposSelecionados.length > 0 && !gruposSelecionados.includes(r.grupo_cliente ?? '')) return false
       if (status !== TODOS) {
-        const cobrado = r.tem_whatsapp || r.tem_email
+        const cobrado = r.tem_whatsapp
         if (status === 'cobrado' && !cobrado) return false
         if (status === 'pendente' && cobrado) return false
       }
@@ -222,7 +221,6 @@ export function CobrancaDashboard() {
 
   const efet = kpi.efetividade_pct
   const pctWhats = kpi.titulos_vencidos > 0 ? (kpi.com_whatsapp / kpi.titulos_vencidos) * 100 : 0
-  const pctEmail = kpi.titulos_vencidos > 0 ? (kpi.com_email / kpi.titulos_vencidos) * 100 : 0
 
   return (
     <div className="space-y-5">
@@ -435,25 +433,25 @@ export function CobrancaDashboard() {
           tone="rose"
         />
         <StatCard
-          label="Cobrados ao menos 1 canal"
+          label="Cobrados (WhatsApp)"
           valor={String(kpi.titulos_cobrados)}
           sub={formatCurrency(kpi.valor_cobrado)}
           icon={CheckCircle2}
           tone="emerald"
         />
         <StatCard
-          label="Cobrados por WhatsApp"
+          label="Cobertura WhatsApp"
           valor={`${pctWhats.toFixed(0)}%`}
-          sub={`${kpi.com_whatsapp} título(s)`}
+          sub={`${kpi.com_whatsapp} de ${kpi.titulos_vencidos} título(s)`}
           icon={MessageCircle}
           tone="emerald"
         />
         <StatCard
-          label="Cobrados por e-mail"
-          valor={`${pctEmail.toFixed(0)}%`}
-          sub={`${kpi.com_email} título(s)`}
-          icon={Mail}
-          tone="slate"
+          label="Pendentes de cobrança"
+          valor={String(kpi.titulos_pendentes)}
+          sub={formatCurrency(kpi.valor_pendente)}
+          icon={AlertTriangle}
+          tone="amber"
         />
       </div>
 
@@ -478,7 +476,7 @@ export function CobrancaDashboard() {
           />
         </div>
         <p className="mt-2 text-[11px] text-slate-400">
-          {kpi.concluidos} título(s) concluído(s) (cobrança em ambos os canais).
+          {kpi.concluidos} título(s) com cobrança registrada por WhatsApp.
         </p>
       </div>
     </div>

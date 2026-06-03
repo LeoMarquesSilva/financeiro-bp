@@ -31,7 +31,7 @@ export function useCobrancaResumo(params: PainelFiltros) {
     ...PAINEL_QUERY_OPTS,
   })
   return {
-    resumo: data ?? { totalValor: 0, qtd: 0, comWhatsapp: 0, comEmail: 0 },
+    resumo: data ?? { totalValor: 0, qtd: 0, comWhatsapp: 0 },
     loading: isLoading,
     isFetching,
   }
