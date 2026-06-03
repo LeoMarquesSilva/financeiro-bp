@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { formatCurrency } from '@/shared/utils/format'
 import { buildMensagemGrupoWhatsApp } from '../utils/template'
 import { cobrancaService } from '../services/cobrancaService'
+import { formatPhoneMasked } from '../utils/phoneMask'
 import type { CobrancaPainelRow } from '@/lib/database.types'
 
 interface Props {
@@ -127,21 +128,27 @@ export function CobrarGrupoModal({ open, rows, onClose, onSent }: Props) {
 
         <div className="space-y-1">
           <Label className="text-xs">Telefone de destino</Label>
-          <select
-            value={telefone}
-            onChange={(e) => setTelefone(e.target.value)}
-            className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2"
-          >
-            {telefones.length === 0 ? (
-              <option value="">Sem telefone cadastrado</option>
-            ) : (
-              telefones.map((tel) => (
+          {telefones.length === 0 ? (
+            <Input readOnly value="Sem telefone cadastrado" className="bg-slate-50 text-slate-500" />
+          ) : telefones.length === 1 ? (
+            <Input
+              readOnly
+              value={formatPhoneMasked(telefone) || telefone}
+              className="bg-slate-50"
+            />
+          ) : (
+            <select
+              value={telefone}
+              onChange={(e) => setTelefone(e.target.value)}
+              className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2"
+            >
+              {telefones.map((tel) => (
                 <option key={tel} value={tel}>
-                  {tel}
+                  {formatPhoneMasked(tel) || tel}
                 </option>
-              ))
-            )}
-          </select>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="space-y-1">

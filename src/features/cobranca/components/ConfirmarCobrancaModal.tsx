@@ -14,6 +14,7 @@ import { useAuth } from '@/lib/AuthContext'
 import { toast } from 'sonner'
 import type { CobrancaPainelRow } from '@/lib/database.types'
 import type { PendingWhatsappCobranca } from '../types/cobranca.types'
+import { formatPhoneMasked } from '../utils/phoneMask'
 
 interface Props {
   open: boolean
@@ -167,7 +168,9 @@ export function ConfirmarCobrancaModal({
                     {r.pessoa_nome || r.cliente}
                   </span>
                   <Badge variant="secondary">
-                    {canal === 'whatsapp' ? r.pessoa_telefone : r.pessoa_email}
+                    {canal === 'whatsapp'
+                      ? formatPhoneMasked(r.pessoa_telefone) || r.pessoa_telefone
+                      : r.pessoa_email}
                   </Badge>
                 </div>
                 <p className="text-xs text-slate-400">
