@@ -69,7 +69,13 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
             inputMode="tel"
             autoComplete="tel"
             value={telefone}
-            onChange={(e) => setTelefone(maskPhoneOnChange(e.target.value))}
+            onChange={(e) => {
+              const next = maskPhoneOnChange(e.target.value)
+              setTelefone(next)
+            }}
+            onFocus={() => {
+              if (!telefone.trim()) setTelefone('+55 ')
+            }}
             placeholder="+55 (11) 99999-9999"
           />
           <p className="text-xs text-slate-400">

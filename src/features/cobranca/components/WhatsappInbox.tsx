@@ -39,6 +39,7 @@ import { toast } from 'sonner'
 import { formatCurrency, formatDate } from '@/shared/utils/format'
 import { applyTemplate, buildTemplateVars, prefixoAtendente } from '../utils/template'
 import { phoneToRemoteJid, phonesMatch, canonicalJid } from '../utils/phone'
+import { formatPhoneMasked } from '../utils/phoneMask'
 import { pickContactLabel } from '../utils/contactNames'
 import { isGroupJid, isLidJid, groupFallbackLabel, chatSubtitle, groupIdFromJid } from '../utils/jid'
 import { resolveChatDisplayName, lidFromJid } from '../utils/lidIndex'
@@ -263,6 +264,16 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   }, [pendingCobranca, chats])
 
   const cliente = titulos[0] ?? null
+
+  const telefoneExibicao = useMemo(() => {
+    if (!selected || isGroupJid(selected.remote_jid)) return null
+    const raw =
+      cliente?.pessoa_telefone?.trim() ||
+      numeroConversa ||
+      jidToNumber(selected.remote_jid)
+    if (!raw) return 'Não informado'
+    return formatPhoneMasked(raw) || raw
+  }, [selected, cliente?.pessoa_telefone, numeroConversa])
   const vencidos = useMemo(
     () => titulos.filter((t) => !t.a_vencer && !t.arquivado),
     [titulos],
@@ -752,7 +763,7 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                     <>
                       <div className="flex items-center gap-2 text-sm text-slate-700">
                         <Phone className="h-4 w-4 text-slate-400" />
-                        <span>{jidToNumber(selected.remote_jid)}</span>
+                        <span>{telefoneExibicao}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-slate-700">
                         <Mail className="h-4 w-4 text-slate-400" />
