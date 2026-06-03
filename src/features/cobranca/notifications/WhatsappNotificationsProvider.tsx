@@ -17,14 +17,16 @@ import { playNotificationSound } from '../utils/sound'
 import type { WhatsappMensagemRow } from '@/lib/database.types'
 
 interface WhatsappNotificationsValue {
-  /** Total de mensagens não lidas (todas as conversas). */
+  /** Soma de mensagens não lidas (badge da aba WhatsApp). */
   unreadTotal: number
-  /** Recarrega o total de não lidas. */
+  /** Conversas com unread_count > 0 (filtro "Não lidas"). */
+  unreadChats: number
   refreshUnread: () => void
 }
 
 const WhatsappNotificationsContext = createContext<WhatsappNotificationsValue>({
   unreadTotal: 0,
+  unreadChats: 0,
   refreshUnread: () => {},
 })
 
@@ -50,11 +52,17 @@ export function WhatsappNotificationsProvider({ children }: { children: ReactNod
   const enabled = role === 'admin' || role === 'financeiro'
 
   const [unreadTotal, setUnreadTotal] = useState(0)
+  const [unreadChats, setUnreadChats] = useState(0)
   const ultimoSomRef = useRef(0)
 
   const refreshUnread = useCallback(() => {
     if (!enabled) return
-    whatsappService.getUnreadTotal().then(setUnreadTotal).catch(() => {})
+    Promise.all([whatsappService.getUnreadTotal(), whatsappService.getUnreadChatsCount()])
+      .then(([messages, chats]) => {
+        setUnreadTotal(messages)
+        setUnreadChats(chats)
+      })
+      .catch(() => {})
   }, [enabled])
 
   useEffect(() => {
@@ -122,7 +130,7 @@ export function WhatsappNotificationsProvider({ children }: { children: ReactNod
   }, [enabled, navigate, refreshUnread])
 
   return (
-    <WhatsappNotificationsContext.Provider value={{ unreadTotal, refreshUnread }}>
+    <WhatsappNotificationsContext.Provider value={{ unreadTotal, unreadChats, refreshUnread }}>
       {children}
     </WhatsappNotificationsContext.Provider>
   )

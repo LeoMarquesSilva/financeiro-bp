@@ -3,6 +3,10 @@ import { parseEdgeFunctionError, canonicalJid } from '../utils/phone'
 import { isGroupJid } from '../utils/jid'
 import { phoneFromJidAlt } from '../utils/lidIndex'
 import type { WhatsappChatRow, WhatsappMensagemRow } from '@/lib/database.types'
+import {
+  WHATSAPP_CATEGORIA_COBRANCA_AUTO,
+  type WhatsappChatCategoriaId,
+} from '../constants/whatsappCategorias'
 import type { GroupParticipantRow } from '../utils/participants'
 
 function isLidJid(jid: string): boolean {
@@ -50,6 +54,7 @@ function mergeChats(existing: WhatsappChatRow, incoming: WhatsappChatRow, key: s
     unread_count: (existing.unread_count || 0) + (incoming.unread_count || 0),
     instance: newer.instance ?? older.instance,
     updated_at: newer.updated_at ?? older.updated_at,
+    categoria: existing.categoria ?? incoming.categoria ?? null,
   }
 }
 
@@ -367,9 +372,16 @@ export const whatsappService = {
     }
   },
 
+  /** Soma de mensagens não lidas (conversas deduplicadas, como na lista). */
   async getUnreadTotal(): Promise<number> {
-    const chats = await this.listChatsRaw()
+    const chats = await this.listChats()
     return chats.reduce((acc, r) => acc + (r.unread_count || 0), 0)
+  },
+
+  /** Quantidade de conversas com pelo menos 1 não lida (filtro "Não lidas"). */
+  async getUnreadChatsCount(): Promise<number> {
+    const chats = await this.listChats()
+    return chats.filter((c) => (c.unread_count ?? 0) > 0).length
   },
 
   async markChatRead(remoteJid: string): Promise<void> {
@@ -403,5 +415,40 @@ export const whatsappService = {
         .eq('remote_jid', jid)
         .gt('unread_count', 0)
     }
+  },
+
+  async updateChatCategoria(
+    remoteJid: string,
+    categoria: WhatsappChatCategoriaId | null,
+  ): Promise<void> {
+    const key = chatKey(remoteJid)
+    const { error } = await supabase
+      .from('whatsapp_chats')
+      .update({ categoria, updated_at: new Date().toISOString() } as never)
+      .eq('remote_jid', key)
+    if (error) throw error
+  },
+
+  /** Marca conversa como Cobrança (painel / envio de cobrança). Cria o chat se ainda não existir. */
+  async ensureChatCategoriaCobranca(remoteJid: string): Promise<void> {
+    const key = chatKey(remoteJid)
+    const now = new Date().toISOString()
+    const { data: row, error: selError } = await supabase
+      .from('whatsapp_chats')
+      .select('remote_jid')
+      .eq('remote_jid', key)
+      .maybeSingle()
+    if (selError) throw selError
+    if (row) {
+      await this.updateChatCategoria(key, WHATSAPP_CATEGORIA_COBRANCA_AUTO)
+      return
+    }
+    const { error } = await supabase.from('whatsapp_chats').insert({
+      remote_jid: key,
+      categoria: WHATSAPP_CATEGORIA_COBRANCA_AUTO,
+      unread_count: 0,
+      updated_at: now,
+    } as never)
+    if (error) throw error
   },
 }

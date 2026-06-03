@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useWhatsappChats,
@@ -34,6 +34,15 @@ import {
   VolumeX,
   Users,
 } from 'lucide-react'
+import {
+  WHATSAPP_CATEGORIAS,
+  WHATSAPP_CATEGORIA_COBRANCA_AUTO,
+  WHATSAPP_FILTRO_NAO_LIDAS,
+  categoriaLabel,
+  getWhatsappCategoria,
+  type WhatsappCategoriaFiltro,
+  type WhatsappChatCategoriaId,
+} from '../constants/whatsappCategorias'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { formatCurrency, formatDate } from '@/shared/utils/format'
@@ -52,6 +61,9 @@ import {
 import { WhatsappMessageBubble } from './WhatsappMessageBubble'
 import { WhatsappComposer } from './WhatsappComposer'
 import { WhatsappGroupMembers } from './WhatsappGroupMembers'
+import { WhatsappChatCategoriaSelect } from './WhatsappChatCategoriaSelect'
+import { WhatsappComposerResizeHandle } from './WhatsappComposerResizeHandle'
+import { useComposerResize } from '../hooks/useComposerResize'
 import { isNotifMuted, setNotifMuted, playNotificationSound } from '../utils/sound'
 import { useWhatsappNotifications } from '../notifications/WhatsappNotificationsProvider'
 import type { PendingWhatsappCobranca } from '../types/cobranca.types'
@@ -114,8 +126,24 @@ function chatFromPending(pending: PendingWhatsappCobranca): WhatsappChatRow {
     last_message_at: null,
     last_message_preview: null,
     unread_count: 0,
+    categoria: WHATSAPP_CATEGORIA_COBRANCA_AUTO,
     updated_at: new Date().toISOString(),
   }
+}
+
+async function aplicarCategoriaCobrancaNoChat(
+  remoteJid: string,
+  refetchChats: () => Promise<unknown>,
+  setSelected: Dispatch<SetStateAction<WhatsappChatRow | null>>,
+): Promise<void> {
+  await whatsappService.ensureChatCategoriaCobranca(remoteJid)
+  const key = remoteJid
+  setSelected((prev) =>
+    prev && (prev.remote_jid === key || canonicalJid(prev.remote_jid) === canonicalJid(key))
+      ? { ...prev, categoria: WHATSAPP_CATEGORIA_COBRANCA_AUTO }
+      : prev,
+  )
+  await refetchChats()
 }
 
 function TituloCard({
@@ -190,10 +218,42 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   const [showDetails, setShowDetails] = useState(true)
   const [activeCobranca, setActiveCobranca] = useState<PendingWhatsappCobranca | null>(null)
   const [muted, setMuted] = useState(isNotifMuted())
+  const [filtroCategoria, setFiltroCategoria] = useState<WhatsappCategoriaFiltro>(null)
+  const [salvandoCategoria, setSalvandoCategoria] = useState(false)
   const { refreshUnread } = useWhatsappNotifications()
   const queryClient = useQueryClient()
+  const { composerHeight, onHandlePointerDown, resetHeight: resetComposerHeight } =
+    useComposerResize()
 
-  const { chats, loading: loadingChats, refetch: refetchChats } = useWhatsappChats(busca)
+  const { chats: chatsRaw, loading: loadingChats, refetch: refetchChats } = useWhatsappChats(busca)
+
+  const contagemPorCategoria = useMemo(() => {
+    const counts = {
+      todas: chatsRaw.length,
+      nao_lidas: 0,
+      sem_categoria: 0,
+      COBRANCA: 0,
+      COLABORADOR_BP: 0,
+      SOCIO: 0,
+    }
+    for (const c of chatsRaw) {
+      if ((c.unread_count ?? 0) > 0) counts.nao_lidas += 1
+      if (!c.categoria) counts.sem_categoria += 1
+      else if (c.categoria in counts) counts[c.categoria as WhatsappChatCategoriaId] += 1
+    }
+    return counts
+  }, [chatsRaw])
+
+  const chats = useMemo(() => {
+    if (!filtroCategoria) return chatsRaw
+    if (filtroCategoria === 'nao_lidas') {
+      return chatsRaw.filter((c: WhatsappChatRow) => (c.unread_count ?? 0) > 0)
+    }
+    if (filtroCategoria === 'sem_categoria') {
+      return chatsRaw.filter((c: WhatsappChatRow) => !c.categoria)
+    }
+    return chatsRaw.filter((c: WhatsappChatRow) => c.categoria === filtroCategoria)
+  }, [chatsRaw, filtroCategoria])
   const nomesPorTelefone = useContatoNomes()
   const lidIndex = useLidContactIndex()
   const { mensagens, loading: loadingMsgs, refetch: refetchMsgs } = useWhatsappConversa(
@@ -201,7 +261,7 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   )
   const groupJid = selected && isGroupJid(selected.remote_jid) ? selected.remote_jid : null
   const { members: groupMembersRaw, loading: loadingMembers } = useGroupParticipants(groupJid)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const messagesScrollRef = useRef<HTMLDivElement>(null)
 
   const senderNames = useMemo(
     () => buildSenderNamesFromMessages(mensagens),
@@ -234,11 +294,13 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     return jidToNumber(chat.remote_jid)
   }
 
-  // Vai para a última mensagem ao abrir a conversa / chegar mensagem nova.
+  // Rola só o painel de mensagens (não a página) ao abrir conversa ou chegar mensagem nova.
   useEffect(() => {
     if (!selected || loadingMsgs) return
+    const el = messagesScrollRef.current
+    if (!el) return
     const id = requestAnimationFrame(() => {
-      bottomRef.current?.scrollIntoView({ block: 'end' })
+      el.scrollTop = el.scrollHeight
     })
     return () => cancelAnimationFrame(id)
   }, [selected?.remote_jid, mensagens.length, loadingMsgs])
@@ -258,10 +320,20 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
       (c: WhatsappChatRow) =>
         c.remote_jid === jid || phonesMatch(jidToNumber(c.remote_jid), pendingCobranca.telefone),
     )
-    setSelected(existente ?? chatFromPending(pendingCobranca))
+    const base = existente ?? chatFromPending(pendingCobranca)
+    setSelected({ ...base, categoria: WHATSAPP_CATEGORIA_COBRANCA_AUTO })
+    setShowDetails(true)
     setActiveCobranca(pendingCobranca)
     setTexto(pendingCobranca.mensagem)
-  }, [pendingCobranca, chats])
+
+    let cancelled = false
+    aplicarCategoriaCobrancaNoChat(jid, refetchChats, setSelected).catch(() => {
+      if (!cancelled) toast.error('Não foi possível aplicar a categoria Cobrança')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [pendingCobranca, chats, refetchChats])
 
   const cliente = titulos[0] ?? null
 
@@ -316,6 +388,7 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
 
   const handleSelect = async (chat: WhatsappChatRow) => {
     setSelected(chat)
+    setShowDetails(true)
     setActiveCobranca(null)
     setTexto('')
     if (chat.unread_count > 0) {
@@ -359,6 +432,10 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
       mensagem,
     })
     setTexto(mensagem)
+    const jid = phoneToRemoteJid(row.pessoa_telefone)
+    if (jid && selected) {
+      aplicarCategoriaCobrancaNoChat(jid, refetchChats, setSelected).catch(() => {})
+    }
   }
 
   const handleSend = async () => {
@@ -379,6 +456,9 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
         )
         if (result.enviados > 0) {
           toast.success('Cobrança enviada e registrada no painel')
+          await aplicarCategoriaCobrancaNoChat(selected.remote_jid, refetchChats, setSelected).catch(
+            () => {},
+          )
           setTexto('')
           setActiveCobranca(null)
           onPendingSent?.()
@@ -432,6 +512,22 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     }
   }
 
+  const handleCategoriaChange = async (categoria: WhatsappChatCategoriaId | '') => {
+    if (!selected) return
+    const valor = categoria === '' ? null : categoria
+    setSalvandoCategoria(true)
+    try {
+      await whatsappService.updateChatCategoria(selected.remote_jid, valor)
+      setSelected((prev) => (prev ? { ...prev, categoria: valor } : prev))
+      await refetchChats()
+      toast.success(valor ? `Categoria: ${categoriaLabel(valor)}` : 'Categoria removida')
+    } catch {
+      toast.error('Erro ao salvar categoria')
+    } finally {
+      setSalvandoCategoria(false)
+    }
+  }
+
   const handleReact = async (messageId: string, fromMe: boolean, emoji: string) => {
     if (!selected || fromMe) return
     try {
@@ -451,16 +547,70 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Barra superior */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/60 bg-white px-3 py-2 shadow-sm">
-        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+      {/* Barra superior — categorias + tempo real */}
+      <div className="flex flex-col gap-2 rounded-xl border border-slate-200/60 bg-white px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltroCategoria(null)}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              filtroCategoria === null
+                ? 'border-slate-800 bg-slate-800 text-white'
+                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100',
+            )}
+          >
+            Todas ({contagemPorCategoria.todas})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFiltroCategoria('nao_lidas')}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              filtroCategoria === 'nao_lidas'
+                ? WHATSAPP_FILTRO_NAO_LIDAS.chipActive
+                : WHATSAPP_FILTRO_NAO_LIDAS.chipIdle,
+            )}
+          >
+            {WHATSAPP_FILTRO_NAO_LIDAS.label} ({contagemPorCategoria.nao_lidas})
+          </button>
+          {WHATSAPP_CATEGORIAS.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setFiltroCategoria(cat.id)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                filtroCategoria === cat.id ? cat.chipActive : cat.chipIdle,
+              )}
+            >
+              {cat.label} ({contagemPorCategoria[cat.id]})
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFiltroCategoria('sem_categoria')}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              filtroCategoria === 'sem_categoria'
+                ? 'border-slate-500 bg-slate-500 text-white'
+                : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100',
+            )}
+          >
+            Sem categoria ({contagemPorCategoria.sem_categoria})
+          </button>
+          <span
+            className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-medium text-emerald-700"
+            title="Atualização em tempo real"
+          >
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            </span>
+            Tempo real
           </span>
-          Tempo real ativo
-        </span>
-        <div className="flex items-center gap-2">
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -488,9 +638,9 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-280px)] min-h-[480px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex h-[calc(100vh-280px)] min-h-[480px] min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* Coluna 1 — Conversas */}
-        <div className="flex w-72 shrink-0 flex-col border-r border-slate-200">
+        <div className="flex w-[260px] shrink-0 flex-col border-r border-slate-200">
           <div className="border-b border-slate-100 p-3">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -530,10 +680,18 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                   </div>
                 </button>
               )}
+            {!loadingChats && filtroCategoria && chats.length === 0 && (
+              <div className="p-4 text-center text-sm text-slate-400">
+                {filtroCategoria === 'nao_lidas'
+                  ? 'Nenhuma conversa não lida.'
+                  : 'Nenhuma conversa nesta categoria.'}
+              </div>
+            )}
             {chats.map((chat: WhatsappChatRow) => {
               const name = resolveName(chat)
               const isGroup = isGroupJid(chat.remote_jid)
               const active = selected?.remote_jid === chat.remote_jid
+              const catDef = getWhatsappCategoria(chat.categoria)
               return (
                 <button
                   key={chat.remote_jid}
@@ -575,6 +733,16 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                       </span>
                     </div>
                     <p className="truncate text-xs text-slate-500">{chat.last_message_preview || ''}</p>
+                    {catDef && (
+                      <span
+                        className={cn(
+                          'mt-0.5 inline-block rounded px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide',
+                          catDef.badgeClass,
+                        )}
+                      >
+                        {catDef.label}
+                      </span>
+                    )}
                   </div>
                   {chat.unread_count > 0 && (
                     <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-500 px-1.5 text-[10px] font-semibold text-white">
@@ -588,24 +756,27 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
         </div>
 
         {/* Coluna 2 — Conversa */}
-        <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50">
           {!selected ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 text-slate-400">
               <MessageSquare className="h-10 w-10" />
               <p className="text-sm">Selecione uma conversa</p>
             </div>
           ) : (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {modoCobranca && (
-                <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
                   <BellRing className="h-4 w-4 shrink-0" />
                   <span>
                     Cobrança pendente para <strong>{activeCobranca!.nome}</strong> — revise a mensagem e
                     envie para registrar no painel.
                   </span>
+                  <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
+                    Categoria: Cobrança (automática)
+                  </Badge>
                 </div>
               )}
-              <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
+              <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
                 <Avatar className="h-9 w-9">
                   {selected.profile_pic_url && (
                     <SafeAvatarImage src={selected.profile_pic_url} alt="" />
@@ -639,11 +810,17 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                   </div>
                   <p className="truncate text-xs text-slate-400">{chatSubtitle(selected.remote_jid)}</p>
                 </div>
+                <WhatsappChatCategoriaSelect
+                  compact
+                  value={selected.categoria}
+                  disabled={salvandoCategoria}
+                  onChange={handleCategoriaChange}
+                />
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-slate-400 hover:text-slate-700"
-                  title={showDetails ? 'Ocultar detalhes' : 'Mostrar detalhes'}
+                  variant={showDetails ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+                  title={showDetails ? 'Ocultar painel de detalhes' : 'Mostrar painel de detalhes'}
                   onClick={() => setShowDetails((v) => !v)}
                 >
                   {showDetails ? (
@@ -651,64 +828,83 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                   ) : (
                     <PanelRightOpen className="h-4 w-4" />
                   )}
+                  Detalhes
                 </Button>
               </div>
 
-              <ScrollArea className="flex-1 px-4 py-4">
-                {loadingMsgs && (
-                  <p className="text-center text-sm text-slate-400">Carregando mensagens…</p>
-                )}
-                {!loadingMsgs && mensagens.length === 0 && (
-                  <p className="text-center text-sm text-slate-400">
-                    {modoCobranca
-                      ? 'Revise a mensagem abaixo e envie a cobrança.'
-                      : 'Sem mensagens nesta conversa.'}
-                  </p>
-                )}
-                <div className="flex flex-col gap-2">
-                  {mensagens.map((m: WhatsappMensagemRow) => {
-                    const senderLabel =
-                      groupJid && !m.from_me ? senderLabelFromMessage(m, mentionMap) : null
-                    return (
-                      <div
-                        key={m.id}
-                        className={cn('flex flex-col', m.from_me ? 'items-end' : 'items-start')}
-                      >
-                        {senderLabel && (
-                          <span className="mb-0.5 max-w-[75%] truncate px-1 text-[10px] font-medium text-violet-600">
-                            {senderLabel}
-                          </span>
-                        )}
-                        <WhatsappMessageBubble
-                          message={m}
-                          remoteJid={selected.remote_jid}
-                          mentionMap={mentionMap}
-                          onReact={modoCobranca ? undefined : handleReact}
-                        />
-                      </div>
-                    )
-                  })}
-                  <div ref={bottomRef} />
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div
+                  ref={messagesScrollRef}
+                  className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4"
+                >
+                  {loadingMsgs && (
+                    <p className="text-center text-sm text-slate-400">Carregando mensagens…</p>
+                  )}
+                  {!loadingMsgs && mensagens.length === 0 && (
+                    <p className="text-center text-sm text-slate-400">
+                      {modoCobranca
+                        ? 'Revise a mensagem abaixo e envie a cobrança.'
+                        : 'Sem mensagens nesta conversa.'}
+                    </p>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    {mensagens.map((m: WhatsappMensagemRow) => {
+                      const senderLabel =
+                        groupJid && !m.from_me ? senderLabelFromMessage(m, mentionMap) : null
+                      return (
+                        <div
+                          key={m.id}
+                          className={cn('flex flex-col', m.from_me ? 'items-end' : 'items-start')}
+                        >
+                          {senderLabel && (
+                            <span className="mb-0.5 max-w-[75%] truncate px-1 text-[10px] font-medium text-violet-600">
+                              {senderLabel}
+                            </span>
+                          )}
+                          <WhatsappMessageBubble
+                            message={m}
+                            remoteJid={selected.remote_jid}
+                            mentionMap={mentionMap}
+                            onReact={modoCobranca ? undefined : handleReact}
+                          />
+                        </div>
+                      )
+                    })}
+                    <div aria-hidden className="h-px shrink-0" />
+                  </div>
                 </div>
-              </ScrollArea>
 
-              <WhatsappComposer
-                texto={texto}
-                onTextoChange={setTexto}
-                onSendText={handleSend}
-                onSendAudio={handleSendAudio}
-                onSendFile={handleSendFile}
-                enviando={enviando}
-                modoCobranca={modoCobranca}
-                placeholder={modoCobranca ? 'Edite a mensagem de cobrança…' : 'Digite uma mensagem…'}
-              />
-            </>
+                <WhatsappComposerResizeHandle
+                  onPointerDown={onHandlePointerDown}
+                  onDoubleClickReset={resetComposerHeight}
+                />
+
+                <WhatsappComposer
+                  panelHeight={composerHeight}
+                  texto={texto}
+                  onTextoChange={setTexto}
+                  onSendText={handleSend}
+                  onSendAudio={handleSendAudio}
+                  onSendFile={handleSendFile}
+                  enviando={enviando}
+                  modoCobranca={modoCobranca}
+                  placeholder={
+                    modoCobranca ? 'Edite a mensagem de cobrança…' : 'Digite uma mensagem…'
+                  }
+                />
+              </div>
+            </div>
           )}
         </div>
 
         {/* Coluna 3 — Detalhes do cliente */}
         {selected && showDetails && (
-          <div className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white">
+          <div className="flex w-[280px] shrink-0 flex-col border-l border-slate-200 bg-white">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Detalhes da conversa
+              </p>
+            </div>
             <ScrollArea className="flex-1">
               <div className="space-y-5 p-4">
                 <div className="flex flex-col items-center gap-2 text-center">
@@ -744,6 +940,15 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                       )
                     )}
                   </div>
+                </div>
+
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
+                  <WhatsappChatCategoriaSelect
+                    value={selected.categoria}
+                    disabled={salvandoCategoria}
+                    showHint
+                    onChange={handleCategoriaChange}
+                  />
                 </div>
 
                 {/* Contato / Grupo */}

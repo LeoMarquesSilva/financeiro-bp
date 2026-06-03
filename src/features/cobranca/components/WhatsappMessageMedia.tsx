@@ -8,14 +8,24 @@ import {
 } from '@/components/ui/dialog'
 import { whatsappService } from '../services/whatsappService'
 import { base64ToDataUrl } from '../utils/mediaHelpers'
+import { WhatsappFormattedText } from './WhatsappFormattedText'
 import type { WhatsappMensagemRow } from '@/lib/database.types'
 
 interface Props {
   message: WhatsappMensagemRow
   remoteJid: string
+  fromMe?: boolean
 }
 
-export function WhatsappMessageMedia({ message, remoteJid }: Props) {
+function MediaCaption({ text, fromMe }: { text: string; fromMe?: boolean }) {
+  return (
+    <p className="whitespace-pre-wrap text-sm">
+      <WhatsappFormattedText text={text} fromMe={fromMe} />
+    </p>
+  )
+}
+
+export function WhatsappMessageMedia({ message, remoteJid, fromMe }: Props) {
   const [src, setSrc] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
@@ -61,7 +71,7 @@ export function WhatsappMessageMedia({ message, remoteJid }: Props) {
           </Button>
         )}
         {error && <span className="text-xs opacity-70">Não foi possível carregar o documento.</span>}
-        {caption && <p className="text-sm whitespace-pre-wrap">{caption}</p>}
+        {caption && <MediaCaption text={caption} fromMe={fromMe} />}
       </div>
     )
   }
@@ -81,7 +91,7 @@ export function WhatsappMessageMedia({ message, remoteJid }: Props) {
         {loading && <Loader2 className="h-6 w-6 animate-spin" />}
         {src && <video controls src={src} className="max-h-64 max-w-full rounded-lg" />}
         {error && <span className="text-xs opacity-70">Erro ao carregar vídeo.</span>}
-        {caption && <p className="text-sm whitespace-pre-wrap">{caption}</p>}
+        {caption && <MediaCaption text={caption} fromMe={fromMe} />}
       </div>
     )
   }
@@ -120,7 +130,7 @@ export function WhatsappMessageMedia({ message, remoteJid }: Props) {
           <img src={src} alt="" className="max-h-[85vh] w-full object-contain" />
         </DialogContent>
       </Dialog>
-      {caption && <p className="text-sm whitespace-pre-wrap">{caption}</p>}
+      {caption && <MediaCaption text={caption} fromMe={fromMe} />}
     </div>
   )
 }

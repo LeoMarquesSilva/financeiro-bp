@@ -58,7 +58,7 @@ export function CobrancaPage() {
   const { fullName, role } = useAuth()
   const canArquivar = role === 'admin'
   const { templates } = useCobrancaTemplates()
-  const { unreadTotal } = useWhatsappNotifications()
+  const { unreadTotal, unreadChats } = useWhatsappNotifications()
 
   const [tab, setTab] = useState('painel')
   const [buscaInput, setBuscaInput] = useState('')
@@ -245,7 +245,14 @@ export function CobrancaPage() {
             <MessageCircle className="h-4 w-4" />
             WhatsApp
             {unreadTotal > 0 && (
-              <span className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white">
+              <span
+                className="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white"
+                title={
+                  unreadChats === 1
+                    ? `1 conversa não lida · ${unreadTotal} mensagem${unreadTotal === 1 ? '' : 'ns'}`
+                    : `${unreadChats} conversas não lidas · ${unreadTotal} mensagens`
+                }
+              >
                 {unreadTotal > 99 ? '99+' : unreadTotal}
               </span>
             )}

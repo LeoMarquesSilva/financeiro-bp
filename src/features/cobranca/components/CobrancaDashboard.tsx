@@ -39,33 +39,55 @@ const MESES = [
 
 type Kpi = {
   titulos_vencidos: number
+  /** Cobrado no D+1 útil — conta no indicador. */
   titulos_cobrados: number
-  titulos_pendentes: number
+  /** Cobrado por WhatsApp, mas fora da data-alvo D+1. */
+  titulos_fora_prazo: number
+  /** Ainda sem nenhuma cobrança WhatsApp. */
+  titulos_sem_cobranca: number
   com_whatsapp: number
-  com_email: number
   concluidos: number
   valor_vencido: number
   valor_cobrado: number
-  valor_pendente: number
+  valor_fora_prazo: number
+  valor_sem_cobranca: number
   efetividade_pct: number
+}
+
+function cobradoIndicadorD1(r: CobrancaPainelKpiRow): boolean {
+  return r.tem_whatsapp_d1
+}
+
+function cobradoForaPrazo(r: CobrancaPainelKpiRow): boolean {
+  return r.tem_whatsapp && !r.tem_whatsapp_d1
+}
+
+function semCobrancaWhatsapp(r: CobrancaPainelKpiRow): boolean {
+  return !r.tem_whatsapp
+}
+
+function somaValor(rows: CobrancaPainelKpiRow[]): number {
+  return rows.reduce((s, r) => s + Number(r.valor || 0), 0)
 }
 
 function agregar(rows: CobrancaPainelKpiRow[]): Kpi {
   const total = rows.length
-  const cobrados = rows.filter((r) => r.tem_whatsapp)
-  const valorVencido = rows.reduce((s, r) => s + Number(r.valor || 0), 0)
-  const valorCobrado = cobrados.reduce((s, r) => s + Number(r.valor || 0), 0)
+  const cobradosD1 = rows.filter(cobradoIndicadorD1)
+  const foraPrazo = rows.filter(cobradoForaPrazo)
+  const semCobranca = rows.filter(semCobrancaWhatsapp)
+  const valorVencido = somaValor(rows)
   return {
     titulos_vencidos: total,
-    titulos_cobrados: cobrados.length,
-    titulos_pendentes: total - cobrados.length,
-    com_whatsapp: cobrados.length,
-    com_email: 0,
-    concluidos: cobrados.length,
+    titulos_cobrados: cobradosD1.length,
+    titulos_fora_prazo: foraPrazo.length,
+    titulos_sem_cobranca: semCobranca.length,
+    com_whatsapp: rows.filter((r) => r.tem_whatsapp).length,
+    concluidos: cobradosD1.length,
     valor_vencido: valorVencido,
-    valor_cobrado: valorCobrado,
-    valor_pendente: valorVencido - valorCobrado,
-    efetividade_pct: total > 0 ? (100 * cobrados.length) / total : 100,
+    valor_cobrado: somaValor(cobradosD1),
+    valor_fora_prazo: somaValor(foraPrazo),
+    valor_sem_cobranca: somaValor(semCobranca),
+    efetividade_pct: total > 0 ? (100 * cobradosD1.length) / total : 100,
   }
 }
 
@@ -170,9 +192,9 @@ export function CobrancaDashboard() {
       if (planosSelecionados.length > 0 && !planosSelecionados.includes(r.plano_contas ?? '')) return false
       if (gruposSelecionados.length > 0 && !gruposSelecionados.includes(r.grupo_cliente ?? '')) return false
       if (status !== TODOS) {
-        const cobrado = r.tem_whatsapp
-        if (status === 'cobrado' && !cobrado) return false
-        if (status === 'pendente' && cobrado) return false
+        if (status === 'cobrado' && !cobradoIndicadorD1(r)) return false
+        if (status === 'fora_prazo' && !cobradoForaPrazo(r)) return false
+        if (status === 'pendente' && !semCobrancaWhatsapp(r)) return false
       }
       if (faixa !== TODOS) {
         const d = Number(r.dias_atraso ?? 0)
@@ -220,7 +242,8 @@ export function CobrancaDashboard() {
   }
 
   const efet = kpi.efetividade_pct
-  const pctWhats = kpi.titulos_vencidos > 0 ? (kpi.com_whatsapp / kpi.titulos_vencidos) * 100 : 0
+  const pctD1 =
+    kpi.titulos_vencidos > 0 ? (kpi.titulos_cobrados / kpi.titulos_vencidos) * 100 : 0
 
   return (
     <div className="space-y-5">
@@ -363,8 +386,9 @@ export function CobrancaDashboard() {
           title="Status da cobrança"
         >
           <option value={TODOS}>Todos os status</option>
-          <option value="cobrado">Já cobrados</option>
-          <option value="pendente">Pendentes</option>
+          <option value="cobrado">No D+1 (indicador)</option>
+          <option value="fora_prazo">Fora do prazo D+1</option>
+          <option value="pendente">Sem cobrança</option>
         </select>
 
         <select
@@ -406,17 +430,25 @@ export function CobrancaDashboard() {
               </h2>
             </div>
             <p className="max-w-2xl text-sm text-slate-500">
-              Assegurar que <strong>100% dos títulos em aberto</strong> sejam objeto de cobrança até 1 dia
-              após o vencimento (D+1), promovendo a redução do risco de inadimplência.
+              Assegurar que <strong>100% dos títulos em aberto</strong> sejam cobrados por WhatsApp no{' '}
+              <strong>D+1 útil</strong>. Vencimento em fim de semana é prorrogado para a segunda-feira
+              seguinte (ex.: venc. 31/05 → efetivo 01/06 → cobrança 02/06).               Cobranças fora da data-alvo não entram no indicador, mas aparecem como{' '}
+              <strong>fora do prazo</strong> (não como pendente).
             </p>
             <div className="flex flex-wrap gap-3 pt-1">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                {kpi.titulos_cobrados} cobrados
+                {kpi.titulos_cobrados} no D+1
               </span>
+              {kpi.titulos_fora_prazo > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {kpi.titulos_fora_prazo} fora do prazo
+                </span>
+              )}
               <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-600">
                 <AlertTriangle className="h-3.5 w-3.5" />
-                {kpi.titulos_pendentes} pendentes
+                {kpi.titulos_sem_cobranca} sem cobrança
               </span>
             </div>
           </div>
@@ -424,41 +456,48 @@ export function CobrancaDashboard() {
       </div>
 
       {/* Cards de apoio */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
-          label="Títulos vencidos (D+1)"
+          label="Títulos vencidos"
           valor={String(kpi.titulos_vencidos)}
           sub={formatCurrency(kpi.valor_vencido)}
           icon={AlertTriangle}
-          tone="rose"
+          tone="slate"
         />
         <StatCard
-          label="Cobrados (WhatsApp)"
+          label="No D+1 (indicador)"
           valor={String(kpi.titulos_cobrados)}
-          sub={formatCurrency(kpi.valor_cobrado)}
+          sub={`${pctD1.toFixed(0)}% · ${formatCurrency(kpi.valor_cobrado)}`}
           icon={CheckCircle2}
           tone="emerald"
         />
         <StatCard
-          label="Cobertura WhatsApp"
-          valor={`${pctWhats.toFixed(0)}%`}
-          sub={`${kpi.com_whatsapp} de ${kpi.titulos_vencidos} título(s)`}
+          label="Fora do prazo D+1"
+          valor={String(kpi.titulos_fora_prazo)}
+          sub={formatCurrency(kpi.valor_fora_prazo)}
           icon={MessageCircle}
-          tone="emerald"
+          tone="amber"
         />
         <StatCard
-          label="Pendentes de cobrança"
-          valor={String(kpi.titulos_pendentes)}
-          sub={formatCurrency(kpi.valor_pendente)}
+          label="Sem cobrança"
+          valor={String(kpi.titulos_sem_cobranca)}
+          sub={formatCurrency(kpi.valor_sem_cobranca)}
           icon={AlertTriangle}
-          tone="amber"
+          tone="rose"
+        />
+        <StatCard
+          label="Com WhatsApp (total)"
+          valor={String(kpi.com_whatsapp)}
+          sub={`de ${kpi.titulos_vencidos} título(s)`}
+          icon={MessageCircle}
+          tone="slate"
         />
       </div>
 
       {/* Pendência de valor */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-2 flex items-center justify-between text-sm">
-          <span className="font-medium text-slate-700">Valor coberto por cobrança</span>
+          <span className="font-medium text-slate-700">Valor no indicador (D+1)</span>
           <span className="text-slate-500">
             {formatCurrency(kpi.valor_cobrado)} de {formatCurrency(kpi.valor_vencido)}
           </span>
@@ -476,7 +515,8 @@ export function CobrancaDashboard() {
           />
         </div>
         <p className="mt-2 text-[11px] text-slate-400">
-          {kpi.concluidos} título(s) com cobrança registrada por WhatsApp.
+          {kpi.concluidos} no D+1 · {kpi.titulos_fora_prazo} cobrado(s) fora do prazo ·{' '}
+          {kpi.titulos_sem_cobranca} sem cobrança WhatsApp.
         </p>
       </div>
     </div>

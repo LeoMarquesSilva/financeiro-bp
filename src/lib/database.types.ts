@@ -463,6 +463,7 @@ export interface Database {
           last_message_at: string | null
           last_message_preview: string | null
           unread_count: number
+          categoria: 'COBRANCA' | 'COLABORADOR_BP' | 'SOCIO' | null
           updated_at: string
         }
         Insert: unknown
@@ -527,7 +528,10 @@ export interface Database {
           grupo_cliente: string | null
           pessoa_telefone: string | null
           pessoa_email: string | null
+          data_vencimento_efetivo: string | null
+          data_prazo_d1: string | null
           tem_whatsapp: boolean
+          tem_whatsapp_d1: boolean
           tem_email: boolean
           cobrancas_total: number
           ultima_cobranca_at: string | null

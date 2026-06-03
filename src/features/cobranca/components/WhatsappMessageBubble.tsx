@@ -53,7 +53,7 @@ export function WhatsappMessageBubble({ message, remoteJid, mentionMap, onReact 
         )}
 
         {isMediaTipo(tipo) && tipo !== 'audioMessage' && (
-          <WhatsappMessageMedia message={message} remoteJid={remoteJid} />
+          <WhatsappMessageMedia message={message} remoteJid={remoteJid} fromMe={message.from_me} />
         )}
 
         {tipo === 'locationMessage' && <LocationBlock message={message} />}

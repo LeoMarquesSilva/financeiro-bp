@@ -12,8 +12,10 @@ export type CobrancaPainelKpiRow = Pick<
   CobrancaPainelRow,
   | 'parcela_id'
   | 'data_vencimento'
+  | 'data_prazo_d1'
   | 'valor'
   | 'tem_whatsapp'
+  | 'tem_whatsapp_d1'
   | 'tem_email'
   | 'concluido'
   | 'plano_contas'
@@ -358,7 +360,7 @@ export const cobrancaService = {
   async listPainelKpi(): Promise<CobrancaPainelKpiRow[]> {
     const { data, error } = await supabase
       .from('cobranca_painel')
-      .select('parcela_id, data_vencimento, valor, tem_whatsapp, tem_email, concluido, plano_contas, grupo_cliente, cliente, dias_atraso')
+      .select('parcela_id, data_vencimento, data_prazo_d1, valor, tem_whatsapp, tem_whatsapp_d1, tem_email, concluido, plano_contas, grupo_cliente, cliente, dias_atraso')
       .gte('data_vencimento', '2026-05-01')
       .limit(10000)
     if (error || !data) {

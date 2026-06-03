@@ -134,6 +134,7 @@ Deno.serve(async (req: Request) => {
         {
           remote_jid: remoteJid,
           instance: EVOLUTION_INSTANCE,
+          categoria: 'COBRANCA',
           last_message_at: now,
           last_message_preview: item.mensagem.slice(0, 120),
           updated_at: now,

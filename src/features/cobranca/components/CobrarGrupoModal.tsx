@@ -11,6 +11,8 @@ import { toast } from 'sonner'
 import { formatCurrency } from '@/shared/utils/format'
 import { buildMensagemGrupoWhatsApp } from '../utils/template'
 import { cobrancaService } from '../services/cobrancaService'
+import { whatsappService } from '../services/whatsappService'
+import { phoneToRemoteJid } from '../utils/phone'
 import { formatPhoneMasked } from '../utils/phoneMask'
 import type { CobrancaPainelRow } from '@/lib/database.types'
 
@@ -70,6 +72,10 @@ export function CobrarGrupoModal({ open, rows, onClose, onSent }: Props) {
       const result = await cobrancaService.enviarWhatsappGrupo(payload, fullName)
       const falhas = result.total - result.enviados
       if (result.enviados > 0) {
+        const jid = phoneToRemoteJid(telefone)
+        if (jid) {
+          await whatsappService.ensureChatCategoriaCobranca(jid).catch(() => {})
+        }
         toast.success(
           `Cobrança consolidada enviada para ${nome} (${result.enviados} título(s) marcados)${
             falhas > 0 ? `, ${falhas} com erro` : ''

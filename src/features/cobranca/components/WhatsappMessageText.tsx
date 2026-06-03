@@ -1,5 +1,6 @@
-import { Fragment, useMemo, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { WhatsappFormattedText } from './WhatsappFormattedText'
 
 const MENTION_RE = /@(\d{5,})/g
 
@@ -21,7 +22,12 @@ export function WhatsappMessageText({ text, mentionMap, fromMe, className }: Pro
     while ((match = MENTION_RE.exec(text)) !== null) {
       const [full, lidId] = match
       const start = match.index
-      if (start > last) parts.push(text.slice(last, start))
+      if (start > last) {
+        const chunk = text.slice(last, start)
+        parts.push(
+          <WhatsappFormattedText key={`fmt-${start}`} text={chunk} fromMe={fromMe} />,
+        )
+      }
 
       const name = mentionMap.get(lidId)
       parts.push(
@@ -39,10 +45,14 @@ export function WhatsappMessageText({ text, mentionMap, fromMe, className }: Pro
       last = start + full.length
     }
 
-    if (last < text.length) parts.push(text.slice(last))
-    if (parts.length === 0) return [text]
+    if (last < text.length) {
+      parts.push(<WhatsappFormattedText key={`fmt-tail`} text={text.slice(last)} fromMe={fromMe} />)
+    }
+    if (parts.length === 0) {
+      return [<WhatsappFormattedText key="fmt-all" text={text} fromMe={fromMe} />]
+    }
 
-    return parts.map((node, i) => (typeof node === 'string' ? <Fragment key={i}>{node}</Fragment> : node))
+    return parts
   }, [text, mentionMap, fromMe])
 
   return <p className={cn('whitespace-pre-wrap break-words', className)}>{nodes}</p>

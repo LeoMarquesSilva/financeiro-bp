@@ -99,6 +99,27 @@ export const receitaService = {
     )
   },
 
+  /** Nome + grupo para vincular cliente do financeiro ao grupo de empresas. */
+  async fetchEmpresasNomeGrupo(): Promise<Array<{ nome: string; grupo_cliente: string | null }>> {
+    const PAGE_SIZE = 1000
+    const all: Array<{ nome: string; grupo_cliente: string | null }> = []
+    let from = 0
+    let hasMore = true
+    while (hasMore) {
+      const to = from + PAGE_SIZE - 1
+      const { data, error } = await supabase
+        .from('escritorio_empresas_por_grupo')
+        .select('nome, grupo_cliente')
+        .range(from, to)
+      if (error) throw error
+      const chunk = (data ?? []) as Array<{ nome: string; grupo_cliente: string | null }>
+      all.push(...chunk)
+      hasMore = chunk.length === PAGE_SIZE
+      from += PAGE_SIZE
+    }
+    return all
+  },
+
   async fetchRecebidoItens(
     ano: number,
     mes: number,
