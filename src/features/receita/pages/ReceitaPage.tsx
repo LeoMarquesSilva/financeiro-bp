@@ -1,16 +1,33 @@
-import { TrendingUp, Cloud, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { TrendingUp, Cloud, RefreshCw, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { useReceitaMetas } from '../hooks/useReceitaMetas'
+import { useReceitaDepartamentoCores } from '../hooks/useReceitaDepartamentoCores'
 import { useReceitaDashboard } from '../hooks/useReceitaDashboard'
-import { ReceitaMetasConfig } from '../components/ReceitaMetasConfig'
+import { ReceitaConfiguracoesSheet } from '../components/ReceitaConfiguracoesSheet'
 import { ReceitaComparativoChart } from '../components/ReceitaComparativoChart'
+import { ReceitaComparativoColunasChart } from '../components/ReceitaComparativoColunasChart'
+import { ReceitaAcumuladoChart } from '../components/ReceitaAcumuladoChart'
 import { ReceitaKpis } from '../components/ReceitaKpis'
-import { PLANOS_CONTAS_INCLUIDOS_COTA } from '../constants'
+import {
+  PLANOS_CONTAS_INCLUIDOS_COTA,
+  RECEITA_COLORS,
+  RECEITA_DEPARTAMENTO_CORES,
+} from '../constants'
 
 export function ReceitaPage() {
+  const [configOpen, setConfigOpen] = useState(false)
   const { metas, isLoading: metasLoading, error: metasError, refetch: refetchMetas, updateMetas, isUpdating } =
     useReceitaMetas()
+  const {
+    cores: departamentoCores,
+    updateCores,
+    isUpdating: coresUpdating,
+  } = useReceitaDepartamentoCores()
   const { data, isLoading: dashLoading, error } = useReceitaDashboard(metas)
+
+  const coresParaGrafico = departamentoCores ?? RECEITA_DEPARTAMENTO_CORES
 
   if (metasLoading) {
     return (
@@ -47,21 +64,42 @@ export function ReceitaPage() {
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
-          <TrendingUp className="h-6 w-6 shrink-0 text-emerald-600" aria-hidden />
-          Receita
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Metas, projeções e realizados por mês (itens financeiros — cota de honorários).
-        </p>
-        <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
-          <Cloud className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          Metas salvas globalmente no Supabase — todos os usuários veem a mesma configuração.
-        </p>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+            <TrendingUp className={cn('h-6 w-6 shrink-0', RECEITA_COLORS.meta.text)} aria-hidden />
+            Receita
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Metas, projeções e realizados por mês (itens financeiros — cota de honorários).
+          </p>
+          <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
+            <Cloud className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Metas e cores das áreas salvas globalmente no Supabase — todos os usuários veem a mesma configuração.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-2 self-start"
+          onClick={() => setConfigOpen(true)}
+        >
+          <Settings2 className="h-4 w-4" aria-hidden />
+          Configurações
+        </Button>
       </header>
 
-      <ReceitaMetasConfig metas={metas} onSave={updateMetas} isSaving={isUpdating} />
+      <ReceitaConfiguracoesSheet
+        open={configOpen}
+        onOpenChange={setConfigOpen}
+        metas={metas}
+        onSaveMetas={updateMetas}
+        isSavingMetas={isUpdating}
+        cores={coresParaGrafico}
+        onSaveCores={updateCores}
+        isSavingCores={coresUpdating}
+      />
 
       {error && (
         <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -73,11 +111,23 @@ export function ReceitaPage() {
       <ReceitaKpis rows={data?.rows ?? []} ano={data?.ano ?? metas.ano} loading={dashLoading} />
 
       {dashLoading && (
-        <div className="h-80 animate-pulse rounded-xl border border-slate-200/60 bg-slate-100" />
+        <div className="space-y-6">
+          <div className="h-80 animate-pulse rounded-xl border border-slate-200/60 bg-slate-100" />
+          <div className="h-96 animate-pulse rounded-xl border border-slate-200/60 bg-slate-100" />
+          <div className="h-80 animate-pulse rounded-xl border border-slate-200/60 bg-slate-100" />
+        </div>
       )}
 
       {data && !dashLoading && (
-        <ReceitaComparativoChart rows={data.rows} ano={data.ano} />
+        <>
+          <ReceitaComparativoChart rows={data.rows} ano={data.ano} />
+          <ReceitaComparativoColunasChart
+            rows={data.rows}
+            ano={data.ano}
+            departamentoCores={coresParaGrafico}
+          />
+          <ReceitaAcumuladoChart rows={data.rows} ano={data.ano} />
+        </>
       )}
 
       <details className="rounded-xl border border-slate-200/60 bg-slate-50/80 px-4 py-3 text-sm text-slate-600 shadow-sm">

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ListTree, Table2, TrendingUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, ListTree, Table2, TrendingUp } from 'lucide-react'
 import {
   Area,
   CartesianGrid,
@@ -14,13 +14,15 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
 import type { ReceitaMesRow } from '../types/receita.types'
+import { RECEITA_COLORS } from '../constants'
 import { ReceitaRecebidoDetalheSheet } from './ReceitaRecebidoDetalheSheet'
+import { isMesFuturo, valorRecebidoGrafico } from '../utils/receitaMes'
 
 const SERIES = [
   {
     key: 'meta',
     legend: 'Meta',
-    color: '#1e40af',
+    color: RECEITA_COLORS.meta.hex,
     type: 'line' as const,
     strokeDasharray: '6 4',
     defaultOn: true,
@@ -28,7 +30,7 @@ const SERIES = [
   {
     key: 'projetadoBaseAbril',
     legend: 'Proj. base abril',
-    color: '#ea580c',
+    color: RECEITA_COLORS.projetadoBaseAbril.hex,
     type: 'line' as const,
     strokeDasharray: '4 4',
     defaultOn: false,
@@ -36,7 +38,7 @@ const SERIES = [
   {
     key: 'projetadoReal',
     legend: 'Proj. real',
-    color: '#10b981',
+    color: RECEITA_COLORS.projetadoReal.hex,
     type: 'line' as const,
     strokeDasharray: '4 4',
     defaultOn: false,
@@ -44,7 +46,7 @@ const SERIES = [
   {
     key: 'recebido',
     legend: 'Recebido',
-    color: '#0284c7',
+    color: RECEITA_COLORS.recebido.hex,
     gradientId: 'receitaRecebidoGradient',
     type: 'area' as const,
     defaultOn: true,
@@ -52,7 +54,7 @@ const SERIES = [
   {
     key: 'previsto',
     legend: 'Previsto',
-    color: '#7c3aed',
+    color: RECEITA_COLORS.previsto.hex,
     gradientId: 'receitaPrevistoGradient',
     type: 'area' as const,
     defaultOn: true,
@@ -70,7 +72,7 @@ type ChartPoint = {
   meta: number
   projetadoBaseAbril: number
   projetadoReal: number
-  recebido: number
+  recebido: number | null
   previsto: number
 }
 
@@ -92,10 +94,10 @@ function PctBadge({ pct }: { pct: number | null }) {
   if (pct == null) return <span className="text-slate-400">—</span>
   const color =
     pct >= 100
-      ? 'bg-emerald-50 text-emerald-800 ring-emerald-200/80'
+      ? 'bg-emerald-100 text-emerald-800 ring-emerald-300/80'
       : pct >= 80
-        ? 'bg-amber-50 text-amber-800 ring-amber-200/80'
-        : 'bg-red-50 text-red-800 ring-red-200/80'
+        ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/80'
+        : 'bg-green-50/80 text-emerald-600 ring-emerald-100'
   return (
     <span
       className={cn(
@@ -130,13 +132,18 @@ function ReceitaChartTooltip({
   if (!entries.length) return null
 
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-xs shadow-lg">
+    <div
+      className="pointer-events-auto z-50 rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm shadow-lg"
+      style={{ pointerEvents: 'auto' }}
+      onWheel={(e) => e.stopPropagation()}
+    >
       <p className="mb-1.5 font-semibold capitalize text-slate-800">{label}</p>
       <ul className="space-y-1">
         {entries.map((entry) => {
           const series = SERIES.find((s) => s.key === entry.dataKey)
           if (!series) return null
-          const value = typeof entry.value === 'number' ? entry.value : 0
+          const value = typeof entry.value === 'number' ? entry.value : null
+          if (value == null) return null
           return (
             <li key={series.key} className="flex items-center justify-between gap-6">
               <span className="flex items-center gap-1.5 text-slate-600">
@@ -200,6 +207,7 @@ type Props = {
 
 export function ReceitaComparativoChart({ rows, ano }: Props) {
   const [detalheMes, setDetalheMes] = useState<ReceitaMesRow | null>(null)
+  const [tabelaAberta, setTabelaAberta] = useState(true)
   const [visible, setVisible] = useState<Set<SeriesKey>>(() => new Set(DEFAULT_VISIBLE))
 
   const toggleSeries = (key: SeriesKey) => {
@@ -220,19 +228,24 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     meta: r.meta,
     projetadoBaseAbril: r.projetadoBaseAbril,
     projetadoReal: r.projetadoReal,
-    recebido: r.recebido,
+    recebido: valorRecebidoGrafico(r.recebido, ano, r.mes),
     previsto: r.previsto,
   }))
 
+  const rowsComDados = useMemo(
+    () => rows.filter((r) => !isMesFuturo(ano, r.mes)),
+    [rows, ano],
+  )
+
   const totais = useMemo(
     () => ({
-      meta: rows.reduce((s, r) => s + r.meta, 0),
-      projetadoBaseAbril: rows.reduce((s, r) => s + r.projetadoBaseAbril, 0),
-      projetadoReal: rows.reduce((s, r) => s + r.projetadoReal, 0),
-      recebido: rows.reduce((s, r) => s + r.recebido, 0),
+      meta: rowsComDados.reduce((s, r) => s + r.meta, 0),
+      projetadoBaseAbril: rowsComDados.reduce((s, r) => s + r.projetadoBaseAbril, 0),
+      projetadoReal: rowsComDados.reduce((s, r) => s + r.projetadoReal, 0),
+      recebido: rowsComDados.reduce((s, r) => s + r.recebido, 0),
       previsto: rows.reduce((s, r) => s + r.previsto, 0),
     }),
-    [rows],
+    [rowsComDados],
   )
 
   const pctTotal = pctMeta(totais.recebido, totais.meta)
@@ -242,13 +255,23 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
       <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+            <span
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-lg',
+                RECEITA_COLORS.meta.bgIcon,
+              )}
+            >
               <TrendingUp className="h-4 w-4" aria-hidden />
             </span>
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Comparativo mensal</h2>
               <p className="text-xs text-slate-500">
-                Linhas = metas e projeções · Áreas = recebido e previsto ({ano})
+                <span className={RECEITA_COLORS.meta.textStrong}>Meta</span>
+                {' · '}
+                <span className={RECEITA_COLORS.projetadoBaseAbril.text}>Proj. base abril</span>
+                {' · '}
+                <span className={RECEITA_COLORS.projetadoReal.text}>Proj. real</span>
+                {' · áreas = recebido e previsto ('}{ano})
               </p>
             </div>
           </div>
@@ -261,12 +284,12 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
             <ComposedChart data={chartData} margin={{ left: 4, right: 12, top: 8, bottom: 4 }}>
               <defs>
                 <linearGradient id="receitaRecebidoGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#0284c7" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#0284c7" stopOpacity={0} />
+                  <stop offset="5%" stopColor={RECEITA_COLORS.recebido.hex} stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={RECEITA_COLORS.recebido.hex} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="receitaPrevistoGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                  <stop offset="5%" stopColor={RECEITA_COLORS.previsto.hex} stopOpacity={0.2} />
+                  <stop offset="95%" stopColor={RECEITA_COLORS.previsto.hex} stopOpacity={0} />
                 </linearGradient>
               </defs>
 
@@ -274,14 +297,14 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
 
               <XAxis
                 dataKey="mesLabel"
-                tick={{ fontSize: 11, fill: '#64748b' }}
+                tick={{ fontSize: 12, fill: '#64748b' }}
                 axisLine={false}
                 tickLine={false}
                 dy={4}
               />
               <YAxis
                 tickFormatter={formatYAxis}
-                tick={{ fontSize: 10, fill: '#94a3b8' }}
+                tick={{ fontSize: 11, fill: '#94a3b8' }}
                 axisLine={false}
                 tickLine={false}
                 width={60}
@@ -289,6 +312,8 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
               />
 
               <Tooltip
+                wrapperStyle={{ pointerEvents: 'auto', zIndex: 60 }}
+                allowEscapeViewBox={{ x: true, y: true }}
                 content={<ReceitaChartTooltip visible={visible} />}
                 cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
               />
@@ -300,10 +325,13 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   dataKey={s.key}
                   stroke={s.color}
                   strokeWidth={2.5}
-                  fill={`url(#${s.gradientId})`}
-                  dot={{ r: 3, fill: s.color, strokeWidth: 0 }}
+                  fill={`url(#${'gradientId' in s ? s.gradientId : ''})`}
+                  dot={({ cx, cy, value }) => {
+                    if (value == null || cx == null || cy == null) return null
+                    return <circle cx={cx} cy={cy} r={3} fill={s.color} />
+                  }}
                   activeDot={{ r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
-                  connectNulls
+                  connectNulls={false}
                 />
               ))}
 
@@ -314,7 +342,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   dataKey={s.key}
                   stroke={s.color}
                   strokeWidth={2}
-                  strokeDasharray={s.strokeDasharray}
+                  strokeDasharray={'strokeDasharray' in s ? s.strokeDasharray : undefined}
                   dot={false}
                   activeDot={{ r: 4, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
                   connectNulls
@@ -326,27 +354,65 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Table2 className="h-4 w-4 text-slate-500" aria-hidden />
-          <h2 className="text-sm font-semibold text-slate-800">Detalhamento por mês</h2>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Table2 className="h-4 w-4 text-slate-500" aria-hidden />
+            <h2 className="text-sm font-semibold text-slate-800">Detalhamento por mês</h2>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs text-slate-600"
+            onClick={() => setTabelaAberta((v) => !v)}
+            aria-expanded={tabelaAberta}
+          >
+            {tabelaAberta ? (
+              <>
+                <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+                Recolher
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                Expandir
+              </>
+            )}
+          </Button>
         </div>
 
+        {tabelaAberta && (
         <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-sm">
           <table className="w-full min-w-[800px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                 <th className="sticky left-0 z-10 bg-slate-50/95 px-4 py-3 backdrop-blur-sm">Mês</th>
-                <th className="px-4 py-3 text-right">Meta</th>
-                <th className="hidden px-4 py-3 text-right md:table-cell">Proj. base abril</th>
-                <th className="hidden px-4 py-3 text-right lg:table-cell">Proj. real</th>
+                <th className={cn('px-4 py-3 text-right', RECEITA_COLORS.meta.header)}>Meta</th>
+                <th
+                  className={cn(
+                    'hidden px-4 py-3 text-right md:table-cell',
+                    RECEITA_COLORS.projetadoBaseAbril.header,
+                  )}
+                >
+                  Proj. base abril
+                </th>
+                <th
+                  className={cn(
+                    'hidden px-4 py-3 text-right lg:table-cell',
+                    RECEITA_COLORS.projetadoReal.header,
+                  )}
+                >
+                  Proj. real
+                </th>
                 <th className="px-4 py-3 text-right">Recebido</th>
-                <th className="px-4 py-3 text-center">% meta</th>
+                <th className={cn('px-4 py-3 text-center', RECEITA_COLORS.meta.header)}>% meta</th>
                 <th className="px-4 py-3 text-right">Previsto</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => {
-                const pct = pctMeta(r.recebido, r.meta)
+                const futuro = isMesFuturo(ano, r.mes)
+                const pct = futuro ? null : pctMeta(r.recebido, r.meta)
                 return (
                   <tr
                     key={r.mes}
@@ -358,35 +424,68 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                     <td className="sticky left-0 z-10 bg-white px-4 py-2.5 font-medium capitalize text-slate-800 even:bg-slate-50/40">
                       {r.mesLabel}
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">
+                    <td
+                      className={cn(
+                        'px-4 py-2.5 text-right tabular-nums font-medium',
+                        RECEITA_COLORS.meta.text,
+                      )}
+                    >
                       {formatCurrency(r.meta)}
                     </td>
-                    <td className="hidden px-4 py-2.5 text-right tabular-nums text-slate-700 md:table-cell">
+                    <td
+                      className={cn(
+                        'hidden px-4 py-2.5 text-right tabular-nums font-medium md:table-cell',
+                        RECEITA_COLORS.projetadoBaseAbril.text,
+                      )}
+                    >
                       {formatCurrency(r.projetadoBaseAbril)}
                     </td>
-                    <td className="hidden px-4 py-2.5 text-right tabular-nums text-slate-700 lg:table-cell">
+                    <td
+                      className={cn(
+                        'hidden px-4 py-2.5 text-right tabular-nums font-medium lg:table-cell',
+                        RECEITA_COLORS.projetadoReal.text,
+                      )}
+                    >
                       {formatCurrency(r.projetadoReal)}
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums font-medium text-sky-700">
-                      <div className="inline-flex items-center justify-end gap-1">
-                        <span>{formatCurrency(r.recebido)}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0 text-sky-600 hover:bg-sky-50 hover:text-sky-800"
-                          title="Ver descritivo por plano de contas"
-                          aria-label={`Descritivo recebido ${r.mesLabel} ${ano}`}
-                          onClick={() => setDetalheMes(r)}
-                        >
-                          <ListTree className="h-4 w-4" />
-                        </Button>
-                      </div>
+                    <td
+                      className={cn(
+                        'px-4 py-2.5 text-right tabular-nums font-medium',
+                        futuro ? 'text-slate-400' : RECEITA_COLORS.recebido.text,
+                      )}
+                    >
+                      {futuro ? (
+                        <span className="text-slate-400">—</span>
+                      ) : (
+                        <div className="inline-flex items-center justify-end gap-1">
+                          <span>{formatCurrency(r.recebido)}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              'h-7 w-7 shrink-0 hover:bg-sky-50',
+                              RECEITA_COLORS.recebido.text,
+                              'hover:text-sky-900',
+                            )}
+                            title="Ver descritivo por plano de contas"
+                            aria-label={`Descritivo recebido ${r.mesLabel} ${ano}`}
+                            onClick={() => setDetalheMes(r)}
+                          >
+                            <ListTree className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-center">
                       <PctBadge pct={pct} />
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums font-medium text-violet-700">
+                    <td
+                      className={cn(
+                        'px-4 py-2.5 text-right tabular-nums font-medium',
+                        RECEITA_COLORS.previsto.text,
+                      )}
+                    >
                       {formatCurrency(r.previsto)}
                     </td>
                   </tr>
@@ -396,26 +495,54 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
             <tfoot>
               <tr className="border-t-2 border-slate-200 bg-slate-50/90 font-semibold text-slate-800">
                 <td className="sticky left-0 z-10 bg-slate-50/95 px-4 py-3 backdrop-blur-sm">Total</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(totais.meta)}</td>
-                <td className="hidden px-4 py-3 text-right tabular-nums md:table-cell">
+                <td
+                  className={cn(
+                    'px-4 py-3 text-right tabular-nums',
+                    RECEITA_COLORS.meta.textStrong,
+                  )}
+                >
+                  {formatCurrency(totais.meta)}
+                </td>
+                <td
+                  className={cn(
+                    'hidden px-4 py-3 text-right tabular-nums md:table-cell',
+                    RECEITA_COLORS.projetadoBaseAbril.textStrong,
+                  )}
+                >
                   {formatCurrency(totais.projetadoBaseAbril)}
                 </td>
-                <td className="hidden px-4 py-3 text-right tabular-nums lg:table-cell">
+                <td
+                  className={cn(
+                    'hidden px-4 py-3 text-right tabular-nums lg:table-cell',
+                    RECEITA_COLORS.projetadoReal.textStrong,
+                  )}
+                >
                   {formatCurrency(totais.projetadoReal)}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums text-sky-800">
+                <td
+                  className={cn(
+                    'px-4 py-3 text-right tabular-nums',
+                    RECEITA_COLORS.recebido.textStrong,
+                  )}
+                >
                   {formatCurrency(totais.recebido)}
                 </td>
                 <td className="px-4 py-3 text-center">
                   <PctBadge pct={pctTotal} />
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums text-violet-800">
+                <td
+                  className={cn(
+                    'px-4 py-3 text-right tabular-nums',
+                    RECEITA_COLORS.previsto.textStrong,
+                  )}
+                >
                   {formatCurrency(totais.previsto)}
                 </td>
               </tr>
             </tfoot>
           </table>
         </div>
+        )}
       </section>
 
       <p className="text-xs leading-relaxed text-slate-500">

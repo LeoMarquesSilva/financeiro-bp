@@ -2,6 +2,8 @@ import { Banknote, CalendarClock, Target, TrendingUp } from 'lucide-react'
 import { formatCurrency } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type { ReceitaMesRow } from '../types/receita.types'
+import { RECEITA_COLORS } from '../constants'
+import { isMesFuturo } from '../utils/receitaMes'
 
 type Props = {
   rows: ReceitaMesRow[]
@@ -56,16 +58,26 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
     )
   }
 
-  const totalRecebido = rows.reduce((s, r) => s + r.recebido, 0)
+  const rowsComDados = rows.filter((r) => !isMesFuturo(ano, r.mes))
+  const totalRecebido = rowsComDados.reduce((s, r) => s + r.recebido, 0)
   const totalPrevisto = rows.reduce((s, r) => s + r.previsto, 0)
-  const metaAcumulada = rows.reduce((s, r) => s + r.meta, 0)
+  const metaAcumulada = rowsComDados.reduce((s, r) => s + r.meta, 0)
   const pctMeta = metaAcumulada > 0 ? (totalRecebido / metaAcumulada) * 100 : 0
-  const mesesLabel = rows.length === 1 ? '1 mês' : `${rows.length} meses`
+  const mesesLabel =
+    rowsComDados.length === 1 ? '1 mês' : `${rowsComDados.length} meses`
 
   const pctColor =
-    pctMeta >= 100 ? 'text-emerald-800' : pctMeta >= 80 ? 'text-amber-800' : 'text-red-800'
+    pctMeta >= 100
+      ? RECEITA_COLORS.meta.textStrong
+      : pctMeta >= 80
+        ? RECEITA_COLORS.meta.text
+        : 'text-emerald-600'
   const pctIcon =
-    pctMeta >= 100 ? 'bg-emerald-50 text-emerald-600' : pctMeta >= 80 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'
+    pctMeta >= 100
+      ? 'bg-emerald-100 text-emerald-700'
+      : pctMeta >= 80
+        ? RECEITA_COLORS.meta.bgIcon
+        : 'bg-emerald-50/80 text-emerald-600'
 
   return (
     <section>
@@ -77,7 +89,7 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           value={formatCurrency(totalRecebido)}
           hint={mesesLabel}
           iconColor="bg-sky-50 text-sky-600"
-          valueColor="text-sky-800"
+          valueColor={RECEITA_COLORS.recebido.textStrong}
         />
         <KPIItem
           icon={CalendarClock}
@@ -85,15 +97,15 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           value={formatCurrency(totalPrevisto)}
           hint="Por vencimento"
           iconColor="bg-violet-50 text-violet-600"
-          valueColor="text-violet-800"
+          valueColor={RECEITA_COLORS.previsto.textStrong}
         />
         <KPIItem
           icon={Target}
           label="Meta acumulada"
           value={formatCurrency(metaAcumulada)}
           hint={rows[0] ? `${formatCurrency(rows[0].meta)}/mês` : undefined}
-          iconColor="bg-blue-50 text-blue-600"
-          valueColor="text-blue-800"
+          iconColor={RECEITA_COLORS.meta.bgIcon}
+          valueColor={RECEITA_COLORS.meta.textStrong}
         />
         <KPIItem
           icon={TrendingUp}

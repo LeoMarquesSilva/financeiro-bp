@@ -1,3 +1,6 @@
+/** Chave = departamento normalizado (ex.: insolvencia); valor = cor hex (#rrggbb). */
+export type ReceitaDepartamentoCoresConfig = Record<string, string>
+
 export type ReceitaMetasConfig = {
   ano: number
   /** Meses exibidos no gráfico (1–12). */
@@ -23,10 +26,49 @@ export type ReceitaDashboardData = {
   rows: ReceitaMesRow[]
 }
 
+export type ReceitaAcumuladoChartPoint = {
+  mes: number
+  mesLabel: string
+  /** null em mês futuro (sem recebido real lançado). */
+  recebidoAcumulado: number | null
+  previstoAcumulado: number
+  metaAcumulada: number
+}
+
 export type ReceitaRecebidoPlanoRow = {
   plano_contas: string
   quantidade: number
   total: number
+}
+
+export type ReceitaRecebidoDepartamentoRow = {
+  mes: number
+  departamento: string
+  total: number
+}
+
+export type ReceitaRecebidoPlanoMensalRow = {
+  mes: number
+  plano_contas: string
+  total: number
+}
+
+export type ReceitaAreaChartSlice = {
+  departamento: string
+  dataKey: string
+  color: string
+}
+
+export type ReceitaColunasChartPoint = {
+  mes: number
+  mesLabel: string
+  meta: number
+  projetadoBaseAbril: number
+  projetadoReal: number
+  previsto: number
+  recebidoTotal: number | null
+  /** Chaves dinâmicas por departamento (dataKey Recharts). */
+  [areaDataKey: string]: number | string | null
 }
 
 export type ReceitaRecebidoItemRow = {

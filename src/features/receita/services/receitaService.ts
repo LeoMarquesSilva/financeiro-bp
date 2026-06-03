@@ -4,6 +4,8 @@ import type {
   ReceitaDashboardData,
   ReceitaMetasConfig,
   ReceitaMesRow,
+  ReceitaRecebidoDepartamentoRow,
+  ReceitaRecebidoPlanoMensalRow,
   ReceitaRecebidoItemRow,
   ReceitaRecebidoPlanoRow,
 } from '../types/receita.types'
@@ -62,6 +64,36 @@ export const receitaService = {
       (row) => ({
         plano_contas: row.plano_contas,
         quantidade: Number(row.quantidade) || 0,
+        total: Number(row.total) || 0,
+      }),
+    )
+  },
+
+  async fetchRecebidoPorPlanoMensal(ano: number): Promise<ReceitaRecebidoPlanoMensalRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_recebido_por_plano_mensal' as never,
+      { p_ano: ano } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<{ mes: number; plano_contas: string; total: number }>).map(
+      (row) => ({
+        mes: Number(row.mes) || 0,
+        plano_contas: String(row.plano_contas ?? ''),
+        total: Number(row.total) || 0,
+      }),
+    )
+  },
+
+  async fetchRecebidoPorDepartamento(ano: number): Promise<ReceitaRecebidoDepartamentoRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_recebido_por_departamento_mensal' as never,
+      { p_ano: ano } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<{ mes: number; departamento: string; total: number }>).map(
+      (row) => ({
+        mes: Number(row.mes) || 0,
+        departamento: String(row.departamento ?? 'Sem departamento'),
         total: Number(row.total) || 0,
       }),
     )

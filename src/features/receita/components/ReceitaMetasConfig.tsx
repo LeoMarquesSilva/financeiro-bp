@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Settings2 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Target } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { MESES_ABREV } from '../constants'
+import { MESES_ABREV, RECEITA_COLORS } from '../constants'
+import { cn } from '@/lib/utils'
 import type { ReceitaMetasConfig } from '../types/receita.types'
 import { parseCurrencyBr, formatCurrencyInput } from '@/shared/utils/format'
 import { toast } from 'sonner'
@@ -13,6 +13,7 @@ type Props = {
   metas: ReceitaMetasConfig
   onSave: (config: ReceitaMetasConfig) => Promise<void>
   isSaving: boolean
+  onSaved?: () => void
 }
 
 function numToInput(n: number): string {
@@ -20,8 +21,7 @@ function numToInput(n: number): string {
   return formatCurrencyInput(String(Math.round(n * 100)))
 }
 
-export function ReceitaMetasConfig({ metas, onSave, isSaving }: Props) {
-  const [open, setOpen] = useState(false)
+export function ReceitaMetasConfig({ metas, onSave, isSaving, onSaved }: Props) {
   const [form, setForm] = useState(metas)
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function ReceitaMetasConfig({ metas, onSave, isSaving }: Props) {
     try {
       await onSave(form)
       toast.success('Metas salvas no Supabase (válidas para todos os usuários)')
-      setOpen(false)
+      onSaved?.()
     } catch {
       toast.error('Erro ao salvar metas')
     }
@@ -47,18 +47,17 @@ export function ReceitaMetasConfig({ metas, onSave, isSaving }: Props) {
   }
 
   return (
-    <Card className="rounded-xl border-slate-200/60 shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Settings2 className="h-4 w-4 text-slate-500" />
-          Metas e projeções (configurável)
-        </CardTitle>
-        <Button type="button" variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
-          {open ? 'Ocultar' : 'Editar metas'}
-        </Button>
-      </CardHeader>
-      {open && (
-        <CardContent className="space-y-4 border-t border-slate-100 pt-4">
+    <section className="space-y-4">
+      <div>
+        <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+          <Target className="h-4 w-4 text-slate-500" aria-hidden />
+          Metas e projeções
+        </h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Ano de referência, meta mensal, projeções e meses exibidos nos gráficos.
+        </p>
+      </div>
+      <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor="receita-ano">Ano de referência</Label>
@@ -72,9 +71,12 @@ export function ReceitaMetasConfig({ metas, onSave, isSaving }: Props) {
               />
             </div>
             <div>
-              <Label htmlFor="receita-meta">Meta (mensal)</Label>
+              <Label htmlFor="receita-meta" className={RECEITA_COLORS.meta.text}>
+                Meta (mensal)
+              </Label>
               <Input
                 id="receita-meta"
+                className="border-emerald-200/80 focus-visible:ring-emerald-500/30"
                 value={numToInput(form.meta)}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, meta: parseCurrencyBr(e.target.value) }))
@@ -83,9 +85,12 @@ export function ReceitaMetasConfig({ metas, onSave, isSaving }: Props) {
               />
             </div>
             <div>
-              <Label htmlFor="receita-base-abril">Projetado base abril (mensal)</Label>
+              <Label htmlFor="receita-base-abril" className={RECEITA_COLORS.projetadoBaseAbril.text}>
+                Projetado base abril (mensal)
+              </Label>
               <Input
                 id="receita-base-abril"
+                className="border-blue-200/80 focus-visible:ring-blue-900/20"
                 value={numToInput(form.projetado_base_abril)}
                 onChange={(e) =>
                   setForm((f) => ({
@@ -130,12 +135,17 @@ export function ReceitaMetasConfig({ metas, onSave, isSaving }: Props) {
           </div>
 
           <div>
-            <Label className="mb-2 block">Projetado real por mês</Label>
+            <Label className={cn('mb-2 block', RECEITA_COLORS.projetadoReal.text)}>
+              Projetado real por mês
+            </Label>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {form.meses.map((mes) => (
                 <div key={mes}>
-                  <Label className="text-xs text-slate-500">{MESES_ABREV[mes - 1]}</Label>
+                  <Label className={cn('text-xs', RECEITA_COLORS.projetadoReal.text)}>
+                    {MESES_ABREV[mes - 1]}
+                  </Label>
                   <Input
+                    className="border-amber-200/80 focus-visible:ring-amber-500/30"
                     value={numToInput(form.projetado_real[String(mes)] ?? 0)}
                     onChange={(e) => setProjetadoReal(mes, e.target.value)}
                     placeholder="0,00"
@@ -145,11 +155,10 @@ export function ReceitaMetasConfig({ metas, onSave, isSaving }: Props) {
             </div>
           </div>
 
-          <Button type="button" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Salvando…' : 'Salvar metas'}
-          </Button>
-        </CardContent>
-      )}
-    </Card>
+      <Button type="button" onClick={handleSave} disabled={isSaving}>
+        {isSaving ? 'Salvando…' : 'Salvar metas'}
+      </Button>
+      </div>
+    </section>
   )
 }
