@@ -11,6 +11,10 @@ import {
   mergeReaction,
   type ReactionEntry,
 } from '../_shared/whatsappMessageUtils.ts'
+import {
+  buildWhatsappPushPayload,
+  sendWhatsappPushToSubscribers,
+} from '../_shared/sendWhatsappPush.ts'
 
 // Webhook publico da Evolution API. Autenticacao via secret na query (?secret=...).
 // Nao usa JWT (deploy com verify_jwt=false).
@@ -126,6 +130,17 @@ async function handleMessage(
     },
     { onConflict: 'remote_jid' },
   )
+
+  if (!fromMe) {
+    const pushPayload = buildWhatsappPushPayload(
+      conteudo || labelForType(msg.messageType),
+      remoteJid,
+      msg.pushName,
+    )
+    sendWhatsappPushToSubscribers(supabase, pushPayload).catch((e) =>
+      console.error('push notify error', e),
+    )
+  }
 }
 
 async function handleMessageUpdate(supabase: SupabaseClient, update: Record<string, any>) {

@@ -14,6 +14,12 @@ import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/AuthContext'
 import { whatsappService } from '../services/whatsappService'
 import { playNotificationSound } from '../utils/sound'
+import {
+  ensureWhatsappPushSubscription,
+  getPushPermissionState,
+  isPushEnabledLocally,
+  showWhatsappBrowserNotification,
+} from '../utils/pushNotifications'
 import type { WhatsappMensagemRow } from '@/lib/database.types'
 
 interface WhatsappNotificationsValue {
@@ -69,6 +75,12 @@ export function WhatsappNotificationsProvider({ children }: { children: ReactNod
     refreshUnread()
   }, [refreshUnread])
 
+  // Reativa inscrição Web Push após login (se o usuário já havia habilitado).
+  useEffect(() => {
+    if (!enabled) return
+    void ensureWhatsappPushSubscription()
+  }, [enabled])
+
   // Atualiza o total de não lidas quando as conversas mudam.
   useEffect(() => {
     if (!enabled) return
@@ -112,14 +124,24 @@ export function WhatsappNotificationsProvider({ children }: { children: ReactNod
             playNotificationSound()
           }
 
-          toast.message('Nova mensagem no WhatsApp', {
-            description: previewTexto(msg.conteudo),
-            icon: <MessageCircle className="h-4 w-4 text-emerald-600" />,
-            action: {
-              label: 'Abrir',
-              onClick: () => navigate('/financeiro/cobranca'),
-            },
-          })
+          const openCobranca = () => navigate('/financeiro/cobranca')
+
+          if (document.hidden) {
+            // Aba em segundo plano: notificação nativa (se push Web não estiver ativo).
+            if (!isPushEnabledLocally() || getPushPermissionState() !== 'granted') {
+              showWhatsappBrowserNotification(msg.conteudo, openCobranca, msg.remote_jid)
+            }
+          } else {
+            toast.message('Nova mensagem no WhatsApp', {
+              description: previewTexto(msg.conteudo),
+              icon: <MessageCircle className="h-4 w-4 text-emerald-600" />,
+              action: {
+                label: 'Abrir',
+                onClick: openCobranca,
+              },
+            })
+          }
+
           refreshUnread()
         },
       )

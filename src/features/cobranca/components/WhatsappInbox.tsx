@@ -36,6 +36,7 @@ import {
   Wallet,
   Volume2,
   VolumeX,
+  BellOff,
   Users,
 } from 'lucide-react'
 import {
@@ -69,6 +70,13 @@ import { WhatsappChatCategoriaSelect } from './WhatsappChatCategoriaSelect'
 import { WhatsappComposerResizeHandle } from './WhatsappComposerResizeHandle'
 import { useComposerResize } from '../hooks/useComposerResize'
 import { isNotifMuted, setNotifMuted, playNotificationSound } from '../utils/sound'
+import {
+  disableWhatsappPush,
+  enableWhatsappPush,
+  getPushPermissionState,
+  isPushEnabledLocally,
+  isPushSupported,
+} from '../utils/pushNotifications'
 import { useWhatsappNotifications } from '../notifications/WhatsappNotificationsProvider'
 import type { PendingWhatsappCobranca, WhatsappChatPessoa } from '../types/cobranca.types'
 import type {
@@ -218,6 +226,8 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   const [showDetails, setShowDetails] = useState(true)
   const [activeCobranca, setActiveCobranca] = useState<PendingWhatsappCobranca | null>(null)
   const [muted, setMuted] = useState(isNotifMuted())
+  const [pushEnabled, setPushEnabled] = useState(isPushEnabledLocally())
+  const pushSupported = isPushSupported()
   const [filtroCategoria, setFiltroCategoria] = useState<WhatsappCategoriaFiltro>(null)
   const [salvandoCategoria, setSalvandoCategoria] = useState(false)
   const { refreshUnread } = useWhatsappNotifications()
@@ -480,6 +490,22 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     if (!novo) playNotificationSound()
   }
 
+  const handleTogglePush = async () => {
+    if (pushEnabled) {
+      await disableWhatsappPush()
+      setPushEnabled(false)
+      toast.success('Notificações push desativadas')
+      return
+    }
+    const result = await enableWhatsappPush()
+    if (result.ok) {
+      setPushEnabled(true)
+      toast.success('Notificações push ativadas — você será avisado mesmo com o app fechado')
+    } else {
+      toast.error(result.reason)
+    }
+  }
+
   const handleCobrarParcela = (row: CobrancaTituloAbertoRow) => {
     if (!row.pessoa_telefone) {
       toast.error('Título sem telefone cadastrado.')
@@ -673,6 +699,28 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
           </span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {pushSupported && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => void handleTogglePush()}
+              title={
+                pushEnabled
+                  ? 'Desativar notificações push do navegador'
+                  : 'Ativar notificações push (funciona com app fechado)'
+              }
+            >
+              {pushEnabled && getPushPermissionState() === 'granted' ? (
+                <BellRing className="h-4 w-4 text-emerald-600" />
+              ) : (
+                <BellOff className="h-4 w-4 text-slate-400" />
+              )}
+              {pushEnabled && getPushPermissionState() === 'granted'
+                ? 'Push ativo'
+                : 'Ativar push'}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

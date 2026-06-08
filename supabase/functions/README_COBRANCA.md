@@ -13,6 +13,43 @@ Backend do módulo de Cobrança roda em Supabase Edge Functions. As chaves ficam
 | `whatsapp-read` | true | Marca mensagens como lidas no WhatsApp (`markMessageAsRead`). |
 | `whatsapp-sync` | true | Backfill de conversas/mensagens via `findChats`/`findMessages`. |
 | `whatsapp-webhook` | false | Recebe eventos da Evolution e grava em `whatsapp_chats`/`whatsapp_mensagens`. Protegido por `?secret=`. |
+| `push-subscribe` | true | Registra/remove inscrição Web Push do usuário (admin/financeiro). |
+
+## Notificações push (WhatsApp)
+
+Quando uma mensagem chega via webhook, usuários com push ativado recebem notificação do sistema operacional — **mesmo com o navegador fechado**.
+
+### 1. Gerar chaves VAPID
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+### 2. Configurar secrets (Supabase)
+
+```bash
+supabase secrets set \
+  VAPID_PUBLIC_KEY="<chave-publica>" \
+  VAPID_PRIVATE_KEY="<chave-privada>" \
+  VAPID_SUBJECT="mailto:financeiro@bpplaw.com.br"
+```
+
+### 3. Frontend (.env / Vercel)
+
+```
+VITE_VAPID_PUBLIC_KEY=<mesma-chave-publica>
+```
+
+### 4. Deploy
+
+- Aplicar migration `20260608200000_push_subscriptions.sql`
+- Deploy das functions `push-subscribe` e `whatsapp-webhook` (atualizada)
+
+### 5. Ativar no sistema
+
+No módulo **Cobrança > WhatsApp**, clique em **Ativar push** e aceite a permissão do navegador.
+
+> Com a aba aberta, o sistema continua usando toast + som em tempo real. Push complementa quando o app está em segundo plano ou fechado.
 
 ## Secrets necessários
 
