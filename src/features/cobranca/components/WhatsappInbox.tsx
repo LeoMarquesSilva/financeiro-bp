@@ -70,7 +70,7 @@ import { WhatsappComposerResizeHandle } from './WhatsappComposerResizeHandle'
 import { useComposerResize } from '../hooks/useComposerResize'
 import { isNotifMuted, setNotifMuted, playNotificationSound } from '../utils/sound'
 import { useWhatsappNotifications } from '../notifications/WhatsappNotificationsProvider'
-import type { PendingWhatsappCobranca } from '../types/cobranca.types'
+import type { PendingWhatsappCobranca, WhatsappChatPessoa } from '../types/cobranca.types'
 import type {
   CobrancaTituloAbertoRow,
   WhatsappChatRow,
@@ -125,6 +125,7 @@ function chatFromPending(pending: PendingWhatsappCobranca): WhatsappChatRow {
     last_message_preview: null,
     unread_count: 0,
     categoria: WHATSAPP_CATEGORIA_COBRANCA_AUTO,
+    pessoa_id: pending.pessoa_id ?? null,
     updated_at: new Date().toISOString(),
   }
 }
@@ -309,7 +310,7 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     selected?.remote_jid,
   )
   const pessoaIdsVinculados = useMemo(
-    () => vinculados.map((v) => v.pessoa_id),
+    () => vinculados.map((v: WhatsappChatPessoa) => v.pessoa_id),
     [vinculados],
   )
   const { candidatos, loading: candidatosLoading } = usePessoasPorTelefone(numeroConversa)
@@ -344,11 +345,15 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     }
   }, [pendingCobranca, chats, refetchChats])
 
-  const cliente = useMemo(() => {
+  const cliente = useMemo((): Pick<
+    CobrancaTituloAbertoRow,
+    'pessoa_nome' | 'cliente' | 'grupo_cliente' | 'pessoa_telefone' | 'pessoa_email'
+  > | null => {
     if (titulos[0]) return titulos[0]
     if (vinculados[0]) {
       return {
         pessoa_nome: vinculados[0].nome,
+        cliente: vinculados[0].nome,
         grupo_cliente: vinculados[0].grupo_cliente,
         pessoa_telefone: numeroConversa,
         pessoa_email: null,
@@ -361,7 +366,7 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     if (!selected) return
     void refetchChats()
     void refetchTitulos()
-    void refetchVinculados().then(({ data }) => {
+    void refetchVinculados().then(({ data }: { data?: WhatsappChatPessoa[] }) => {
       const principal = data?.[0]?.pessoa_id ?? null
       setSelected((prev) => (prev ? { ...prev, pessoa_id: principal } : prev))
     })

@@ -4,6 +4,10 @@ import { isGroupJid, isValidWhatsappRemoteJid } from '../utils/jid'
 import { phoneFromJidAlt } from '../utils/lidIndex'
 import type { WhatsappChatRow, WhatsappMensagemRow } from '@/lib/database.types'
 import type { WhatsappChatPessoa } from '../types/cobranca.types'
+import {
+  WHATSAPP_CATEGORIA_COBRANCA_AUTO,
+  type WhatsappChatCategoriaId,
+} from '../constants/whatsappCategorias'
 import type { GroupParticipantRow } from '../utils/participants'
 
 function isLidJid(jid: string): boolean {

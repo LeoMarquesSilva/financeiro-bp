@@ -2,12 +2,14 @@ import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { whatsappService } from '../services/whatsappService'
+import type { WhatsappChatPessoa } from '../types/cobranca.types'
 
 export function useChatPessoas(remoteJid: string | null | undefined) {
   const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['whatsapp', 'chat-pessoas', remoteJid ?? ''],
-    queryFn: () => (remoteJid ? whatsappService.listChatPessoas(remoteJid) : []),
+    queryFn: (): Promise<WhatsappChatPessoa[]> =>
+      remoteJid ? whatsappService.listChatPessoas(remoteJid) : Promise.resolve([]),
     enabled: !!remoteJid,
     staleTime: 15_000,
   })
@@ -30,7 +32,7 @@ export function useChatPessoas(remoteJid: string | null | undefined) {
   }, [remoteJid, queryClient])
 
   return {
-    vinculados: query.data ?? [],
+    vinculados: (query.data ?? []) as WhatsappChatPessoa[],
     loading: query.isLoading,
     refetch: query.refetch,
   }
