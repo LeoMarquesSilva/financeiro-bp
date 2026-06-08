@@ -44,8 +44,15 @@ export interface DashboardData {
   followUpAlerts: FollowUpAlerts
 }
 
-type RowValorEmAberto = { valor_em_aberto: number }
-type RowClasseValor = { status_classe: string; valor_em_aberto: number }
+type ClientListRow = {
+  id: string
+  valor_em_aberto: number
+  status_classe: string
+  gestor: string[] | string | null
+  area: string[] | string | null
+  pessoa_id: string | null
+  resolvido_at: string | null
+}
 type RowValorPago = { valor_pago: number }
 type RowPagamentoClient = { client_id: string; valor_pago: number }
 type RowClientGestor = { id: string; gestor: string[] | string | null }
@@ -58,28 +65,50 @@ function normKey(value: string[] | string | null | undefined): string {
   return Array.isArray(value) ? (value[0] ?? 'Não informado') : String(value)
 }
 
-async function getTotalEmAberto(): Promise<number> {
+async function fetchClientListRows(): Promise<ClientListRow[]> {
   const { data, error } = await supabase
     .from('clients_inadimplencia_list')
-    .select('valor_em_aberto')
-    .is('resolvido_at', null)
-  if (error) return 0
-  const rows = (data ?? []) as RowValorEmAberto[]
-  return rows.reduce((sum, r) => sum + Number(r.valor_em_aberto), 0)
+    .select('id, valor_em_aberto, status_classe, gestor, area, pessoa_id, resolvido_at')
+  if (error) return []
+  return (data ?? []) as ClientListRow[]
 }
 
-async function getTotaisPorClasse(): Promise<{ A: number; B: number; C: number }> {
-  const { data, error } = await supabase
-    .from('clients_inadimplencia_list')
-    .select('status_classe, valor_em_aberto')
-    .is('resolvido_at', null)
-  if (error) return { A: 0, B: 0, C: 0 }
+function getActiveClients(rows: ClientListRow[]): ClientListRow[] {
+  return rows.filter((r) => r.resolvido_at == null)
+}
+
+function getTotalEmAbertoFromRows(rows: ClientListRow[]): number {
+  return getActiveClients(rows).reduce((sum, r) => sum + Number(r.valor_em_aberto), 0)
+}
+
+function getTotaisPorClasseFromRows(rows: ClientListRow[]): { A: number; B: number; C: number } {
   const acc = { A: 0, B: 0, C: 0 }
-  const rows = (data ?? []) as RowClasseValor[]
-  for (const r of rows) {
+  for (const r of getActiveClients(rows)) {
     acc[r.status_classe as keyof typeof acc] += Number(r.valor_em_aberto)
   }
   return acc
+}
+
+function getValorEmAbertoPorGestorFromRows(rows: ClientListRow[]): RankingItem[] {
+  const byGestor = new Map<string, number>()
+  for (const r of getActiveClients(rows)) {
+    const nome = normKey(r.gestor)
+    byGestor.set(nome, (byGestor.get(nome) ?? 0) + Number(r.valor_em_aberto))
+  }
+  return Array.from(byGestor.entries())
+    .map(([nome, valor]) => ({ nome, valor, quantidade: 0 }))
+    .sort((a, b) => b.valor - a.valor)
+}
+
+function getValorEmAbertoPorAreaFromRows(rows: ClientListRow[]): RankingItem[] {
+  const byArea = new Map<string, number>()
+  for (const r of getActiveClients(rows)) {
+    const nome = normKey(r.area)
+    byArea.set(nome, (byArea.get(nome) ?? 0) + Number(r.valor_em_aberto))
+  }
+  return Array.from(byArea.entries())
+    .map(([nome, valor]) => ({ nome, valor, quantidade: 0 }))
+    .sort((a, b) => b.valor - a.valor)
 }
 
 async function getTotalRecuperadoNoMes(): Promise<number> {
@@ -126,40 +155,6 @@ async function getRankingGestores(): Promise<RankingItem[]> {
 
   return Array.from(byGestor.entries())
     .map(([nome, v]) => ({ nome, valor: v.valor, quantidade: v.qty }))
-    .sort((a, b) => b.valor - a.valor)
-}
-
-async function getValorEmAbertoPorGestor(): Promise<RankingItem[]> {
-  const { data, error } = await supabase
-    .from('clients_inadimplencia_list')
-    .select('gestor, valor_em_aberto')
-    .is('resolvido_at', null)
-  const rows = (data ?? []) as { gestor: string[] | string | null; valor_em_aberto: number }[]
-  if (error || !rows.length) return []
-  const byGestor = new Map<string, number>()
-  for (const r of rows) {
-    const nome = normKey(r.gestor)
-    byGestor.set(nome, (byGestor.get(nome) ?? 0) + Number(r.valor_em_aberto))
-  }
-  return Array.from(byGestor.entries())
-    .map(([nome, valor]) => ({ nome, valor, quantidade: 0 }))
-    .sort((a, b) => b.valor - a.valor)
-}
-
-async function getValorEmAbertoPorArea(): Promise<RankingItem[]> {
-  const { data, error } = await supabase
-    .from('clients_inadimplencia_list')
-    .select('area, valor_em_aberto')
-    .is('resolvido_at', null)
-  const rows = (data ?? []) as { area: string[] | string | null; valor_em_aberto: number }[]
-  if (error || !rows.length) return []
-  const byArea = new Map<string, number>()
-  for (const r of rows) {
-    const nome = normKey(r.area)
-    byArea.set(nome, (byArea.get(nome) ?? 0) + Number(r.valor_em_aberto))
-  }
-  return Array.from(byArea.entries())
-    .map(([nome, valor]) => ({ nome, valor, quantidade: 0 }))
     .sort((a, b) => b.valor - a.valor)
 }
 
@@ -238,24 +233,12 @@ async function getFollowUpAlerts(): Promise<FollowUpAlerts> {
 
 /** Taxa de recuperação desde o início do comitê (05/02/2026). Pagamentos a partir dessa data entram na porcentagem.
  * Fontes: inadimplencia_pagamentos (registros manuais) + financeiro_parcelas (parcelas com data_baixa >= 05/02), vinculadas por pessoa_id. */
-async function getTaxaRecuperacaoComite(): Promise<TaxaRecuperacaoComite> {
-  const [clientsRes, paymentsRes] = await Promise.all([
-    supabase
-      .from('clients_inadimplencia_list')
-      .select('id, valor_em_aberto, pessoa_id, gestor, area'),
-    supabase
-      .from('inadimplencia_pagamentos')
-      .select('client_id, valor_pago')
-      .gte('data_pagamento', DATA_INICIO_COMITE),
-  ])
+async function getTaxaRecuperacaoComite(clients: ClientListRow[]): Promise<TaxaRecuperacaoComite> {
+  const paymentsRes = await supabase
+    .from('inadimplencia_pagamentos')
+    .select('client_id, valor_pago')
+    .gte('data_pagamento', DATA_INICIO_COMITE)
 
-  const clients = (clientsRes.data ?? []) as {
-    id: string
-    valor_em_aberto: number
-    pessoa_id: string | null
-    gestor: string[] | string | null
-    area: string[] | string | null
-  }[]
   const payments = (paymentsRes.data ?? []) as { client_id: string; valor_pago: number }[]
 
   const pessoaIdsComite = [...new Set(clients.map((c) => c.pessoa_id).filter(Boolean))] as string[]
@@ -324,28 +307,26 @@ async function getTaxaRecuperacaoComite(): Promise<TaxaRecuperacaoComite> {
 export const dashboardService = {
   async getDashboard(): Promise<DashboardData> {
     const [
-      emAberto,
-      porClasse,
+      clientListRows,
       recuperadoMes,
-      taxaRecuperacaoComite,
       rankingGestores,
       rankingAreas,
-      valorPorGestor,
-      valorPorArea,
       tempoMedio,
       followUpAlerts,
     ] = await Promise.all([
-      getTotalEmAberto(),
-      getTotaisPorClasse(),
+      fetchClientListRows(),
       getTotalRecuperadoNoMes(),
-      getTaxaRecuperacaoComite(),
       getRankingGestores(),
       getRankingAreas(),
-      getValorEmAbertoPorGestor(),
-      getValorEmAbertoPorArea(),
       getTempoMedioRecuperacao(),
       getFollowUpAlerts(),
     ])
+
+    const emAberto = getTotalEmAbertoFromRows(clientListRows)
+    const porClasse = getTotaisPorClasseFromRows(clientListRows)
+    const valorPorGestor = getValorEmAbertoPorGestorFromRows(clientListRows)
+    const valorPorArea = getValorEmAbertoPorAreaFromRows(clientListRows)
+    const taxaRecuperacaoComite = await getTaxaRecuperacaoComite(clientListRows)
 
     const totalInicioMes = emAberto + recuperadoMes
     const percentualRecuperacao =
