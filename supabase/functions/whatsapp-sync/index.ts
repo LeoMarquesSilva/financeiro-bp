@@ -7,6 +7,8 @@ import {
   mapStatus,
   canonicalJid,
   isGroupJid,
+  isValidWhatsappRemoteJid,
+  resolveEvolutionContactJid,
   isInternalBusinessName,
   mergeReaction,
   type ReactionEntry,
@@ -309,9 +311,8 @@ async function syncEvolutionContacts(
     let count = 0
     const maxContacts = 500
     for (const c of contacts.slice(0, maxContacts)) {
-      const rawJid = (c.id ?? c.remoteJid ?? c.jid) as string | undefined
-      if (!rawJid || rawJid === 'status@broadcast') continue
-      const remoteJid = canonicalJid(rawJid)
+      const remoteJid = resolveEvolutionContactJid(c)
+      if (!remoteJid || isGroupJid(remoteJid) || !isValidWhatsappRemoteJid(remoteJid)) continue
       const pushName = (c.pushName ?? c.name ?? c.verifiedName ?? c.notify ?? null) as string | null
       if (!isUsableEvolutionContactName(pushName)) continue
       await supabase.from('whatsapp_chats').upsert(

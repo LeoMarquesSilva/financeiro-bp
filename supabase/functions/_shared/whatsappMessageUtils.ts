@@ -136,6 +136,41 @@ export function isGroupJid(jid: string): boolean {
   return jid.endsWith('@g.us')
 }
 
+export function isValidWhatsappRemoteJid(jid: string | null | undefined): boolean {
+  if (!jid?.includes('@')) return false
+  const canonical = canonicalJid(jid)
+  return (
+    canonical.endsWith('@s.whatsapp.net') ||
+    canonical.endsWith('@g.us') ||
+    canonical.includes('@lid')
+  )
+}
+
+function normalizePhoneDigits(raw: string): string | null {
+  let d = raw.replace(/\D/g, '')
+  if (!d) return null
+  d = d.replace(/^0+/, '')
+  if (!d.startsWith('55') && (d.length === 10 || d.length === 11)) d = '55' + d
+  return d.length >= 12 ? d : null
+}
+
+/** Resolve JID de contato da Evolution (remoteJid/telefone), ignorando id interno. */
+export function resolveEvolutionContactJid(c: Record<string, unknown>): string | null {
+  for (const field of ['remoteJid', 'jid']) {
+    const raw = c[field] as string | undefined
+    if (!raw || raw === 'status@broadcast') continue
+    const canonical = canonicalJid(raw)
+    if (isValidWhatsappRemoteJid(canonical)) return canonical
+  }
+  for (const field of ['phoneNumber', 'phone', 'number']) {
+    const raw = c[field] as string | undefined
+    if (!raw) continue
+    const digits = normalizePhoneDigits(String(raw))
+    if (digits) return `${digits}@s.whatsapp.net`
+  }
+  return null
+}
+
 export function isInternalBusinessName(name: string | null | undefined): boolean {
   const raw = (name ?? '').trim()
   if (!raw) return false

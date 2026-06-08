@@ -12,7 +12,6 @@ import {
 } from '../hooks/useCobrancaPainel'
 import { useCobrancaTemplates } from '../hooks/useCobrancaTemplates'
 import { cobrancaService, type ArquivadoRow, type FaixaAtrasoFiltro, type StatusCobrancaFiltro } from '../services/cobrancaService'
-import { applyTemplate, buildTemplateVars } from '../utils/template'
 import { useWhatsappNotifications } from '../notifications/WhatsappNotificationsProvider'
 import type { PendingWhatsappCobranca } from '../types/cobranca.types'
 import { CobrancaKPIs } from '../components/CobrancaKPIs'
@@ -196,21 +195,15 @@ export function CobrancaPage() {
   }
 
   const iniciarCobrancaWhatsapp = () => {
-    const comTel = selectedRows.filter((r: CobrancaPainelRow) => r.pessoa_telefone?.trim())
-    if (comTel.length === 0) {
+    const rows = selectedRows.filter(
+      (r: CobrancaPainelRow) => r.pessoa_id || r.pessoa_telefone?.trim(),
+    )
+    if (rows.length === 0) {
       toast.error('Nenhum cliente selecionado possui telefone cadastrado.')
       return
     }
-    if (comTel.length === 1) {
-      const r = comTel[0]
-      setPendingWhatsapp({
-        parcela_id: r.parcela_id,
-        pessoa_id: r.pessoa_id,
-        telefone: r.pessoa_telefone!,
-        nome: r.pessoa_nome || r.cliente,
-        mensagem: applyTemplate(templates.whatsapp, buildTemplateVars(r, fullName)),
-      })
-      setTab('whatsapp')
+    if (rows.length === 1) {
+      setGrupoParaCobrar(rows)
       return
     }
     setCanalEnvio('whatsapp')

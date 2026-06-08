@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModalBase } from '@/features/inadimplencia/components/ModalBase'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import type { CobrancaPainelRow } from '@/lib/database.types'
 import type { PendingWhatsappCobranca } from '../types/cobranca.types'
 import { formatPhoneMasked } from '../utils/phoneMask'
+import { TelefoneWhatsappPicker, type TelefoneWhatsappPickerHandle } from './TelefoneWhatsappPicker'
 
 interface Props {
   open: boolean
@@ -40,27 +41,41 @@ export function ConfirmarCobrancaModal({
   const [sending, setSending] = useState(false)
   const [mensagens, setMensagens] = useState<Record<string, string>>({})
   const [assuntos, setAssuntos] = useState<Record<string, string>>({})
+  const [telefonePorPessoa, setTelefonePorPessoa] = useState<Record<string, string>>({})
+  const pickerRefs = useRef<Record<string, TelefoneWhatsappPickerHandle | null>>({})
 
   const { enviaveis, semContato } = useMemo(() => {
     if (!canal) return { enviaveis: [] as CobrancaPainelRow[], semContato: [] as CobrancaPainelRow[] }
     const enviaveis: CobrancaPainelRow[] = []
     const semContato: CobrancaPainelRow[] = []
     for (const r of rows) {
-      const contato = canal === 'whatsapp' ? r.pessoa_telefone : r.pessoa_email
-      if (contato && contato.trim()) enviaveis.push(r)
+      const contato = canal === 'whatsapp' ? r.pessoa_telefone || r.pessoa_id : r.pessoa_email
+      if (contato) enviaveis.push(r)
       else semContato.push(r)
     }
     return { enviaveis, semContato }
   }, [rows, canal])
 
+  const pessoasUnicas = useMemo(() => {
+    const map = new Map<string, CobrancaPainelRow>()
+    for (const r of enviaveis) {
+      if (r.pessoa_id && !map.has(r.pessoa_id)) map.set(r.pessoa_id, r)
+    }
+    return Array.from(map.values())
+  }, [enviaveis])
+
   useEffect(() => {
     if (!open || !canal) return
     const msgMap: Record<string, string> = {}
     const assMap: Record<string, string> = {}
+    const telMap: Record<string, string> = {}
     for (const r of enviaveis) {
       const vars = buildTemplateVars(r, fullName)
       if (canal === 'whatsapp') {
         msgMap[r.parcela_id] = applyTemplate(templates.whatsapp, vars)
+        if (r.pessoa_id && r.pessoa_telefone) {
+          telMap[r.pessoa_id] = telMap[r.pessoa_id] ?? r.pessoa_telefone
+        }
       } else {
         msgMap[r.parcela_id] = applyTemplate(templates.emailCorpo, vars)
         assMap[r.parcela_id] = applyTemplate(templates.emailAssunto, vars)
@@ -68,7 +83,13 @@ export function ConfirmarCobrancaModal({
     }
     setMensagens(msgMap)
     setAssuntos(assMap)
-  }, [open, canal, enviaveis, templates])
+    setTelefonePorPessoa(telMap)
+  }, [open, canal, enviaveis, templates, fullName])
+
+  const telefoneParaRow = (r: CobrancaPainelRow) => {
+    if (r.pessoa_id && telefonePorPessoa[r.pessoa_id]) return telefonePorPessoa[r.pessoa_id]
+    return r.pessoa_telefone ?? ''
+  }
 
   const handleSend = async () => {
     if (!canal || enviaveis.length === 0) return
@@ -78,21 +99,41 @@ export function ConfirmarCobrancaModal({
       let firstWhatsapp: PendingWhatsappCobranca | null = null
 
       if (canal === 'whatsapp') {
+        const resolvedPorPessoa: Record<string, { telefone: string; nome: string }> = {}
+        for (const p of pessoasUnicas) {
+          if (!p.pessoa_id) continue
+          const ref = pickerRefs.current[p.pessoa_id]
+          const resolved = await ref?.resolve()
+          if (resolved) {
+            resolvedPorPessoa[p.pessoa_id] = resolved
+          } else {
+            const tel = telefonePorPessoa[p.pessoa_id] ?? p.pessoa_telefone
+            if (tel) {
+              resolvedPorPessoa[p.pessoa_id] = {
+                telefone: tel,
+                nome: p.pessoa_nome || p.cliente,
+              }
+            }
+          }
+        }
+
         const itens = enviaveis.map((r) => {
           const mensagem = mensagens[r.parcela_id] ?? applyTemplate(templates.whatsapp, buildTemplateVars(r, fullName))
+          const resolved = r.pessoa_id ? resolvedPorPessoa[r.pessoa_id] : null
+          const number = resolved?.telefone ?? r.pessoa_telefone!
           if (!firstWhatsapp) {
             firstWhatsapp = {
               parcela_id: r.parcela_id,
               pessoa_id: r.pessoa_id,
-              telefone: r.pessoa_telefone!,
-              nome: r.pessoa_nome || r.cliente,
+              telefone: number,
+              nome: resolved?.nome ?? r.pessoa_nome ?? r.cliente,
               mensagem,
             }
           }
           return {
             parcela_id: r.parcela_id,
             pessoa_id: r.pessoa_id,
-            number: r.pessoa_telefone!,
+            number,
             mensagem,
           }
         })
@@ -159,6 +200,32 @@ export function ConfirmarCobrancaModal({
           </div>
         )}
 
+        {canal === 'whatsapp' && pessoasUnicas.length > 0 && (
+          <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Telefone de destino por cliente
+            </p>
+            {pessoasUnicas.map((p) => (
+              <div key={p.pessoa_id!} className="space-y-1">
+                <Label className="text-xs">{p.pessoa_nome || p.cliente}</Label>
+                <TelefoneWhatsappPicker
+                  ref={(el) => {
+                    pickerRefs.current[p.pessoa_id!] = el
+                  }}
+                  pessoaId={p.pessoa_id}
+                  pessoaNome={p.pessoa_nome || p.cliente}
+                  fallbackTelefone={p.pessoa_telefone}
+                  value={telefonePorPessoa[p.pessoa_id!] ?? p.pessoa_telefone ?? ''}
+                  onChange={(tel) =>
+                    setTelefonePorPessoa((prev) => ({ ...prev, [p.pessoa_id!]: tel }))
+                  }
+                  disabled={sending}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
         {enviaveis.length > 0 && (
           <ScrollArea className="max-h-[50vh] space-y-4 pr-2">
             {enviaveis.map((r) => (
@@ -169,7 +236,7 @@ export function ConfirmarCobrancaModal({
                   </span>
                   <Badge variant="secondary">
                     {canal === 'whatsapp'
-                      ? formatPhoneMasked(r.pessoa_telefone) || r.pessoa_telefone
+                      ? formatPhoneMasked(telefoneParaRow(r)) || telefoneParaRow(r)
                       : r.pessoa_email}
                   </Badge>
                 </div>

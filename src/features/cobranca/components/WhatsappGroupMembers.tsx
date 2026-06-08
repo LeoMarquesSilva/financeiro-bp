@@ -1,4 +1,5 @@
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { WhatsappAvatarImage } from './WhatsappAvatarImage'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Crown, Loader2, Users } from 'lucide-react'
@@ -51,8 +52,14 @@ export function WhatsappGroupMembers({ members, loading }: Props) {
                 key={m.participant_jid}
                 className="flex items-center gap-2 rounded-lg border border-slate-100 px-2 py-1.5"
               >
-                <Avatar className="h-8 w-8 shrink-0">
-                  {m.profile_pic_url && <AvatarImage src={m.profile_pic_url} alt="" />}
+                <Avatar key={m.participant_jid} className="h-8 w-8 shrink-0">
+                  <WhatsappAvatarImage
+                    src={m.profile_pic_url}
+                    alt=""
+                    remoteJid={m.phone_number ?? m.participant_jid}
+                    fetchIfNeeded
+                    lazy
+                  />
                   <AvatarFallback className="bg-slate-100 text-[10px] text-slate-600">
                     {initials(m.name)}
                   </AvatarFallback>

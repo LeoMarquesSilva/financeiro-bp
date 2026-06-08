@@ -6,3 +6,34 @@ export interface PendingWhatsappCobranca {
   nome: string
   mensagem: string
 }
+
+/** Telefone WhatsApp cadastrado para cobrança (com rótulo). */
+export interface PessoaTelefoneWhatsapp {
+  id: string
+  pessoa_id: string
+  nome: string
+  telefone: string
+  ordem: number
+}
+
+export interface PessoaTelefoneWhatsappInput {
+  id?: string
+  nome: string
+  telefone: string
+}
+
+/** Cliente identificado pelo telefone da conversa (cadastro ou títulos). */
+export interface PessoaTelefoneMatch {
+  pessoa_id: string
+  nome: string
+  grupo_cliente: string | null
+  contato_nome?: string | null
+  fonte: 'telefone_whatsapp' | 'titulos'
+}
+
+/** Cliente vinculado manualmente à conversa WhatsApp. */
+export interface WhatsappChatPessoa {
+  pessoa_id: string
+  nome: string
+  grupo_cliente: string | null
+}

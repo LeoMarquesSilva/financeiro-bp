@@ -1,12 +1,9 @@
 import { supabase } from '@/lib/supabaseClient'
 import { parseEdgeFunctionError, canonicalJid } from '../utils/phone'
-import { isGroupJid } from '../utils/jid'
+import { isGroupJid, isValidWhatsappRemoteJid } from '../utils/jid'
 import { phoneFromJidAlt } from '../utils/lidIndex'
 import type { WhatsappChatRow, WhatsappMensagemRow } from '@/lib/database.types'
-import {
-  WHATSAPP_CATEGORIA_COBRANCA_AUTO,
-  type WhatsappChatCategoriaId,
-} from '../constants/whatsappCategorias'
+import type { WhatsappChatPessoa } from '../types/cobranca.types'
 import type { GroupParticipantRow } from '../utils/participants'
 
 function isLidJid(jid: string): boolean {
@@ -15,6 +12,39 @@ function isLidJid(jid: string): boolean {
 
 function chatKey(jid: string): string {
   return isLidJid(jid) ? jid : canonicalJid(jid)
+}
+
+const avatarDataUrlCache = new Map<string, string>()
+const avatarInflight = new Map<string, Promise<string | null>>()
+
+async function fetchAvatarDataUrl(remoteJid: string): Promise<string | null> {
+  const key = chatKey(remoteJid)
+  const cached = avatarDataUrlCache.get(key)
+  if (cached) return cached
+
+  const pending = avatarInflight.get(key)
+  if (pending) return pending
+
+  const promise = (async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('whatsapp-avatar', {
+        body: { remoteJid: key },
+      })
+      if (error) return null
+      const result = data as { base64?: string; mimetype?: string; unavailable?: boolean }
+      if (result?.unavailable || !result?.base64 || !result?.mimetype) return null
+      const dataUrl = `data:${result.mimetype};base64,${result.base64}`
+      avatarDataUrlCache.set(key, dataUrl)
+      return dataUrl
+    } catch {
+      return null
+    } finally {
+      avatarInflight.delete(key)
+    }
+  })()
+
+  avatarInflight.set(key, promise)
+  return promise
 }
 
 function pickPushName(
@@ -55,6 +85,7 @@ function mergeChats(existing: WhatsappChatRow, incoming: WhatsappChatRow, key: s
     instance: newer.instance ?? older.instance,
     updated_at: newer.updated_at ?? older.updated_at,
     categoria: existing.categoria ?? incoming.categoria ?? null,
+    pessoa_id: existing.pessoa_id ?? incoming.pessoa_id ?? null,
   }
 }
 
@@ -181,7 +212,9 @@ export const whatsappService = {
         console.warn('[whatsappService] listChatsRaw', error.message)
         return []
       }
-      return (data ?? []) as WhatsappChatRow[]
+      return ((data ?? []) as WhatsappChatRow[]).filter((row) =>
+        isValidWhatsappRemoteJid(row.remote_jid),
+      )
     } catch (e) {
       console.warn('[whatsappService] listChatsRaw fetch failed', e)
       return []
@@ -265,6 +298,23 @@ export const whatsappService = {
     } catch {
       return []
     }
+  },
+
+  async fetchAvatar(
+    remoteJid: string,
+  ): Promise<{ base64: string; mimetype: string } | null> {
+    const dataUrl = await fetchAvatarDataUrl(remoteJid)
+    if (!dataUrl) return null
+    const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl)
+    if (!match) return null
+    return { mimetype: match[1], base64: match[2] }
+  },
+
+  /** URL data: pronta para `<img>` (com cache em memória). */
+  fetchAvatarDataUrl,
+
+  getCachedAvatarDataUrl(remoteJid: string): string | null {
+    return avatarDataUrlCache.get(chatKey(remoteJid)) ?? null
   },
 
   async sendMessage(params: { remoteJid?: string; number?: string; text: string }): Promise<void> {
@@ -427,6 +477,91 @@ export const whatsappService = {
       .update({ categoria, updated_at: new Date().toISOString() } as never)
       .eq('remote_jid', key)
     if (error) throw error
+  },
+
+  /** Vincula conversa a um cliente (permite múltiplos vínculos). */
+  async addChatPessoa(remoteJid: string, pessoaId: string): Promise<void> {
+    const key = chatKey(remoteJid)
+    const { error } = await supabase.from('whatsapp_chat_pessoas').insert({
+      remote_jid: key,
+      pessoa_id: pessoaId,
+    } as never)
+    if (error && error.code !== '23505') throw error
+    await this.syncChatPessoaPrincipal(key)
+  },
+
+  /** Remove vínculo de um cliente específico. */
+  async removeChatPessoa(remoteJid: string, pessoaId: string): Promise<void> {
+    const key = chatKey(remoteJid)
+    const { error } = await supabase
+      .from('whatsapp_chat_pessoas')
+      .delete()
+      .eq('remote_jid', key)
+      .eq('pessoa_id', pessoaId)
+    if (error) throw error
+    await this.syncChatPessoaPrincipal(key)
+  },
+
+  /** Lista clientes vinculados manualmente à conversa. */
+  async listChatPessoas(remoteJid: string): Promise<WhatsappChatPessoa[]> {
+    const key = chatKey(remoteJid)
+    const { data: links, error } = await supabase
+      .from('whatsapp_chat_pessoas')
+      .select('pessoa_id')
+      .eq('remote_jid', key)
+      .order('created_at', { ascending: true })
+    if (error) {
+      console.error('[whatsappService] listChatPessoas', error)
+      return []
+    }
+    if (!links?.length) return []
+
+    const ids = links.map((l) => (l as { pessoa_id: string }).pessoa_id)
+    const { data: pessoas, error: pErr } = await supabase
+      .from('pessoas')
+      .select('id, nome, grupo_cliente')
+      .in('id', ids)
+    if (pErr) {
+      console.error('[whatsappService] listChatPessoas pessoas', pErr)
+      return ids.map((id) => ({ pessoa_id: id, nome: 'Cliente', grupo_cliente: null }))
+    }
+
+    const byId = new Map(
+      ((pessoas ?? []) as { id: string; nome: string; grupo_cliente: string | null }[]).map((p) => [
+        p.id,
+        p,
+      ]),
+    )
+    return ids.map((id) => {
+      const p = byId.get(id)
+      return {
+        pessoa_id: id,
+        nome: p?.nome ?? 'Cliente',
+        grupo_cliente: p?.grupo_cliente ?? null,
+      }
+    })
+  },
+
+  /** Mantém pessoa_id legado como o primeiro vínculo (compatibilidade). */
+  async syncChatPessoaPrincipal(remoteJid: string): Promise<void> {
+    const vinculados = await this.listChatPessoas(remoteJid)
+    const principal = vinculados[0]?.pessoa_id ?? null
+    await supabase
+      .from('whatsapp_chats')
+      .update({ pessoa_id: principal, updated_at: new Date().toISOString() } as never)
+      .eq('remote_jid', remoteJid)
+  },
+
+  /** @deprecated Use addChatPessoa / removeChatPessoa */
+  async linkChatPessoa(remoteJid: string, pessoaId: string | null): Promise<void> {
+    const key = chatKey(remoteJid)
+    if (pessoaId === null) {
+      const { error } = await supabase.from('whatsapp_chat_pessoas').delete().eq('remote_jid', key)
+      if (error) throw error
+      await this.syncChatPessoaPrincipal(key)
+      return
+    }
+    await this.addChatPessoa(key, pessoaId)
   },
 
   /** Marca conversa como Cobrança (painel / envio de cobrança). Cria o chat se ainda não existir. */

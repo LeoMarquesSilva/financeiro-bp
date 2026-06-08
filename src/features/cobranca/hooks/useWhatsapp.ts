@@ -133,13 +133,17 @@ export function useCobrancaKpiRows() {
   }
 }
 
-/** Títulos em aberto (vencidos e a vencer) do cliente vinculado ao telefone da conversa. */
-export function useTitulosCliente(numero: string | null) {
+/** Títulos em aberto do(s) cliente(s) vinculado(s) ou, na ausência, pelo telefone. */
+export function useTitulosCliente(numero: string | null, pessoaIds: string[] = []) {
+  const idsKey = pessoaIds.length > 0 ? pessoaIds.slice().sort().join(',') : ''
   const query = useQuery({
-    queryKey: ['cobranca', 'titulos-cliente', numero ?? ''],
-    queryFn: () =>
-      numero ? cobrancaService.listTitulosPorTelefone(numero) : Promise.resolve([]),
-    enabled: !!numero,
+    queryKey: ['cobranca', 'titulos-cliente', idsKey, numero ?? ''],
+    queryFn: async () => {
+      if (pessoaIds.length > 0) return cobrancaService.listTitulosPorPessoaIds(pessoaIds)
+      if (numero) return cobrancaService.listTitulosPorTelefone(numero)
+      return []
+    },
+    enabled: pessoaIds.length > 0 || !!numero,
     staleTime: 30_000,
   })
   return {
@@ -147,6 +151,16 @@ export function useTitulosCliente(numero: string | null) {
     loading: query.isLoading,
     refetch: query.refetch,
   }
+}
+
+export function usePessoaResumo(pessoaId: string | null) {
+  const query = useQuery({
+    queryKey: ['cobranca', 'pessoa-resumo', pessoaId ?? ''],
+    queryFn: () => (pessoaId ? cobrancaService.getPessoaResumo(pessoaId) : Promise.resolve(null)),
+    enabled: !!pessoaId,
+    staleTime: 60_000,
+  })
+  return { pessoa: query.data ?? null, loading: query.isLoading }
 }
 
 export function useWhatsappChats(busca?: string) {

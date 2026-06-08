@@ -10,6 +10,22 @@ export function isLidJid(jid: string | null | undefined): boolean {
   return !!jid && jid.includes('@lid')
 }
 
+/** ID interno da Evolution (agenda) — não é telefone nem conversa. */
+export function isEvolutionContactId(jid: string | null | undefined): boolean {
+  return !!jid && !jid.includes('@')
+}
+
+/** JID utilizável para conversa WhatsApp (telefone, grupo ou @lid). */
+export function isValidWhatsappRemoteJid(jid: string | null | undefined): boolean {
+  if (!jid?.includes('@')) return false
+  const canonical = canonicalJid(jid)
+  return (
+    canonical.endsWith('@s.whatsapp.net') ||
+    canonical.endsWith('@g.us') ||
+    canonical.includes('@lid')
+  )
+}
+
 /** ID numérico do grupo (sem @g.us). */
 export function groupIdFromJid(jid: string): string {
   return canonicalJid(jid).split('@')[0]

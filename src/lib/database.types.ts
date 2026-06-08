@@ -342,6 +342,32 @@ export interface Database {
           updated_at?: string
         }
       }
+      pessoa_telefones_whatsapp: {
+        Row: {
+          id: string
+          pessoa_id: string
+          nome: string
+          telefone: string
+          ordem: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          pessoa_id: string
+          nome?: string
+          telefone: string
+          ordem?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          nome?: string
+          telefone?: string
+          ordem?: number
+          updated_at?: string
+        }
+      }
       relatorio_financeiro_resumo_por_cliente: {
         Row: {
           pessoa_id: string
@@ -464,10 +490,28 @@ export interface Database {
           last_message_preview: string | null
           unread_count: number
           categoria: 'COBRANCA' | 'COLABORADOR_BP' | 'SOCIO' | null
+          pessoa_id: string | null
           updated_at: string
         }
         Insert: unknown
         Update: unknown
+      }
+      whatsapp_chat_pessoas: {
+        Row: {
+          id: string
+          remote_jid: string
+          pessoa_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          remote_jid: string
+          pessoa_id: string
+          created_at?: string
+        }
+        Update: {
+          pessoa_id?: string
+        }
       }
       whatsapp_mensagens: {
         Row: {

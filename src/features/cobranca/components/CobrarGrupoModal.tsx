@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModalBase } from '@/features/inadimplencia/components/ModalBase'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { AlertTriangle, MessageCircle } from 'lucide-react'
+import { MessageCircle } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/shared/utils/format'
@@ -13,7 +13,7 @@ import { buildMensagemGrupoWhatsApp } from '../utils/template'
 import { cobrancaService } from '../services/cobrancaService'
 import { whatsappService } from '../services/whatsappService'
 import { phoneToRemoteJid } from '../utils/phone'
-import { formatPhoneMasked } from '../utils/phoneMask'
+import { TelefoneWhatsappPicker, type TelefoneWhatsappPickerHandle } from './TelefoneWhatsappPicker'
 import type { CobrancaPainelRow } from '@/lib/database.types'
 
 interface Props {
@@ -29,21 +29,19 @@ export function CobrarGrupoModal({ open, rows, onClose, onSent }: Props) {
   const [mensagem, setMensagem] = useState('')
   const [telefone, setTelefone] = useState('')
   const [nomeContato, setNomeContato] = useState('')
+  const pickerRef = useRef<TelefoneWhatsappPickerHandle>(null)
 
-  const telefones = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.pessoa_telefone?.trim()).filter(Boolean))) as string[],
-    [rows],
-  )
   const total = useMemo(() => rows.reduce((sum, r) => sum + Number(r.valor ?? 0), 0), [rows])
   const nome = rows[0]?.pessoa_nome || rows[0]?.cliente || 'Cliente'
+  const pessoaId = rows[0]?.pessoa_id ?? null
+  const fallbackTelefone = rows[0]?.pessoa_telefone ?? null
   const isSingular = rows.length === 1
 
   useEffect(() => {
     if (!open) return
-    const nomeDefault = rows[0]?.pessoa_nome || rows[0]?.cliente || 'Cliente'
-    setNomeContato(nomeDefault)
-    setTelefone(telefones[0] ?? '')
-  }, [open, rows, telefones])
+    setNomeContato(rows[0]?.pessoa_nome || rows[0]?.cliente || 'Cliente')
+    setTelefone(fallbackTelefone?.trim() ?? '')
+  }, [open, rows, fallbackTelefone])
 
   useEffect(() => {
     if (!open) return
@@ -52,8 +50,10 @@ export function CobrarGrupoModal({ open, rows, onClose, onSent }: Props) {
 
   const handleSend = async () => {
     if (rows.length === 0) return
-    if (!telefone) {
-      toast.error('Selecione um telefone para envio.')
+
+    const resolved = (await pickerRef.current?.resolve()) ?? (telefone ? { telefone, nome: nomeContato } : null)
+    if (!resolved?.telefone) {
+      toast.error('Selecione ou informe um telefone para envio.')
       return
     }
     if (!mensagem.trim()) {
@@ -65,19 +65,19 @@ export function CobrarGrupoModal({ open, rows, onClose, onSent }: Props) {
     try {
       const payload = {
         parcela_ids: rows.map((r) => r.parcela_id),
-        pessoa_id: rows[0]?.pessoa_id ?? null,
-        number: telefone,
+        pessoa_id: pessoaId,
+        number: resolved.telefone,
         mensagem: mensagem.trim(),
       }
       const result = await cobrancaService.enviarWhatsappGrupo(payload, fullName)
       const falhas = result.total - result.enviados
       if (result.enviados > 0) {
-        const jid = phoneToRemoteJid(telefone)
+        const jid = phoneToRemoteJid(resolved.telefone)
         if (jid) {
           await whatsappService.ensureChatCategoriaCobranca(jid).catch(() => {})
         }
         toast.success(
-          `Cobrança consolidada enviada para ${nome} (${result.enviados} título(s) marcados)${
+          `Cobrança consolidada enviada para ${resolved.nome || nome} (${result.enviados} título(s) marcados)${
             falhas > 0 ? `, ${falhas} com erro` : ''
           }`,
         )
@@ -101,8 +101,8 @@ export function CobrarGrupoModal({ open, rows, onClose, onSent }: Props) {
       title={isSingular ? 'Cobrar título por WhatsApp' : 'Cobrança consolidada do grupo'}
       description={
         isSingular
-          ? 'Envia uma mensagem de cobrança para este título.'
-          : 'Envia uma única mensagem para o cliente com todos os títulos do grupo.'
+          ? 'Escolha o contato WhatsApp e envie a mensagem de cobrança.'
+          : 'Escolha o contato WhatsApp e envie uma única mensagem com todos os títulos do grupo.'
       }
       className="max-w-2xl"
     >
@@ -116,15 +116,8 @@ export function CobrarGrupoModal({ open, rows, onClose, onSent }: Props) {
           </span>
         </div>
 
-        {telefones.length > 1 && (
-          <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Foram encontrados múltiplos telefones neste grupo. Selecione o destino correto.</span>
-          </div>
-        )}
-
         <div className="space-y-1">
-          <Label className="text-xs">Nome do contato financeiro</Label>
+          <Label className="text-xs">Nome do contato financeiro (na mensagem)</Label>
           <Input
             value={nomeContato}
             onChange={(e) => setNomeContato(e.target.value)}
@@ -134,27 +127,18 @@ export function CobrarGrupoModal({ open, rows, onClose, onSent }: Props) {
 
         <div className="space-y-1">
           <Label className="text-xs">Telefone de destino</Label>
-          {telefones.length === 0 ? (
-            <Input readOnly value="Sem telefone cadastrado" className="bg-slate-50 text-slate-500" />
-          ) : telefones.length === 1 ? (
-            <Input
-              readOnly
-              value={formatPhoneMasked(telefone) || telefone}
-              className="bg-slate-50"
-            />
-          ) : (
-            <select
-              value={telefone}
-              onChange={(e) => setTelefone(e.target.value)}
-              className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2"
-            >
-              {telefones.map((tel) => (
-                <option key={tel} value={tel}>
-                  {formatPhoneMasked(tel) || tel}
-                </option>
-              ))}
-            </select>
-          )}
+          <TelefoneWhatsappPicker
+            ref={pickerRef}
+            pessoaId={pessoaId}
+            pessoaNome={nome}
+            fallbackTelefone={fallbackTelefone}
+            value={telefone}
+            onChange={(tel, meta) => {
+              setTelefone(tel)
+              if (meta?.nome) setNomeContato(meta.nome)
+            }}
+            disabled={sending}
+          />
         </div>
 
         <div className="space-y-1">
@@ -186,7 +170,7 @@ export function CobrarGrupoModal({ open, rows, onClose, onSent }: Props) {
           </Button>
           <Button
             onClick={handleSend}
-            disabled={sending || !telefone || rows.length === 0}
+            disabled={sending || rows.length === 0}
             className="bg-emerald-600 hover:bg-emerald-700"
           >
             {sending ? 'Enviando…' : isSingular ? 'Enviar cobrança' : 'Enviar cobrança consolidada'}

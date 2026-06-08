@@ -1,11 +1,13 @@
 import { supabase } from '@/lib/supabaseClient'
 import { parseEdgeFunctionError, phoneKey, phonesMatch } from '../utils/phone'
+import { parsePhoneForStorage } from '../utils/phoneMask'
 import { isInternalContactName, pickContactLabel } from '../utils/contactNames'
 import type {
   CobrancaPainelRow,
   CobrancaTituloAbertoRow,
   CobrancaKpiRow,
 } from '@/lib/database.types'
+import type { PessoaTelefoneWhatsapp, PessoaTelefoneWhatsappInput, PessoaTelefoneMatch } from '../types/cobranca.types'
 
 /** Subconjunto de colunas do painel usado no dashboard de indicadores. */
 export type CobrancaPainelKpiRow = Pick<
@@ -277,6 +279,157 @@ export const cobrancaService = {
     )
   },
 
+  /**
+   * Clientes cujo telefone coincide com o número da conversa (cadastro nomeado ou títulos).
+   */
+  async resolvePessoasPorTelefone(numero: string): Promise<PessoaTelefoneMatch[]> {
+    const sub8 = numero.replace(/\D/g, '').slice(-8)
+    if (sub8.length < 8) return []
+
+    const map = new Map<string, PessoaTelefoneMatch>()
+
+    const add = (match: PessoaTelefoneMatch) => {
+      const existing = map.get(match.pessoa_id)
+      if (!existing) {
+        map.set(match.pessoa_id, match)
+        return
+      }
+      if (!existing.contato_nome && match.contato_nome) {
+        map.set(match.pessoa_id, { ...existing, contato_nome: match.contato_nome })
+      }
+    }
+
+    const [{ data: telRows }, titulos] = await Promise.all([
+      supabase
+        .from('pessoa_telefones_whatsapp')
+        .select('pessoa_id, nome, telefone, pessoas(nome, grupo_cliente)')
+        .like('telefone', `%${sub8}`)
+        .limit(50),
+      this.listTitulosPorTelefone(numero),
+    ])
+
+    for (const row of (telRows ?? []) as Array<{
+      pessoa_id: string
+      nome: string
+      telefone: string
+      pessoas: { nome: string; grupo_cliente: string | null } | null
+    }>) {
+      if (!phonesMatch(numero, row.telefone)) continue
+      const pessoa = row.pessoas
+      add({
+        pessoa_id: row.pessoa_id,
+        nome: pessoa?.nome ?? row.nome,
+        grupo_cliente: pessoa?.grupo_cliente ?? null,
+        contato_nome: row.nome?.trim() || null,
+        fonte: 'telefone_whatsapp',
+      })
+    }
+
+    for (const t of titulos) {
+      if (!t.pessoa_id) continue
+      add({
+        pessoa_id: t.pessoa_id,
+        nome: t.pessoa_nome || t.cliente,
+        grupo_cliente: t.grupo_cliente,
+        fonte: 'titulos',
+      })
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  },
+
+  /** Títulos em aberto de um ou mais clientes vinculados à conversa. */
+  async listTitulosPorPessoaIds(pessoaIds: string[]): Promise<CobrancaTituloAbertoRow[]> {
+    const ids = [...new Set(pessoaIds.filter(Boolean))]
+    if (ids.length === 0) return []
+    const { data, error } = await supabase
+      .from('cobranca_titulos_abertos')
+      .select('*')
+      .eq('arquivado', false)
+      .in('pessoa_id', ids)
+      .order('data_vencimento', { ascending: true })
+      .limit(500)
+    if (error) {
+      console.error('[cobrancaService] listTitulosPorPessoaIds', error)
+      return []
+    }
+    return (data ?? []) as CobrancaTituloAbertoRow[]
+  },
+
+  /** Títulos em aberto vinculados manualmente à conversa (por pessoa_id). */
+  async listTitulosPorPessoaId(pessoaId: string): Promise<CobrancaTituloAbertoRow[]> {
+    const { data, error } = await supabase
+      .from('cobranca_titulos_abertos')
+      .select('*')
+      .eq('arquivado', false)
+      .eq('pessoa_id', pessoaId)
+      .order('data_vencimento', { ascending: true })
+      .limit(300)
+    if (error) {
+      console.error('[cobrancaService] listTitulosPorPessoaId', error)
+      return []
+    }
+    return (data ?? []) as CobrancaTituloAbertoRow[]
+  },
+
+  async getPessoaResumo(pessoaId: string): Promise<{
+    id: string
+    nome: string
+    grupo_cliente: string | null
+    telefone: string | null
+    email: string | null
+  } | null> {
+    const { data, error } = await supabase
+      .from('pessoas')
+      .select('id, nome, grupo_cliente, telefone, email')
+      .eq('id', pessoaId)
+      .maybeSingle()
+    if (error) {
+      console.error('[cobrancaService] getPessoaResumo', error)
+      return null
+    }
+    return data as {
+      id: string
+      nome: string
+      grupo_cliente: string | null
+      telefone: string | null
+      email: string | null
+    } | null
+  },
+
+  async searchPessoas(
+    term: string,
+    limit = 15,
+  ): Promise<
+    {
+      id: string
+      nome: string
+      grupo_cliente: string | null
+      telefone: string | null
+      cpf_cnpj: string | null
+    }[]
+  > {
+    const safe = term.trim().replace(/%/g, '').replace(/_/g, '').replace(/,/g, '')
+    if (safe.length < 2) return []
+    const { data, error } = await supabase
+      .from('pessoas')
+      .select('id, nome, grupo_cliente, telefone, cpf_cnpj')
+      .or(`nome.ilike.%${safe}%,grupo_cliente.ilike.%${safe}%,cpf_cnpj.ilike.%${safe}%`)
+      .order('nome')
+      .limit(limit)
+    if (error) {
+      console.error('[cobrancaService] searchPessoas', error)
+      return []
+    }
+    return (data ?? []) as {
+      id: string
+      nome: string
+      grupo_cliente: string | null
+      telefone: string | null
+      cpf_cnpj: string | null
+    }[]
+  },
+
   /** Nomes de clientes por telefone (para identificar conversas do WhatsApp). */
   async listContatoNomes(): Promise<{ telefone: string; nome: string }[]> {
     const map = new Map<string, string>()
@@ -293,7 +446,8 @@ export const cobrancaService = {
       map.set(key, label)
     }
 
-    const [{ data: painel }, { data: titulos }, { data: pessoas, error }] = await Promise.all([
+    const [{ data: painel }, { data: titulos }, { data: pessoas, error }, { data: telWhatsapp }] =
+      await Promise.all([
       supabase
         .from('cobranca_painel')
         .select('pessoa_telefone, pessoa_nome, cliente, grupo_cliente')
@@ -306,6 +460,7 @@ export const cobrancaService = {
         .not('pessoa_telefone', 'is', null)
         .limit(5000),
       supabase.from('pessoas').select('nome, grupo_cliente, telefone').not('telefone', 'is', null).limit(5000),
+      supabase.from('pessoa_telefones_whatsapp').select('telefone, nome, pessoa_id').limit(10000),
     ])
 
     if (error) {
@@ -337,8 +492,115 @@ export const cobrancaService = {
       if (!nome || isInternalContactName(nome)) continue
       registrar(r.telefone, r.nome, r.nome, r.grupo_cliente)
     }
+    for (const r of (telWhatsapp ?? []) as {
+      telefone: string | null
+      nome: string | null
+      pessoa_id: string
+    }[]) {
+      const label = r.nome?.trim()
+      if (!label) continue
+      registrar(r.telefone, label, label)
+    }
 
     return Array.from(map.entries()).map(([telefone, nome]) => ({ telefone, nome }))
+  },
+
+  /** Telefones WhatsApp nomeados de uma pessoa. */
+  async listTelefonesWhatsapp(pessoa_id: string): Promise<PessoaTelefoneWhatsapp[]> {
+    const { data, error } = await supabase
+      .from('pessoa_telefones_whatsapp')
+      .select('id, pessoa_id, nome, telefone, ordem')
+      .eq('pessoa_id', pessoa_id)
+      .order('ordem', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('[cobrancaService] listTelefonesWhatsapp', error)
+      return []
+    }
+    return (data ?? []) as PessoaTelefoneWhatsapp[]
+  },
+
+  /** Substitui a lista de telefones WhatsApp da pessoa e sincroniza o telefone principal. */
+  async saveTelefonesWhatsapp(
+    pessoa_id: string,
+    telefones: PessoaTelefoneWhatsappInput[],
+  ): Promise<void> {
+    const rows = telefones
+      .map((t, idx) => {
+        const tel = parsePhoneForStorage(t.telefone) ?? t.telefone.replace(/\D/g, '')
+        if (!tel || tel.length < 12) return null
+        return {
+          id: t.id,
+          pessoa_id,
+          nome: t.nome.trim() || 'WhatsApp',
+          telefone: tel,
+          ordem: idx,
+        }
+      })
+      .filter(Boolean) as Array<{
+      id?: string
+      pessoa_id: string
+      nome: string
+      telefone: string
+      ordem: number
+    }>
+
+    const { error: delError } = await supabase
+      .from('pessoa_telefones_whatsapp')
+      .delete()
+      .eq('pessoa_id', pessoa_id)
+    if (delError) throw delError
+
+    if (rows.length > 0) {
+      const { error: insError } = await supabase.from('pessoa_telefones_whatsapp').insert(
+        rows.map(({ id: _id, ...rest }) => rest) as never,
+      )
+      if (insError) throw insError
+    }
+
+    const principal = rows[0]?.telefone ?? null
+    const { error: updError } = await supabase
+      .from('pessoas')
+      .update({ telefone: principal } as never)
+      .eq('id', pessoa_id)
+    if (updError) throw updError
+  },
+
+  /** Adiciona um telefone WhatsApp ao cadastro (ex.: durante a cobrança). */
+  async addTelefoneWhatsapp(
+    pessoa_id: string,
+    input: { nome: string; telefone: string },
+  ): Promise<PessoaTelefoneWhatsapp | null> {
+    const tel =
+      parsePhoneForStorage(input.telefone) ?? input.telefone.replace(/\D/g, '')
+    if (!tel || tel.length < 12) return null
+
+    const existentes = await this.listTelefonesWhatsapp(pessoa_id)
+    const dup = existentes.find((t) => phonesMatch(t.telefone, tel))
+    if (dup) return dup
+
+    const { data, error } = await supabase
+      .from('pessoa_telefones_whatsapp')
+      .insert({
+        pessoa_id,
+        nome: input.nome.trim() || 'WhatsApp',
+        telefone: tel,
+        ordem: existentes.length,
+      } as never)
+      .select('id, pessoa_id, nome, telefone, ordem')
+      .single()
+
+    if (error) {
+      console.error('[cobrancaService] addTelefoneWhatsapp', error)
+      return null
+    }
+
+    if (existentes.length === 0) {
+      await supabase.from('pessoas').update({ telefone: tel } as never).eq('id', pessoa_id)
+    }
+
+    return data as PessoaTelefoneWhatsapp
   },
 
   /** Indicador de Efetividade na Cobrança Inicial (D+1). */
@@ -434,16 +696,24 @@ export const cobrancaService = {
     if (error) throw error
   },
 
-  /** Atualiza telefone/e-mail da pessoa vinculada (para permitir cobrança). */
+  /** Atualiza e-mail da pessoa e telefones WhatsApp nomeados. */
   async updateContato(
     pessoa_id: string,
-    contato: { telefone?: string | null; email?: string | null },
+    contato: {
+      email?: string | null
+      telefones?: PessoaTelefoneWhatsappInput[]
+    },
   ): Promise<void> {
-    const update: Record<string, string | null> = {}
-    if (contato.telefone !== undefined) update.telefone = contato.telefone
-    if (contato.email !== undefined) update.email = contato.email
-    const { error } = await supabase.from('pessoas').update(update as never).eq('id', pessoa_id)
-    if (error) throw error
+    if (contato.telefones !== undefined) {
+      await this.saveTelefonesWhatsapp(pessoa_id, contato.telefones)
+    }
+    if (contato.email !== undefined) {
+      const { error } = await supabase
+        .from('pessoas')
+        .update({ email: contato.email } as never)
+        .eq('id', pessoa_id)
+      if (error) throw error
+    }
   },
 
   async enviarWhatsapp(itens: EnvioItemWhatsapp[], created_by?: string | null): Promise<EnvioResult> {
