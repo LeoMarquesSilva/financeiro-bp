@@ -166,14 +166,14 @@ async function findLinkedLidJid(phoneJid: string): Promise<string | null> {
   const phone = canonical.split('@')[0]
 
   try {
-    const { data: lidChat } = await supabase
+    const { data: lidRows } = await supabase
       .from('whatsapp_chats')
       .select('remote_jid')
       .eq('phone_jid', canonical)
       .like('remote_jid', '%@lid')
       .limit(1)
-      .maybeSingle()
-    if (lidChat?.remote_jid) return lidChat.remote_jid as string
+    const lidChat = (lidRows as { remote_jid: string }[] | null)?.[0]
+    if (lidChat?.remote_jid) return lidChat.remote_jid
 
     const { data } = await supabase
       .from('whatsapp_group_participants')
@@ -194,21 +194,22 @@ async function findLinkedPhoneJid(lidJid: string): Promise<string | null> {
   if (!lid) return null
 
   try {
-    const { data: chat } = await supabase
+    const { data: chatRows } = await supabase
       .from('whatsapp_chats')
       .select('phone_jid')
       .eq('remote_jid', canonical)
-      .maybeSingle()
-    if (chat?.phone_jid) return canonicalJid(chat.phone_jid as string)
+      .limit(1)
+    const chat = (chatRows as { phone_jid: string | null }[] | null)?.[0]
+    if (chat?.phone_jid) return canonicalJid(chat.phone_jid)
 
-    const { data: part } = await supabase
+    const { data: partRows } = await supabase
       .from('whatsapp_group_participants')
       .select('phone_number')
       .eq('lid_id', lid)
       .not('phone_number', 'is', null)
       .limit(1)
-      .maybeSingle()
-    if (part?.phone_number) return canonicalJid(part.phone_number as string)
+    const part = (partRows as { phone_number: string | null }[] | null)?.[0]
+    if (part?.phone_number) return canonicalJid(part.phone_number)
 
     const { data: msgs } = await supabase
       .from('whatsapp_mensagens')
@@ -216,7 +217,7 @@ async function findLinkedPhoneJid(lidJid: string): Promise<string | null> {
       .eq('remote_jid', canonical)
       .order('timestamp', { ascending: false })
       .limit(5)
-    for (const row of msgs ?? []) {
+    for (const row of (msgs ?? []) as { raw: Record<string, unknown> | null }[]) {
       const key = (row.raw as Record<string, unknown> | null)?.key as Record<string, unknown> | undefined
       const alt = phoneFromJidAlt(key?.remoteJidAlt as string | undefined)
       if (alt) return `${alt}@s.whatsapp.net`

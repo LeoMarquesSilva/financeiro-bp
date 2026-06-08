@@ -126,6 +126,7 @@ function chatFromPending(pending: PendingWhatsappCobranca): WhatsappChatRow {
     unread_count: 0,
     categoria: WHATSAPP_CATEGORIA_COBRANCA_AUTO,
     pessoa_id: pending.pessoa_id ?? null,
+    phone_jid: null,
     updated_at: new Date().toISOString(),
   }
 }
