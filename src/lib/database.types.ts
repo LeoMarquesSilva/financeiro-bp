@@ -491,6 +491,7 @@ export interface Database {
           unread_count: number
           categoria: 'COBRANCA' | 'COLABORADOR_BP' | 'SOCIO' | null
           pessoa_id: string | null
+          phone_jid: string | null
           updated_at: string
         }
         Insert: unknown

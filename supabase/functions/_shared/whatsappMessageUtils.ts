@@ -154,6 +154,19 @@ function normalizePhoneDigits(raw: string): string | null {
   return d.length >= 12 ? d : null
 }
 
+/** Extrai telefone canônico a partir de remoteJidAlt (Evolution/Baileys). Ignora @lid. */
+export function phoneFromJidAlt(alt: string | null | undefined): string | null {
+  if (!alt?.trim()) return null
+  const canonical = canonicalJid(alt.trim())
+  if (canonical.includes('@lid')) return null
+  const user = canonical.split('@')[0]
+  return user && /^\d+$/.test(user) ? user : null
+}
+
+export function isLidJid(jid: string | null | undefined): boolean {
+  return !!jid && jid.includes('@lid')
+}
+
 /** Resolve JID de contato da Evolution (remoteJid/telefone), ignorando id interno. */
 export function resolveEvolutionContactJid(c: Record<string, unknown>): string | null {
   for (const field of ['remoteJid', 'jid']) {

@@ -55,7 +55,7 @@ import { phoneToRemoteJid, phonesMatch, canonicalJid } from '../utils/phone'
 import { formatPhoneFromWhatsappDigits, formatPhoneMasked, isPlausiblePhoneDigits } from '../utils/phoneMask'
 import { pickContactLabel } from '../utils/contactNames'
 import { isGroupJid, isLidJid, isValidWhatsappRemoteJid, groupFallbackLabel, chatSubtitle, groupIdFromJid } from '../utils/jid'
-import { resolveChatDisplayName, lidFromJid } from '../utils/lidIndex'
+import { resolveChatDisplayName, lidFromJid, phoneFromJidAlt } from '../utils/lidIndex'
 import {
   buildMentionMap,
   buildSenderNamesFromMessages,
@@ -286,9 +286,15 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   const phoneForTitulos = (chat: WhatsappChatRow | null): string | null => {
     if (!chat || isGroupJid(chat.remote_jid)) return null
     if (isLidJid(chat.remote_jid)) {
+      const fromRow = chat.phone_jid ? phoneFromJidAlt(chat.phone_jid) : null
+      if (fromRow) return fromRow
       const lid = lidFromJid(chat.remote_jid)
       const entry = lid ? lidIndex.get(lid) : undefined
-      return entry?.phone_number ? entry.phone_number.split('@')[0] : null
+      return (
+        entry?.phone_number ??
+        phoneFromJidAlt(entry?.phone_jid ?? undefined) ??
+        null
+      )
     }
     return jidToNumber(chat.remote_jid)
   }
@@ -304,8 +310,9 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     return () => cancelAnimationFrame(id)
   }, [selected?.remote_jid, mensagens.length, loadingMsgs])
 
-  // Número da conversa (sem sufixo de dispositivo); vazio para JIDs @lid (número oculto).
+  // Número da conversa (sem sufixo de dispositivo); @lid usa phone_jid ou índice LID.
   const numeroConversa = phoneForTitulos(selected)
+
   const { vinculados, loading: vinculadosLoading, refetch: refetchVinculados } = useChatPessoas(
     selected?.remote_jid,
   )
@@ -869,7 +876,11 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                       </Badge>
                     )}
                   </div>
-                  <p className="truncate text-xs text-slate-400">{chatSubtitle(selected.remote_jid)}</p>
+                  <p className="truncate text-xs text-slate-400">
+                    {isGroupJid(selected.remote_jid)
+                      ? chatSubtitle(selected.remote_jid)
+                      : (telefoneExibicao ?? chatSubtitle(selected.remote_jid))}
+                  </p>
                 </div>
                 <WhatsappChatCategoriaSelect
                   compact

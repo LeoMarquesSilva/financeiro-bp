@@ -474,6 +474,16 @@ Deno.serve(async (req: Request) => {
         phoneAlt,
       )
 
+      if (canonical.includes('@lid') && phoneAlt) {
+        await supabase
+          .from('whatsapp_chats')
+          .update({
+            phone_jid: `${phoneAlt.replace(/\D/g, '')}@s.whatsapp.net`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('remote_jid', canonical)
+      }
+
       const membros = isGroupJid(canonical)
         ? await syncGroupParticipants(supabase, EVOLUTION_API_URL, EVOLUTION_INSTANCE, EVOLUTION_API_KEY, canonical)
         : 0

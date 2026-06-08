@@ -38,8 +38,9 @@ export function groupFallbackLabel(jid: string): string {
 }
 
 /** Subtítulo da conversa (telefone, grupo ou privacidade). */
-export function chatSubtitle(jid: string): string {
+export function chatSubtitle(jid: string, resolvedPhone?: string | null): string {
   if (isGroupJid(jid)) return 'Grupo WhatsApp'
+  if (resolvedPhone) return resolvedPhone
   if (isLidJid(jid)) return 'Número oculto'
   return canonicalJid(jid).split('@')[0]
 }

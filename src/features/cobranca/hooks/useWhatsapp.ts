@@ -48,7 +48,7 @@ export function useLidContactIndex() {
     queryFn: async () => {
       const [participants, chatsRes, msgsRes, altMsgsRes] = await Promise.all([
         whatsappService.listLidParticipantRows(),
-        supabase.from('whatsapp_chats').select('remote_jid, push_name').limit(1000),
+        supabase.from('whatsapp_chats').select('remote_jid, push_name, phone_jid').limit(1000),
         supabase
           .from('whatsapp_mensagens')
           .select('remote_jid, raw')
@@ -66,11 +66,18 @@ export function useLidContactIndex() {
 
       const chatsByPhoneJid = new Map<string, string | null>()
       const lidChatNames = new Map<string, string>()
-      for (const c of (chatsRes.data ?? []) as { remote_jid: string; push_name: string | null }[]) {
+      const lidToPhoneDigits = new Map<string, string>()
+      for (const c of (chatsRes.data ?? []) as {
+        remote_jid: string
+        push_name: string | null
+        phone_jid: string | null
+      }[]) {
         if (c.remote_jid.endsWith('@g.us')) continue
         if (c.remote_jid.includes('@lid')) {
           const lid = c.remote_jid.split('@')[0]
           if (lid && isUsableContactName(c.push_name)) lidChatNames.set(lid, c.push_name!.trim())
+          const digits = c.phone_jid ? phoneFromJidAlt(c.phone_jid) : null
+          if (lid && digits) lidToPhoneDigits.set(lid, digits)
           continue
         }
         chatsByPhoneJid.set(canonicalJid(c.remote_jid), c.push_name)
@@ -89,7 +96,6 @@ export function useLidContactIndex() {
         }
       }
 
-      const lidToPhoneDigits = new Map<string, string>()
       for (const m of (altMsgsRes.data ?? []) as { remote_jid: string; raw: Record<string, unknown> | null }[]) {
         if (!m.remote_jid.includes('@lid')) continue
         const lid = m.remote_jid.split('@')[0]

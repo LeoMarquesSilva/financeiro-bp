@@ -90,6 +90,7 @@ function mergeChats(existing: WhatsappChatRow, incoming: WhatsappChatRow, key: s
     updated_at: newer.updated_at ?? older.updated_at,
     categoria: existing.categoria ?? incoming.categoria ?? null,
     pessoa_id: existing.pessoa_id ?? incoming.pessoa_id ?? null,
+    phone_jid: existing.phone_jid ?? incoming.phone_jid ?? key,
   }
 }
 
@@ -165,6 +166,15 @@ async function findLinkedLidJid(phoneJid: string): Promise<string | null> {
   const phone = canonical.split('@')[0]
 
   try {
+    const { data: lidChat } = await supabase
+      .from('whatsapp_chats')
+      .select('remote_jid')
+      .eq('phone_jid', canonical)
+      .like('remote_jid', '%@lid')
+      .limit(1)
+      .maybeSingle()
+    if (lidChat?.remote_jid) return lidChat.remote_jid as string
+
     const { data } = await supabase
       .from('whatsapp_group_participants')
       .select('lid_id')
@@ -172,6 +182,46 @@ async function findLinkedLidJid(phoneJid: string): Promise<string | null> {
       .limit(1)
     const lid = (data as { lid_id: string | null }[] | null)?.[0]?.lid_id
     return lid ? `${lid}@lid` : null
+  } catch {
+    return null
+  }
+}
+
+async function findLinkedPhoneJid(lidJid: string): Promise<string | null> {
+  const canonical = canonicalJid(lidJid)
+  if (!isLidJid(canonical)) return null
+  const lid = canonical.split('@')[0]
+  if (!lid) return null
+
+  try {
+    const { data: chat } = await supabase
+      .from('whatsapp_chats')
+      .select('phone_jid')
+      .eq('remote_jid', canonical)
+      .maybeSingle()
+    if (chat?.phone_jid) return canonicalJid(chat.phone_jid as string)
+
+    const { data: part } = await supabase
+      .from('whatsapp_group_participants')
+      .select('phone_number')
+      .eq('lid_id', lid)
+      .not('phone_number', 'is', null)
+      .limit(1)
+      .maybeSingle()
+    if (part?.phone_number) return canonicalJid(part.phone_number as string)
+
+    const { data: msgs } = await supabase
+      .from('whatsapp_mensagens')
+      .select('raw')
+      .eq('remote_jid', canonical)
+      .order('timestamp', { ascending: false })
+      .limit(5)
+    for (const row of msgs ?? []) {
+      const key = (row.raw as Record<string, unknown> | null)?.key as Record<string, unknown> | undefined
+      const alt = phoneFromJidAlt(key?.remoteJidAlt as string | undefined)
+      if (alt) return `${alt}@s.whatsapp.net`
+    }
+    return null
   } catch {
     return null
   }
@@ -227,15 +277,27 @@ export const whatsappService = {
 
   async listLidPhoneMappings(): Promise<Map<string, string>> {
     try {
-      const { data, error } = await supabase
-        .from('whatsapp_mensagens')
-        .select('remote_jid, raw')
-        .like('remote_jid', '%@lid')
-        .order('timestamp', { ascending: false })
-        .limit(2000)
-      if (error) return new Map()
+      const [msgsRes, chatsRes] = await Promise.all([
+        supabase
+          .from('whatsapp_mensagens')
+          .select('remote_jid, raw')
+          .like('remote_jid', '%@lid')
+          .order('timestamp', { ascending: false })
+          .limit(2000),
+        supabase
+          .from('whatsapp_chats')
+          .select('remote_jid, phone_jid')
+          .like('remote_jid', '%@lid')
+          .not('phone_jid', 'is', null),
+      ])
       const map = new Map<string, string>()
-      for (const row of (data ?? []) as { remote_jid: string; raw: Record<string, unknown> | null }[]) {
+      for (const row of (chatsRes.data ?? []) as { remote_jid: string; phone_jid: string | null }[]) {
+        const lid = row.remote_jid.split('@')[0]
+        const digits = row.phone_jid ? phoneFromJidAlt(row.phone_jid) : null
+        if (lid && digits) map.set(lid, digits)
+      }
+      if (msgsRes.error) return map
+      for (const row of (msgsRes.data ?? []) as { remote_jid: string; raw: Record<string, unknown> | null }[]) {
         const lid = row.remote_jid.split('@')[0]
         if (!lid || map.has(lid)) continue
         const key = row.raw?.key as Record<string, unknown> | undefined
@@ -263,18 +325,8 @@ export const whatsappService = {
       const lidJid = await findLinkedLidJid(remoteJid)
       if (lidJid) extraJids.push(lidJid)
     } else if (isLidJid(remoteJid)) {
-      const lid = remoteJid.split('@')[0]
-      try {
-        const { data } = await supabase
-          .from('whatsapp_group_participants')
-          .select('phone_number')
-          .eq('lid_id', lid)
-          .limit(1)
-        const phone = (data as { phone_number: string | null }[] | null)?.[0]?.phone_number
-        if (phone) extraJids.push(canonicalJid(phone))
-      } catch {
-        /* ignore */
-      }
+      const phoneJid = await findLinkedPhoneJid(remoteJid)
+      if (phoneJid) extraJids.push(phoneJid)
     }
 
     try {
@@ -321,19 +373,45 @@ export const whatsappService = {
     return avatarDataUrlCache.get(chatKey(remoteJid)) ?? null
   },
 
+  async resolveSendTarget(remoteJid: string): Promise<{ remoteJid: string; number: string }> {
+    if (!isLidJid(remoteJid)) {
+      const canonical = canonicalJid(remoteJid)
+      return { remoteJid: canonical, number: canonical.split('@')[0] }
+    }
+    const lid = remoteJid.split('@')[0]
+    const [participants, lidPhone] = await Promise.all([
+      this.listLidParticipantRows(),
+      this.listLidPhoneMappings(),
+    ])
+    const map = buildLidToPhoneJid(participants, lidPhone)
+    const phoneJid = lid ? map.get(lid) : undefined
+    if (!phoneJid) {
+      throw new Error(
+        'Telefone deste contato não está disponível (número oculto). Sincronize a conversa ou vincule pelo telefone cadastrado.',
+      )
+    }
+    const canonical = canonicalJid(phoneJid)
+    return { remoteJid: canonical, number: canonical.split('@')[0] }
+  },
+
   async sendMessage(params: { remoteJid?: string; number?: string; text: string }): Promise<void> {
-    const body = params.remoteJid
-      ? { kind: 'text' as const, ...params, remoteJid: canonicalJid(params.remoteJid) }
+    const target = params.remoteJid
+      ? await this.resolveSendTarget(params.remoteJid)
+      : null
+    const body = target
+      ? { kind: 'text' as const, remoteJid: target.remoteJid, number: target.number, text: params.text }
       : { kind: 'text' as const, ...params }
     const { error } = await supabase.functions.invoke('whatsapp-send', { body })
     if (error) throw new Error(await parseEdgeFunctionError(error))
   },
 
   async sendAudio(params: { remoteJid: string; audio: string }): Promise<void> {
+    const target = await this.resolveSendTarget(params.remoteJid)
     const { error } = await supabase.functions.invoke('whatsapp-send', {
       body: {
         kind: 'audio',
-        remoteJid: canonicalJid(params.remoteJid),
+        remoteJid: target.remoteJid,
+        number: target.number,
         audio: params.audio,
       },
     })
@@ -348,9 +426,19 @@ export const whatsappService = {
     fileName?: string
     caption?: string
   }): Promise<void> {
-    const { remoteJid, ...rest } = params
+    const target = await this.resolveSendTarget(params.remoteJid)
+    const { mediatype, media, mimetype, fileName, caption } = params
     const { error } = await supabase.functions.invoke('whatsapp-send', {
-      body: { kind: 'media', remoteJid: canonicalJid(remoteJid), ...rest },
+      body: {
+        kind: 'media',
+        remoteJid: target.remoteJid,
+        number: target.number,
+        mediatype,
+        media,
+        mimetype,
+        fileName,
+        caption,
+      },
     })
     if (error) throw new Error(await parseEdgeFunctionError(error))
   },

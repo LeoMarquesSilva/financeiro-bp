@@ -4,6 +4,8 @@ import {
   extractText,
   extractMediaMeta,
   canonicalJid,
+  phoneFromJidAlt,
+  isLidJid,
 } from '../_shared/whatsappMessageUtils.ts'
 
 const corsHeaders = {
@@ -50,11 +52,73 @@ type Payload =
     }
   | { kind: 'reaction'; remoteJid: string; messageId: string; fromMe: boolean; emoji: string }
 
-function resolveNumber(payload: { remoteJid?: string; number?: string }): string | null {
+async function resolveLidPhoneDigits(
+  supabase: ReturnType<typeof createClient>,
+  lidJid: string,
+): Promise<string | null> {
+  const canonical = canonicalJid(lidJid)
+  const lid = canonical.split('@')[0]
+  if (!lid) return null
+
+  const { data: chat } = await supabase
+    .from('whatsapp_chats')
+    .select('phone_jid')
+    .eq('remote_jid', canonical)
+    .maybeSingle()
+  if (chat?.phone_jid) {
+    const digits = normalizePhone(canonicalJid(chat.phone_jid as string).split('@')[0])
+    if (digits) return digits
+  }
+
+  const { data: part } = await supabase
+    .from('whatsapp_group_participants')
+    .select('phone_number')
+    .eq('lid_id', lid)
+    .not('phone_number', 'is', null)
+    .limit(1)
+    .maybeSingle()
+  if (part?.phone_number) {
+    const digits = normalizePhone(canonicalJid(part.phone_number as string).split('@')[0])
+    if (digits) return digits
+  }
+
+  const { data: msgs } = await supabase
+    .from('whatsapp_mensagens')
+    .select('raw')
+    .eq('remote_jid', canonical)
+    .order('timestamp', { ascending: false })
+    .limit(30)
+
+  for (const row of msgs ?? []) {
+    const key = (row.raw as Record<string, unknown> | null)?.key as Record<string, unknown> | undefined
+    const alt = phoneFromJidAlt(key?.remoteJidAlt as string | undefined)
+    if (alt) {
+      const digits = normalizePhone(alt)
+      if (digits) return digits
+    }
+  }
+  return null
+}
+
+async function resolveNumber(
+  supabase: ReturnType<typeof createClient>,
+  payload: { remoteJid?: string; number?: string },
+): Promise<string | null> {
   const jid = payload.remoteJid
   const isGroup = !!jid?.endsWith('@g.us')
+  if (isGroup) return canonicalJid(jid!)
+
+  if (payload.number) {
+    const fromNumber = normalizePhone(payload.number)
+    if (fromNumber) return fromNumber
+  }
+
+  if (jid && isLidJid(jid)) {
+    return resolveLidPhoneDigits(supabase, jid)
+  }
+
   const numberFromJid = jid ? canonicalJid(jid).split('@')[0] : null
-  return isGroup ? canonicalJid(jid!) : normalizePhone(payload.number ?? numberFromJid ?? '')
+  return normalizePhone(numberFromJid ?? '')
 }
 
 async function persistMessage(
@@ -142,9 +206,14 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ ok: true, data })
     }
 
-    const numero = resolveNumber(payload)
-    if (!numero) return jsonResponse({ error: 'Destinatário inválido.' }, 400)
-    const jid = payload.remoteJid ? canonicalJid(payload.remoteJid) : `${numero}@s.whatsapp.net`
+    const numero = await resolveNumber(supabase, payload)
+    if (!numero) {
+      const hint = payload.remoteJid && isLidJid(payload.remoteJid)
+        ? 'Contato com número oculto (@lid): sincronize a conversa ou vincule pelo telefone cadastrado.'
+        : 'Destinatário inválido.'
+      return jsonResponse({ error: hint }, 400)
+    }
+    const jid = `${numero}@s.whatsapp.net`
 
     if (payload.kind === 'audio') {
       const audio = stripBase64Prefix(payload.audio.trim())
