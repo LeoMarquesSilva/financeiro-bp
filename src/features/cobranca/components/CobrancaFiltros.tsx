@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, CheckCircle2, RotateCcw, CalendarClock } from 'lucide-react'
+import { Search, CheckCircle2, RotateCcw, CalendarClock, Info, AlertTriangle } from 'lucide-react'
+import { formatDate } from '@/shared/utils/format'
 import type { FaixaAtrasoFiltro, StatusCobrancaFiltro } from '../services/cobrancaService'
 
 const SELECT_CLASS =
@@ -20,6 +21,7 @@ export interface CobrancaFiltrosState {
 
 interface Props {
   filtros: CobrancaFiltrosState
+  totalTitulos?: number
   meses: Array<{ value: number; label: string }>
   anos: number[]
   planoContasOpcoes: string[]
@@ -48,8 +50,17 @@ const FAIXA_ATRASO: Array<{ value: FaixaAtrasoFiltro | ''; label: string }> = [
   { value: '31+', label: '31+ dias' },
 ]
 
+function hojeIsoLocal(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export function CobrancaFiltros({
   filtros,
+  totalTitulos,
   meses,
   anos,
   planoContasOpcoes,
@@ -64,16 +75,59 @@ export function CobrancaFiltros({
   onToggleArquivados,
   onLimpar,
 }: Props) {
-  const temFiltroAtivo =
+  const hoje = hojeIsoLocal()
+  const temFiltroExtra =
     filtros.mes ||
     filtros.ano ||
     filtros.planoContas ||
     filtros.statusCobranca ||
     filtros.faixaAtraso ||
-    filtros.rotinaVencidosOntem
+    !filtros.rotinaVencidosOntem
 
   return (
     <div className="space-y-3 rounded-xl border border-slate-200/60 bg-white p-3 shadow-sm">
+      {filtros.rotinaVencidosOntem ? (
+        <div className="flex gap-3 rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-2.5 text-sm text-sky-950">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
+          <div className="space-y-1">
+            <p className="font-medium">Rotina D+1 — visão padrão do painel</p>
+            <p className="text-sky-900/90">
+              Mostra apenas títulos <strong>vencidos em aberto</strong>, ainda{' '}
+              <strong>sem cobrança por WhatsApp</strong>, cuja{' '}
+              <strong>data-alvo de cobrança é hoje ({formatDate(hoje)})</strong>. O D+1 é
+              calculado em <strong>dias úteis</strong>: vencimento em fim de semana é prorrogado
+              para a segunda-feira e a cobrança ocorre no dia útil seguinte.
+            </p>
+            {typeof totalTitulos === 'number' && (
+              <p className="text-xs text-sky-800/80">
+                {totalTitulos === 0
+                  ? 'Nenhum título na fila de hoje — rotina em dia.'
+                  : `${totalTitulos} título(s) na fila de cobrança de hoje.`}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2.5 text-sm text-amber-950">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="space-y-1">
+            <p className="font-medium">Modo backlog — fora da rotina D+1</p>
+            <p className="text-amber-900/90">
+              Sem o filtro D+1, o painel lista <strong>todos os títulos vencidos em aberto</strong>{' '}
+              que ainda não receberam WhatsApp, <strong>de qualquer data de vencimento</strong>.
+              Títulos antigos podem aparecer após atualização da base financeira — use este modo
+              para conferência e arquive o que não fizer parte da cobrança diária.
+            </p>
+            {typeof totalTitulos === 'number' && totalTitulos > 0 && (
+              <p className="text-xs text-amber-800/80">
+                {totalTitulos} título(s) no backlog. Reative a rotina D+1 para ver só a fila de
+                hoje.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -90,6 +144,7 @@ export function CobrancaFiltros({
           onChange={(e) => onMesChange(e.target.value ? Number(e.target.value) : null)}
           className={SELECT_CLASS}
           title="Mês de vencimento"
+          disabled={filtros.rotinaVencidosOntem}
         >
           <option value="">Mês</option>
           {meses.map((m) => (
@@ -104,6 +159,7 @@ export function CobrancaFiltros({
           onChange={(e) => onAnoChange(e.target.value ? Number(e.target.value) : null)}
           className={SELECT_CLASS}
           title="Ano de vencimento"
+          disabled={filtros.rotinaVencidosOntem}
         >
           <option value="">Ano</option>
           {anos.map((a) => (
@@ -157,9 +213,9 @@ export function CobrancaFiltros({
           ))}
         </select>
 
-        {temFiltroAtivo && (
+        {temFiltroExtra && (
           <Button variant="ghost" size="sm" onClick={onLimpar}>
-            Limpar filtros
+            Restaurar padrão
           </Button>
         )}
       </div>
@@ -170,16 +226,21 @@ export function CobrancaFiltros({
           size="sm"
           onClick={onToggleRotinaVencidosOntem}
           className="gap-2"
-          title="Mostra apenas títulos vencidos ontem e ainda em aberto"
+          title={
+            filtros.rotinaVencidosOntem
+              ? 'Desativar para ver todo o backlog vencido'
+              : 'Ativar rotina D+1: só títulos com cobrança prevista para hoje'
+          }
         >
           <CalendarClock className="h-4 w-4" />
-          {filtros.rotinaVencidosOntem ? 'Rotina D+1 ativa' : 'Vencidos ontem (D+1)'}
+          {filtros.rotinaVencidosOntem ? 'Rotina D+1 ativa' : 'Ativar rotina D+1'}
         </Button>
         <Button
           variant={filtros.incluirConcluidos ? 'default' : 'outline'}
           size="sm"
           onClick={onToggleConcluidos}
           className="gap-2"
+          title="Inclui títulos que já receberam cobrança por WhatsApp"
         >
           <CheckCircle2 className="h-4 w-4" />
           {filtros.incluirConcluidos ? 'Mostrando concluídos' : 'Ver concluídos'}
@@ -190,6 +251,7 @@ export function CobrancaFiltros({
             size="sm"
             onClick={onToggleArquivados}
             className="gap-2"
+            title="Títulos removidos manualmente do painel"
           >
             <RotateCcw className="h-4 w-4" />
             {filtros.verArquivados ? 'Ocultar arquivados' : 'Ver arquivados'}

@@ -24,7 +24,7 @@ interface Props {
   onCobrarGrupo: (rows: CobrancaPainelRow[]) => void
   onEditContato: (row: CobrancaPainelRow) => void
   onArquivar: (row: CobrancaPainelRow) => void
-  /** Somente admin pode remover título do painel. */
+  /** Admin e financeiro podem remover título do painel. */
   canArquivar?: boolean
 }
 

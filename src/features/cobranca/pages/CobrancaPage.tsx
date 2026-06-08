@@ -33,6 +33,7 @@ import {
 import { toast } from 'sonner'
 import { formatCurrency, formatDate } from '@/shared/utils/format'
 import type { CobrancaPainelRow } from '@/lib/database.types'
+import { canArquivarCobranca } from '../utils/permissions'
 
 const PAGE_SIZE = 50
 
@@ -55,8 +56,8 @@ const ANO_ATUAL = new Date().getFullYear()
 const ANOS = Array.from({ length: ANO_ATUAL - 2019 + 1 }, (_, i) => ANO_ATUAL - i)
 
 export function CobrancaPage() {
-  const { fullName, role } = useAuth()
-  const canArquivar = role === 'admin'
+  const { fullName, role, user } = useAuth()
+  const canArquivar = canArquivarCobranca(role, user?.email)
   const { templates } = useCobrancaTemplates()
   const { unreadTotal, unreadChats } = useWhatsappNotifications()
 
@@ -70,7 +71,7 @@ export function CobrancaPage() {
   const [planoContas, setPlanoContas] = useState<string | null>(null)
   const [statusCobranca, setStatusCobranca] = useState<StatusCobrancaFiltro | null>(null)
   const [faixaAtraso, setFaixaAtraso] = useState<FaixaAtrasoFiltro | null>(null)
-  const [rotinaVencidosOntem, setRotinaVencidosOntem] = useState(false)
+  const [rotinaVencidosOntem, setRotinaVencidosOntem] = useState(true)
   const [page, setPage] = useState(1)
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -140,7 +141,7 @@ export function CobrancaPage() {
 
   const handleArquivar = async (row: CobrancaPainelRow) => {
     if (!canArquivar) {
-      toast.error('Apenas administradores podem remover títulos do painel.')
+      toast.error('Sem permissão para remover títulos do painel.')
       return
     }
     try {
@@ -167,7 +168,7 @@ export function CobrancaPage() {
 
   const handleDesarquivar = async (parcela_id: string) => {
     if (!canArquivar) {
-      toast.error('Apenas administradores podem reativar títulos arquivados.')
+      toast.error('Sem permissão para reativar títulos arquivados.')
       return
     }
     try {
@@ -190,7 +191,7 @@ export function CobrancaPage() {
     setPlanoContas(null)
     setStatusCobranca(null)
     setFaixaAtraso(null)
-    setRotinaVencidosOntem(false)
+    setRotinaVencidosOntem(true)
     resetPage()
   }
 
@@ -230,7 +231,7 @@ export function CobrancaPage() {
             Cobrança
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
-            Cobrança automatizada de títulos vencidos por WhatsApp
+            Rotina diária D+1: cobrar por WhatsApp os títulos cuja data-alvo é hoje
           </p>
         </div>
       </header>
@@ -267,6 +268,7 @@ export function CobrancaPage() {
           <CobrancaKPIs resumo={resumo} loading={loadingResumo} />
 
           <CobrancaFiltros
+            totalTitulos={total}
             filtros={{
               buscaInput,
               mes,
@@ -310,7 +312,14 @@ export function CobrancaPage() {
               resetPage()
             }}
             onToggleRotinaVencidosOntem={() => {
-              setRotinaVencidosOntem((v) => !v)
+              setRotinaVencidosOntem((v) => {
+                const next = !v
+                if (next) {
+                  setMes(null)
+                  setAno(null)
+                }
+                return next
+              })
               resetPage()
             }}
             onToggleArquivados={
@@ -372,10 +381,14 @@ export function CobrancaPage() {
           ) : rows.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-white py-16 text-slate-400">
               <Send className="h-8 w-8" />
-              <p className="text-sm">
-                {incluirConcluidos
-                  ? 'Nenhum título no painel.'
-                  : 'Nenhum título pendente de cobrança. Tudo em dia!'}
+              <p className="text-sm text-center max-w-md">
+                {rotinaVencidosOntem
+                  ? incluirConcluidos
+                    ? 'Nenhum título com cobrança prevista para hoje.'
+                    : 'Nenhum título pendente na fila D+1 de hoje. Rotina em dia!'
+                  : incluirConcluidos
+                    ? 'Nenhum título no backlog.'
+                    : 'Nenhum título vencido pendente de WhatsApp no backlog.'}
               </p>
             </div>
           ) : (

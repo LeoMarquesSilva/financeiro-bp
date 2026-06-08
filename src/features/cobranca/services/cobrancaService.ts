@@ -27,7 +27,7 @@ export type CobrancaPainelKpiRow = Pick<
 export interface PainelFiltros {
   busca?: string
   incluirConcluidos?: boolean
-  /** Rotina diária: somente títulos vencidos ontem e ainda em aberto. */
+  /** Rotina diária D+1: somente títulos cuja data-alvo de cobrança é hoje (data_prazo_d1). */
   rotinaVencidosOntem?: boolean
   mes?: number | null
   ano?: number | null
@@ -65,13 +65,12 @@ function buildVencimentoRange(
   return { inicio: `${anoEfetivo}-01-01`, fim: `${anoEfetivo}-12-31` }
 }
 
-/** Data local (YYYY-MM-DD) para "ontem", usada na rotina D+1. */
-function yesterdayDateIsoLocal(): string {
+/** Data local (YYYY-MM-DD) de hoje, usada na rotina D+1 (data_prazo_d1). */
+function todayDateIsoLocal(): string {
   const now = new Date()
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
-  const y = yesterday.getFullYear()
-  const m = String(yesterday.getMonth() + 1).padStart(2, '0')
-  const d = String(yesterday.getDate()).padStart(2, '0')
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
 
@@ -147,7 +146,7 @@ function applyPainelFiltros(query: PainelFilterBuilder, params: PainelFiltros): 
   }
 
   if (params.rotinaVencidosOntem) {
-    q = q.eq('data_vencimento', yesterdayDateIsoLocal())
+    q = q.eq('data_prazo_d1', todayDateIsoLocal())
   } else {
     const range = buildVencimentoRange(params.mes, params.ano)
     if (range) {
