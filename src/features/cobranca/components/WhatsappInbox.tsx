@@ -591,6 +591,7 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     media: string
     mimetype: string
     fileName: string
+    caption?: string
   }) => {
     if (!selected) return
     setEnviando(true)
