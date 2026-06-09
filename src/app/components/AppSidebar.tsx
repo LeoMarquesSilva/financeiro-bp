@@ -40,7 +40,7 @@ function getInitials(name: string | null): string {
 
 export function AppSidebar() {
   const { role, fullName, avatarUrl, signOut } = useAuth()
-  const { unreadTotal } = useWhatsappNotifications()
+  const { unreadChats } = useWhatsappNotifications()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -75,7 +75,7 @@ export function AppSidebar() {
             const isActive = item.end
               ? location.pathname === item.to
               : location.pathname.startsWith(item.to)
-            const showBadge = item.to === '/financeiro/cobranca' && unreadTotal > 0
+            const showBadge = item.to === '/financeiro/cobranca' && unreadChats > 0
 
             return (
               <Tooltip key={item.to}>
@@ -95,14 +95,17 @@ export function AppSidebar() {
                     <Icon className={cn('h-[18px] w-[18px] transition-colors', isActive ? 'text-sales' : 'text-slate-400 group-hover:text-white')} />
                     {showBadge && (
                       <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white ring-2 ring-[#0f172a]">
-                        {unreadTotal > 99 ? '99+' : unreadTotal}
+                        {unreadChats > 99 ? '99+' : unreadChats}
                       </span>
                     )}
                   </NavLink>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="font-medium">
                   {item.label}
-                  {showBadge && ` · ${unreadTotal} não lida(s)`}
+                  {showBadge &&
+                    (unreadChats === 1
+                      ? ` · 1 conversa não lida`
+                      : ` · ${unreadChats} conversas não lidas`)}
                 </TooltipContent>
               </Tooltip>
             )

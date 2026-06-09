@@ -10,6 +10,10 @@ import {
   isValidWhatsappRemoteJid,
   resolveEvolutionContactJid,
   isInternalBusinessName,
+  isUsableEvolutionContactName,
+  extractProfileName,
+  pickContactPushName,
+  resolvePushNameForUpdate,
   mergeReaction,
   type ReactionEntry,
 } from '../_shared/whatsappMessageUtils.ts'
@@ -108,8 +112,7 @@ async function upsertMessages(
 }
 
 function extractDirectPushName(c: Record<string, any>): string | null {
-  const pushName = (c.pushName ?? c.name ?? null) as string | null
-  return pushName && !isInternalBusinessName(pushName) ? pushName : null
+  return pickContactPushName(c)
 }
 
 function extractGroupSubject(c: Record<string, any>): string | null {
@@ -239,14 +242,34 @@ async function fetchProfilePictureUrl(
   }
 }
 
-function isUsableEvolutionContactName(name: string | null | undefined): boolean {
-  const raw = (name ?? '').trim()
-  if (!raw) return false
-  if (/^\d+$/.test(raw)) return false
-  if (isInternalBusinessName(raw)) return false
-  const n = raw.toLowerCase()
-  if (n === 'você' || n === 'voce' || n === 'you') return false
-  return true
+/** Busca um contato na agenda Evolution (findContacts com filtro por JID). */
+async function fetchEvolutionContactByJid(
+  apiUrl: string,
+  instance: string,
+  apiKey: string,
+  remoteJid: string,
+): Promise<Record<string, unknown> | null> {
+  const canonical = canonicalJid(remoteJid)
+  if (isGroupJid(canonical) || canonical.includes('@lid')) return null
+  try {
+    const resp = await fetchWithTimeout(
+      `${apiUrl}/chat/findContacts/${encodeURIComponent(instance)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: apiKey },
+        body: JSON.stringify({ where: { remoteJid: canonical } }),
+      },
+      12000,
+    )
+    if (!resp.ok) return null
+    const data = await resp.json().catch(() => ({}))
+    const contacts: Record<string, unknown>[] = Array.isArray(data)
+      ? data
+      : (data?.contacts ?? data?.records ?? []) as Record<string, unknown>[]
+    return contacts[0] ?? null
+  } catch {
+    return null
+  }
 }
 
 /** Nome de perfil WhatsApp via Evolution fetchProfile (best-effort; endpoint pode não existir). */
@@ -271,8 +294,8 @@ async function fetchProfileName(
     )
     if (!resp.ok) return null
     const data = await resp.json().catch(() => ({}))
-    const name = (data?.name ?? data?.pushName ?? data?.notify ?? null) as string | null
-    return isUsableEvolutionContactName(name) ? name!.trim() : null
+    const name = extractProfileName(data as Record<string, unknown>)
+    return name
   } catch {
     return null
   }
@@ -313,12 +336,19 @@ async function syncEvolutionContacts(
     for (const c of contacts.slice(0, maxContacts)) {
       const remoteJid = resolveEvolutionContactJid(c)
       if (!remoteJid || isGroupJid(remoteJid) || !isValidWhatsappRemoteJid(remoteJid)) continue
-      const pushName = (c.pushName ?? c.name ?? c.verifiedName ?? c.notify ?? null) as string | null
-      if (!isUsableEvolutionContactName(pushName)) continue
+      const pushName = pickContactPushName(c)
+      if (!pushName) continue
+      const { data: existing } = await supabase
+        .from('whatsapp_chats')
+        .select('push_name')
+        .eq('remote_jid', remoteJid)
+        .maybeSingle()
+      const resolved = resolvePushNameForUpdate(existing?.push_name, c)
+      if (!resolved) continue
       await supabase.from('whatsapp_chats').upsert(
         {
           remote_jid: remoteJid,
-          push_name: pushName!.trim(),
+          push_name: resolved,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'remote_jid' },
@@ -345,21 +375,60 @@ async function ensureContactName(
     .select('push_name')
     .eq('remote_jid', canonical)
     .maybeSingle()
-  if (chat?.push_name && isUsableEvolutionContactName(chat.push_name)) return
 
   const phone = phoneAlt ?? (canonical.includes('@lid') ? null : canonical.split('@')[0])
-  const profileName = phone ? await fetchProfileName(apiUrl, instance, apiKey, phone) : null
-  if (!profileName) return
+  const phoneJid = phone ? `${phone.replace(/\D/g, '')}@s.whatsapp.net` : null
+
+  const contactFromAgenda =
+    (await fetchEvolutionContactByJid(apiUrl, instance, apiKey, canonical)) ??
+    (phoneJid ? await fetchEvolutionContactByJid(apiUrl, instance, apiKey, phoneJid) : null)
+
+  let resolved: string | null = null
+  if (contactFromAgenda) {
+    resolved = resolvePushNameForUpdate(chat?.push_name, contactFromAgenda)
+  }
+  if (!resolved && (!chat?.push_name || !isUsableEvolutionContactName(chat.push_name))) {
+    const profileName = phone ? await fetchProfileName(apiUrl, instance, apiKey, phone) : null
+    resolved = profileName
+  }
+  if (!resolved) return
 
   const targets = new Set<string>([canonical])
-  if (phone) targets.add(`${phone.replace(/\D/g, '')}@s.whatsapp.net`)
+  if (phoneJid) targets.add(phoneJid)
 
   for (const jid of targets) {
     await supabase
       .from('whatsapp_chats')
-      .update({ push_name: profileName, updated_at: new Date().toISOString() })
+      .update({ push_name: resolved, updated_at: new Date().toISOString() })
       .eq('remote_jid', canonicalJid(jid))
   }
+}
+
+/** Aplica nomes cadastrados em pessoa_telefones_whatsapp (Evolution não expõe agenda do celular). */
+async function syncCadastroTelefoneNames(supabase: SupabaseClient): Promise<number> {
+  const { data: rows, error } = await supabase
+    .from('pessoa_telefones_whatsapp')
+    .select('telefone, nome')
+    .not('nome', 'is', null)
+    .limit(5000)
+  if (error || !rows?.length) return 0
+
+  let count = 0
+  for (const row of rows as { telefone: string; nome: string }[]) {
+    const label = row.nome?.trim()
+    if (!label || !isUsableEvolutionContactName(label)) continue
+    let digits = row.telefone.replace(/\D/g, '')
+    if (!digits) continue
+    if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) digits = '55' + digits
+    if (digits.length < 12) continue
+    const remoteJid = `${digits}@s.whatsapp.net`
+    const { error: upErr } = await supabase
+      .from('whatsapp_chats')
+      .update({ push_name: label, updated_at: new Date().toISOString() })
+      .eq('remote_jid', remoteJid)
+    if (!upErr) count++
+  }
+  return count
 }
 
 async function ensureProfilePicture(
@@ -437,7 +506,12 @@ Deno.serve(async (req: Request) => {
           }),
         })
         const data = await resp.json().catch(() => ({}))
-        if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
+        if (!resp.ok) {
+          // Evolution falhou nesta página (ex.: bug de mídia nula). Para a
+          // paginação e segue com o que já foi gravado em vez de abortar.
+          console.error('[whatsapp-sync] findMessages falhou:', JSON.stringify(data))
+          break
+        }
 
         const bloco = data?.messages ?? {}
         const records: any[] = bloco.records ?? data?.records ?? (Array.isArray(data) ? data : [])
@@ -491,45 +565,75 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ ok: true, mensagens: gravadas, lidas, membros })
     }
 
-    // Sincroniza lista de conversas
-    const resp = await fetchWithTimeout(`${EVOLUTION_API_URL}/chat/findChats/${inst}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({}),
-    })
-    const data = await resp.json().catch(() => ({}))
-    if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
-
-    const chats: any[] = Array.isArray(data) ? data : data?.chats ?? data?.records ?? []
+    // Sincroniza lista de conversas.
+    // best-effort: a Evolution pode retornar 500 em findChats (ex.: bug
+    // "Cannot read properties of null (reading 'mediaUrl')" quando algum chat
+    // tem mídia nula). Nesse caso, NÃO abortamos o sync: registramos o erro e
+    // seguimos para a sincronização de contatos (que corrige os nomes).
     let count = 0
+    let chatsError: string | null = null
     const groupsSemNome: string[] = []
-    for (const c of chats) {
-      const rawJid = c.remoteJid ?? c.id ?? c.jid
-      if (!rawJid || rawJid === 'status@broadcast') continue
-      const remoteJid = canonicalJid(rawJid)
-      const lastTs = c.lastMessage?.messageTimestamp ?? c.updatedAt ?? c.lastMsgTimestamp
-      const profilePic = c.profilePicUrl ?? c.profilePictureUrl ?? null
-      let chatName: string | null = null
-      if (isGroupJid(remoteJid)) {
-        chatName = extractGroupSubject(c)
-        if (!chatName) groupsSemNome.push(remoteJid)
+
+    try {
+      const resp = await fetchWithTimeout(`${EVOLUTION_API_URL}/chat/findChats/${inst}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({}),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        chatsError = typeof data === 'object' ? JSON.stringify(data) : String(data)
+        console.error('[whatsapp-sync] findChats falhou:', chatsError)
       } else {
-        chatName = extractDirectPushName(c)
+        const chats: any[] = Array.isArray(data) ? data : data?.chats ?? data?.records ?? []
+        for (const c of chats) {
+          try {
+            const rawJid = c.remoteJid ?? c.id ?? c.jid
+            if (!rawJid || rawJid === 'status@broadcast') continue
+            const remoteJid = canonicalJid(rawJid)
+            const lastTs = c.lastMessage?.messageTimestamp ?? c.updatedAt ?? c.lastMsgTimestamp
+            const profilePic = c.profilePicUrl ?? c.profilePictureUrl ?? null
+            let chatName: string | null = null
+            if (isGroupJid(remoteJid)) {
+              chatName = extractGroupSubject(c)
+              if (!chatName) groupsSemNome.push(remoteJid)
+            } else {
+              const { data: existingChat } = await supabase
+                .from('whatsapp_chats')
+                .select('push_name')
+                .eq('remote_jid', remoteJid)
+                .maybeSingle()
+              chatName = resolvePushNameForUpdate(existingChat?.push_name, c)
+              if (!chatName && !existingChat?.push_name?.trim()) {
+                chatName = extractDirectPushName(c)
+              }
+            }
+            await supabase.from('whatsapp_chats').upsert(
+              {
+                remote_jid: remoteJid,
+                instance: EVOLUTION_INSTANCE,
+                ...(chatName ? { push_name: chatName } : {}),
+                ...(profilePic ? { profile_pic_url: profilePic } : {}),
+                last_message_at: lastTs ? toTimestamp(lastTs) : null,
+                last_message_preview:
+                  extractText(c.lastMessage?.message, c.lastMessage?.messageType)?.slice(0, 120) || null,
+                ...(typeof c.unreadCount === 'number'
+                  ? { unread_count: Math.max(0, c.unreadCount) }
+                  : {}),
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'remote_jid' },
+            )
+            count++
+          } catch (e) {
+            // Um chat malformado não interrompe os demais.
+            console.error('[whatsapp-sync] chat ignorado:', e instanceof Error ? e.message : String(e))
+          }
+        }
       }
-      await supabase.from('whatsapp_chats').upsert(
-        {
-          remote_jid: remoteJid,
-          instance: EVOLUTION_INSTANCE,
-          ...(chatName ? { push_name: chatName } : {}),
-          ...(profilePic ? { profile_pic_url: profilePic } : {}),
-          last_message_at: lastTs ? toTimestamp(lastTs) : null,
-          last_message_preview: extractText(c.lastMessage?.message, c.lastMessage?.messageType)?.slice(0, 120) || null,
-          unread_count: c.unreadCount ?? 0,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'remote_jid' },
-      )
-      count++
+    } catch (e) {
+      chatsError = e instanceof Error ? e.message : String(e)
+      console.error('[whatsapp-sync] findChats erro:', chatsError)
     }
 
     for (const groupJid of groupsSemNome.slice(0, 10)) {
@@ -540,15 +644,23 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Participantes de grupo: só em sync por conversa (evita timeout no sync global).
+    // Agenda de contatos (findContacts) — corrige os nomes. Roda mesmo que
+    // findChats tenha falhado.
     const contatos = await syncEvolutionContacts(
       supabase,
       EVOLUTION_API_URL,
       EVOLUTION_INSTANCE,
       EVOLUTION_API_KEY,
     )
+    const cadastroNomes = await syncCadastroTelefoneNames(supabase)
 
-    return jsonResponse({ ok: true, conversas: count, contatos })
+    return jsonResponse({
+      ok: true,
+      conversas: count,
+      contatos,
+      cadastroNomes,
+      ...(chatsError ? { chatsError } : {}),
+    })
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : String(e) }, 500)
   }

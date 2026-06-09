@@ -6,7 +6,17 @@ import {
   canonicalJid,
   phoneFromJidAlt,
   isLidJid,
+  mapStatus,
 } from '../_shared/whatsappMessageUtils.ts'
+
+// Tempo de "digitando" (presença) antes de enviar — deixa o envio mais natural
+// e reduz risco de bloqueio anti-spam do WhatsApp.
+const SEND_DELAY_MS = 1200
+
+/** fetch com timeout para não pendurar a function se a Evolution travar. */
+function fetchEvolution(url: string, init: RequestInit, ms = 20000): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(ms) })
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,7 +36,10 @@ function normalizePhone(raw: string | null | undefined): string | null {
   let digits = String(raw).replace(/\D/g, '')
   if (digits.length === 0) return null
   digits = digits.replace(/^0+/, '')
-  if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
+  // DDD + número (10 ou 11 dígitos) → acrescenta o código do país.
+  // Não usar startsWith('55'): DDD 55 (RS) colide com o código do Brasil.
+  // Números já com país têm 12 (55+10) ou 13 (55+11) dígitos.
+  if (digits.length === 10 || digits.length === 11) {
     digits = '55' + digits
   }
   return digits || null
@@ -132,7 +145,7 @@ async function persistMessage(
 ) {
   const messageId = (data?.key as Record<string, unknown> | undefined)?.id as string | null
   const now = new Date().toISOString()
-  const status = (data.status as string | undefined) ?? 'PENDING'
+  const status = mapStatus(data.status) ?? 'PENDING'
 
   await supabase.from('whatsapp_mensagens').upsert(
     {
@@ -193,7 +206,7 @@ Deno.serve(async (req: Request) => {
   try {
     if (payload.kind === 'reaction') {
       const remoteJid = canonicalJid(payload.remoteJid)
-      const resp = await fetch(`${EVOLUTION_API_URL}/message/sendReaction/${inst}`, {
+      const resp = await fetchEvolution(`${EVOLUTION_API_URL}/message/sendReaction/${inst}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -218,10 +231,10 @@ Deno.serve(async (req: Request) => {
     if (payload.kind === 'audio') {
       const audio = stripBase64Prefix(payload.audio.trim())
       if (!audio) return jsonResponse({ error: 'Áudio vazio.' }, 400)
-      const resp = await fetch(`${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${inst}`, {
+      const resp = await fetchEvolution(`${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${inst}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ number: numero, audio }),
+        body: JSON.stringify({ number: numero, audio, delay: SEND_DELAY_MS }),
       })
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
@@ -242,7 +255,7 @@ Deno.serve(async (req: Request) => {
     if (payload.kind === 'media') {
       const media = stripBase64Prefix(payload.media.trim())
       if (!media) return jsonResponse({ error: 'Mídia vazia.' }, 400)
-      const resp = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${inst}`, {
+      const resp = await fetchEvolution(`${EVOLUTION_API_URL}/message/sendMedia/${inst}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -252,8 +265,9 @@ Deno.serve(async (req: Request) => {
           media,
           fileName: payload.fileName,
           caption: payload.caption,
+          delay: SEND_DELAY_MS,
         }),
-      })
+      }, 60000)
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
       const remoteJid = canonicalJid((data?.key?.remoteJid as string) ?? jid)
@@ -278,10 +292,10 @@ Deno.serve(async (req: Request) => {
     const text = (textPayload.text ?? '').trim()
     if (!text) return jsonResponse({ error: 'Mensagem vazia.' }, 400)
 
-    const resp = await fetch(`${EVOLUTION_API_URL}/message/sendText/${inst}`, {
+    const resp = await fetchEvolution(`${EVOLUTION_API_URL}/message/sendText/${inst}`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ number: numero, text }),
+      body: JSON.stringify({ number: numero, text, delay: SEND_DELAY_MS, linkPreview: true }),
     })
     const data = await resp.json().catch(() => ({}))
     if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)

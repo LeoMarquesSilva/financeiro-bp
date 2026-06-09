@@ -3,6 +3,9 @@
 export function extractText(message: Record<string, unknown> | undefined, messageType?: string | null): string {
   if (!message) return labelForType(messageType)
   const m = message as Record<string, any>
+  const inner = (m.ephemeralMessage?.message ?? m.viewOnceMessage?.message) as
+    | Record<string, any>
+    | undefined
 
   const text =
     m.conversation ??
@@ -10,6 +13,11 @@ export function extractText(message: Record<string, unknown> | undefined, messag
     m.imageMessage?.caption ??
     m.videoMessage?.caption ??
     m.documentMessage?.caption ??
+    inner?.conversation ??
+    inner?.extendedTextMessage?.text ??
+    inner?.imageMessage?.caption ??
+    inner?.videoMessage?.caption ??
+    inner?.documentMessage?.caption ??
     m.buttonsResponseMessage?.selectedDisplayText ??
     m.listResponseMessage?.title ??
     m.templateMessage?.hydratedTemplate?.hydratedContentText ??
@@ -74,14 +82,18 @@ export function extractMediaMeta(
   const m = message as Record<string, any>
   const tipo = messageType ?? ''
 
-  if (tipo === 'imageMessage' || m.imageMessage) {
-    const img = m.imageMessage
+  const inner = (m.ephemeralMessage?.message ?? m.viewOnceMessage?.message) as
+    | Record<string, any>
+    | undefined
+
+  if (tipo === 'imageMessage' || m.imageMessage || inner?.imageMessage) {
+    const img = m.imageMessage ?? inner?.imageMessage
     return img
       ? { mimetype: img.mimetype, caption: img.caption, fileName: img.fileName }
       : null
   }
-  if (tipo === 'videoMessage' || m.videoMessage) {
-    const v = m.videoMessage
+  if (tipo === 'videoMessage' || m.videoMessage || inner?.videoMessage) {
+    const v = m.videoMessage ?? inner?.videoMessage
     return v ? { mimetype: v.mimetype, caption: v.caption, seconds: v.seconds } : null
   }
   if (tipo === 'audioMessage' || m.audioMessage) {
@@ -90,8 +102,8 @@ export function extractMediaMeta(
       ? { mimetype: a.mimetype, seconds: a.seconds, ptt: a.ptt }
       : null
   }
-  if (tipo === 'documentMessage' || m.documentMessage) {
-    const d = m.documentMessage
+  if (tipo === 'documentMessage' || m.documentMessage || inner?.documentMessage) {
+    const d = m.documentMessage ?? inner?.documentMessage
     return d
       ? { mimetype: d.mimetype, fileName: d.fileName, caption: d.caption }
       : null
@@ -194,6 +206,58 @@ export function isInternalBusinessName(name: string | null | undefined): boolean
     n.includes('bismarchi') &&
     (n.includes('pires') || n.includes('sociedade') || n.includes('advogados') || n.includes('financeiro'))
   )
+}
+
+/** Nome inválido para exibição (só dígitos, rótulos genéricos, etc.). */
+export function isUsableEvolutionContactName(name: string | null | undefined): boolean {
+  const raw = (name ?? '').trim()
+  if (!raw) return false
+  if (/^\d+$/.test(raw)) return false
+  if (isInternalBusinessName(raw)) return false
+  const n = raw.toLowerCase()
+  if (n === 'você' || n === 'voce' || n === 'you') return false
+  return true
+}
+
+/**
+ * Nome salvo na agenda do celular (contato cadastrado).
+ * Baileys/Evolution: `name`, `verifiedName`; às vezes `contactName` / `saveName`.
+ */
+export function extractAgendaName(c: Record<string, unknown>): string | null {
+  const raw = (c.name ?? c.contactName ?? c.saveName ?? c.verifiedName ?? null) as string | null
+  const name = raw?.trim()
+  return name && isUsableEvolutionContactName(name) ? name : null
+}
+
+/**
+ * Nome de perfil WhatsApp (o que a pessoa definiu no app) — não é o da agenda.
+ * Mensagens e Evolution costumam expor em `pushName` / `notify`.
+ */
+export function extractProfileName(c: Record<string, unknown>): string | null {
+  const raw = (c.pushName ?? c.notify ?? c.profileName ?? null) as string | null
+  const name = raw?.trim()
+  return name && isUsableEvolutionContactName(name) ? name : null
+}
+
+/** Melhor nome disponível: agenda primeiro, perfil como fallback. */
+export function pickContactPushName(c: Record<string, unknown>): string | null {
+  return extractAgendaName(c) ?? extractProfileName(c)
+}
+
+/**
+ * Decide se deve gravar `push_name` no banco.
+ * Agenda sempre pode sobrescrever; perfil só preenche quando ainda não há nome.
+ */
+export function resolvePushNameForUpdate(
+  existing: string | null | undefined,
+  incoming: Record<string, unknown>,
+): string | null {
+  const agenda = extractAgendaName(incoming)
+  if (agenda) return agenda
+  const profile = extractProfileName(incoming)
+  if (!profile) return null
+  if (!existing?.trim() || !isUsableEvolutionContactName(existing)) return profile
+  return null
 }
 
 export interface ReactionEntry {

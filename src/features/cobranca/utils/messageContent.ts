@@ -6,6 +6,9 @@ export function extractMessageText(
   if (!message) return labelForType(messageType)
 
   const m = message as Record<string, any>
+  const inner = (m.ephemeralMessage?.message ?? m.viewOnceMessage?.message) as
+    | Record<string, any>
+    | undefined
 
   const text =
     m.conversation ??
@@ -13,6 +16,11 @@ export function extractMessageText(
     m.imageMessage?.caption ??
     m.videoMessage?.caption ??
     m.documentMessage?.caption ??
+    inner?.conversation ??
+    inner?.extendedTextMessage?.text ??
+    inner?.imageMessage?.caption ??
+    inner?.videoMessage?.caption ??
+    inner?.documentMessage?.caption ??
     m.buttonsResponseMessage?.selectedDisplayText ??
     m.listResponseMessage?.title ??
     m.templateMessage?.hydratedTemplate?.hydratedContentText ??

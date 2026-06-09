@@ -237,6 +237,10 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
 
   const { chats: chatsRaw, loading: loadingChats, refetch: refetchChats } = useWhatsappChats(busca)
 
+  useEffect(() => {
+    refreshUnread()
+  }, [chatsRaw, refreshUnread])
+
   const contagemPorCategoria = useMemo(() => {
     const counts = {
       todas: chatsRaw.length,
@@ -463,10 +467,10 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     setShowDetails(true)
     setActiveCobranca(null)
     setTexto('')
-    if (chat.unread_count > 0) {
-      whatsappService
+    if ((chat.unread_count ?? 0) > 0) {
+      void whatsappService
         .markChatRead(chat.remote_jid)
-        .then(() => refreshUnread())
+        .then(() => Promise.all([refreshUnread(), refetchChats()]))
         .catch(() => {})
     }
     try {
@@ -757,7 +761,7 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
               <Input
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar conversa"
+                placeholder="Buscar nome ou telefone"
                 className="pl-8"
               />
             </div>

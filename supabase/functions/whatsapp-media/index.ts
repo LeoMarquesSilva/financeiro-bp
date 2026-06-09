@@ -33,8 +33,10 @@ function buildEvolutionMediaBody(
     fromMe: false,
   }
   const inner = raw?.message as Record<string, unknown> | undefined
+  const nested = (inner?.ephemeralMessage as Record<string, unknown> | undefined)?.message ??
+    (inner?.viewOnceMessage as Record<string, unknown> | undefined)?.message
   const message: Record<string, unknown> = { key }
-  if (inner) message.message = inner
+  if (inner) message.message = nested ?? inner
   if (raw?.messageType) message.messageType = raw.messageType
   else if (tipo) message.messageType = tipo
   if (raw?.messageTimestamp != null) message.messageTimestamp = raw.messageTimestamp
@@ -95,6 +97,7 @@ Deno.serve(async (req: Request) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
         body: JSON.stringify(evolutionBody),
+        signal: AbortSignal.timeout(60000),
       },
     )
     const data = await resp.json().catch(() => ({}))

@@ -72,8 +72,12 @@ Deno.serve(async (req: Request) => {
       }))
   }
 
+  async function zeroUnread(jid: string): Promise<void> {
+    await supabase.from('whatsapp_chats').update({ unread_count: 0 }).eq('remote_jid', jid)
+  }
+
   if (readMessages.length === 0) {
-    await supabase.from('whatsapp_chats').update({ unread_count: 0 }).eq('remote_jid', canonical)
+    await zeroUnread(canonical)
     return jsonResponse({ ok: true, read: 0 })
   }
 
@@ -84,12 +88,30 @@ Deno.serve(async (req: Request) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
         body: JSON.stringify({ readMessages }),
+        signal: AbortSignal.timeout(15000),
       },
     )
     const data = await resp.json().catch(() => ({}))
     if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
 
-    await supabase.from('whatsapp_chats').update({ unread_count: 0 }).eq('remote_jid', canonical)
+    await zeroUnread(canonical)
+
+    const [user, domain] = canonical.split('@')
+    if (user && domain && !canonical.includes('@g.us')) {
+      await supabase
+        .from('whatsapp_chats')
+        .update({ unread_count: 0 })
+        .like('remote_jid', `${user}:%@${domain}`)
+
+      const { data: lidRow } = await supabase
+        .from('whatsapp_chats')
+        .select('remote_jid')
+        .eq('phone_jid', canonical)
+        .like('remote_jid', '%@lid')
+        .limit(1)
+        .maybeSingle()
+      if (lidRow?.remote_jid) await zeroUnread(lidRow.remote_jid as string)
+    }
 
     return jsonResponse({ ok: true, read: readMessages.length })
   } catch (e) {

@@ -1,6 +1,17 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { canonicalJid } from '../_shared/whatsappMessageUtils.ts'
+import { canonicalJid, mapStatus } from '../_shared/whatsappMessageUtils.ts'
+
+// Presença ("digitando") antes de enviar + pausa entre destinatários:
+// disparo em lote sem espaçamento é o padrão que o WhatsApp marca como spam.
+const SEND_DELAY_MS = 1200
+const ENTRE_ENVIOS_MS = 1500
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+function fetchEvolution(url: string, init: RequestInit, ms = 20000): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(ms) })
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,7 +31,9 @@ function normalizePhone(raw: string | null | undefined): string | null {
   let digits = String(raw).replace(/\D/g, '')
   if (digits.length === 0) return null
   digits = digits.replace(/^0+/, '')
-  if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
+  // DDD + número (10 ou 11 dígitos) → acrescenta o código do país.
+  // Não usar startsWith('55'): DDD 55 (RS) colide com o código do Brasil.
+  if (digits.length === 10 || digits.length === 11) {
     digits = '55' + digits
   }
   return digits || null
@@ -68,7 +81,10 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE)
   const results: Array<{ parcela_id: string; ok: boolean; erro?: string }> = []
 
-  for (const item of itens) {
+  for (let i = 0; i < itens.length; i++) {
+    const item = itens[i]
+    // Espaça os envios (menos o primeiro) para evitar bloqueio anti-spam.
+    if (i > 0) await sleep(ENTRE_ENVIOS_MS)
     const numero = normalizePhone(item.number)
     if (!numero) {
       await supabase.from('cobranca_eventos').insert({
@@ -86,12 +102,17 @@ Deno.serve(async (req: Request) => {
     }
 
     try {
-      const resp = await fetch(
+      const resp = await fetchEvolution(
         `${EVOLUTION_API_URL}/message/sendText/${encodeURIComponent(EVOLUTION_INSTANCE)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
-          body: JSON.stringify({ number: numero, text: item.mensagem }),
+          body: JSON.stringify({
+            number: numero,
+            text: item.mensagem,
+            delay: SEND_DELAY_MS,
+            linkPreview: true,
+          }),
         },
       )
       const data = await resp.json().catch(() => ({}))
@@ -126,7 +147,7 @@ Deno.serve(async (req: Request) => {
           conteudo: item.mensagem,
           timestamp: now,
           raw: data,
-          status: data?.status ?? 'PENDING',
+          status: mapStatus(data?.status) ?? 'PENDING',
         },
         { onConflict: 'message_id', ignoreDuplicates: false },
       )

@@ -7,7 +7,9 @@ import {
   mapStatus,
   canonicalJid,
   isGroupJid,
-  isInternalBusinessName,
+  isUsableEvolutionContactName,
+  pickContactPushName,
+  resolvePushNameForUpdate,
   mergeReaction,
   type ReactionEntry,
 } from '../_shared/whatsappMessageUtils.ts'
@@ -51,8 +53,21 @@ function extractChatPushName(c: Record<string, any>, remoteJid: string): string 
     const subject = (c.subject ?? c.name ?? c.groupName ?? null) as string | null
     return subject?.trim() || null
   }
-  const pushName = (c.pushName ?? c.name ?? null) as string | null
-  return pushName && !isInternalBusinessName(pushName) ? pushName : null
+  return pickContactPushName(c)
+}
+
+async function resolveChatPushNameUpdate(
+  supabase: SupabaseClient,
+  remoteJid: string,
+  c: Record<string, any>,
+): Promise<string | null> {
+  if (isGroupJid(remoteJid)) return extractChatPushName(c, remoteJid)
+  const { data: existing } = await supabase
+    .from('whatsapp_chats')
+    .select('push_name')
+    .eq('remote_jid', remoteJid)
+    .maybeSingle()
+  return resolvePushNameForUpdate(existing?.push_name, c)
 }
 
 async function mergeReactionOnParent(
@@ -93,6 +108,17 @@ async function handleMessage(
   const mediaMeta = extractMediaMeta(msg.message, msg.messageType)
   const status = mapStatus((msg as Record<string, unknown>).status)
 
+  const messageId = msg.key?.id ?? null
+  let isNewMessage = !!messageId
+  if (messageId) {
+    const { data: existingMsg } = await supabase
+      .from('whatsapp_mensagens')
+      .select('message_id')
+      .eq('message_id', messageId)
+      .maybeSingle()
+    isNewMessage = !existingMsg
+  }
+
   if (msg.messageType === 'reactionMessage' && reactionTo) {
     const emoji = ((msg.message as Record<string, any>)?.reactionMessage?.text ?? '') as string
     await mergeReactionOnParent(supabase, reactionTo, emoji, fromMe, msg.pushName)
@@ -117,19 +143,43 @@ async function handleMessage(
 
   if (msg.messageType === 'reactionMessage') return
 
+  // Mensagem recebida incrementa o contador de não lidas (base do filtro "Não lidas").
+  // Enviada por nós não altera o contador. Ignora reentrega do mesmo message_id.
+  let unreadCount: number | undefined
+  if (!fromMe && isNewMessage) {
+    const { data: cur } = await supabase
+      .from('whatsapp_chats')
+      .select('unread_count')
+      .eq('remote_jid', remoteJid)
+      .maybeSingle()
+    unreadCount = ((cur?.unread_count as number | null) ?? 0) + 1
+  }
+
   await supabase.from('whatsapp_chats').upsert(
     {
       remote_jid: remoteJid,
       instance: instance ?? null,
-      ...( !fromMe && !isGroupJid(remoteJid) && msg.pushName && !isInternalBusinessName(msg.pushName)
-        ? { push_name: msg.pushName }
-        : {}),
       last_message_at: timestamp,
       last_message_preview: (conteudo || labelForType(msg.messageType)).slice(0, 120) || null,
+      ...(unreadCount !== undefined ? { unread_count: unreadCount } : {}),
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'remote_jid' },
   )
+
+  // pushName na mensagem é o nome de perfil WhatsApp — só preenche se ainda vazio.
+  if (
+    !fromMe &&
+    !isGroupJid(remoteJid) &&
+    msg.pushName &&
+    isUsableEvolutionContactName(msg.pushName)
+  ) {
+    await supabase
+      .from('whatsapp_chats')
+      .update({ push_name: msg.pushName.trim() })
+      .eq('remote_jid', remoteJid)
+      .is('push_name', null)
+  }
 
   if (!fromMe) {
     const pushPayload = buildWhatsappPushPayload(
@@ -219,13 +269,15 @@ Deno.serve(async (req: Request) => {
         const rawJid = c.remoteJid ?? c.id
         if (!rawJid || rawJid === 'status@broadcast') continue
         const remoteJid = canonicalJid(rawJid)
-        const chatName = extractChatPushName(c, remoteJid)
+        const chatName = await resolveChatPushNameUpdate(supabase, remoteJid, c)
         await supabase.from('whatsapp_chats').upsert(
           {
             remote_jid: remoteJid,
             instance: instance ?? null,
             ...(chatName ? { push_name: chatName } : {}),
-            unread_count: c.unreadCount ?? undefined,
+            ...(typeof c.unreadCount === 'number'
+              ? { unread_count: Math.max(0, c.unreadCount) }
+              : {}),
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'remote_jid' },

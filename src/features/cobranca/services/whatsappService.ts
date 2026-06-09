@@ -1,5 +1,12 @@
 import { supabase } from '@/lib/supabaseClient'
 import { parseEdgeFunctionError, canonicalJid } from '../utils/phone'
+import {
+  buildChatSearchOr,
+  chatMatchesSearch,
+  escapeIlike,
+  telefoneToRemoteJid,
+} from '../utils/chatSearch'
+import { parsePhoneDigits } from '../utils/phoneMask'
 import { isGroupJid, isValidWhatsappRemoteJid } from '../utils/jid'
 import { phoneFromJidAlt } from '../utils/lidIndex'
 import type { WhatsappChatRow, WhatsappMensagemRow } from '@/lib/database.types'
@@ -20,6 +27,24 @@ function chatKey(jid: string): string {
 
 const avatarDataUrlCache = new Map<string, string>()
 const avatarInflight = new Map<string, Promise<string | null>>()
+
+type MediaCacheEntry = { base64: string; mimetype: string; fileName: string | null }
+const mediaDataUrlCache = new Map<string, string>()
+const mediaPayloadCache = new Map<string, MediaCacheEntry>()
+const mediaInflight = new Map<string, Promise<MediaCacheEntry>>()
+let mediaActiveLoads = 0
+const MEDIA_MAX_CONCURRENT = 3
+const mediaWaitQueue: Array<() => void> = []
+
+function mediaCacheKey(remoteJid: string, messageId: string): string {
+  return `${chatKey(remoteJid)}|${messageId}`
+}
+
+function runNextMediaLoad(): void {
+  if (mediaActiveLoads >= MEDIA_MAX_CONCURRENT) return
+  const next = mediaWaitQueue.shift()
+  if (next) next()
+}
 
 async function fetchAvatarDataUrl(remoteJid: string): Promise<string | null> {
   const key = chatKey(remoteJid)
@@ -85,7 +110,8 @@ function mergeChats(existing: WhatsappChatRow, incoming: WhatsappChatRow, key: s
     push_name: pickPushName(existing.push_name, incoming.push_name, group),
     last_message_at: newer.last_message_at ?? older.last_message_at,
     last_message_preview: newer.last_message_preview ?? older.last_message_preview,
-    unread_count: (existing.unread_count || 0) + (incoming.unread_count || 0),
+    // Mesma conversa pode existir em @lid + telefone — usa o maior, nunca soma.
+    unread_count: Math.max(existing.unread_count || 0, incoming.unread_count || 0),
     instance: newer.instance ?? older.instance,
     updated_at: newer.updated_at ?? older.updated_at,
     categoria: existing.categoria ?? incoming.categoria ?? null,
@@ -258,8 +284,7 @@ export const whatsappService = {
 
       const term = busca?.trim()
       if (term) {
-        const safe = term.replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/,/g, '')
-        query = query.or(`push_name.ilike.%${safe}%,remote_jid.ilike.%${safe}%`)
+        query = query.or(buildChatSearchOr(term))
       }
 
       const { data, error } = await query
@@ -279,12 +304,15 @@ export const whatsappService = {
   async listLidPhoneMappings(): Promise<Map<string, string>> {
     try {
       const [msgsRes, chatsRes] = await Promise.all([
+        // Extrai só o campo necessário (remoteJidAlt) no servidor — NUNCA o raw
+        // inteiro, que para milhares de linhas estoura o timeout do banco.
         supabase
           .from('whatsapp_mensagens')
-          .select('remote_jid, raw')
+          .select('remote_jid, alt:raw->key->>remoteJidAlt')
           .like('remote_jid', '%@lid')
+          .not('raw->key->>remoteJidAlt', 'is', null)
           .order('timestamp', { ascending: false })
-          .limit(2000),
+          .limit(500),
         supabase
           .from('whatsapp_chats')
           .select('remote_jid, phone_jid')
@@ -298,11 +326,10 @@ export const whatsappService = {
         if (lid && digits) map.set(lid, digits)
       }
       if (msgsRes.error) return map
-      for (const row of (msgsRes.data ?? []) as { remote_jid: string; raw: Record<string, unknown> | null }[]) {
+      for (const row of (msgsRes.data ?? []) as { remote_jid: string; alt: string | null }[]) {
         const lid = row.remote_jid.split('@')[0]
         if (!lid || map.has(lid)) continue
-        const key = row.raw?.key as Record<string, unknown> | undefined
-        const alt = phoneFromJidAlt(key?.remoteJidAlt as string | undefined)
+        const alt = phoneFromJidAlt(row.alt ?? undefined)
         if (alt) map.set(lid, alt)
       }
       return map
@@ -311,13 +338,56 @@ export const whatsappService = {
     }
   },
 
+  async findChatJidsByCadastroTelefone(term: string): Promise<string[]> {
+    const digits = parsePhoneDigits(term)
+    if (digits.length < 4) return []
+    try {
+      const safe = escapeIlike(digits)
+      const { data, error } = await supabase
+        .from('pessoa_telefones_whatsapp')
+        .select('telefone')
+        .ilike('telefone', `%${safe}%`)
+        .limit(40)
+      if (error) return []
+      const jids = new Set<string>()
+      for (const row of (data ?? []) as { telefone: string }[]) {
+        const jid = telefoneToRemoteJid(row.telefone)
+        if (jid) jids.add(jid)
+      }
+      return [...jids]
+    } catch {
+      return []
+    }
+  },
+
   async listChats(busca?: string): Promise<WhatsappChatRow[]> {
-    const [chats, participants, lidPhone] = await Promise.all([
+    const term = busca?.trim()
+    const [chats, participants, lidPhone, cadastroJids] = await Promise.all([
       this.listChatsRaw(busca),
       this.listLidParticipantRows(),
       this.listLidPhoneMappings(),
+      term ? this.findChatJidsByCadastroTelefone(term) : Promise.resolve([]),
     ])
-    return dedupeWhatsappChats(chats, buildLidToPhoneJid(participants, lidPhone))
+
+    const lidToPhone = buildLidToPhoneJid(participants, lidPhone)
+    let merged = chats
+
+    const missingJids = cadastroJids.filter(
+      (jid) => !chats.some((c) => canonicalJid(c.remote_jid) === canonicalJid(jid)),
+    )
+    if (missingJids.length > 0) {
+      const { data } = await supabase
+        .from('whatsapp_chats')
+        .select('*')
+        .in('remote_jid', missingJids)
+      if (data?.length) {
+        merged = [...chats, ...(data as WhatsappChatRow[])]
+      }
+    }
+
+    const deduped = dedupeWhatsappChats(merged, lidToPhone)
+    if (!term) return deduped
+    return deduped.filter((chat) => chatMatchesSearch(chat, term, lidToPhone))
   },
 
   async fetchMensagens(remoteJid: string): Promise<WhatsappMensagemRow[]> {
@@ -467,6 +537,10 @@ export const whatsappService = {
     remoteJid: string,
     messageId: string,
   ): Promise<{ base64: string; mimetype: string; fileName: string | null }> {
+    const key = mediaCacheKey(remoteJid, messageId)
+    const cached = mediaPayloadCache.get(key)
+    if (cached) return cached
+
     const { data, error } = await supabase.functions.invoke('whatsapp-media', {
       body: { remoteJid: canonicalJid(remoteJid), messageId },
     })
@@ -480,11 +554,56 @@ export const whatsappService = {
     if (result?.unavailable || !result?.base64) {
       throw new Error('Mídia indisponível no momento.')
     }
-    return {
+    const entry: MediaCacheEntry = {
       base64: result.base64,
       mimetype: result.mimetype ?? 'application/octet-stream',
       fileName: result.fileName ?? null,
     }
+    mediaPayloadCache.set(key, entry)
+    return entry
+  },
+
+  /** Fila de download — evita disparar dezenas de requests à Evolution de uma vez. */
+  fetchMediaQueued(
+    remoteJid: string,
+    messageId: string,
+  ): Promise<{ base64: string; mimetype: string; fileName: string | null }> {
+    const key = mediaCacheKey(remoteJid, messageId)
+    const cached = mediaPayloadCache.get(key)
+    if (cached) return Promise.resolve(cached)
+
+    const pending = mediaInflight.get(key)
+    if (pending) return pending
+
+    const promise = new Promise<MediaCacheEntry>((resolve, reject) => {
+      const run = () => {
+        mediaActiveLoads++
+        this.fetchMedia(remoteJid, messageId)
+          .then(resolve)
+          .catch(reject)
+          .finally(() => {
+            mediaActiveLoads--
+            mediaInflight.delete(key)
+            runNextMediaLoad()
+          })
+      }
+      if (mediaActiveLoads < MEDIA_MAX_CONCURRENT) run()
+      else mediaWaitQueue.push(run)
+    })
+
+    mediaInflight.set(key, promise)
+    return promise
+  },
+
+  cacheMediaDataUrl(remoteJid: string, messageId: string, base64: string, mimetype: string): string {
+    const key = mediaCacheKey(remoteJid, messageId)
+    const dataUrl = base64.startsWith('data:') ? base64 : `data:${mimetype};base64,${base64}`
+    mediaDataUrlCache.set(key, dataUrl)
+    return dataUrl
+  },
+
+  getCachedMediaDataUrl(remoteJid: string, messageId: string): string | null {
+    return mediaDataUrlCache.get(mediaCacheKey(remoteJid, messageId)) ?? null
   },
 
   async sync(): Promise<{ conversas?: number }> {
@@ -554,9 +673,8 @@ export const whatsappService = {
     for (const jid of targets) {
       await supabase
         .from('whatsapp_chats')
-        .update({ unread_count: 0 } as never)
+        .update({ unread_count: 0, updated_at: new Date().toISOString() } as never)
         .eq('remote_jid', jid)
-        .gt('unread_count', 0)
     }
   },
 

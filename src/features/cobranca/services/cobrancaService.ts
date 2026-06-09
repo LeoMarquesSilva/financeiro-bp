@@ -433,17 +433,22 @@ export const cobrancaService = {
   /** Nomes de clientes por telefone (para identificar conversas do WhatsApp). */
   async listContatoNomes(): Promise<{ telefone: string; nome: string }[]> {
     const map = new Map<string, string>()
+    const priority = new Map<string, number>()
 
     const registrar = (
       telefone: string | null | undefined,
       pessoaNome: string | null | undefined,
       cliente: string | null | undefined,
       grupoCliente?: string | null,
+      prio = 0,
     ) => {
       const key = phoneKey(telefone)
       const label = pickContactLabel(pessoaNome, cliente, grupoCliente)
-      if (!key || !label || map.has(key)) return
+      if (!key || !label) return
+      const prev = priority.get(key) ?? -1
+      if (prio < prev) return
       map.set(key, label)
+      priority.set(key, prio)
     }
 
     const [{ data: painel }, { data: titulos }, { data: pessoas, error }, { data: telWhatsapp }] =
@@ -467,13 +472,22 @@ export const cobrancaService = {
       console.error('[cobrancaService] listContatoNomes', error)
     }
 
+    for (const r of (telWhatsapp ?? []) as {
+      telefone: string | null
+      nome: string | null
+      pessoa_id: string
+    }[]) {
+      const label = r.nome?.trim()
+      if (!label) continue
+      registrar(r.telefone, label, label, undefined, 100)
+    }
     for (const r of (painel ?? []) as {
       pessoa_telefone: string | null
       pessoa_nome: string | null
       cliente: string | null
       grupo_cliente: string | null
     }[]) {
-      registrar(r.pessoa_telefone, r.pessoa_nome, r.cliente, r.grupo_cliente)
+      registrar(r.pessoa_telefone, r.pessoa_nome, r.cliente, r.grupo_cliente, 50)
     }
     for (const r of (titulos ?? []) as {
       pessoa_telefone: string | null
@@ -481,7 +495,7 @@ export const cobrancaService = {
       cliente: string | null
       grupo_cliente: string | null
     }[]) {
-      registrar(r.pessoa_telefone, r.pessoa_nome, r.cliente, r.grupo_cliente)
+      registrar(r.pessoa_telefone, r.pessoa_nome, r.cliente, r.grupo_cliente, 40)
     }
     for (const r of (pessoas ?? []) as {
       telefone: string | null
@@ -490,16 +504,7 @@ export const cobrancaService = {
     }[]) {
       const nome = pickContactLabel(r.nome, r.nome, r.grupo_cliente)
       if (!nome || isInternalContactName(nome)) continue
-      registrar(r.telefone, r.nome, r.nome, r.grupo_cliente)
-    }
-    for (const r of (telWhatsapp ?? []) as {
-      telefone: string | null
-      nome: string | null
-      pessoa_id: string
-    }[]) {
-      const label = r.nome?.trim()
-      if (!label) continue
-      registrar(r.telefone, label, label)
+      registrar(r.telefone, r.nome, r.nome, r.grupo_cliente, 10)
     }
 
     return Array.from(map.entries()).map(([telefone, nome]) => ({ telefone, nome }))

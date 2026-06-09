@@ -49,19 +49,22 @@ export function useLidContactIndex() {
       const [participants, chatsRes, msgsRes, altMsgsRes] = await Promise.all([
         whatsappService.listLidParticipantRows(),
         supabase.from('whatsapp_chats').select('remote_jid, push_name, phone_jid').limit(1000),
+        // Extrai só os campos necessários no servidor (pushName / participant),
+        // nunca o raw inteiro — evita timeout/sobrecarga do banco.
         supabase
           .from('whatsapp_mensagens')
-          .select('remote_jid, raw')
-          .or('remote_jid.like.%@lid')
+          .select('remote_jid, pushName:raw->>pushName, participant:raw->key->>participant')
+          .like('remote_jid', '%@lid')
           .eq('from_me', false)
           .order('timestamp', { ascending: false })
-          .limit(800),
+          .limit(300),
         supabase
           .from('whatsapp_mensagens')
-          .select('remote_jid, raw')
-          .or('remote_jid.like.%@lid')
+          .select('remote_jid, alt:raw->key->>remoteJidAlt')
+          .like('remote_jid', '%@lid')
+          .not('raw->key->>remoteJidAlt', 'is', null)
           .order('timestamp', { ascending: false })
-          .limit(1500),
+          .limit(500),
       ])
 
       const chatsByPhoneJid = new Map<string, string | null>()
@@ -84,11 +87,13 @@ export function useLidContactIndex() {
       }
 
       const messageNames = new Map<string, string>()
-      for (const m of (msgsRes.data ?? []) as { remote_jid: string; raw: Record<string, unknown> | null }[]) {
-        const raw = m.raw as Record<string, unknown> | null
-        const pushName = (raw?.pushName as string | undefined)?.trim()
-        const participant = (raw?.key as Record<string, unknown> | undefined)?.participant as string | undefined
-        const targets = [m.remote_jid, participant].filter(Boolean) as string[]
+      for (const m of (msgsRes.data ?? []) as {
+        remote_jid: string
+        pushName: string | null
+        participant: string | null
+      }[]) {
+        const pushName = m.pushName?.trim()
+        const targets = [m.remote_jid, m.participant].filter(Boolean) as string[]
         for (const jid of targets) {
           if (!jid.includes('@lid') || !pushName || !isUsableContactName(pushName)) continue
           const lid = jid.split('@')[0]
@@ -96,18 +101,19 @@ export function useLidContactIndex() {
         }
       }
 
-      for (const m of (altMsgsRes.data ?? []) as { remote_jid: string; raw: Record<string, unknown> | null }[]) {
+      for (const m of (altMsgsRes.data ?? []) as { remote_jid: string; alt: string | null }[]) {
         if (!m.remote_jid.includes('@lid')) continue
         const lid = m.remote_jid.split('@')[0]
         if (!lid || lidToPhoneDigits.has(lid)) continue
-        const key = (m.raw as Record<string, unknown> | null)?.key as Record<string, unknown> | undefined
-        const alt = phoneFromJidAlt(key?.remoteJidAlt as string | undefined)
+        const alt = phoneFromJidAlt(m.alt ?? undefined)
         if (alt) lidToPhoneDigits.set(lid, alt)
       }
 
       return { participants, chatsByPhoneJid, lidChatNames, messageNames, lidToPhoneDigits }
     },
     staleTime: 5 * 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
   })
 
   return useMemo(() => {
@@ -176,6 +182,8 @@ export function useWhatsappChats(busca?: string) {
     queryKey: ['whatsapp', 'chats', busca ?? ''],
     queryFn: () => whatsappService.listChats(busca),
     staleTime: 15_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
   })
 
   useEffect(() => {
@@ -183,7 +191,7 @@ export function useWhatsappChats(busca?: string) {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['whatsapp', 'chats'] })
-      }, 1200)
+      }, 350)
     }
 
     const channel = supabase
