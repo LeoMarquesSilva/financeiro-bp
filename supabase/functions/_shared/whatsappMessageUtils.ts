@@ -266,6 +266,166 @@ export interface ReactionEntry {
   pushName?: string | null
 }
 
+/** Payload `quoted` da Evolution API v2 (resposta citando mensagem). */
+export interface EvolutionQuoted {
+  key: {
+    remoteJid: string
+    fromMe: boolean
+    id: string
+    participant?: string
+  }
+  message: Record<string, unknown>
+}
+
+export function extractMessageParticipant(
+  raw: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!raw) return null
+  const r = raw as Record<string, any>
+  const participant = r.key?.participant ?? r.message?.key?.participant
+  if (!participant || typeof participant !== 'string') return null
+  return canonicalJid(participant)
+}
+
+/** Reconstrói corpo proto da mensagem citada para a Evolution. */
+export function buildQuotedMessageBody(
+  tipo: string | null | undefined,
+  conteudo: string | null | undefined,
+  raw?: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const inner = (raw as Record<string, any> | null)?.message as Record<string, any> | undefined
+  if (inner) {
+    if (inner.conversation) return { conversation: String(inner.conversation) }
+    if (inner.extendedTextMessage?.text) {
+      return { extendedTextMessage: { text: String(inner.extendedTextMessage.text) } }
+    }
+    if (inner.imageMessage) {
+      const img = inner.imageMessage
+      return {
+        imageMessage: {
+          caption: img.caption ?? conteudo ?? undefined,
+          mimetype: img.mimetype,
+        },
+      }
+    }
+    if (inner.videoMessage) {
+      const v = inner.videoMessage
+      return { videoMessage: { caption: v.caption ?? conteudo ?? undefined, mimetype: v.mimetype } }
+    }
+    if (inner.documentMessage) {
+      const d = inner.documentMessage
+      return {
+        documentMessage: {
+          fileName: d.fileName,
+          caption: d.caption ?? conteudo ?? undefined,
+          mimetype: d.mimetype,
+        },
+      }
+    }
+    if (inner.audioMessage) {
+      return { audioMessage: { mimetype: inner.audioMessage.mimetype, ptt: inner.audioMessage.ptt } }
+    }
+    if (inner.stickerMessage) {
+      return { stickerMessage: { mimetype: inner.stickerMessage.mimetype } }
+    }
+    if (inner.locationMessage) {
+      return { locationMessage: { degreesLatitude: 0, degreesLongitude: 0 } }
+    }
+  }
+
+  const text = (conteudo ?? '').trim() || extractText(inner, tipo) || 'Mensagem'
+  switch (tipo) {
+    case 'imageMessage':
+      return { imageMessage: { caption: text } }
+    case 'videoMessage':
+      return { videoMessage: { caption: text } }
+    case 'documentMessage':
+      return { documentMessage: { fileName: text.replace(/^📄\s*/, ''), caption: text } }
+    case 'audioMessage':
+      return { audioMessage: { ptt: true } }
+    case 'stickerMessage':
+      return { stickerMessage: {} }
+    case 'locationMessage':
+      return { locationMessage: { degreesLatitude: 0, degreesLongitude: 0 } }
+    default:
+      return { conversation: text }
+  }
+}
+
+/** Injeta contextInfo no raw salvo (Evolution às vezes retorna só `conversation`). */
+export function enrichOutgoingRawWithQuote(
+  data: Record<string, unknown>,
+  quoted: EvolutionQuoted,
+): Record<string, unknown> {
+  const out = { ...data }
+  const msg = { ...((out.message as Record<string, unknown>) ?? {}) }
+
+  const contextInfo: Record<string, unknown> = {
+    stanzaId: quoted.key.id,
+    quotedFromMe: quoted.key.fromMe,
+    ...(quoted.key.participant ? { participant: quoted.key.participant } : {}),
+    quotedMessage: quoted.message,
+  }
+
+  out.contextInfo = contextInfo
+
+  const mediaKey =
+    msg.imageMessage
+      ? 'imageMessage'
+      : msg.videoMessage
+        ? 'videoMessage'
+        : msg.documentMessage
+          ? 'documentMessage'
+          : msg.audioMessage
+            ? 'audioMessage'
+            : null
+
+  if (mediaKey) {
+    const block = { ...(msg[mediaKey] as Record<string, unknown>), contextInfo }
+    out.message = { [mediaKey]: block }
+    out.messageType = out.messageType ?? mediaKey
+    return out
+  }
+
+  const text =
+    (msg.conversation as string | undefined) ??
+    ((msg.extendedTextMessage as Record<string, any> | undefined)?.text as string | undefined) ??
+    extractText(msg, 'extendedTextMessage') ??
+    ''
+
+  out.message = {
+    extendedTextMessage: {
+      text,
+      contextInfo,
+    },
+  }
+  out.messageType = 'extendedTextMessage'
+  return out
+}
+
+export function buildEvolutionQuoted(params: {
+  messageId: string
+  fromMe: boolean
+  chatRemoteJid: string
+  participant?: string | null
+  tipo?: string | null
+  conteudo?: string | null
+  raw?: Record<string, unknown> | null
+}): EvolutionQuoted {
+  const key: EvolutionQuoted['key'] = {
+    remoteJid: canonicalJid(params.chatRemoteJid),
+    fromMe: params.fromMe,
+    id: params.messageId,
+  }
+  const participant = params.participant?.trim()
+  if (participant) key.participant = canonicalJid(participant)
+
+  return {
+    key,
+    message: buildQuotedMessageBody(params.tipo, params.conteudo, params.raw),
+  }
+}
+
 export function mergeReaction(
   existing: ReactionEntry[] | null | undefined,
   emoji: string,

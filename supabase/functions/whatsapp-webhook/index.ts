@@ -113,10 +113,18 @@ async function handleMessage(
   if (messageId) {
     const { data: existingMsg } = await supabase
       .from('whatsapp_mensagens')
-      .select('message_id')
+      .select('message_id, raw')
       .eq('message_id', messageId)
       .maybeSingle()
     isNewMessage = !existingMsg
+
+    // whatsapp-send pode gravar contextInfo antes; webhook às vezes reenvia só `conversation`.
+    const existingRaw = existingMsg?.raw as Record<string, unknown> | null | undefined
+    const existingCtx = (existingRaw as Record<string, any> | undefined)?.contextInfo
+    const incoming = msg as Record<string, any>
+    if (existingCtx?.quotedMessage && !incoming.contextInfo?.quotedMessage) {
+      incoming.contextInfo = existingCtx
+    }
   }
 
   if (msg.messageType === 'reactionMessage' && reactionTo) {

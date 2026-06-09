@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useWhatsappChats,
@@ -78,7 +86,12 @@ import {
   isPushSupported,
 } from '../utils/pushNotifications'
 import { useWhatsappNotifications } from '../notifications/WhatsappNotificationsProvider'
-import type { PendingWhatsappCobranca, WhatsappChatPessoa } from '../types/cobranca.types'
+import {
+  buildQuoteSendPayload,
+  replyTargetFromMessage,
+  type ReplyTarget,
+} from '../utils/quotedMessage'
+import type { OpenWhatsappConversa, PendingWhatsappCobranca, WhatsappChatPessoa } from '../types/cobranca.types'
 import type {
   CobrancaTituloAbertoRow,
   WhatsappChatRow,
@@ -88,6 +101,9 @@ import type {
 interface Props {
   pendingCobranca?: PendingWhatsappCobranca | null
   onPendingSent?: () => void
+  /** Navegação a partir do painel (título já cobrado). */
+  openConversa?: OpenWhatsappConversa | null
+  onOpenConversaHandled?: () => void
 }
 
 function jidToNumber(jid: string): string {
@@ -123,20 +139,24 @@ function formatDiaHora(ts: string | null): string {
   }).format(d)
 }
 
-function chatFromPending(pending: PendingWhatsappCobranca): WhatsappChatRow {
+function chatFromTelefone(telefone: string, nome: string, pessoa_id?: string | null): WhatsappChatRow {
   return {
-    remote_jid: phoneToRemoteJid(pending.telefone),
+    remote_jid: phoneToRemoteJid(telefone),
     instance: null,
-    push_name: pending.nome,
+    push_name: nome,
     profile_pic_url: null,
     last_message_at: null,
     last_message_preview: null,
     unread_count: 0,
     categoria: WHATSAPP_CATEGORIA_COBRANCA_AUTO,
-    pessoa_id: pending.pessoa_id ?? null,
+    pessoa_id: pessoa_id ?? null,
     phone_jid: null,
     updated_at: new Date().toISOString(),
   }
+}
+
+function chatFromPending(pending: PendingWhatsappCobranca): WhatsappChatRow {
+  return chatFromTelefone(pending.telefone, pending.nome, pending.pessoa_id)
 }
 
 async function aplicarCategoriaCobrancaNoChat(
@@ -215,7 +235,12 @@ function TituloCard({
   )
 }
 
-export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
+export function WhatsappInbox({
+  pendingCobranca,
+  onPendingSent,
+  openConversa,
+  onOpenConversaHandled,
+}: Props) {
   const { fullName } = useAuth()
   const { templates } = useCobrancaTemplates()
   const [busca, setBusca] = useState('')
@@ -230,6 +255,8 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   const pushSupported = isPushSupported()
   const [filtroCategoria, setFiltroCategoria] = useState<WhatsappCategoriaFiltro>(null)
   const [salvandoCategoria, setSalvandoCategoria] = useState(false)
+  const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null)
+  const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
   const { refreshUnread } = useWhatsappNotifications()
   const queryClient = useQueryClient()
   const { composerHeight, onHandlePointerDown, resetHeight: resetComposerHeight } =
@@ -287,6 +314,34 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
   )
   const mentionMap = useMemo(() => buildMentionMap(resolvedMembers), [resolvedMembers])
 
+  const messagesById = useMemo(() => {
+    const map = new Map<string, WhatsappMensagemRow>()
+    for (const m of mensagens) {
+      if (m.message_id) map.set(m.message_id, m)
+    }
+    return map
+  }, [mensagens])
+
+  const handleGoToMessage = useCallback(
+    (messageId: string) => {
+      if (!messagesById.has(messageId)) {
+        toast.info('Mensagem citada não está visível nesta conversa.')
+        return
+      }
+      setHighlightMessageId(messageId)
+    },
+    [messagesById],
+  )
+
+  useEffect(() => {
+    setReplyTo(null)
+  }, [selected?.remote_jid])
+
+  const buildQuote = () => {
+    if (!replyTo || !selected) return undefined
+    return buildQuoteSendPayload(replyTo, selected.remote_jid)
+  }
+
   // Resolve o nome exibido: grupo > cadastro > @lid > push_name > telefone.
   const resolveName = (chat: WhatsappChatRow): string =>
     resolveChatDisplayName(
@@ -316,14 +371,14 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
 
   // Rola só o painel de mensagens (não a página) ao abrir conversa ou chegar mensagem nova.
   useEffect(() => {
-    if (!selected || loadingMsgs) return
+    if (!selected || loadingMsgs || highlightMessageId) return
     const el = messagesScrollRef.current
     if (!el) return
     const id = requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight
     })
     return () => cancelAnimationFrame(id)
-  }, [selected?.remote_jid, mensagens.length, loadingMsgs])
+  }, [selected?.remote_jid, mensagens.length, loadingMsgs, highlightMessageId])
 
   // Número da conversa (sem sufixo de dispositivo); @lid usa phone_jid ou índice LID.
   const numeroConversa = phoneForTitulos(selected)
@@ -366,6 +421,65 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
       cancelled = true
     }
   }, [pendingCobranca, chats, refetchChats])
+
+  useEffect(() => {
+    if (!openConversa) return
+    const jid = phoneToRemoteJid(openConversa.telefone)
+    if (!jid) {
+      toast.error('Telefone inválido para WhatsApp.')
+      onOpenConversaHandled?.()
+      return
+    }
+
+    const existente = chats.find(
+      (c: WhatsappChatRow) =>
+        c.remote_jid === jid ||
+        phonesMatch(jidToNumber(c.remote_jid), openConversa.telefone) ||
+        (c.phone_jid && phonesMatch(jidToNumber(c.phone_jid), openConversa.telefone)),
+    )
+    const base = existente ?? chatFromTelefone(openConversa.telefone, openConversa.nome)
+    setSelected(base)
+    setShowDetails(true)
+    setActiveCobranca(null)
+    setTexto('')
+    setHighlightMessageId(openConversa.message_id ?? null)
+
+    let cancelled = false
+    void (async () => {
+      try {
+        await whatsappService.syncConversa(base.remote_jid)
+        if (!cancelled) await refetchMsgs()
+      } catch {
+        /* best-effort */
+      } finally {
+        if (!cancelled) onOpenConversaHandled?.()
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [openConversa, chats, refetchMsgs, onOpenConversaHandled])
+
+  useEffect(() => {
+    if (!highlightMessageId || loadingMsgs || mensagens.length === 0) return
+    const scrollEl = messagesScrollRef.current
+    if (!scrollEl) return
+
+    const scrollTimer = window.setTimeout(() => {
+      const target = scrollEl.querySelector(`[data-message-id="${highlightMessageId}"]`)
+      if (target instanceof HTMLElement) {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }
+    }, 200)
+
+    const clearTimer = window.setTimeout(() => setHighlightMessageId(null), 4500)
+
+    return () => {
+      window.clearTimeout(scrollTimer)
+      window.clearTimeout(clearTimer)
+    }
+  }, [highlightMessageId, loadingMsgs, mensagens, selected?.remote_jid])
 
   const cliente = useMemo((): Pick<
     CobrancaTituloAbertoRow,
@@ -562,8 +676,13 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
         }
       } else {
         const corpo = `${prefixoAtendente(fullName)}${texto.trim()}`
-        await whatsappService.sendMessage({ remoteJid: selected.remote_jid, text: corpo })
+        await whatsappService.sendMessage({
+          remoteJid: selected.remote_jid,
+          text: corpo,
+          quote: buildQuote(),
+        })
         setTexto('')
+        setReplyTo(null)
         await Promise.all([refetchMsgs(), refetchChats()])
       }
     } catch (e) {
@@ -577,7 +696,12 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     if (!selected) return
     setEnviando(true)
     try {
-      await whatsappService.sendAudio({ remoteJid: selected.remote_jid, audio: base64 })
+      await whatsappService.sendAudio({
+        remoteJid: selected.remote_jid,
+        audio: base64,
+        quote: buildQuote(),
+      })
+      setReplyTo(null)
       await Promise.all([refetchMsgs(), refetchChats()])
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao enviar áudio')
@@ -596,7 +720,12 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     if (!selected) return
     setEnviando(true)
     try {
-      await whatsappService.sendMediaFile({ remoteJid: selected.remote_jid, ...params })
+      await whatsappService.sendMediaFile({
+        remoteJid: selected.remote_jid,
+        ...params,
+        quote: buildQuote(),
+      })
+      setReplyTo(null)
       await Promise.all([refetchMsgs(), refetchChats()])
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao enviar arquivo')
@@ -619,6 +748,21 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
     } finally {
       setSalvandoCategoria(false)
     }
+  }
+
+  const handleReply = (message: WhatsappMensagemRow) => {
+    if (!selected || modoCobranca) return
+    const authorLabel = message.from_me
+      ? 'Você'
+      : groupJid
+        ? senderLabelFromMessage(message, mentionMap) ?? undefined
+        : resolveName(selected)
+    const target = replyTargetFromMessage(message, authorLabel)
+    if (!target) {
+      toast.error('Não foi possível responder a esta mensagem.')
+      return
+    }
+    setReplyTo(target)
   }
 
   const handleReact = async (messageId: string, fromMe: boolean, emoji: string) => {
@@ -980,7 +1124,14 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                       return (
                         <div
                           key={m.id}
-                          className={cn('flex flex-col', m.from_me ? 'items-end' : 'items-start')}
+                          data-message-id={m.message_id ?? undefined}
+                          className={cn(
+                            'flex flex-col rounded-lg transition-shadow',
+                            m.from_me ? 'items-end' : 'items-start',
+                            highlightMessageId &&
+                              m.message_id === highlightMessageId &&
+                              'ring-2 ring-emerald-400 ring-offset-2',
+                          )}
                         >
                           {senderLabel && (
                             <span className="mb-0.5 max-w-[75%] truncate px-1 text-[10px] font-medium text-violet-600">
@@ -991,7 +1142,11 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                             message={m}
                             remoteJid={selected.remote_jid}
                             mentionMap={mentionMap}
+                            contactLabel={resolveName(selected)}
+                            messagesById={messagesById}
+                            onGoToMessage={modoCobranca ? undefined : handleGoToMessage}
                             onReact={modoCobranca ? undefined : handleReact}
+                            onReply={modoCobranca ? undefined : handleReply}
                           />
                         </div>
                       )
@@ -1014,8 +1169,14 @@ export function WhatsappInbox({ pendingCobranca, onPendingSent }: Props) {
                   onSendFile={handleSendFile}
                   enviando={enviando}
                   modoCobranca={modoCobranca}
+                  replyTo={replyTo}
+                  onClearReply={() => setReplyTo(null)}
                   placeholder={
-                    modoCobranca ? 'Edite a mensagem de cobrança…' : 'Digite uma mensagem…'
+                    modoCobranca
+                      ? 'Edite a mensagem de cobrança…'
+                      : replyTo
+                        ? 'Digite sua resposta…'
+                        : 'Digite uma mensagem…'
                   }
                 />
               </div>

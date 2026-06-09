@@ -3,6 +3,7 @@ import { parseEdgeFunctionError, phoneKey, phonesMatch } from '../utils/phone'
 import { parsePhoneForStorage } from '../utils/phoneMask'
 import { isInternalContactName, pickContactLabel } from '../utils/contactNames'
 import type {
+  CobrancaEventoRow,
   CobrancaPainelRow,
   CobrancaTituloAbertoRow,
   CobrancaKpiRow,
@@ -684,6 +685,24 @@ export const cobrancaService = {
         valor: (fp.valor as number) ?? null,
       }
     })
+  },
+
+  /** Último disparo WhatsApp bem-sucedido da parcela (telefone real + id da mensagem). */
+  async getUltimaCobrancaWhatsapp(parcela_id: string): Promise<CobrancaEventoRow | null> {
+    const { data, error } = await supabase
+      .from('cobranca_eventos')
+      .select('*')
+      .eq('parcela_id', parcela_id)
+      .eq('canal', 'whatsapp')
+      .eq('status', 'enviado')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) {
+      console.error('[cobrancaService] getUltimaCobrancaWhatsapp', error)
+      return null
+    }
+    return (data as CobrancaEventoRow | null) ?? null
   },
 
   async arquivar(parcela_id: string, motivo: string | null, arquivado_by: string | null): Promise<void> {

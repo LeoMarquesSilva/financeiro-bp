@@ -16,6 +16,7 @@ import {
   type WhatsappChatCategoriaId,
 } from '../constants/whatsappCategorias'
 import type { GroupParticipantRow } from '../utils/participants'
+import type { QuoteSendPayload } from '../utils/quotedMessage'
 
 function isLidJid(jid: string): boolean {
   return jid.includes('@lid')
@@ -465,18 +466,33 @@ export const whatsappService = {
     return { remoteJid: canonical, number: canonical.split('@')[0] }
   },
 
-  async sendMessage(params: { remoteJid?: string; number?: string; text: string }): Promise<void> {
+  async sendMessage(params: {
+    remoteJid?: string
+    number?: string
+    text: string
+    quote?: QuoteSendPayload
+  }): Promise<void> {
     const target = params.remoteJid
       ? await this.resolveSendTarget(params.remoteJid)
       : null
     const body = target
-      ? { kind: 'text' as const, remoteJid: target.remoteJid, number: target.number, text: params.text }
+      ? {
+          kind: 'text' as const,
+          remoteJid: target.remoteJid,
+          number: target.number,
+          text: params.text,
+          quote: params.quote,
+        }
       : { kind: 'text' as const, ...params }
     const { error } = await supabase.functions.invoke('whatsapp-send', { body })
     if (error) throw new Error(await parseEdgeFunctionError(error))
   },
 
-  async sendAudio(params: { remoteJid: string; audio: string }): Promise<void> {
+  async sendAudio(params: {
+    remoteJid: string
+    audio: string
+    quote?: QuoteSendPayload
+  }): Promise<void> {
     const target = await this.resolveSendTarget(params.remoteJid)
     const { error } = await supabase.functions.invoke('whatsapp-send', {
       body: {
@@ -484,6 +500,7 @@ export const whatsappService = {
         remoteJid: target.remoteJid,
         number: target.number,
         audio: params.audio,
+        quote: params.quote,
       },
     })
     if (error) throw new Error(await parseEdgeFunctionError(error))
@@ -496,9 +513,10 @@ export const whatsappService = {
     mimetype: string
     fileName?: string
     caption?: string
+    quote?: QuoteSendPayload
   }): Promise<void> {
     const target = await this.resolveSendTarget(params.remoteJid)
-    const { mediatype, media, mimetype, fileName, caption } = params
+    const { mediatype, media, mimetype, fileName, caption, quote } = params
     const { error } = await supabase.functions.invoke('whatsapp-send', {
       body: {
         kind: 'media',
@@ -509,6 +527,7 @@ export const whatsappService = {
         mimetype,
         fileName,
         caption,
+        quote,
       },
     })
     if (error) throw new Error(await parseEdgeFunctionError(error))

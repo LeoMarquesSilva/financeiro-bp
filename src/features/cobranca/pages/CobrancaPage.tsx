@@ -13,7 +13,7 @@ import {
 import { useCobrancaTemplates } from '../hooks/useCobrancaTemplates'
 import { cobrancaService, type ArquivadoRow, type FaixaAtrasoFiltro, type StatusCobrancaFiltro } from '../services/cobrancaService'
 import { useWhatsappNotifications } from '../notifications/WhatsappNotificationsProvider'
-import type { PendingWhatsappCobranca } from '../types/cobranca.types'
+import type { OpenWhatsappConversa, PendingWhatsappCobranca } from '../types/cobranca.types'
 import { CobrancaKPIs } from '../components/CobrancaKPIs'
 import { CobrancaFiltros } from '../components/CobrancaFiltros'
 import { CobrancaTable } from '../components/CobrancaTable'
@@ -77,6 +77,7 @@ export function CobrancaPage() {
   const [editRow, setEditRow] = useState<CobrancaPainelRow | null>(null)
   const [canalEnvio, setCanalEnvio] = useState<'whatsapp' | 'email' | null>(null)
   const [pendingWhatsapp, setPendingWhatsapp] = useState<PendingWhatsappCobranca | null>(null)
+  const [openWhatsapp, setOpenWhatsapp] = useState<OpenWhatsappConversa | null>(null)
   const [grupoParaCobrar, setGrupoParaCobrar] = useState<CobrancaPainelRow[]>([])
 
   const filtrosBase = {
@@ -213,6 +214,27 @@ export function CobrancaPage() {
     setPendingWhatsapp(null)
     setSelectedIds(new Set())
     refreshPainel()
+  }
+
+  const handleVerConversa = async (row: CobrancaPainelRow) => {
+    try {
+      const evento = await cobrancaService.getUltimaCobrancaWhatsapp(row.parcela_id)
+      const telefone = evento?.destino ?? row.pessoa_telefone
+      if (!telefone) {
+        toast.error('Sem telefone para abrir a conversa.')
+        return
+      }
+      setPendingWhatsapp(null)
+      setOpenWhatsapp({
+        telefone,
+        nome: row.pessoa_nome || row.cliente,
+        parcela_id: row.parcela_id,
+        message_id: evento?.provider_message_id ?? null,
+      })
+      setTab('whatsapp')
+    } catch {
+      toast.error('Não foi possível abrir a conversa.')
+    }
   }
 
   return (
@@ -394,6 +416,7 @@ export function CobrancaPage() {
                 onCobrarGrupo={setGrupoParaCobrar}
                 onEditContato={setEditRow}
                 onArquivar={handleArquivar}
+                onVerConversa={handleVerConversa}
                 canArquivar={canArquivar}
               />
               {totalPages > 1 && (
@@ -424,7 +447,12 @@ export function CobrancaPage() {
         </TabsContent>
 
         <TabsContent value="whatsapp" className="mt-6">
-          <WhatsappInbox pendingCobranca={pendingWhatsapp} onPendingSent={handleWhatsappEnviado} />
+          <WhatsappInbox
+            pendingCobranca={pendingWhatsapp}
+            onPendingSent={handleWhatsappEnviado}
+            openConversa={openWhatsapp}
+            onOpenConversaHandled={() => setOpenWhatsapp(null)}
+          />
         </TabsContent>
 
         <TabsContent value="indicadores" className="mt-6">

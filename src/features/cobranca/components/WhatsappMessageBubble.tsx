@@ -4,15 +4,21 @@ import { isMediaTipo } from '../utils/mediaHelpers'
 import { WhatsappMessageText } from './WhatsappMessageText'
 import { WhatsappMessageMedia } from './WhatsappMessageMedia'
 import { WhatsappMessageAudio } from './WhatsappMessageAudio'
-import { WhatsappMessageReactions } from './WhatsappMessageReactions'
+import { WhatsappMessageActions } from './WhatsappMessageActions'
+import { WhatsappQuotedBlock } from './WhatsappQuotedBlock'
 import { WhatsappMessageStatus } from './WhatsappMessageStatus'
+import { extractQuotedPreview, resolveQuotedAuthorLabel } from '../utils/quotedMessage'
 import type { WhatsappMensagemRow } from '@/lib/database.types'
 
 interface Props {
   message: WhatsappMensagemRow
   remoteJid: string
   mentionMap: Map<string, string>
+  contactLabel?: string
+  messagesById?: Map<string, { from_me: boolean }>
+  onGoToMessage?: (messageId: string) => void
   onReact?: (messageId: string, fromMe: boolean, emoji: string) => void
+  onReply?: (message: WhatsappMensagemRow) => void
 }
 
 function LocationBlock({ message }: { message: WhatsappMensagemRow }) {
@@ -30,9 +36,22 @@ function LocationBlock({ message }: { message: WhatsappMensagemRow }) {
   )
 }
 
-export function WhatsappMessageBubble({ message, remoteJid, mentionMap, onReact }: Props) {
+export function WhatsappMessageBubble({
+  message,
+  remoteJid,
+  mentionMap,
+  contactLabel,
+  messagesById,
+  onGoToMessage,
+  onReact,
+  onReply,
+}: Props) {
   const tipo = message.tipo ?? ''
   const text = displayMessageContent(message)
+  const quoted = extractQuotedPreview(message)
+  const quotedAuthor = quoted
+    ? resolveQuotedAuthorLabel(quoted, message, mentionMap, contactLabel, messagesById)
+    : null
   const showText =
     tipo === 'conversation' ||
     tipo === 'extendedTextMessage' ||
@@ -48,6 +67,23 @@ export function WhatsappMessageBubble({ message, remoteJid, mentionMap, onReact 
             : 'rounded-bl-sm bg-white text-slate-800',
         )}
       >
+        {quoted && quotedAuthor && (
+          <div className="mb-1.5">
+            <WhatsappQuotedBlock
+              preview={quoted.text}
+              authorLabel={quotedAuthor.label}
+              authorFromMe={quotedAuthor.fromMe}
+              inOutgoingBubble={message.from_me}
+              compact
+              onClick={
+                quoted.stanzaId && onGoToMessage
+                  ? () => onGoToMessage(quoted.stanzaId!)
+                  : undefined
+              }
+            />
+          </div>
+        )}
+
         {tipo === 'audioMessage' && (
           <WhatsappMessageAudio message={message} remoteJid={remoteJid} />
         )}
@@ -86,14 +122,17 @@ export function WhatsappMessageBubble({ message, remoteJid, mentionMap, onReact 
         </div>
       </div>
 
-      {message.message_id && onReact && !message.from_me && (
-        <WhatsappMessageReactions
+      {(onReact || onReply || (message.reactions?.length ?? 0) > 0) && (
+        <WhatsappMessageActions
+          message={message}
           reactions={message.reactions}
-          onReact={(emoji) => onReact(message.message_id!, false, emoji)}
+          onReact={
+            onReact && !message.from_me
+              ? (emoji) => onReact(message.message_id!, false, emoji)
+              : undefined
+          }
+          onReply={onReply ? () => onReply(message) : undefined}
         />
-      )}
-      {!onReact && (message.reactions?.length ?? 0) > 0 && (
-        <WhatsappMessageReactions reactions={message.reactions} />
       )}
     </div>
   )

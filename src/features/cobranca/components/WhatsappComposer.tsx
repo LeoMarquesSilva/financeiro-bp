@@ -3,6 +3,8 @@ import { ImageIcon, Mic, Paperclip, Send, Square, X, ZoomIn } from 'lucide-react
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { WhatsappImageLightbox } from './WhatsappImageLightbox'
+import { WhatsappQuotedBlock } from './WhatsappQuotedBlock'
+import type { ReplyTarget } from '../utils/quotedMessage'
 import {
   blobToBase64,
   COMPOSER_FILE_ACCEPT,
@@ -20,6 +22,7 @@ interface PendingAttachment {
 
 /** Faixa extra acima do campo — não reduz a área de digitação nem o histórico de mensagens. */
 const PENDING_PREVIEW_HEIGHT = 80
+const REPLY_PREVIEW_HEIGHT = 64
 
 interface Props {
   texto: string
@@ -39,6 +42,8 @@ interface Props {
   modoCobranca?: boolean
   /** Altura total do painel (px) — o textarea preenche o espaço disponível. */
   panelHeight: number
+  replyTo?: ReplyTarget | null
+  onClearReply?: () => void
 }
 
 export function WhatsappComposer({
@@ -52,6 +57,8 @@ export function WhatsappComposer({
   placeholder,
   modoCobranca,
   panelHeight,
+  replyTo,
+  onClearReply,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -206,13 +213,40 @@ export function WhatsappComposer({
 
   const canSend = !!pending || !!texto.trim()
   const inputRowHeight = Math.max(72, panelHeight - 16)
-  const totalHeight = inputRowHeight + 16 + (pending ? PENDING_PREVIEW_HEIGHT : 0)
+  const extraHeight =
+    (pending ? PENDING_PREVIEW_HEIGHT : 0) + (replyTo ? REPLY_PREVIEW_HEIGHT : 0)
+  const totalHeight = inputRowHeight + 16 + extraHeight
 
   return (
     <div
       className="box-border flex shrink-0 flex-col overflow-hidden bg-white px-3 py-2"
       style={{ height: totalHeight }}
     >
+      {replyTo && (
+        <div
+          className="mb-2 flex shrink-0 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-2.5 py-2"
+          style={{ height: REPLY_PREVIEW_HEIGHT - 8 }}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+              Respondendo
+              {replyTo.authorLabel ? ` · ${replyTo.authorLabel}` : ''}
+            </p>
+            <WhatsappQuotedBlock preview={replyTo.preview} compact />
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-full text-slate-500 hover:bg-slate-200"
+            onClick={onClearReply}
+            title="Cancelar resposta"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       {pending && (
         <div
           className="mb-2 flex shrink-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 shadow-sm"
@@ -320,6 +354,11 @@ export function WhatsappComposer({
           onChange={(e) => onTextoChange(e.target.value)}
           onPaste={handlePaste}
           onKeyDown={(e) => {
+            if (e.key === 'Escape' && replyTo) {
+              e.preventDefault()
+              onClearReply?.()
+              return
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               if (canSend && !enviando && !disabled) void handleSend()

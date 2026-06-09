@@ -7,6 +7,14 @@ export interface PendingWhatsappCobranca {
   mensagem: string
 }
 
+/** Abre conversa existente (ex.: título já cobrado no painel). */
+export interface OpenWhatsappConversa {
+  telefone: string
+  nome: string
+  parcela_id?: string
+  message_id?: string | null
+}
+
 /** Telefone WhatsApp cadastrado para cobrança (com rótulo). */
 export interface PessoaTelefoneWhatsapp {
   id: string

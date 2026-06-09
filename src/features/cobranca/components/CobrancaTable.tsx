@@ -10,7 +10,16 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { MessageCircle, Pencil, Archive, Phone, AtSign, ChevronDown, ChevronRight } from 'lucide-react'
+import {
+  MessageCircle,
+  Pencil,
+  Archive,
+  Phone,
+  AtSign,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+} from 'lucide-react'
 import { formatPhoneMasked } from '../utils/phoneMask'
 import { formatCurrency, formatDate } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
@@ -24,6 +33,8 @@ interface Props {
   onCobrarGrupo: (rows: CobrancaPainelRow[]) => void
   onEditContato: (row: CobrancaPainelRow) => void
   onArquivar: (row: CobrancaPainelRow) => void
+  /** Abre a conversa WhatsApp da cobrança já enviada. */
+  onVerConversa?: (row: CobrancaPainelRow) => void
   /** Admin e financeiro podem remover título do painel. */
   canArquivar?: boolean
 }
@@ -51,6 +62,7 @@ export function CobrancaTable({
   onCobrarGrupo,
   onEditContato,
   onArquivar,
+  onVerConversa,
   canArquivar = false,
 }: Props) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -182,16 +194,29 @@ export function CobrancaTable({
         </TableCell>
         <TableCell>
           <div className="flex items-center justify-end gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1 text-[11px]"
-              title="Cobrar este título"
-              onClick={() => onCobrarGrupo([r])}
-            >
-              <MessageCircle className="h-3.5 w-3.5" />
-              Cobrar
-            </Button>
+            {r.tem_whatsapp && onVerConversa ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 border-emerald-200 bg-emerald-50/50 text-[11px] text-emerald-800 hover:bg-emerald-100"
+                title="Abrir conversa da cobrança no WhatsApp"
+                onClick={() => onVerConversa(r)}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Ver conversa
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 text-[11px]"
+                title="Cobrar este título"
+                onClick={() => onCobrarGrupo([r])}
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Cobrar
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

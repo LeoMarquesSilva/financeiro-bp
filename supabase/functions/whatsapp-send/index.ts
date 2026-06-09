@@ -7,6 +7,9 @@ import {
   phoneFromJidAlt,
   isLidJid,
   mapStatus,
+  buildEvolutionQuoted,
+  enrichOutgoingRawWithQuote,
+  type EvolutionQuoted,
 } from '../_shared/whatsappMessageUtils.ts'
 
 // Tempo de "digitando" (presença) antes de enviar — deixa o envio mais natural
@@ -50,9 +53,19 @@ function stripBase64Prefix(data: string): string {
   return idx >= 0 ? data.slice(idx + 7) : data
 }
 
+interface QuoteInput {
+  messageId: string
+  fromMe: boolean
+  chatRemoteJid: string
+  participant?: string | null
+  tipo?: string | null
+  conteudo?: string | null
+  raw?: Record<string, unknown> | null
+}
+
 type Payload =
-  | { kind?: 'text'; remoteJid?: string; number?: string; text: string }
-  | { kind: 'audio'; remoteJid?: string; number?: string; audio: string }
+  | { kind?: 'text'; remoteJid?: string; number?: string; text: string; quote?: QuoteInput }
+  | { kind: 'audio'; remoteJid?: string; number?: string; audio: string; quote?: QuoteInput }
   | {
       kind: 'media'
       remoteJid?: string
@@ -62,8 +75,25 @@ type Payload =
       mimetype: string
       fileName?: string
       caption?: string
+      quote?: QuoteInput
     }
   | { kind: 'reaction'; remoteJid: string; messageId: string; fromMe: boolean; emoji: string }
+
+function resolveQuoted(
+  quote: QuoteInput | undefined,
+  fallbackChatJid: string,
+): EvolutionQuoted | undefined {
+  if (!quote?.messageId) return undefined
+  return buildEvolutionQuoted({
+    messageId: quote.messageId,
+    fromMe: quote.fromMe,
+    chatRemoteJid: quote.chatRemoteJid || fallbackChatJid,
+    participant: quote.participant,
+    tipo: quote.tipo,
+    conteudo: quote.conteudo,
+    raw: quote.raw,
+  })
+}
 
 async function resolveLidPhoneDigits(
   supabase: ReturnType<typeof createClient>,
@@ -142,7 +172,10 @@ async function persistMessage(
   tipo: string,
   conteudo: string,
   mediaMeta?: Record<string, unknown> | null,
+  quoted?: EvolutionQuoted,
 ) {
+  const rawStored = quoted ? enrichOutgoingRawWithQuote(data, quoted) : data
+  const tipoStored = quoted && tipo === 'conversation' ? 'extendedTextMessage' : tipo
   const messageId = (data?.key as Record<string, unknown> | undefined)?.id as string | null
   const now = new Date().toISOString()
   const status = mapStatus(data.status) ?? 'PENDING'
@@ -153,10 +186,10 @@ async function persistMessage(
       remote_jid: remoteJid,
       message_id: messageId,
       from_me: true,
-      tipo,
+      tipo: tipoStored,
       conteudo,
       timestamp: now,
-      raw: data,
+      raw: rawStored,
       status,
       media_meta: mediaMeta ?? null,
     },
@@ -226,15 +259,23 @@ Deno.serve(async (req: Request) => {
         : 'Destinatário inválido.'
       return jsonResponse({ error: hint }, 400)
     }
-    const jid = `${numero}@s.whatsapp.net`
+    const isGroup = numero.includes('@g.us')
+    const jid = isGroup ? canonicalJid(numero) : `${numero}@s.whatsapp.net`
+    const chatJid = payload.remoteJid ? canonicalJid(payload.remoteJid) : jid
 
     if (payload.kind === 'audio') {
       const audio = stripBase64Prefix(payload.audio.trim())
       if (!audio) return jsonResponse({ error: 'Áudio vazio.' }, 400)
+      const quoted = resolveQuoted(payload.quote, chatJid)
       const resp = await fetchEvolution(`${EVOLUTION_API_URL}/message/sendWhatsAppAudio/${inst}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ number: numero, audio, delay: SEND_DELAY_MS }),
+        body: JSON.stringify({
+          number: numero,
+          audio,
+          delay: SEND_DELAY_MS,
+          ...(quoted ? { quoted } : {}),
+        }),
       })
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
@@ -248,6 +289,7 @@ Deno.serve(async (req: Request) => {
         'audioMessage',
         '🎤 Áudio',
         meta,
+        quoted,
       )
       return jsonResponse({ ok: true, ...result })
     }
@@ -255,6 +297,7 @@ Deno.serve(async (req: Request) => {
     if (payload.kind === 'media') {
       const media = stripBase64Prefix(payload.media.trim())
       if (!media) return jsonResponse({ error: 'Mídia vazia.' }, 400)
+      const quoted = resolveQuoted(payload.quote, chatJid)
       const resp = await fetchEvolution(`${EVOLUTION_API_URL}/message/sendMedia/${inst}`, {
         method: 'POST',
         headers,
@@ -266,6 +309,7 @@ Deno.serve(async (req: Request) => {
           fileName: payload.fileName,
           caption: payload.caption,
           delay: SEND_DELAY_MS,
+          ...(quoted ? { quoted } : {}),
         }),
       }, 60000)
       const data = await resp.json().catch(() => ({}))
@@ -283,25 +327,55 @@ Deno.serve(async (req: Request) => {
         fileName: payload.fileName,
         caption: payload.caption,
       }
-      const result = await persistMessage(supabase, EVOLUTION_INSTANCE, remoteJid, data, tipo, conteudo, meta)
+      const result = await persistMessage(
+        supabase,
+        EVOLUTION_INSTANCE,
+        remoteJid,
+        data,
+        tipo,
+        conteudo,
+        meta,
+        quoted,
+      )
       return jsonResponse({ ok: true, ...result })
     }
 
     // Text (default / legacy)
-    const textPayload = payload as { text: string; remoteJid?: string; number?: string }
+    const textPayload = payload as {
+      text: string
+      remoteJid?: string
+      number?: string
+      quote?: QuoteInput
+    }
     const text = (textPayload.text ?? '').trim()
     if (!text) return jsonResponse({ error: 'Mensagem vazia.' }, 400)
 
+    const quoted = resolveQuoted(textPayload.quote, chatJid)
     const resp = await fetchEvolution(`${EVOLUTION_API_URL}/message/sendText/${inst}`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ number: numero, text, delay: SEND_DELAY_MS, linkPreview: true }),
+      body: JSON.stringify({
+        number: numero,
+        text,
+        delay: SEND_DELAY_MS,
+        linkPreview: true,
+        ...(quoted ? { quoted } : {}),
+      }),
     })
     const data = await resp.json().catch(() => ({}))
     if (!resp.ok) return jsonResponse({ error: JSON.stringify(data) }, 502)
 
     const remoteJid = canonicalJid((data?.key?.remoteJid as string) ?? jid)
-    const result = await persistMessage(supabase, EVOLUTION_INSTANCE, remoteJid, data, 'conversation', text)
+    const result = await persistMessage(
+      supabase,
+      EVOLUTION_INSTANCE,
+      remoteJid,
+      data,
+      'conversation',
+      text,
+      null,
+      quoted,
+    )
     return jsonResponse({ ok: true, ...result })
   } catch (e) {
     return jsonResponse({ error: e instanceof Error ? e.message : String(e) }, 500)
