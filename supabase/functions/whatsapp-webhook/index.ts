@@ -232,9 +232,19 @@ Deno.serve(async (req: Request) => {
   }
 
   const url = new URL(req.url)
-  const secret = url.searchParams.get('secret')
-  const expected = Deno.env.get('WHATSAPP_WEBHOOK_SECRET')
-  if (!expected || secret !== expected) {
+  const secret = url.searchParams.get('secret')?.trim() ?? ''
+  // Evolution envia ?secret= na URL. Aceita env do Supabase OU o valor configurado na instância.
+  const allowedSecrets = new Set(
+    [
+      Deno.env.get('WHATSAPP_WEBHOOK_SECRET')?.trim(),
+      'bp-cobranca-webhook-2026',
+    ].filter((s): s is string => !!s),
+  )
+  if (!secret || !allowedSecrets.has(secret)) {
+    console.error('[whatsapp-webhook] unauthorized', {
+      hasSecretParam: !!secret,
+      allowedCount: allowedSecrets.size,
+    })
     return new Response(JSON.stringify({ error: 'unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },

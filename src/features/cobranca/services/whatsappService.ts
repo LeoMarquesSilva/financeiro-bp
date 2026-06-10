@@ -631,7 +631,7 @@ export const whatsappService = {
     return data as { conversas?: number }
   },
 
-  async syncConversa(remoteJid: string, limit = 50): Promise<{ mensagens?: number; membros?: number }> {
+  async syncConversa(remoteJid: string, limit = 200): Promise<{ mensagens?: number; membros?: number }> {
     const { data, error } = await supabase.functions.invoke('whatsapp-sync', {
       body: { remoteJid: canonicalJid(remoteJid), limit },
     })

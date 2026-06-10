@@ -564,11 +564,23 @@ export function WhatsappInbox({
     setSincronizando(true)
     try {
       const res = await whatsappService.sync()
+      let msgCount: number | undefined
+      if (selected?.remote_jid) {
+        const conv = await whatsappService.syncConversa(selected.remote_jid)
+        msgCount = conv.mensagens
+        await refetchMsgs()
+      }
       await Promise.all([
         refetchChats(),
         queryClient.invalidateQueries({ queryKey: ['whatsapp', 'lid-index'] }),
       ])
-      toast.success(`Conversas sincronizadas${res.conversas != null ? ` (${res.conversas})` : ''}`)
+      const extra =
+        msgCount != null && selected
+          ? ` — ${msgCount} mensagem(ns) em ${resolveName(selected)}`
+          : ''
+      toast.success(
+        `Conversas sincronizadas${res.conversas != null ? ` (${res.conversas})` : ''}${extra}`,
+      )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar conversas')
     } finally {
@@ -588,7 +600,7 @@ export function WhatsappInbox({
         .catch(() => {})
     }
     try {
-      await whatsappService.syncConversa(chat.remote_jid)
+      const conv = await whatsappService.syncConversa(chat.remote_jid)
       const tasks: Promise<unknown>[] = [refetchMsgs(), refetchChats()]
       if (isGroupJid(chat.remote_jid)) {
         tasks.push(
@@ -596,8 +608,13 @@ export function WhatsappInbox({
         )
       }
       await Promise.all(tasks)
-    } catch {
-      // sincronização é best-effort; mensagens já existentes continuam visíveis
+      if ((conv.mensagens ?? 0) > 0) {
+        toast.success(`${conv.mensagens} mensagem(ns) atualizada(s)`)
+      }
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : 'Não foi possível sincronizar as mensagens desta conversa',
+      )
     }
   }
 
