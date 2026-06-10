@@ -37,6 +37,33 @@ let mediaActiveLoads = 0
 const MEDIA_MAX_CONCURRENT = 3
 const mediaWaitQueue: Array<() => void> = []
 
+const LID_CACHE_MS = 5 * 60_000
+let lidParticipantsCache: Pick<GroupParticipantRow, 'lid_id' | 'phone_number' | 'display_name'>[] | null =
+  null
+let lidPhoneCache: Map<string, string> | null = null
+let lidCacheAt = 0
+
+const MENSAGEM_LIST_COLUMNS =
+  'id, message_id, remote_jid, from_me, tipo, conteudo, timestamp, status, reaction_to, reactions, media_meta, instance'
+
+async function getLidCaches(): Promise<{
+  participants: Pick<GroupParticipantRow, 'lid_id' | 'phone_number' | 'display_name'>[]
+  lidPhone: Map<string, string>
+}> {
+  const fresh = Date.now() - lidCacheAt < LID_CACHE_MS
+  if (fresh && lidParticipantsCache && lidPhoneCache) {
+    return { participants: lidParticipantsCache, lidPhone: lidPhoneCache }
+  }
+  const [participants, lidPhone] = await Promise.all([
+    whatsappService.listLidParticipantRows(),
+    whatsappService.listLidPhoneMappings(),
+  ])
+  lidParticipantsCache = participants
+  lidPhoneCache = lidPhone
+  lidCacheAt = Date.now()
+  return { participants, lidPhone }
+}
+
 function mediaCacheKey(remoteJid: string, messageId: string): string {
   return `${chatKey(remoteJid)}|${messageId}`
 }
@@ -363,10 +390,9 @@ export const whatsappService = {
 
   async listChats(busca?: string): Promise<WhatsappChatRow[]> {
     const term = busca?.trim()
-    const [chats, participants, lidPhone, cadastroJids] = await Promise.all([
+    const [{ participants, lidPhone }, chats, cadastroJids] = await Promise.all([
+      getLidCaches(),
       this.listChatsRaw(busca),
-      this.listLidParticipantRows(),
-      this.listLidPhoneMappings(),
       term ? this.findChatJidsByCadastroTelefone(term) : Promise.resolve([]),
     ])
 
@@ -391,23 +417,31 @@ export const whatsappService = {
     return deduped.filter((chat) => chatMatchesSearch(chat, term, lidToPhone))
   },
 
-  async fetchMensagens(remoteJid: string): Promise<WhatsappMensagemRow[]> {
-    const extraJids: string[] = []
-    if (!isLidJid(remoteJid) && !isGroupJid(remoteJid)) {
-      const lidJid = await findLinkedLidJid(remoteJid)
-      if (lidJid) extraJids.push(lidJid)
-    } else if (isLidJid(remoteJid)) {
-      const phoneJid = await findLinkedPhoneJid(remoteJid)
-      if (phoneJid) extraJids.push(phoneJid)
+  /** JIDs da mesma thread (telefone + @lid vinculado, variantes de dispositivo). */
+  async resolveThreadJids(remoteJid: string): Promise<string[]> {
+    const canonical = canonicalJid(remoteJid)
+    const jids = new Set<string>([canonical])
+    if (!isLidJid(canonical) && !isGroupJid(canonical)) {
+      const lidJid = await findLinkedLidJid(canonical)
+      if (lidJid) jids.add(canonicalJid(lidJid))
+    } else if (isLidJid(canonical)) {
+      const phoneJid = await findLinkedPhoneJid(canonical)
+      if (phoneJid) jids.add(canonicalJid(phoneJid))
     }
+    return [...jids]
+  },
+
+  async fetchMensagens(remoteJid: string): Promise<WhatsappMensagemRow[]> {
+    const threadJids = await this.resolveThreadJids(remoteJid)
+    const extraJids = threadJids.filter((j) => canonicalJid(j) !== canonicalJid(remoteJid))
 
     try {
       const { data, error } = await supabase
         .from('whatsapp_mensagens')
-        .select('*')
+        .select(MENSAGEM_LIST_COLUMNS)
         .or(mensagensFilterParts(remoteJid, extraJids))
         .order('timestamp', { ascending: true, nullsFirst: true })
-        .limit(500)
+        .limit(200)
 
       if (error) {
         console.warn('[whatsappService] fetchMensagens', error.message)
@@ -662,16 +696,34 @@ export const whatsappService = {
     }
   },
 
-  /** Soma de mensagens não lidas (conversas deduplicadas, como na lista). */
-  async getUnreadTotal(): Promise<number> {
-    const chats = await this.listChats()
-    return chats.reduce((acc, r) => acc + (r.unread_count || 0), 0)
+  /** Contagem leve de não lidas (sem recarregar participantes/LID da lista inteira). */
+  async getUnreadCounts(): Promise<{ total: number; chats: number }> {
+    try {
+      const { data, error } = await supabase
+        .from('whatsapp_chats')
+        .select('remote_jid, unread_count, phone_jid, push_name, last_message_at, last_message_preview, instance, updated_at, categoria, pessoa_id, profile_pic_url')
+        .gt('unread_count', 0)
+        .limit(150)
+      if (error || !data?.length) return { total: 0, chats: 0 }
+
+      const { lidPhone } = await getLidCaches()
+      const deduped = dedupeWhatsappChats(data as WhatsappChatRow[], buildLidToPhoneJid([], lidPhone))
+      const withUnread = deduped.filter((c) => (c.unread_count ?? 0) > 0)
+      return {
+        total: withUnread.reduce((acc, r) => acc + (r.unread_count || 0), 0),
+        chats: withUnread.length,
+      }
+    } catch {
+      return { total: 0, chats: 0 }
+    }
   },
 
-  /** Quantidade de conversas com pelo menos 1 não lida (filtro "Não lidas"). */
+  async getUnreadTotal(): Promise<number> {
+    return (await this.getUnreadCounts()).total
+  },
+
   async getUnreadChatsCount(): Promise<number> {
-    const chats = await this.listChats()
-    return chats.filter((c) => (c.unread_count ?? 0) > 0).length
+    return (await this.getUnreadCounts()).chats
   },
 
   async markChatRead(remoteJid: string): Promise<void> {

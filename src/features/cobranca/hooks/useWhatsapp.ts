@@ -181,7 +181,7 @@ export function useWhatsappChats(busca?: string) {
   const query = useQuery({
     queryKey: ['whatsapp', 'chats', busca ?? ''],
     queryFn: () => whatsappService.listChats(busca),
-    staleTime: 15_000,
+    staleTime: 30_000,
     retry: 1,
     refetchOnWindowFocus: false,
   })
@@ -191,7 +191,7 @@ export function useWhatsappChats(busca?: string) {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['whatsapp', 'chats'] })
-      }, 350)
+      }, 1200)
     }
 
     const channel = supabase
@@ -218,28 +218,57 @@ export function useWhatsappChats(busca?: string) {
 export function useWhatsappConversa(remoteJid: string | null) {
   const queryClient = useQueryClient()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const threadJidsRef = useRef<Set<string>>(new Set())
   const query = useQuery({
     queryKey: ['whatsapp', 'conversa', remoteJid],
     queryFn: () => (remoteJid ? whatsappService.fetchMensagens(remoteJid) : Promise.resolve([])),
     enabled: !!remoteJid,
+    staleTime: 20_000,
+    refetchOnWindowFocus: false,
   })
 
   useEffect(() => {
     if (!remoteJid) return
+    const key = canonicalJid(remoteJid)
+    const phoneUser = key.split('@')[0]
+    threadJidsRef.current = new Set([key])
+
+    void whatsappService.resolveThreadJids(remoteJid).then((jids) => {
+      threadJidsRef.current = new Set(jids.map((j) => canonicalJid(j)))
+    })
 
     const invalidate = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['whatsapp', 'conversa', remoteJid] })
-      }, 800)
+      }, 2500)
+    }
+
+    const matchesRow = (row: { remote_jid?: string } | null | undefined) => {
+      const jid = row?.remote_jid
+      if (!jid) return false
+      const c = canonicalJid(jid)
+      if (threadJidsRef.current.has(c)) return true
+      // Variante com sufixo de dispositivo (ex.: 5511…:68@s.whatsapp.net).
+      if (!key.includes('@lid') && phoneUser && c.startsWith(`${phoneUser}:`)) return true
+      return false
     }
 
     const channel = supabase
-      .channel(`whatsapp_msgs_${canonicalJid(remoteJid)}`)
+      .channel(`whatsapp_msgs_${key}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'whatsapp_mensagens' },
-        invalidate,
+        { event: 'INSERT', schema: 'public', table: 'whatsapp_mensagens' },
+        (payload) => {
+          if (matchesRow(payload.new as { remote_jid?: string })) invalidate()
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'whatsapp_mensagens' },
+        (payload) => {
+          if (matchesRow(payload.new as { remote_jid?: string })) invalidate()
+        },
       )
       .subscribe()
     return () => {

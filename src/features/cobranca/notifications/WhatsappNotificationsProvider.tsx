@@ -61,14 +61,19 @@ export function WhatsappNotificationsProvider({ children }: { children: ReactNod
   const [unreadChats, setUnreadChats] = useState(0)
   const ultimoSomRef = useRef(0)
 
+  const unreadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshUnread = useCallback(() => {
     if (!enabled) return
-    Promise.all([whatsappService.getUnreadTotal(), whatsappService.getUnreadChatsCount()])
-      .then(([messages, chats]) => {
-        setUnreadTotal(messages)
-        setUnreadChats(chats)
-      })
-      .catch(() => {})
+    if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current)
+    unreadDebounceRef.current = setTimeout(() => {
+      whatsappService
+        .getUnreadCounts()
+        .then(({ total, chats }) => {
+          setUnreadTotal(total)
+          setUnreadChats(chats)
+        })
+        .catch(() => {})
+    }, 1500)
   }, [enabled])
 
   useEffect(() => {
@@ -93,6 +98,7 @@ export function WhatsappNotificationsProvider({ children }: { children: ReactNod
       )
       .subscribe()
     return () => {
+      if (unreadDebounceRef.current) clearTimeout(unreadDebounceRef.current)
       supabase.removeChannel(channel)
     }
   }, [enabled, refreshUnread])

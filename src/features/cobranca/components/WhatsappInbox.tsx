@@ -596,25 +596,11 @@ export function WhatsappInbox({
         .then(() => Promise.all([refreshUnread(), refetchChats()]))
         .catch(() => {})
     }
-    try {
-      const conv = await whatsappService.syncConversa(chat.remote_jid)
-      const tasks: Promise<unknown>[] = [refetchMsgs(), refetchChats()]
-      if (isGroupJid(chat.remote_jid)) {
-        tasks.push(
-          queryClient.invalidateQueries({ queryKey: ['whatsapp', 'group-members', chat.remote_jid] }),
-        )
-      }
-      await Promise.all(tasks)
-      const n = conv.mensagens ?? 0
-      if (n > 0) {
-        toast.success(`${n} mensagem(ns) importada(s) da Evolution`)
-      } else if ((conv.lidas ?? 0) === 0) {
-        toast.info('Nenhuma mensagem nova encontrada na Evolution para este período')
-      }
-    } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : 'Não foi possível sincronizar as mensagens desta conversa',
-      )
+    void refetchMsgs()
+    if (isGroupJid(chat.remote_jid)) {
+      void queryClient.invalidateQueries({
+        queryKey: ['whatsapp', 'group-members', chat.remote_jid],
+      })
     }
   }
 
