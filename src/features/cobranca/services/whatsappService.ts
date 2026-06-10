@@ -633,58 +633,6 @@ export const whatsappService = {
     return data as { conversas?: number }
   },
 
-  /**
-   * Importa da Evolution TODAS as mensagens desde o período sem webhook
-   * (ontem/today), paginando até o fim.
-   */
-  async backfillPeriodo(
-    onProgress?: (info: { page: number; totalPages: number; lidas: number }) => void,
-  ): Promise<{ lidas: number; processadas: number; totalEvolution: number }> {
-    let startPage = 1
-    let done = false
-    let lidas = 0
-    let processadas = 0
-    let totalEvolution = 0
-    let totalPages = 1
-
-    while (!done) {
-      const { data, error } = await supabase.functions.invoke('whatsapp-sync', {
-        body: {
-          backfillGlobal: true,
-          since: WHATSAPP_BACKFILL_SINCE,
-          startPage,
-          maxPages: 12,
-        },
-      })
-      if (error) throw new Error(await parseEdgeFunctionError(error))
-
-      const batch = data as {
-        lidas?: number
-        processadas?: number
-        nextPage?: number
-        totalPages?: number
-        totalEvolution?: number
-        done?: boolean
-      }
-
-      lidas += batch.lidas ?? 0
-      processadas += batch.processadas ?? 0
-      totalPages = batch.totalPages ?? totalPages
-      totalEvolution = batch.totalEvolution ?? totalEvolution
-      onProgress?.({
-        page: Math.min(startPage + 11, totalPages),
-        totalPages,
-        lidas,
-      })
-
-      done = !!batch.done
-      startPage = batch.nextPage ?? startPage + 12
-      if (!batch.lidas && !batch.processadas && done) break
-    }
-
-    return { lidas, processadas, totalEvolution }
-  },
-
   async syncConversa(
     remoteJid: string,
     opts?: { limit?: number; since?: string },
@@ -692,8 +640,8 @@ export const whatsappService = {
     const { data, error } = await supabase.functions.invoke('whatsapp-sync', {
       body: {
         remoteJid: canonicalJid(remoteJid),
-        limit: opts?.limit ?? 3000,
-        since: opts?.since ?? WHATSAPP_BACKFILL_SINCE,
+        limit: opts?.limit ?? 200,
+        ...(opts?.since ? { since: opts.since } : {}),
       },
     })
     if (error) throw new Error(await parseEdgeFunctionError(error))

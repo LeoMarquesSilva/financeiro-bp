@@ -758,25 +758,15 @@ Deno.serve(async (req: Request) => {
   const inst = encodeURIComponent(EVOLUTION_INSTANCE)
 
   try {
+    // Desativado: reimportava milhares de mensagens já existentes (1 upsert/msg) e derrubava o banco.
     if (payload.backfillGlobal) {
-      const sinceIso = payload.since ?? defaultBackfillSince()
-      const sinceTs = parseSinceTs(sinceIso)
-      if (!sinceTs) {
-        return jsonResponse({ error: 'Parâmetro since inválido' }, 400)
-      }
-      const result = await backfillGlobalMessages(
-        supabase,
-        EVOLUTION_API_URL,
-        EVOLUTION_INSTANCE,
-        EVOLUTION_API_KEY,
-        {
-          sinceIso,
-          sinceTs,
-          startPage: payload.startPage ?? 1,
-          maxPages: Math.min(payload.maxPages ?? 12, 25),
-        },
-      )
-      return jsonResponse({ ok: true, ...result })
+      return jsonResponse({
+        ok: false,
+        error: 'backfillGlobal desativado',
+        done: true,
+        lidas: 0,
+        processadas: 0,
+      })
     }
 
     // Sincroniza mensagens de uma conversa (paginação + JIDs alternativos + filtro since).

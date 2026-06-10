@@ -565,28 +565,21 @@ export function WhatsappInbox({
 
   const handleSyncChats = async () => {
     setSincronizando(true)
-    const progressId = 'whatsapp-backfill'
     try {
       const res = await whatsappService.sync()
-      toast.loading('Importando mensagens de ontem e hoje…', { id: progressId })
-      const backfill = await whatsappService.backfillPeriodo(({ page, totalPages, lidas }) => {
-        toast.loading(`Importando mensagens… ${page}/${totalPages} (${lidas} lidas)`, {
-          id: progressId,
-        })
-      })
+      if (selected?.remote_jid) {
+        await whatsappService.syncConversa(selected.remote_jid, { limit: 200 })
+        await refetchMsgs()
+      }
       await Promise.all([
         refetchChats(),
-        selected?.remote_jid ? refetchMsgs() : Promise.resolve(),
         queryClient.invalidateQueries({ queryKey: ['whatsapp', 'lid-index'] }),
       ])
       toast.success(
-        `Sincronizado${res.conversas != null ? ` (${res.conversas} conversas)` : ''} — ${backfill.lidas} mensagem(ns) importada(s) do período`,
-        { id: progressId },
+        `Conversas sincronizadas${res.conversas != null ? ` (${res.conversas})` : ''}`,
       )
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar conversas', {
-        id: progressId,
-      })
+      toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar conversas')
     } finally {
       setSincronizando(false)
     }
