@@ -633,50 +633,56 @@ export const whatsappService = {
     return data as { conversas?: number }
   },
 
-  /** Backfill de mensagens perdidas no período sem webhook (Evolution findMessages). */
-  async syncRecentChats(
-    chats: WhatsappChatRow[],
-    opts?: { maxChats?: number; extraJid?: string | null },
-  ): Promise<{ mensagens: number; conversas: number }> {
-    const sinceMs = Date.parse(WHATSAPP_BACKFILL_SINCE)
-    const max = opts?.maxChats ?? 20
-    const jids = new Set<string>()
+  /**
+   * Importa da Evolution TODAS as mensagens desde o período sem webhook
+   * (ontem/today), paginando até o fim.
+   */
+  async backfillPeriodo(
+    onProgress?: (info: { page: number; totalPages: number; lidas: number }) => void,
+  ): Promise<{ lidas: number; processadas: number; totalEvolution: number }> {
+    let startPage = 1
+    let done = false
+    let lidas = 0
+    let processadas = 0
+    let totalEvolution = 0
+    let totalPages = 1
 
-    const sorted = [...chats]
-      .filter((c) => c.last_message_at && Date.parse(c.last_message_at) >= sinceMs)
-      .sort(
-        (a, b) =>
-          new Date(b.last_message_at ?? 0).getTime() - new Date(a.last_message_at ?? 0).getTime(),
-      )
+    while (!done) {
+      const { data, error } = await supabase.functions.invoke('whatsapp-sync', {
+        body: {
+          backfillGlobal: true,
+          since: WHATSAPP_BACKFILL_SINCE,
+          startPage,
+          maxPages: 12,
+        },
+      })
+      if (error) throw new Error(await parseEdgeFunctionError(error))
 
-    for (const chat of sorted) {
-      if (jids.size >= max) break
-      jids.add(canonicalJid(chat.remote_jid))
-    }
-    if (opts?.extraJid) jids.add(canonicalJid(opts.extraJid))
-
-    let mensagens = 0
-    let conversas = 0
-    const list = [...jids]
-    const batchSize = 3
-
-    for (let i = 0; i < list.length; i += batchSize) {
-      const batch = list.slice(i, i + batchSize)
-      const results = await Promise.all(
-        batch.map((jid) =>
-          this.syncConversa(jid).catch(() => ({ mensagens: 0, lidas: 0 })),
-        ),
-      )
-      for (const r of results) {
-        const n = r.mensagens ?? 0
-        if (n > 0) {
-          mensagens += n
-          conversas++
-        }
+      const batch = data as {
+        lidas?: number
+        processadas?: number
+        nextPage?: number
+        totalPages?: number
+        totalEvolution?: number
+        done?: boolean
       }
+
+      lidas += batch.lidas ?? 0
+      processadas += batch.processadas ?? 0
+      totalPages = batch.totalPages ?? totalPages
+      totalEvolution = batch.totalEvolution ?? totalEvolution
+      onProgress?.({
+        page: Math.min(startPage + 11, totalPages),
+        totalPages,
+        lidas,
+      })
+
+      done = !!batch.done
+      startPage = batch.nextPage ?? startPage + 12
+      if (!batch.lidas && !batch.processadas && done) break
     }
 
-    return { mensagens, conversas }
+    return { lidas, processadas, totalEvolution }
   },
 
   async syncConversa(

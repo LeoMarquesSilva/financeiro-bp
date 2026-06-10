@@ -40,6 +40,10 @@ interface Payload {
   /** No sync global: também puxa mensagens das conversas recentes. */
   backfillRecent?: boolean
   maxChats?: number
+  /** Importa TODAS as mensagens da Evolution desde `since` (sem filtrar por conversa). */
+  backfillGlobal?: boolean
+  startPage?: number
+  maxPages?: number
 }
 
 const PAGE_SIZE = 100
@@ -201,6 +205,107 @@ async function syncConversaCompleta(
 
   const novas = Math.max(0, (countAfter ?? 0) - (countBefore ?? 0))
   return { gravadas: novas, lidas, membros }
+}
+
+async function refreshChatsFromBatch(
+  supabase: SupabaseClient,
+  instance: string,
+  records: any[],
+): Promise<void> {
+  const byJid = new Map<string, { ts: string; preview: string; phoneJid?: string }>()
+  for (const msg of records) {
+    const rawJid = msg?.key?.remoteJid
+    if (!rawJid || rawJid === 'status@broadcast') continue
+    const jid = canonicalJid(rawJid)
+    if (!isValidWhatsappRemoteJid(jid)) continue
+    const ts = toTimestamp(msg.messageTimestamp)
+    const preview = extractText(msg.message, msg.messageType)?.slice(0, 120) || ''
+    const alt = msg?.key?.remoteJidAlt as string | undefined
+    const phoneJid = alt && !alt.includes('@lid') ? canonicalJid(alt) : undefined
+    const cur = byJid.get(jid)
+    if (!cur || ts > cur.ts) byJid.set(jid, { ts, preview, phoneJid: phoneJid ?? cur?.phoneJid })
+  }
+  for (const [jid, meta] of byJid) {
+    await supabase.from('whatsapp_chats').upsert(
+      {
+        remote_jid: jid,
+        instance,
+        last_message_at: meta.ts,
+        last_message_preview: meta.preview,
+        ...(meta.phoneJid && jid.includes('@lid') ? { phone_jid: meta.phoneJid } : {}),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'remote_jid' },
+    )
+  }
+}
+
+/** Puxa mensagens de TODAS as conversas na Evolution desde `since` (paginação em lotes). */
+async function backfillGlobalMessages(
+  supabase: SupabaseClient,
+  apiUrl: string,
+  instance: string,
+  apiKey: string,
+  opts: { sinceIso: string; sinceTs: number; startPage: number; maxPages: number },
+): Promise<{
+  lidas: number
+  processadas: number
+  page: number
+  nextPage: number
+  totalPages: number
+  totalEvolution: number
+  done: boolean
+}> {
+  const headers = { 'Content-Type': 'application/json', apikey: apiKey }
+  const inst = encodeURIComponent(instance)
+  let page = Math.max(1, opts.startPage)
+  let totalPages = 1
+  let totalEvolution = 0
+  let lidas = 0
+  let processadas = 0
+  let pagesDone = 0
+
+  while (pagesDone < opts.maxPages) {
+    const resp = await fetch(`${apiUrl}/chat/findMessages/${inst}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        where: { messageTimestamp: { gte: opts.sinceTs } },
+        page,
+        offset: PAGE_SIZE,
+      }),
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      console.error('[whatsapp-sync] backfillGlobal falhou:', JSON.stringify(data))
+      break
+    }
+
+    const bloco = data?.messages ?? {}
+    const records: any[] = bloco.records ?? data?.records ?? (Array.isArray(data) ? data : [])
+    totalPages = Number(bloco.pages ?? 1) || 1
+    totalEvolution = Number(bloco.total ?? data?.total ?? 0) || totalEvolution
+
+    if (records.length === 0) break
+
+    processadas += await upsertMessages(supabase, instance, records)
+    await refreshChatsFromBatch(supabase, instance, records)
+    lidas += records.length
+    pagesDone++
+    page = (Number(bloco.currentPage ?? page) || page) + 1
+    if (page > totalPages) break
+  }
+
+  const done = page > totalPages
+  return {
+    lidas,
+    processadas,
+    page: Math.max(1, opts.startPage),
+    nextPage: page,
+    totalPages,
+    totalEvolution,
+    done,
+  }
 }
 
 function toTimestamp(ts: number | string | undefined): string {
@@ -653,6 +758,27 @@ Deno.serve(async (req: Request) => {
   const inst = encodeURIComponent(EVOLUTION_INSTANCE)
 
   try {
+    if (payload.backfillGlobal) {
+      const sinceIso = payload.since ?? defaultBackfillSince()
+      const sinceTs = parseSinceTs(sinceIso)
+      if (!sinceTs) {
+        return jsonResponse({ error: 'Parâmetro since inválido' }, 400)
+      }
+      const result = await backfillGlobalMessages(
+        supabase,
+        EVOLUTION_API_URL,
+        EVOLUTION_INSTANCE,
+        EVOLUTION_API_KEY,
+        {
+          sinceIso,
+          sinceTs,
+          startPage: payload.startPage ?? 1,
+          maxPages: Math.min(payload.maxPages ?? 12, 25),
+        },
+      )
+      return jsonResponse({ ok: true, ...result })
+    }
+
     // Sincroniza mensagens de uma conversa (paginação + JIDs alternativos + filtro since).
     if (payload.remoteJid) {
       const { gravadas, lidas, membros } = await syncConversaCompleta(

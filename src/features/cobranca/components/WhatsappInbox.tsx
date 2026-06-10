@@ -565,24 +565,28 @@ export function WhatsappInbox({
 
   const handleSyncChats = async () => {
     setSincronizando(true)
+    const progressId = 'whatsapp-backfill'
     try {
       const res = await whatsappService.sync()
-      const freshChats = await refetchChats().then(() => whatsappService.listChats())
-      const backfill = await whatsappService.syncRecentChats(freshChats, {
-        maxChats: 20,
-        extraJid: selected?.remote_jid ?? null,
+      toast.loading('Importando mensagens de ontem e hoje…', { id: progressId })
+      const backfill = await whatsappService.backfillPeriodo(({ page, totalPages, lidas }) => {
+        toast.loading(`Importando mensagens… ${page}/${totalPages} (${lidas} lidas)`, {
+          id: progressId,
+        })
       })
-      if (selected?.remote_jid) await refetchMsgs()
-      await queryClient.invalidateQueries({ queryKey: ['whatsapp', 'lid-index'] })
-      const backfillTxt =
-        backfill.mensagens > 0
-          ? ` — ${backfill.mensagens} msg em ${backfill.conversas} conversa(s)`
-          : ''
+      await Promise.all([
+        refetchChats(),
+        selected?.remote_jid ? refetchMsgs() : Promise.resolve(),
+        queryClient.invalidateQueries({ queryKey: ['whatsapp', 'lid-index'] }),
+      ])
       toast.success(
-        `Sincronizado${res.conversas != null ? ` (${res.conversas} conversas)` : ''}${backfillTxt}`,
+        `Sincronizado${res.conversas != null ? ` (${res.conversas} conversas)` : ''} — ${backfill.lidas} mensagem(ns) importada(s) do período`,
+        { id: progressId },
       )
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar conversas')
+      toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar conversas', {
+        id: progressId,
+      })
     } finally {
       setSincronizando(false)
     }
