@@ -1,13 +1,14 @@
 import { Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
-  WHATSAPP_CATEGORIAS,
   getWhatsappCategoria,
+  type WhatsappCategoriaDef,
   type WhatsappChatCategoriaId,
 } from '../constants/whatsappCategorias'
 
 interface Props {
   value: string | null | undefined
+  categorias: WhatsappCategoriaDef[]
   disabled?: boolean
   compact?: boolean
   showHint?: boolean
@@ -16,12 +17,13 @@ interface Props {
 
 export function WhatsappChatCategoriaSelect({
   value,
+  categorias,
   disabled,
   compact,
   showHint,
   onChange,
 }: Props) {
-  const ativa = getWhatsappCategoria(value)
+  const ativa = getWhatsappCategoria(value, categorias)
 
   return (
     <div className={cn('space-y-1', compact ? 'min-w-0' : 'w-full')}>
@@ -47,7 +49,7 @@ export function WhatsappChatCategoriaSelect({
         aria-label="Categoria da conversa"
       >
         <option value="">Sem categoria</option>
-        {WHATSAPP_CATEGORIAS.map((cat) => (
+        {categorias.map((cat) => (
           <option key={cat.id} value={cat.id}>
             {cat.label}
           </option>

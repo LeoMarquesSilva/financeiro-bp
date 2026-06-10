@@ -480,6 +480,29 @@ export interface Database {
           motivo?: string | null
         }
       }
+      whatsapp_categorias: {
+        Row: {
+          id: string
+          label: string
+          color_scheme: string
+          sort_order: number
+          is_system: boolean
+          created_at: string
+        }
+        Insert: {
+          id: string
+          label: string
+          color_scheme?: string
+          sort_order?: number
+          is_system?: boolean
+          created_at?: string
+        }
+        Update: {
+          label?: string
+          color_scheme?: string
+          sort_order?: number
+        }
+      }
       whatsapp_chats: {
         Row: {
           remote_jid: string
@@ -489,7 +512,7 @@ export interface Database {
           last_message_at: string | null
           last_message_preview: string | null
           unread_count: number
-          categoria: 'COBRANCA' | 'COLABORADOR_BP' | 'SOCIO' | null
+          categoria: string | null
           pessoa_id: string | null
           phone_jid: string | null
           updated_at: string

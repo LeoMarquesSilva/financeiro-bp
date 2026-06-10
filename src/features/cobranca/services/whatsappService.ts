@@ -11,10 +11,7 @@ import { isGroupJid, isValidWhatsappRemoteJid } from '../utils/jid'
 import { phoneFromJidAlt } from '../utils/lidIndex'
 import type { WhatsappChatRow, WhatsappMensagemRow } from '@/lib/database.types'
 import type { WhatsappChatPessoa } from '../types/cobranca.types'
-import {
-  WHATSAPP_CATEGORIA_COBRANCA_AUTO,
-  type WhatsappChatCategoriaId,
-} from '../constants/whatsappCategorias'
+import { WHATSAPP_CATEGORIA_COBRANCA_AUTO } from '../constants/whatsappCategorias'
 import type { GroupParticipantRow } from '../utils/participants'
 import type { QuoteSendPayload } from '../utils/quotedMessage'
 
@@ -25,6 +22,9 @@ function isLidJid(jid: string): boolean {
 function chatKey(jid: string): string {
   return isLidJid(jid) ? jid : canonicalJid(jid)
 }
+
+/** Início do período sem webhook (15h BRT 09/06/2026) — usado no backfill. */
+export const WHATSAPP_BACKFILL_SINCE = '2026-06-09T18:00:00Z'
 
 const avatarDataUrlCache = new Map<string, string>()
 const avatarInflight = new Map<string, Promise<string | null>>()
@@ -626,17 +626,72 @@ export const whatsappService = {
   },
 
   async sync(): Promise<{ conversas?: number }> {
-    const { data, error } = await supabase.functions.invoke('whatsapp-sync', { body: {} })
+    const { data, error } = await supabase.functions.invoke('whatsapp-sync', {
+      body: { backfillRecent: false },
+    })
     if (error) throw new Error(await parseEdgeFunctionError(error))
     return data as { conversas?: number }
   },
 
-  async syncConversa(remoteJid: string, limit = 200): Promise<{ mensagens?: number; membros?: number }> {
+  /** Backfill de mensagens perdidas no período sem webhook (Evolution findMessages). */
+  async syncRecentChats(
+    chats: WhatsappChatRow[],
+    opts?: { maxChats?: number; extraJid?: string | null },
+  ): Promise<{ mensagens: number; conversas: number }> {
+    const sinceMs = Date.parse(WHATSAPP_BACKFILL_SINCE)
+    const max = opts?.maxChats ?? 20
+    const jids = new Set<string>()
+
+    const sorted = [...chats]
+      .filter((c) => c.last_message_at && Date.parse(c.last_message_at) >= sinceMs)
+      .sort(
+        (a, b) =>
+          new Date(b.last_message_at ?? 0).getTime() - new Date(a.last_message_at ?? 0).getTime(),
+      )
+
+    for (const chat of sorted) {
+      if (jids.size >= max) break
+      jids.add(canonicalJid(chat.remote_jid))
+    }
+    if (opts?.extraJid) jids.add(canonicalJid(opts.extraJid))
+
+    let mensagens = 0
+    let conversas = 0
+    const list = [...jids]
+    const batchSize = 3
+
+    for (let i = 0; i < list.length; i += batchSize) {
+      const batch = list.slice(i, i + batchSize)
+      const results = await Promise.all(
+        batch.map((jid) =>
+          this.syncConversa(jid).catch(() => ({ mensagens: 0, lidas: 0 })),
+        ),
+      )
+      for (const r of results) {
+        const n = r.mensagens ?? 0
+        if (n > 0) {
+          mensagens += n
+          conversas++
+        }
+      }
+    }
+
+    return { mensagens, conversas }
+  },
+
+  async syncConversa(
+    remoteJid: string,
+    opts?: { limit?: number; since?: string },
+  ): Promise<{ mensagens?: number; lidas?: number; membros?: number }> {
     const { data, error } = await supabase.functions.invoke('whatsapp-sync', {
-      body: { remoteJid: canonicalJid(remoteJid), limit },
+      body: {
+        remoteJid: canonicalJid(remoteJid),
+        limit: opts?.limit ?? 3000,
+        since: opts?.since ?? WHATSAPP_BACKFILL_SINCE,
+      },
     })
     if (error) throw new Error(await parseEdgeFunctionError(error))
-    return data as { mensagens?: number; membros?: number }
+    return data as { mensagens?: number; lidas?: number; membros?: number }
   },
 
   async listGroupParticipants(groupJid: string): Promise<GroupParticipantRow[]> {
@@ -697,10 +752,7 @@ export const whatsappService = {
     }
   },
 
-  async updateChatCategoria(
-    remoteJid: string,
-    categoria: WhatsappChatCategoriaId | null,
-  ): Promise<void> {
+  async updateChatCategoria(remoteJid: string, categoria: string | null): Promise<void> {
     const key = chatKey(remoteJid)
     const { error } = await supabase
       .from('whatsapp_chats')

@@ -8,6 +8,7 @@ import {
   canonicalJid,
   isGroupJid,
   isValidWhatsappRemoteJid,
+  isLidJid,
   resolveEvolutionContactJid,
   isInternalBusinessName,
   isUsableEvolutionContactName,
@@ -34,6 +35,172 @@ function jsonResponse(body: unknown, status = 200): Response {
 interface Payload {
   remoteJid?: string
   limit?: number
+  /** ISO-8601 — importa só mensagens a partir desta data (útil para backfill do período sem webhook). */
+  since?: string
+  /** No sync global: também puxa mensagens das conversas recentes. */
+  backfillRecent?: boolean
+  maxChats?: number
+}
+
+const PAGE_SIZE = 100
+/** Início aproximado da falha do webhook (15h BRT em 09/06/2026). */
+const OUTAGE_FALLBACK_SINCE = '2026-06-09T18:00:00Z'
+
+function parseSinceTs(since?: string): number | undefined {
+  if (!since) return undefined
+  const ms = Date.parse(since)
+  if (!Number.isFinite(ms)) return undefined
+  return Math.floor(ms / 1000)
+}
+
+function defaultBackfillSince(): string {
+  const outageMs = Date.parse(OUTAGE_FALLBACK_SINCE)
+  const hours72 = Date.now() - 72 * 3600 * 1000
+  return new Date(Math.min(outageMs, hours72)).toISOString()
+}
+
+async function resolveSyncJids(supabase: SupabaseClient, remoteJid: string): Promise<string[]> {
+  const canonical = canonicalJid(remoteJid)
+  const jids = new Set<string>([canonical])
+
+  if (isLidJid(canonical)) {
+    const { data } = await supabase
+      .from('whatsapp_chats')
+      .select('phone_jid')
+      .eq('remote_jid', canonical)
+      .maybeSingle()
+    if (data?.phone_jid) jids.add(canonicalJid(data.phone_jid as string))
+  } else if (!isGroupJid(canonical)) {
+    const { data: lidRows } = await supabase
+      .from('whatsapp_chats')
+      .select('remote_jid')
+      .eq('phone_jid', canonical)
+      .like('remote_jid', '%@lid')
+      .limit(5)
+    for (const row of lidRows ?? []) {
+      jids.add(canonicalJid((row as { remote_jid: string }).remote_jid))
+    }
+  }
+
+  return [...jids]
+}
+
+async function syncMessagesFromEvolution(
+  supabase: SupabaseClient,
+  apiUrl: string,
+  instance: string,
+  apiKey: string,
+  queryJid: string,
+  opts: { maxMensagens: number; sinceTs?: number; storeAsJid: string },
+): Promise<{ gravadas: number; lidas: number }> {
+  const headers = { 'Content-Type': 'application/json', apikey: apiKey }
+  const inst = encodeURIComponent(instance)
+  let gravadas = 0
+  let lidas = 0
+  let page = 1
+  let totalPages = 1
+
+  while (page <= totalPages && lidas < opts.maxMensagens) {
+    const where: Record<string, unknown> = { key: { remoteJid: queryJid } }
+    if (opts.sinceTs) where.messageTimestamp = { gte: opts.sinceTs }
+
+    const resp = await fetch(`${apiUrl}/chat/findMessages/${inst}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ where, page, offset: PAGE_SIZE }),
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      console.error('[whatsapp-sync] findMessages falhou:', queryJid, JSON.stringify(data))
+      break
+    }
+
+    const bloco = data?.messages ?? {}
+    const records: any[] = bloco.records ?? data?.records ?? (Array.isArray(data) ? data : [])
+    if (records.length === 0) break
+
+    gravadas += await upsertMessages(supabase, instance, records, opts.storeAsJid)
+    lidas += records.length
+
+    totalPages = Number(bloco.pages ?? 1) || 1
+    const current = Number(bloco.currentPage ?? page) || page
+    page = current + 1
+  }
+
+  return { gravadas, lidas }
+}
+
+async function syncConversaCompleta(
+  supabase: SupabaseClient,
+  apiUrl: string,
+  instance: string,
+  apiKey: string,
+  remoteJid: string,
+  opts: { limit?: number; since?: string },
+): Promise<{ gravadas: number; lidas: number; membros: number }> {
+  const canonical = canonicalJid(remoteJid)
+  const sinceIso = opts.since ?? defaultBackfillSince()
+  const sinceTs = parseSinceTs(sinceIso)
+  const maxMensagens = opts.limit ?? 3000
+  const jids = await resolveSyncJids(supabase, canonical)
+
+  const { count: countBefore } = await supabase
+    .from('whatsapp_mensagens')
+    .select('*', { count: 'exact', head: true })
+    .eq('remote_jid', canonical)
+    .gte('timestamp', sinceIso)
+
+  let gravadas = 0
+  let lidas = 0
+  for (const jid of jids) {
+    const remaining = Math.max(0, maxMensagens - lidas)
+    if (remaining <= 0) break
+    const r = await syncMessagesFromEvolution(supabase, apiUrl, instance, apiKey, jid, {
+      maxMensagens: remaining,
+      sinceTs,
+      storeAsJid: canonical,
+    })
+    gravadas += r.gravadas
+    lidas += r.lidas
+  }
+
+  await ensureProfilePicture(supabase, apiUrl, instance, apiKey, canonical)
+
+  const { data: altRow } = await supabase
+    .from('whatsapp_mensagens')
+    .select('raw')
+    .eq('remote_jid', canonical)
+    .order('timestamp', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const altKey = (altRow?.raw as Record<string, unknown> | null)?.key as Record<string, unknown> | undefined
+  const phoneAlt = altKey?.remoteJidAlt
+    ? canonicalJid(altKey.remoteJidAlt as string).split('@')[0]
+    : null
+  await ensureContactName(supabase, apiUrl, instance, apiKey, canonical, phoneAlt)
+
+  if (canonical.includes('@lid') && phoneAlt) {
+    await supabase
+      .from('whatsapp_chats')
+      .update({
+        phone_jid: `${phoneAlt.replace(/\D/g, '')}@s.whatsapp.net`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('remote_jid', canonical)
+  }
+
+  const membros = isGroupJid(canonical)
+    ? await syncGroupParticipants(supabase, apiUrl, instance, apiKey, canonical)
+    : 0
+
+  const { count: countAfter } = await supabase
+    .from('whatsapp_mensagens')
+    .select('*', { count: 'exact', head: true })
+    .eq('remote_jid', canonical)
+    .gte('timestamp', sinceIso)
+
+  const novas = Math.max(0, (countAfter ?? 0) - (countBefore ?? 0))
+  return { gravadas: novas, lidas, membros }
 }
 
 function toTimestamp(ts: number | string | undefined): string {
@@ -486,82 +653,16 @@ Deno.serve(async (req: Request) => {
   const inst = encodeURIComponent(EVOLUTION_INSTANCE)
 
   try {
-    // Sincroniza mensagens de uma conversa específica (com paginação para puxar todo o histórico).
+    // Sincroniza mensagens de uma conversa (paginação + JIDs alternativos + filtro since).
     if (payload.remoteJid) {
-      const canonical = canonicalJid(payload.remoteJid)
-      const maxMensagens = payload.limit ?? 1000
-      let page = 1
-      let totalPages = 1
-      let gravadas = 0
-      let lidas = 0
-
-      while (page <= totalPages && lidas < maxMensagens) {
-        const resp = await fetch(`${EVOLUTION_API_URL}/chat/findMessages/${inst}`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            where: { key: { remoteJid: payload.remoteJid } },
-            page,
-            offset: 100,
-          }),
-        })
-        const data = await resp.json().catch(() => ({}))
-        if (!resp.ok) {
-          // Evolution falhou nesta página (ex.: bug de mídia nula). Para a
-          // paginação e segue com o que já foi gravado em vez de abortar.
-          console.error('[whatsapp-sync] findMessages falhou:', JSON.stringify(data))
-          break
-        }
-
-        const bloco = data?.messages ?? {}
-        const records: any[] = bloco.records ?? data?.records ?? (Array.isArray(data) ? data : [])
-        if (records.length === 0) break
-
-        // Grava com JID canônico para unificar thread no front.
-        gravadas += await upsertMessages(supabase, EVOLUTION_INSTANCE, records, canonical)
-        lidas += records.length
-
-        totalPages = Number(bloco.pages ?? 1) || 1
-        const current = Number(bloco.currentPage ?? page) || page
-        page = current + 1
-      }
-
-      await ensureProfilePicture(supabase, EVOLUTION_API_URL, EVOLUTION_INSTANCE, EVOLUTION_API_KEY, canonical)
-
-      const { data: altRow } = await supabase
-        .from('whatsapp_mensagens')
-        .select('raw')
-        .eq('remote_jid', canonical)
-        .order('timestamp', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      const altKey = (altRow?.raw as Record<string, unknown> | null)?.key as Record<string, unknown> | undefined
-      const phoneAlt = altKey?.remoteJidAlt
-        ? canonicalJid(altKey.remoteJidAlt as string).split('@')[0]
-        : null
-      await ensureContactName(
+      const { gravadas, lidas, membros } = await syncConversaCompleta(
         supabase,
         EVOLUTION_API_URL,
         EVOLUTION_INSTANCE,
         EVOLUTION_API_KEY,
-        canonical,
-        phoneAlt,
+        payload.remoteJid,
+        { limit: payload.limit, since: payload.since },
       )
-
-      if (canonical.includes('@lid') && phoneAlt) {
-        await supabase
-          .from('whatsapp_chats')
-          .update({
-            phone_jid: `${phoneAlt.replace(/\D/g, '')}@s.whatsapp.net`,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('remote_jid', canonical)
-      }
-
-      const membros = isGroupJid(canonical)
-        ? await syncGroupParticipants(supabase, EVOLUTION_API_URL, EVOLUTION_INSTANCE, EVOLUTION_API_KEY, canonical)
-        : 0
-
       return jsonResponse({ ok: true, mensagens: gravadas, lidas, membros })
     }
 

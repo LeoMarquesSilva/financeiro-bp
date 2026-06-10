@@ -46,9 +46,9 @@ import {
   VolumeX,
   BellOff,
   Users,
+  Plus,
 } from 'lucide-react'
 import {
-  WHATSAPP_CATEGORIAS,
   WHATSAPP_CATEGORIA_COBRANCA_AUTO,
   WHATSAPP_FILTRO_NAO_LIDAS,
   categoriaLabel,
@@ -75,6 +75,8 @@ import { WhatsappMessageBubble } from './WhatsappMessageBubble'
 import { WhatsappComposer } from './WhatsappComposer'
 import { WhatsappGroupMembers } from './WhatsappGroupMembers'
 import { WhatsappChatCategoriaSelect } from './WhatsappChatCategoriaSelect'
+import { ModalNovaWhatsappCategoria } from './ModalNovaWhatsappCategoria'
+import { useWhatsappCategorias } from '../hooks/useWhatsappCategorias'
 import { WhatsappComposerResizeHandle } from './WhatsappComposerResizeHandle'
 import { useComposerResize } from '../hooks/useComposerResize'
 import { isNotifMuted, setNotifMuted, playNotificationSound } from '../utils/sound'
@@ -91,6 +93,7 @@ import {
   replyTargetFromMessage,
   type ReplyTarget,
 } from '../utils/quotedMessage'
+import type { CreateWhatsappCategoriaInput } from '../services/whatsappCategoriasService'
 import type { OpenWhatsappConversa, PendingWhatsappCobranca, WhatsappChatPessoa } from '../types/cobranca.types'
 import type {
   CobrancaTituloAbertoRow,
@@ -255,6 +258,8 @@ export function WhatsappInbox({
   const pushSupported = isPushSupported()
   const [filtroCategoria, setFiltroCategoria] = useState<WhatsappCategoriaFiltro>(null)
   const [salvandoCategoria, setSalvandoCategoria] = useState(false)
+  const [modalNovaCategoria, setModalNovaCategoria] = useState(false)
+  const { categoriasDef, createCategoria, isCreating: criandoCategoria } = useWhatsappCategorias()
   const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null)
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
   const { refreshUnread } = useWhatsappNotifications()
@@ -269,21 +274,19 @@ export function WhatsappInbox({
   }, [chatsRaw, refreshUnread])
 
   const contagemPorCategoria = useMemo(() => {
-    const counts = {
+    const counts: Record<string, number> = {
       todas: chatsRaw.length,
       nao_lidas: 0,
       sem_categoria: 0,
-      COBRANCA: 0,
-      COLABORADOR_BP: 0,
-      SOCIO: 0,
     }
+    for (const cat of categoriasDef) counts[cat.id] = 0
     for (const c of chatsRaw) {
       if ((c.unread_count ?? 0) > 0) counts.nao_lidas += 1
       if (!c.categoria) counts.sem_categoria += 1
-      else if (c.categoria in counts) counts[c.categoria as WhatsappChatCategoriaId] += 1
+      else if (c.categoria in counts) counts[c.categoria] += 1
     }
     return counts
-  }, [chatsRaw])
+  }, [chatsRaw, categoriasDef])
 
   const chats = useMemo(() => {
     if (!filtroCategoria) return chatsRaw
@@ -564,22 +567,19 @@ export function WhatsappInbox({
     setSincronizando(true)
     try {
       const res = await whatsappService.sync()
-      let msgCount: number | undefined
-      if (selected?.remote_jid) {
-        const conv = await whatsappService.syncConversa(selected.remote_jid)
-        msgCount = conv.mensagens
-        await refetchMsgs()
-      }
-      await Promise.all([
-        refetchChats(),
-        queryClient.invalidateQueries({ queryKey: ['whatsapp', 'lid-index'] }),
-      ])
-      const extra =
-        msgCount != null && selected
-          ? ` — ${msgCount} mensagem(ns) em ${resolveName(selected)}`
+      const freshChats = await refetchChats().then(() => whatsappService.listChats())
+      const backfill = await whatsappService.syncRecentChats(freshChats, {
+        maxChats: 20,
+        extraJid: selected?.remote_jid ?? null,
+      })
+      if (selected?.remote_jid) await refetchMsgs()
+      await queryClient.invalidateQueries({ queryKey: ['whatsapp', 'lid-index'] })
+      const backfillTxt =
+        backfill.mensagens > 0
+          ? ` — ${backfill.mensagens} msg em ${backfill.conversas} conversa(s)`
           : ''
       toast.success(
-        `Conversas sincronizadas${res.conversas != null ? ` (${res.conversas})` : ''}${extra}`,
+        `Sincronizado${res.conversas != null ? ` (${res.conversas} conversas)` : ''}${backfillTxt}`,
       )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar conversas')
@@ -608,8 +608,11 @@ export function WhatsappInbox({
         )
       }
       await Promise.all(tasks)
-      if ((conv.mensagens ?? 0) > 0) {
-        toast.success(`${conv.mensagens} mensagem(ns) atualizada(s)`)
+      const n = conv.mensagens ?? 0
+      if (n > 0) {
+        toast.success(`${n} mensagem(ns) importada(s) da Evolution`)
+      } else if ((conv.lidas ?? 0) === 0) {
+        toast.info('Nenhuma mensagem nova encontrada na Evolution para este período')
       }
     } catch (e) {
       toast.error(
@@ -759,12 +762,18 @@ export function WhatsappInbox({
       await whatsappService.updateChatCategoria(selected.remote_jid, valor)
       setSelected((prev) => (prev ? { ...prev, categoria: valor } : prev))
       await refetchChats()
-      toast.success(valor ? `Categoria: ${categoriaLabel(valor)}` : 'Categoria removida')
+      toast.success(valor ? `Categoria: ${categoriaLabel(valor, categoriasDef)}` : 'Categoria removida')
     } catch {
       toast.error('Erro ao salvar categoria')
     } finally {
       setSalvandoCategoria(false)
     }
+  }
+
+  const handleNovaCategoria = async (input: CreateWhatsappCategoriaInput) => {
+    const created = await createCategoria(input)
+    setFiltroCategoria(created.id)
+    toast.success(`Categoria "${created.label}" criada`)
   }
 
   const handleReply = (message: WhatsappMensagemRow) => {
@@ -828,7 +837,7 @@ export function WhatsappInbox({
           >
             {WHATSAPP_FILTRO_NAO_LIDAS.label} ({contagemPorCategoria.nao_lidas})
           </button>
-          {WHATSAPP_CATEGORIAS.map((cat) => (
+          {categoriasDef.map((cat) => (
             <button
               key={cat.id}
               type="button"
@@ -838,9 +847,20 @@ export function WhatsappInbox({
                 filtroCategoria === cat.id ? cat.chipActive : cat.chipIdle,
               )}
             >
-              {cat.label} ({contagemPorCategoria[cat.id]})
+              {cat.label} ({contagemPorCategoria[cat.id] ?? 0})
             </button>
           ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 rounded-full px-2.5 text-xs"
+            onClick={() => setModalNovaCategoria(true)}
+            title="Criar novo tipo de categoria"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nova categoria
+          </Button>
           <button
             type="button"
             onClick={() => setFiltroCategoria('sem_categoria')}
@@ -967,7 +987,7 @@ export function WhatsappInbox({
               const name = resolveName(chat)
               const isGroup = isGroupJid(chat.remote_jid)
               const active = selected?.remote_jid === chat.remote_jid
-              const catDef = getWhatsappCategoria(chat.categoria)
+              const catDef = getWhatsappCategoria(chat.categoria, categoriasDef)
               return (
                 <button
                   key={chat.remote_jid}
@@ -1099,6 +1119,7 @@ export function WhatsappInbox({
                 </div>
                 <WhatsappChatCategoriaSelect
                   compact
+                  categorias={categoriasDef}
                   value={selected.categoria}
                   disabled={salvandoCategoria}
                   onChange={handleCategoriaChange}
@@ -1251,6 +1272,7 @@ export function WhatsappInbox({
 
                 <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
                   <WhatsappChatCategoriaSelect
+                    categorias={categoriasDef}
                     value={selected.categoria}
                     disabled={salvandoCategoria}
                     showHint
@@ -1380,6 +1402,13 @@ export function WhatsappInbox({
           </div>
         )}
       </div>
+
+      <ModalNovaWhatsappCategoria
+        open={modalNovaCategoria}
+        onClose={() => setModalNovaCategoria(false)}
+        onCreate={handleNovaCategoria}
+        isCreating={criandoCategoria}
+      />
     </div>
   )
 }
