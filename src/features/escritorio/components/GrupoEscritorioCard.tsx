@@ -1,7 +1,9 @@
 import type { GrupoEscritorio } from '../services/escritorioService'
+import { GRUPO_SEM_NOME } from '../services/escritorioService'
 import type { ClienteEscritorioRow } from '@/lib/database.types'
 import type { InadimplenciaGrupoStatus } from '../services/inadimplenciaGruposIndex'
 import { InadimplenciaGrupoBadges } from './InadimplenciaGrupoBadges'
+import { SemGrupoEmpresasList } from './SemGrupoEmpresasList'
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card'
 import { formatHorasHHMMSS, formatCurrency } from '@/shared/utils/format'
 import { Building2, Briefcase, Clock, ChevronDown, ChevronUp, ChevronRight, Banknote, CircleDollarSign, AlertTriangle } from 'lucide-react'
@@ -29,6 +31,7 @@ interface GrupoEscritorioCardProps {
 export function GrupoEscritorioCard({ grupo, inadimplencia, onSelectCliente, onOpenGrupo }: GrupoEscritorioCardProps) {
   const [maisInfosAberto, setMaisInfosAberto] = useState(false)
   const { grupo_cliente, empresas, contagem, horasGrupo, horasPorAno, valorAberto, valorPago, valorEmAtraso } = grupo
+  const isSemGrupo = grupo_cliente === GRUPO_SEM_NOME
   const totalGeral = contagem?.total_geral ?? 0
   const hasInadimplencia = !!(inadimplencia?.ativa || inadimplencia?.resolvida)
   const anosOrdenados = Object.keys(horasPorAno ?? {})
@@ -77,6 +80,12 @@ export function GrupoEscritorioCard({ grupo, inadimplencia, onSelectCliente, onO
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-0">
+        {isSemGrupo ? (
+          <SemGrupoEmpresasList
+            empresas={empresas}
+            onSelectCliente={onSelectCliente ? (e) => onSelectCliente(grupo, e) : undefined}
+          />
+        ) : (
         <div>
           <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
             Empresas do grupo ({empresas.length})
@@ -108,6 +117,7 @@ export function GrupoEscritorioCard({ grupo, inadimplencia, onSelectCliente, onO
             )}
           </ul>
         </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <span className="flex items-center gap-1.5 text-slate-600">

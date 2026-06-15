@@ -413,6 +413,9 @@ export interface Database {
           qtd_processos: number | null
           horas_total: number | null
           horas_por_ano: Record<string, number> | null
+          valor_aberto: number | null
+          valor_pago: number | null
+          valor_em_atraso: number | null
         }
         Insert: unknown
         Update: unknown
@@ -674,6 +677,8 @@ export type ProvidenciaFollowUpRow = Database['public']['Tables']['providencia_f
 export type InadimplenciaLogRow = Database['public']['Tables']['inadimplencia_logs']['Row']
 export type InadimplenciaPagamentoRow = Database['public']['Tables']['inadimplencia_pagamentos']['Row']
 export type PessoaRow = Database['public']['Tables']['pessoas']['Row']
-/** @deprecated Use PessoaRow; mantido para compatibilidade durante migração. */
+/** Empresa com processos, timesheets e financeiro (view escritorio_empresas_por_grupo). */
+export type EscritorioEmpresaRow = Database['public']['Tables']['escritorio_empresas_por_grupo']['Row']
+/** @deprecated Use PessoaRow ou EscritorioEmpresaRow; mantido para compatibilidade durante migração. */
 export type ClienteEscritorioRow = PessoaRow
 export type TeamMember = TeamMemberRow

@@ -107,7 +107,7 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
     return Array.from(map.entries())
       .map(([nome, pessoas]) => {
         const valorEmAtraso = pessoas.reduce((sum, p) => {
-          const resumo = financeiroResumo?.get(p.id)
+          const resumo = financeiroResumo?.[p.id]
           return sum + (resumo?.valorEmAtraso ?? 0)
         }, 0)
         return {

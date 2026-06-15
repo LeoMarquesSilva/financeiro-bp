@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { GrupoEscritorio, FiltroFinanceiro, OrdenacaoEscritorio } from '../services/escritorioService'
+import { GRUPO_SEM_NOME } from '../services/escritorioService'
 import { GrupoEscritorioCard } from '../components/GrupoEscritorioCard'
 import { ClienteEscritorioDetailSheet } from '../components/ClienteEscritorioDetailSheet'
 import { useGruposEscritorioPaginado } from '../hooks/useGruposEscritorioPaginado'
@@ -345,15 +346,19 @@ export function EscritorioPage() {
           )}
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filtrado.map((grupo: GrupoEscritorio) => (
-              <GrupoEscritorioCard
+              <div
                 key={grupo.grupo_cliente}
-                grupo={grupo}
-                inadimplencia={
-                  inadimplenciaIndex ? getInadimplenciaStatusForGrupo(grupo, inadimplenciaIndex) : null
-                }
-                onSelectCliente={handleSelectEmpresa}
-                onOpenGrupo={handleOpenGrupo}
-              />
+                className={grupo.grupo_cliente === GRUPO_SEM_NOME ? 'sm:col-span-2 lg:col-span-3' : undefined}
+              >
+                <GrupoEscritorioCard
+                  grupo={grupo}
+                  inadimplencia={
+                    inadimplenciaIndex ? getInadimplenciaStatusForGrupo(grupo, inadimplenciaIndex) : null
+                  }
+                  onSelectCliente={handleSelectEmpresa}
+                  onOpenGrupo={handleOpenGrupo}
+                />
+              </div>
             ))}
           </div>
         </section>

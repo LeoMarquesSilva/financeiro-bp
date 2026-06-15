@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabaseClient'
 import type {
   ClienteEscritorioRow,
   ContagemCiPorGrupoRow,
+  EscritorioEmpresaRow,
 } from '@/lib/database.types'
 
 /** Horas do grupo: total e por ano (extraído da coluna data do timesheets). */
@@ -13,10 +14,18 @@ export interface HorasGrupo {
 export type FiltroFinanceiro = 'todos' | 'em_atraso' | 'a_vencer' | 'em_aberto' | 'com_pago'
 export type OrdenacaoEscritorio = 'nome' | 'atraso' | 'a_vencer' | 'aberto' | 'pago'
 
+export interface FinanceiroEmpresaResumo {
+  valorAberto: number
+  valorPago: number
+  valorEmAtraso: number
+}
+
+export type OrdenacaoSemGrupoEmpresa = 'nome' | 'valor' | 'valor_aberto' | 'valor_atraso' | 'processos' | 'timesheet'
+
 /** Dados agregados por grupo para o card: empresas do grupo, contagem de CI, horas (timesheets) e totais do relatório financeiro. */
 export interface GrupoEscritorio {
   grupo_cliente: string
-  empresas: ClienteEscritorioRow[]
+  empresas: EscritorioEmpresaRow[]
   contagem: ContagemCiPorGrupoRow | null
   horasGrupo: number
   horasPorAno: Record<string, number>
@@ -26,9 +35,84 @@ export interface GrupoEscritorio {
   valorPago: number
   /** Soma do valor em atraso (parcelas abertas com vencimento < hoje). */
   valorEmAtraso: number
+  /** Resumo financeiro por empresa (derivado da view). */
+  financeiroPorEmpresa?: Record<string, FinanceiroEmpresaResumo>
 }
 
-/** Garante que valores numéricos vindos do Supabase (podem vir como string) sejam number. */
+const ESCRITORIO_EMPRESA_SELECT =
+  'id, grupo_cliente, nome, cpf_cnpj, categoria, ci, qtd_processos, horas_total, horas_por_ano, valor_aberto, valor_pago, valor_em_atraso, created_at, updated_at'
+
+/** PostgREST: sem grupo só traz empresas com processos, timesheet ou valor (sync pode incluir novas depois). */
+export const SEM_GRUPO_COM_DADOS_OR_FILTER =
+  'qtd_processos.gt.0,horas_total.gt.0,valor_aberto.gt.0,valor_pago.gt.0,valor_em_atraso.gt.0'
+
+/** Empresa do escritório com ao menos processo, timesheet ou movimentação financeira. */
+export function empresaTemDadosEscritorio(e: EscritorioEmpresaRow): boolean {
+  return (
+    (Number(e.qtd_processos) || 0) > 0 ||
+    (Number(e.horas_total) || 0) > 0 ||
+    temValorFinanceiro(e)
+  )
+}
+
+/** Extrai resumo financeiro dos campos da view escritorio_empresas_por_grupo. */
+export function getFinanceiroEmpresa(e: EscritorioEmpresaRow): FinanceiroEmpresaResumo {
+  return {
+    valorAberto: Number(e.valor_aberto) || 0,
+    valorPago: Number(e.valor_pago) || 0,
+    valorEmAtraso: Number(e.valor_em_atraso) || 0,
+  }
+}
+
+export function temValorFinanceiro(e: EscritorioEmpresaRow): boolean {
+  const f = getFinanceiroEmpresa(e)
+  return f.valorAberto > 0 || f.valorPago > 0 || f.valorEmAtraso > 0
+}
+
+export function valorTotalEmpresa(e: EscritorioEmpresaRow): number {
+  const f = getFinanceiroEmpresa(e)
+  return f.valorAberto + f.valorPago
+}
+
+export function ordenaEmpresasEscritorio(
+  lista: EscritorioEmpresaRow[],
+  ordenacao: OrdenacaoSemGrupoEmpresa,
+): EscritorioEmpresaRow[] {
+  const copy = [...lista]
+  switch (ordenacao) {
+    case 'valor':
+      return copy.sort(
+        (a, b) => valorTotalEmpresa(b) - valorTotalEmpresa(a) || (a.nome ?? '').localeCompare(b.nome ?? ''),
+      )
+    case 'valor_aberto':
+      return copy.sort(
+        (a, b) =>
+          getFinanceiroEmpresa(b).valorAberto - getFinanceiroEmpresa(a).valorAberto ||
+          (a.nome ?? '').localeCompare(b.nome ?? ''),
+      )
+    case 'valor_atraso':
+      return copy.sort(
+        (a, b) =>
+          getFinanceiroEmpresa(b).valorEmAtraso - getFinanceiroEmpresa(a).valorEmAtraso ||
+          (a.nome ?? '').localeCompare(b.nome ?? ''),
+      )
+    case 'processos':
+      return copy.sort(
+        (a, b) =>
+          (Number(b.qtd_processos) || 0) - (Number(a.qtd_processos) || 0) ||
+          (a.nome ?? '').localeCompare(b.nome ?? ''),
+      )
+    case 'timesheet':
+      return copy.sort(
+        (a, b) =>
+          (Number(b.horas_total) || 0) - (Number(a.horas_total) || 0) ||
+          (a.nome ?? '').localeCompare(b.nome ?? ''),
+      )
+    default:
+      return copy.sort((a, b) => (a.nome ?? '').localeCompare(b.nome ?? ''))
+  }
+}
+
 function normalizePessoaRow(row: Record<string, unknown>): ClienteEscritorioRow {
   return {
     ...row,
@@ -44,6 +128,15 @@ function normalizePessoaRow(row: Record<string, unknown>): ClienteEscritorioRow 
     created_at: String(row.created_at ?? ''),
     updated_at: String(row.updated_at ?? ''),
   } as ClienteEscritorioRow
+}
+
+function normalizeEscritorioEmpresaRow(row: Record<string, unknown>): EscritorioEmpresaRow {
+  return {
+    ...normalizePessoaRow(row),
+    valor_aberto: row.valor_aberto != null ? Number(row.valor_aberto) : 0,
+    valor_pago: row.valor_pago != null ? Number(row.valor_pago) : 0,
+    valor_em_atraso: row.valor_em_atraso != null ? Number(row.valor_em_atraso) : 0,
+  }
 }
 
 function normalizeContagemRow(row: Record<string, unknown>): ContagemCiPorGrupoRow {
@@ -116,7 +209,7 @@ export async function fetchGruposResumo(): Promise<GrupoResumoRow[]> {
 }
 
 /** Empresas apenas dos grupos indicados (para a página atual). groupKeys usa '' para "Sem grupo". */
-export async function fetchEmpresasPorGrupos(groupKeys: string[]): Promise<ClienteEscritorioRow[]> {
+export async function fetchEmpresasPorGrupos(groupKeys: string[]): Promise<EscritorioEmpresaRow[]> {
   if (groupKeys.length === 0) return []
   const hasEmpty = groupKeys.includes('')
   const nonEmpty = groupKeys.filter((g) => g !== '')
@@ -129,7 +222,7 @@ export async function fetchEmpresasPorGrupos(groupKeys: string[]): Promise<Clien
       const to = from + PAGE_SIZE - 1
       const { data, error } = await supabase
         .from('escritorio_empresas_por_grupo')
-        .select('id, grupo_cliente, nome, cpf_cnpj, categoria, ci, qtd_processos, horas_total, horas_por_ano, created_at, updated_at')
+        .select(ESCRITORIO_EMPRESA_SELECT)
         .in('grupo_cliente', nonEmpty)
         .order('grupo_cliente', { ascending: true })
         .order('nome', { ascending: true })
@@ -149,8 +242,9 @@ export async function fetchEmpresasPorGrupos(groupKeys: string[]): Promise<Clien
       const to = from + PAGE_SIZE - 1
       const { data, error } = await supabase
         .from('escritorio_empresas_por_grupo')
-        .select('id, grupo_cliente, nome, cpf_cnpj, categoria, ci, qtd_processos, horas_total, horas_por_ano, created_at, updated_at')
+        .select(ESCRITORIO_EMPRESA_SELECT)
         .is('grupo_cliente', null)
+        .or(SEM_GRUPO_COM_DADOS_OR_FILTER)
         .order('nome', { ascending: true })
         .range(from, to)
       if (error) throw error
@@ -162,16 +256,16 @@ export async function fetchEmpresasPorGrupos(groupKeys: string[]): Promise<Clien
   }
 
   return allRows.map((row) => {
-    const normalized = normalizePessoaRow(row)
+    const normalized = normalizeEscritorioEmpresaRow(row)
     if (normalized.grupo_cliente == null || normalized.grupo_cliente.trim() === '') {
       normalized.grupo_cliente = ''
     }
     return normalized
-  })
+  }).filter((e) => e.grupo_cliente !== '' || empresaTemDadosEscritorio(e))
 }
 
 /** Lista empresas por grupo (view escritorio_empresas_por_grupo). Busca em lotes de 1000 para ultrapassar o limite do Supabase. */
-export async function fetchClientesEscritorio(): Promise<ClienteEscritorioRow[]> {
+export async function fetchClientesEscritorio(): Promise<EscritorioEmpresaRow[]> {
   const allRows: Record<string, unknown>[] = []
   let from = 0
   let hasMore = true
@@ -179,7 +273,7 @@ export async function fetchClientesEscritorio(): Promise<ClienteEscritorioRow[]>
     const to = from + PAGE_SIZE - 1
     const { data, error } = await supabase
       .from('escritorio_empresas_por_grupo')
-      .select('id, grupo_cliente, nome, cpf_cnpj, categoria, ci, qtd_processos, horas_total, horas_por_ano, created_at, updated_at')
+      .select(ESCRITORIO_EMPRESA_SELECT)
       .order('grupo_cliente', { ascending: true, nullsFirst: true })
       .order('nome', { ascending: true })
       .range(from, to)
@@ -189,7 +283,7 @@ export async function fetchClientesEscritorio(): Promise<ClienteEscritorioRow[]>
     hasMore = chunk.length === PAGE_SIZE
     from += PAGE_SIZE
   }
-  return allRows.map(normalizePessoaRow)
+  return allRows.map(normalizeEscritorioEmpresaRow)
 }
 
 export async function fetchContagemCiPorGrupo(): Promise<ContagemCiPorGrupoRow[]> {
@@ -236,32 +330,55 @@ export async function fetchHorasPorGrupo(): Promise<Map<string, HorasGrupo>> {
   return map
 }
 
+export type FinanceiroEmpresaResumoCompleto = FinanceiroEmpresaResumo & {
+  parcelasAbertas: number
+  parcelasPagas: number
+  parcelasEmAtraso: number
+}
+
 /** Resumo do relatório financeiro por pessoa_id (valor aberto, pago e em atraso). */
 export async function fetchRelatorioFinanceiroResumoPorCliente(): Promise<
-  Map<string, { valorAberto: number; valorPago: number; valorEmAtraso: number; parcelasAbertas: number; parcelasPagas: number; parcelasEmAtraso: number }>
+  Record<string, FinanceiroEmpresaResumoCompleto>
 > {
-  const { data, error } = await supabase
-    .from('relatorio_financeiro_resumo_por_cliente')
-    .select('pessoa_id, valor_aberto, valor_pago, valor_em_atraso, parcelas_abertas, parcelas_pagas, parcelas_em_atraso')
-    .limit(10000)
-  if (error) throw error
-  type FinanceiroRow = { pessoa_id: string; valor_aberto: number; valor_pago: number; valor_em_atraso: number; parcelas_abertas: number; parcelas_pagas: number; parcelas_em_atraso: number }
-  const rows = (data ?? []) as FinanceiroRow[]
-  const map = new Map<string, { valorAberto: number; valorPago: number; valorEmAtraso: number; parcelasAbertas: number; parcelasPagas: number; parcelasEmAtraso: number }>()
-  for (const r of rows) {
+  type FinanceiroRow = {
+    pessoa_id: string
+    valor_aberto: number
+    valor_pago: number
+    valor_em_atraso: number
+    parcelas_abertas: number
+    parcelas_pagas: number
+    parcelas_em_atraso: number
+  }
+  const allRows: FinanceiroRow[] = []
+  let from = 0
+  let hasMore = true
+  while (hasMore) {
+    const to = from + PAGE_SIZE - 1
+    const { data, error } = await supabase
+      .from('relatorio_financeiro_resumo_por_cliente')
+      .select('pessoa_id, valor_aberto, valor_pago, valor_em_atraso, parcelas_abertas, parcelas_pagas, parcelas_em_atraso')
+      .order('pessoa_id', { ascending: true })
+      .range(from, to)
+    if (error) throw error
+    const chunk = (data ?? []) as FinanceiroRow[]
+    allRows.push(...chunk)
+    hasMore = chunk.length === PAGE_SIZE
+    from += PAGE_SIZE
+  }
+  const out: Record<string, FinanceiroEmpresaResumoCompleto> = {}
+  for (const r of allRows) {
     const id = r.pessoa_id
-    if (id) {
-      map.set(id, {
-        valorAberto: Number(r.valor_aberto) || 0,
-        valorPago: Number(r.valor_pago) || 0,
-        valorEmAtraso: Number(r.valor_em_atraso) || 0,
-        parcelasAbertas: Number(r.parcelas_abertas) || 0,
-        parcelasPagas: Number(r.parcelas_pagas) || 0,
-        parcelasEmAtraso: Number(r.parcelas_em_atraso) || 0,
-      })
+    if (!id) continue
+    out[id] = {
+      valorAberto: Number(r.valor_aberto) || 0,
+      valorPago: Number(r.valor_pago) || 0,
+      valorEmAtraso: Number(r.valor_em_atraso) || 0,
+      parcelasAbertas: Number(r.parcelas_abertas) || 0,
+      parcelasPagas: Number(r.parcelas_pagas) || 0,
+      parcelasEmAtraso: Number(r.parcelas_em_atraso) || 0,
     }
   }
-  return map
+  return out
 }
 
 /** Normaliza nome do grupo para comparação: minúsculo, um espaço, sem prefixo "Grupo ", barra com espaços. */
@@ -291,15 +408,23 @@ export function getHorasParaGrupo(map: Map<string, HorasGrupo>, grupo: string): 
   return merged
 }
 
+function buildFinanceiroPorEmpresa(lista: EscritorioEmpresaRow[]): Record<string, FinanceiroEmpresaResumo> | undefined {
+  const out: Record<string, FinanceiroEmpresaResumo> = {}
+  for (const e of lista) {
+    if (temValorFinanceiro(e)) out[e.id] = getFinanceiroEmpresa(e)
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 /** Monta GrupoEscritorio[] para a página a partir do resumo, empresas (só da página) e contagem/horas. */
 export function buildGruposEscritorioParaPagina(
   resumoPage: GrupoResumoRow[],
-  empresas: ClienteEscritorioRow[],
+  empresas: EscritorioEmpresaRow[],
   contagemByGrupo: Map<string, ContagemCiPorGrupoRow>,
   horasPorGrupo: Map<string, HorasGrupo>,
 ): GrupoEscritorio[] {
   const keyToDisplay = (k: string) => (k === '' ? GRUPO_SEM_NOME : k)
-  const byGrupo = new Map<string, ClienteEscritorioRow[]>()
+  const byGrupo = new Map<string, EscritorioEmpresaRow[]>()
   for (const c of empresas) {
     const key = c.grupo_cliente?.trim() ?? ''
     if (!byGrupo.has(key)) byGrupo.set(key, [])
@@ -319,20 +444,20 @@ export function buildGruposEscritorioParaPagina(
       valorAberto: r.valor_aberto,
       valorPago: r.valor_pago,
       valorEmAtraso: r.valor_em_atraso,
+      financeiroPorEmpresa: buildFinanceiroPorEmpresa(lista),
     }
   })
 }
 
 /** Busca clientes, contagem, timesheets e resumo financeiro; agrega por grupo para os cards. */
 export async function fetchGruposEscritorio(): Promise<GrupoEscritorio[]> {
-  const [clientes, contagens, horasPorGrupo, financeiroResumo] = await Promise.all([
+  const [clientes, contagens, horasPorGrupo] = await Promise.all([
     fetchClientesEscritorio(),
     fetchContagemCiPorGrupo(),
     fetchHorasPorGrupo(),
-    fetchRelatorioFinanceiroResumoPorCliente(),
   ])
 
-  const byGrupo = new Map<string, { empresas: ClienteEscritorioRow[] }>()
+  const byGrupo = new Map<string, { empresas: EscritorioEmpresaRow[] }>()
   for (const c of clientes) {
     const grupo = c.grupo_cliente?.trim() ?? GRUPO_SEM_NOME
     const key = grupo === GRUPO_SEM_NOME ? '' : grupo
@@ -353,12 +478,10 @@ export async function fetchGruposEscritorio(): Promise<GrupoEscritorio[]> {
     let valorPago = 0
     let valorEmAtraso = 0
     for (const e of empresas) {
-      const resumo = financeiroResumo.get(e.id)
-      if (resumo) {
-        valorAberto += resumo.valorAberto
-        valorPago += resumo.valorPago
-        valorEmAtraso += resumo.valorEmAtraso
-      }
+      const resumo = getFinanceiroEmpresa(e)
+      valorAberto += resumo.valorAberto
+      valorPago += resumo.valorPago
+      valorEmAtraso += resumo.valorEmAtraso
     }
     result.push({
       grupo_cliente: grupoDisplay,
@@ -369,6 +492,7 @@ export async function fetchGruposEscritorio(): Promise<GrupoEscritorio[]> {
       valorAberto,
       valorPago,
       valorEmAtraso,
+      financeiroPorEmpresa: buildFinanceiroPorEmpresa(empresas),
     })
   }
   result.sort((a, b) => a.grupo_cliente.localeCompare(b.grupo_cliente))
