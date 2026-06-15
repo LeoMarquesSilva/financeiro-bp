@@ -39,7 +39,11 @@ export interface GrupoEscritorio {
   financeiroPorEmpresa?: Record<string, FinanceiroEmpresaResumo>
 }
 
-const ESCRITORIO_EMPRESA_SELECT =
+const ESCRITORIO_EMPRESA_LIST_SELECT =
+  'id, grupo_cliente, nome, cpf_cnpj, categoria, ci, qtd_processos, horas_total, valor_aberto, valor_pago, valor_em_atraso, created_at, updated_at'
+
+/** Detalhe da empresa (inclui horas_por_ano — agregação pesada; não usar em listagens). */
+const ESCRITORIO_EMPRESA_DETALHE_SELECT =
   'id, grupo_cliente, nome, cpf_cnpj, categoria, ci, qtd_processos, horas_total, horas_por_ano, valor_aberto, valor_pago, valor_em_atraso, created_at, updated_at'
 
 /** PostgREST: sem grupo só traz empresas com processos, timesheet ou valor (sync pode incluir novas depois). */
@@ -208,52 +212,64 @@ export async function fetchGruposResumo(): Promise<GrupoResumoRow[]> {
   return allRows.map(normalizeResumoRow)
 }
 
+/** Busca empresas de um grupo (paginado). */
+async function fetchEmpresasDeUmGrupo(
+  grupoCliente: string | null,
+  options?: { semGrupoComDados?: boolean },
+): Promise<Record<string, unknown>[]> {
+  const allRows: Record<string, unknown>[] = []
+  let from = 0
+  let hasMore = true
+  while (hasMore) {
+    const to = from + PAGE_SIZE - 1
+    let query = supabase
+      .from('escritorio_empresas_por_grupo')
+      .select(ESCRITORIO_EMPRESA_LIST_SELECT)
+      .order('nome', { ascending: true })
+      .range(from, to)
+
+    if (grupoCliente === null) {
+      query = query.is('grupo_cliente', null)
+      if (options?.semGrupoComDados) {
+        query = query.or(SEM_GRUPO_COM_DADOS_OR_FILTER)
+      }
+    } else {
+      query = query.eq('grupo_cliente', grupoCliente)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    const chunk = (data ?? []) as Record<string, unknown>[]
+    allRows.push(...chunk)
+    hasMore = chunk.length === PAGE_SIZE
+    from += PAGE_SIZE
+  }
+  return allRows
+}
+
+/** Detalhe de uma empresa (com horas_por_ano). Usar só ao abrir o painel. */
+export async function fetchEscritorioEmpresaDetalhe(id: string): Promise<EscritorioEmpresaRow | null> {
+  const { data, error } = await supabase
+    .from('escritorio_empresas_por_grupo')
+    .select(ESCRITORIO_EMPRESA_DETALHE_SELECT)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  return normalizeEscritorioEmpresaRow(data as Record<string, unknown>)
+}
+
 /** Empresas apenas dos grupos indicados (para a página atual). groupKeys usa '' para "Sem grupo". */
 export async function fetchEmpresasPorGrupos(groupKeys: string[]): Promise<EscritorioEmpresaRow[]> {
   if (groupKeys.length === 0) return []
   const hasEmpty = groupKeys.includes('')
   const nonEmpty = groupKeys.filter((g) => g !== '')
-  const allRows: Record<string, unknown>[] = []
 
-  if (nonEmpty.length > 0) {
-    let from = 0
-    let hasMore = true
-    while (hasMore) {
-      const to = from + PAGE_SIZE - 1
-      const { data, error } = await supabase
-        .from('escritorio_empresas_por_grupo')
-        .select(ESCRITORIO_EMPRESA_SELECT)
-        .in('grupo_cliente', nonEmpty)
-        .order('grupo_cliente', { ascending: true })
-        .order('nome', { ascending: true })
-        .range(from, to)
-      if (error) throw error
-      const chunk = (data ?? []) as Record<string, unknown>[]
-      allRows.push(...chunk)
-      hasMore = chunk.length === PAGE_SIZE
-      from += PAGE_SIZE
-    }
-  }
-
-  if (hasEmpty) {
-    let from = 0
-    let hasMore = true
-    while (hasMore) {
-      const to = from + PAGE_SIZE - 1
-      const { data, error } = await supabase
-        .from('escritorio_empresas_por_grupo')
-        .select(ESCRITORIO_EMPRESA_SELECT)
-        .is('grupo_cliente', null)
-        .or(SEM_GRUPO_COM_DADOS_OR_FILTER)
-        .order('nome', { ascending: true })
-        .range(from, to)
-      if (error) throw error
-      const chunk = (data ?? []) as Record<string, unknown>[]
-      allRows.push(...chunk)
-      hasMore = chunk.length === PAGE_SIZE
-      from += PAGE_SIZE
-    }
-  }
+  const batches = await Promise.all([
+    ...nonEmpty.map((grupo) => fetchEmpresasDeUmGrupo(grupo)),
+    ...(hasEmpty ? [fetchEmpresasDeUmGrupo(null, { semGrupoComDados: true })] : []),
+  ])
+  const allRows = batches.flat()
 
   return allRows.map((row) => {
     const normalized = normalizeEscritorioEmpresaRow(row)
@@ -273,7 +289,7 @@ export async function fetchClientesEscritorio(): Promise<EscritorioEmpresaRow[]>
     const to = from + PAGE_SIZE - 1
     const { data, error } = await supabase
       .from('escritorio_empresas_por_grupo')
-      .select(ESCRITORIO_EMPRESA_SELECT)
+      .select(ESCRITORIO_EMPRESA_LIST_SELECT)
       .order('grupo_cliente', { ascending: true, nullsFirst: true })
       .order('nome', { ascending: true })
       .range(from, to)
