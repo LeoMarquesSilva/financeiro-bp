@@ -262,7 +262,7 @@ export function useGruposEscritorioPaginado(
 
   const { data: empresas, isLoading: loadingEmpresas, isFetching: fetchingEmpresas } = useQuery({
 
-    queryKey: ['escritorio', 'empresas-v3', safePage, groupKeys.join(',')],
+    queryKey: ['escritorio', 'empresas-v4', safePage, groupKeys.join(',')],
 
     queryFn: () => fetchEmpresasPorGrupos(groupKeys),
 

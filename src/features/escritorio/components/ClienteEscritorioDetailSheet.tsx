@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { formatCnpj, formatCurrency, formatDate, formatHorasDuracao } from '@/shared/utils/format'
 import type { ClienteEscritorioRow } from '@/lib/database.types'
 import type { InadimplenciaGrupoStatus } from '../services/inadimplenciaGruposIndex'
+import { fetchEscritorioEmpresaDetalhe } from '../services/escritorioService'
 import { InadimplenciaGrupoBadges } from './InadimplenciaGrupoBadges'
 import { fetchPagamentosPorPeriodo, type ParcelaRow } from '@/features/inadimplencia/services/parcelasService'
 import { Briefcase, Clock, Building2, Banknote, Loader2, CalendarRange, ChevronDown } from 'lucide-react'
@@ -154,13 +155,20 @@ export function ClienteEscritorioDetailSheet({
     enabled: open && !!cliente && periodoValido,
   })
 
+  const { data: empresaDetalhe } = useQuery({
+    queryKey: ['escritorio', 'empresa-detalhe', cliente?.id],
+    queryFn: () => fetchEscritorioEmpresaDetalhe(cliente!.id),
+    enabled: open && !!cliente?.id,
+    staleTime: 5 * 60 * 1000,
+  })
+
   if (!cliente) return null
 
   const processos = Number(cliente.qtd_processos) || 0
   const horas = Number(cliente.horas_total) || 0
   const grupo = cliente.grupo_cliente?.trim() || null
   const grupoLink = grupo ?? cliente.nome
-  const horasPorAno = cliente.horas_por_ano ?? {}
+  const horasPorAno = empresaDetalhe?.horas_por_ano ?? cliente.horas_por_ano ?? {}
   const hasInadimplencia = !!(inadimplencia?.ativa || inadimplencia?.resolvida)
   const totalPago = pagamentos?.totalPago ?? 0
   const parcelasPagas = pagamentos?.parcelas ?? []
