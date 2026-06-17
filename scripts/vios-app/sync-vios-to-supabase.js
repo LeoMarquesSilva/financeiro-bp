@@ -1221,13 +1221,124 @@ function normalizarColuna(h) {
     .replace(/\p{Diacritic}/gu, '')
     .trim();
 }
+
+const POESSOAS_CSV_FINANCEIRO_MARKERS = [
+  'ci item',
+  'ci - item',
+  'ci titulo',
+  'ci - titulo',
+  'ci parcela',
+  'data cadastro titulo',
+  'data cadastro - titulo',
+  'data de competencia',
+  'fornecedor / cliente',
+  'fornecedor cliente',
+  'plano de contas',
+  'grupo da conta',
+  'valor item',
+  'valor - item',
+  'valor fluxo item',
+  'situacao titulo',
+  'situacao - titulo',
+  'valor parcial em aberto',
+  'data vencimento',
+  'data pagamento',
+  'data baixa',
+];
+
+function compactPessoasHeader(normalizedHeader) {
+  return normalizedHeader.replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function headerMatchesMarker(normalizedHeader, marker) {
+  const h = compactPessoasHeader(normalizedHeader);
+  const m = compactPessoasHeader(marker);
+  return h.includes(m);
+}
+
+/**
+ * Rejeita CSV de relatório financeiro (parcelas/itens) antes de gravar em pessoas.
+ * @param {string[]} headerRow
+ */
+export function validatePessoasCsvHeader(headerRow) {
+  const normalized = headerRow.map(normalizarColuna);
+
+  for (let i = 0; i < normalized.length; i++) {
+    const h = normalized[i];
+    if (!h) continue;
+    for (const marker of POESSOAS_CSV_FINANCEIRO_MARKERS) {
+      if (headerMatchesMarker(h, marker)) {
+        throw new Error(
+          `CSV inválido para pessoas: coluna [${i}] "${headerRow[i]}" indica relatório financeiro. ` +
+            'Use runSyncRelatorioFinanceiro ou runSyncRelatorioFinanceiroItens.'
+        );
+      }
+    }
+  }
+
+  const nomeIdx = normalized.findIndex(
+    (h) =>
+      h === 'nome' ||
+      h === 'razao social' ||
+      h.includes('razao social') ||
+      (h.startsWith('nome') && !h.includes('fantasia') && !h.includes('apelido'))
+  );
+  if (nomeIdx < 0) {
+    throw new Error(
+      'Relatório de pessoas: coluna "Nome" não encontrada no cabeçalho. ' +
+        `Cabeçalho: ${headerRow.slice(0, 8).join('; ')}`
+    );
+  }
+
+  const col3 = normalized[3] || '';
+  if (col3.includes('data cadastro') || col3.includes('data de competencia') || col3.includes('nro titulo')) {
+    throw new Error(
+      `CSV inválido para pessoas: coluna 4 (índice 3) é "${headerRow[3]}", esperado "Nome". ` +
+        'O arquivo parece ser relatório financeiro.'
+    );
+  }
+
+  return { nomeIdx };
+}
+
+function assertPessoasRowsNotFinanceiro(rows) {
+  const sample = rows.slice(0, Math.min(rows.length, 200));
+  if (sample.length < 5) return;
+
+  const dateNamePattern = /^\d{2}\/\d{2}\/\d{4}$/;
+  let dateNames = 0;
+  let financeTipo = 0;
+  let accountingGroups = 0;
+  const accountingGroupMarkers = [
+    'RECEITAS OPERACIONAIS',
+    'RECEITAS FINANCEIRAS',
+    'RECEITAS NÃO OPERACIONAIS',
+    'COMISSÕES SOBRE VENDAS',
+    'DISTRIBUIÇÃO DE LUCROS',
+  ];
+
+  for (const r of sample) {
+    if (dateNamePattern.test(r.nome ?? '')) dateNames++;
+    if (r.tipo === 'RECEBER' || r.tipo === 'PAGAR') financeTipo++;
+    if (accountingGroupMarkers.some((g) => (r.grupo_cliente ?? '').toUpperCase().includes(g))) accountingGroups++;
+  }
+
+  const ratio = sample.length;
+  if (dateNames / ratio > 0.3 || financeTipo / ratio > 0.3 || accountingGroups / ratio > 0.3) {
+    throw new Error(
+      'CSV rejeitado: amostra parece relatório financeiro (nomes em formato data, tipo RECEBER/PAGAR ou grupo de conta contábil). ' +
+        'Confirme que baixou o Relatório de Clientes do VIOS, não o relatório de parcelas/itens.'
+    );
+  }
+}
  
 /**
  * Mapeia cabeçalho do relatório de pessoas/clientes (RelatorioPessoas) para índices.
- * Posições fixas: Coluna 1 = CI (índice 0), Coluna 4 = Nome (índice 3).
+ * CI e Nome são detectados pelo cabeçalho; fallback legado: col 0 = CI, col 3 = Nome.
  * Demais colunas detectadas por nome normalizado.
  */
 function buildPessoasColumnIndexes(headerRow) {
+  const normalized = headerRow.map(normalizarColuna);
   const map = {
     etiquetas: ['etiquetas'],
     cpf_cnpj: ['cpf/cnpj', 'cpf_cnpj', 'cpf', 'cnpj', 'documento', 'doc'],
@@ -1245,7 +1356,15 @@ function buildPessoasColumnIndexes(headerRow) {
     responsaveis: ['responsáveis', 'responsaveis'],
     telefone: ['telefone'],
     email: ['e-mail', 'email'],
-    grupo_cliente: ['grupo cliente', 'grupo_cliente', 'grupo do cliente', 'grupo', 'grupo de clientes', 'grupo clientes', 'grupo economico', 'grupo empresarial'],
+    grupo_cliente: [
+      'grupo cliente',
+      'grupo_cliente',
+      'grupo do cliente',
+      'grupo de clientes',
+      'grupo clientes',
+      'grupo economico',
+      'grupo empresarial',
+    ],
     categoria: ['categoria', 'categorias'],
     contato_1: ['contato 1', 'contato_1'],
     facebook: ['facebook'],
@@ -1253,8 +1372,26 @@ function buildPessoasColumnIndexes(headerRow) {
     linkedin: ['linkedin'],
     site: ['site'],
   };
-  const idx = { ci: 0, nome: 3 };
+
+  const idx = { ci: -1, nome: -1 };
   for (const key of Object.keys(map)) idx[key] = -1;
+
+  const ciIdx = normalized.findIndex(
+    (h) => h === 'ci' || (h.startsWith('ci') && !h.includes('item') && !h.includes('titulo') && !h.includes('parcela'))
+  );
+  if (ciIdx >= 0) idx.ci = ciIdx;
+  else if (normalized[0] === 'ci') idx.ci = 0;
+
+  const nomeIdx = normalized.findIndex(
+    (h) =>
+      h === 'nome' ||
+      h === 'razao social' ||
+      h.includes('razao social') ||
+      (h.startsWith('nome') && !h.includes('fantasia') && !h.includes('apelido'))
+  );
+  if (nomeIdx >= 0) idx.nome = nomeIdx;
+  else if (normalized[3] && !normalized[3].includes('data cadastro')) idx.nome = 3;
+
   headerRow.forEach((h, i) => {
     const n = normalizarColuna(h);
     if (!n) return;
@@ -1262,6 +1399,8 @@ function buildPessoasColumnIndexes(headerRow) {
       if (aliases.some((k) => n.includes(k) || k.includes(n))) idx[key] = i;
     }
   });
+
+  if (idx.ci < 0) idx.ci = 0;
   return idx;
 }
 
@@ -1360,17 +1499,22 @@ export async function runSyncPessoas(filePathOrCsvContent) {
     throw new Error('Erro ao abrir/processar o relatório de pessoas: ' + err.message);
   }
  
+  validatePessoasCsvHeader(headerRow);
+
   const idx = buildPessoasColumnIndexes(headerRow);
   if (idx.nome < 0) {
     console.error('[Sync Supabase] Cabeçalhos (normalizados):', headerRow.map((h, i) => `[${i}]${normalizarColuna(h)}`).join(' | '));
     throw new Error('Relatório de pessoas: coluna "Nome" (ou Cliente/Razão Social) não encontrada. Verifique o cabeçalho do CSV.');
   }
+  console.log('[Sync Supabase] Colunas pessoas: ci=[' + idx.ci + '] nome=[' + idx.nome + ']');
  
   const rows = [];
   for (const row of dataRows) {
     const obj = getPessoasRow(row, idx);
     if (obj) rows.push(obj);
   }
+
+  assertPessoasRowsNotFinanceiro(rows);
 
   // Uma linha por CI: evita "ON CONFLICT DO UPDATE cannot affect row a second time" no mesmo lote.
   const byKey = new Map();

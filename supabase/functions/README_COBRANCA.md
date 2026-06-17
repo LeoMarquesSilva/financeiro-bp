@@ -83,7 +83,7 @@ supabase secrets set \
 Aponte o webhook da instância para a função `whatsapp-webhook`, incluindo o secret:
 
 ```
-URL: https://wvbptgcevwvubtnetojz.functions.supabase.co/whatsapp-webhook?secret=<WHATSAPP_WEBHOOK_SECRET>
+URL: https://pzfxmlidwdmsqfwrxdbd.supabase.co/functions/v1/whatsapp-webhook?secret=<WHATSAPP_WEBHOOK_SECRET>
 Eventos: MESSAGES_UPSERT, MESSAGES_UPDATE, CHATS_UPSERT, CHATS_UPDATE, SEND_MESSAGE
 ```
 
@@ -96,7 +96,7 @@ curl -X POST "$EVOLUTION_API_URL/webhook/set/FINANCEIRO%20-%20BP" \
   -d '{
     "webhook": {
       "enabled": true,
-      "url": "https://wvbptgcevwvubtnetojz.functions.supabase.co/whatsapp-webhook?secret=<WHATSAPP_WEBHOOK_SECRET>",
+      "url": "https://pzfxmlidwdmsqfwrxdbd.supabase.co/functions/v1/whatsapp-webhook?secret=<WHATSAPP_WEBHOOK_SECRET>",
       "events": ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CHATS_UPSERT", "CHATS_UPDATE", "SEND_MESSAGE"]
     }
   }'
