@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import { parseEdgeFunctionError, phoneKey, phonesMatch } from '../utils/phone'
+import { parseEdgeFunctionError, normalizePhone, phoneKey, phonesMatch } from '../utils/phone'
 import { parsePhoneForStorage } from '../utils/phoneMask'
 import { isInternalContactName, pickContactLabel } from '../utils/contactNames'
 import type {
@@ -9,6 +9,15 @@ import type {
   CobrancaKpiRow,
 } from '@/lib/database.types'
 import type { PessoaTelefoneWhatsapp, PessoaTelefoneWhatsappInput, PessoaTelefoneMatch } from '../types/cobranca.types'
+
+function normalizeTelefoneForStorage(raw: string): string | null {
+  return parsePhoneForStorage(raw) ?? normalizePhone(raw)
+}
+
+function isTelefoneStorable(raw: string): boolean {
+  const tel = normalizeTelefoneForStorage(raw)
+  return !!tel && tel.length >= 8 && tel.length <= 15
+}
 
 /** Subconjunto de colunas do painel usado no dashboard de indicadores. */
 export type CobrancaPainelKpiRow = Pick<
@@ -534,8 +543,8 @@ export const cobrancaService = {
   ): Promise<void> {
     const rows = telefones
       .map((t, idx) => {
-        const tel = parsePhoneForStorage(t.telefone) ?? t.telefone.replace(/\D/g, '')
-        if (!tel || tel.length < 12) return null
+        const tel = normalizeTelefoneForStorage(t.telefone)
+        if (!tel || !isTelefoneStorable(t.telefone)) return null
         return {
           id: t.id,
           pessoa_id,
@@ -578,9 +587,8 @@ export const cobrancaService = {
     pessoa_id: string,
     input: { nome: string; telefone: string },
   ): Promise<PessoaTelefoneWhatsapp | null> {
-    const tel =
-      parsePhoneForStorage(input.telefone) ?? input.telefone.replace(/\D/g, '')
-    if (!tel || tel.length < 12) return null
+    const tel = normalizeTelefoneForStorage(input.telefone)
+    if (!tel || !isTelefoneStorable(input.telefone)) return null
 
     const existentes = await this.listTelefonesWhatsapp(pessoa_id)
     const dup = existentes.find((t) => phonesMatch(t.telefone, tel))
@@ -741,8 +749,12 @@ export const cobrancaService = {
   },
 
   async enviarWhatsapp(itens: EnvioItemWhatsapp[], created_by?: string | null): Promise<EnvioResult> {
+    const itensNormalizados = itens.map((item) => ({
+      ...item,
+      number: normalizePhone(item.number) ?? item.number,
+    }))
     const { data, error } = await supabase.functions.invoke('cobranca-enviar-whatsapp', {
-      body: { itens, created_by },
+      body: { itens: itensNormalizados, created_by },
     })
     if (error) {
       throw new Error(await parseEdgeFunctionError(error))
@@ -780,7 +792,12 @@ export const cobrancaService = {
     }
 
     const tryEdge = await supabase.functions.invoke('cobranca-enviar-whatsapp-grupo', {
-      body: { ...payload, parcela_ids, created_by },
+      body: {
+        ...payload,
+        parcela_ids,
+        number: normalizePhone(payload.number) ?? payload.number,
+        created_by,
+      },
     })
 
     if (!tryEdge.error && tryEdge.data) {
@@ -789,7 +806,10 @@ export const cobrancaService = {
 
     // Fallback: envia 1 mensagem via gateway WhatsApp e registra eventos por parcela.
     const { error: sendError } = await supabase.functions.invoke('whatsapp-send', {
-      body: { number: payload.number, text: payload.mensagem },
+      body: {
+        number: normalizePhone(payload.number) ?? payload.number,
+        text: payload.mensagem,
+      },
     })
     if (sendError) {
       throw new Error(await parseEdgeFunctionError(sendError))

@@ -1,13 +1,48 @@
-/** Normaliza telefone BR para dígitos com DDI 55 (formato Evolution). */
+import { parsePhoneForStorage, parsePhoneDigits, isPlausiblePhoneDigits } from './phoneMask'
+
+/**
+ * Normaliza telefone para dígitos E.164 (sem +), formato Evolution/WhatsApp.
+ * BR local recebe DDI 55; internacional mantém o DDI informado.
+ */
 export function normalizePhone(raw: string | null | undefined): string | null {
-  if (!raw) return null
-  let digits = String(raw).replace(/\D/g, '')
-  if (digits.length === 0) return null
-  digits = digits.replace(/^0+/, '')
-  if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
-    digits = '55' + digits
+  if (!raw?.trim()) return null
+  const stored = parsePhoneForStorage(raw)
+  if (stored) return stored
+  const digits = parsePhoneDigits(raw)
+  if (digits.length >= 8 && digits.length <= 15 && isPlausiblePhoneDigits(digits)) {
+    return digits
   }
-  return digits.length >= 10 ? digits : null
+  return null
+}
+
+function brazilPhoneKey(digits: string): string | null {
+  let d = digits
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2)
+  if (d.length < 8) return null
+  if (d.length >= 10) return d.slice(0, 2) + d.slice(-8)
+  return d.slice(-8)
+}
+
+/**
+ * Chave comparável: BR usa DDD+8 dígitos (9º dígito); internacional usa E.164 completo.
+ */
+export function phoneKey(raw: string | null | undefined): string | null {
+  const n = normalizePhone(raw)
+  if (!n) return null
+  if (n.startsWith('55')) return brazilPhoneKey(n)
+  return n
+}
+
+/** Compara telefones normalizados (BR tolerante ao 9º dígito). */
+export function phonesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizePhone(a)
+  const nb = normalizePhone(b)
+  if (!na || !nb) return false
+  if (na === nb) return true
+  if (na.startsWith('55') && nb.startsWith('55')) {
+    return brazilPhoneKey(na) === brazilPhoneKey(nb)
+  }
+  return false
 }
 
 /** Converte telefone normalizado para remoteJid do WhatsApp. */
@@ -24,29 +59,6 @@ export function canonicalJid(jid: string): string {
   const [user, domain] = jid.split('@')
   const base = (user ?? '').split(':')[0]
   return domain ? `${base}@${domain}` : base
-}
-
-/**
- * Gera uma chave comparável de telefone: DDD + 8 últimos dígitos.
- * Resolve as diferenças entre o WhatsApp (com DDI 55, sem 9º dígito) e os
- * telefones cadastrados (sem DDI, com/sem 9º dígito). Retorna null se inválido.
- */
-export function phoneKey(raw: string | null | undefined): string | null {
-  let d = String(raw ?? '').replace(/\D/g, '')
-  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2)
-  if (d.length < 8) return null
-  if (d.length >= 10) {
-    const ddd = d.slice(0, 2)
-    return ddd + d.slice(-8)
-  }
-  return d.slice(-8)
-}
-
-/** Compara dois telefones por DDD + 8 últimos dígitos (tolerante a DDI/9º dígito). */
-export function phonesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
-  const ka = phoneKey(a)
-  const kb = phoneKey(b)
-  return !!ka && ka === kb
 }
 
 /** Extrai mensagem de erro legível de invoke de Edge Function. */

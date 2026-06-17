@@ -11,6 +11,7 @@ import {
   enrichOutgoingRawWithQuote,
   type EvolutionQuoted,
 } from '../_shared/whatsappMessageUtils.ts'
+import { normalizePhone } from '../_shared/phoneNormalize.ts'
 
 // Tempo de "digitando" (presença) antes de enviar — deixa o envio mais natural
 // e reduz risco de bloqueio anti-spam do WhatsApp.
@@ -32,20 +33,6 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
-}
-
-function normalizePhone(raw: string | null | undefined): string | null {
-  if (!raw) return null
-  let digits = String(raw).replace(/\D/g, '')
-  if (digits.length === 0) return null
-  digits = digits.replace(/^0+/, '')
-  // DDD + número (10 ou 11 dígitos) → acrescenta o código do país.
-  // Não usar startsWith('55'): DDD 55 (RS) colide com o código do Brasil.
-  // Números já com país têm 12 (55+10) ou 13 (55+11) dígitos.
-  if (digits.length === 10 || digits.length === 11) {
-    digits = '55' + digits
-  }
-  return digits || null
 }
 
 function stripBase64Prefix(data: string): string {

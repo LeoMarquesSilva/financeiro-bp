@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Plus, Trash2 } from 'lucide-react'
 import { cobrancaService } from '../services/cobrancaService'
-import { formatPhoneMasked, maskPhoneOnChange } from '../utils/phoneMask'
+import { PhoneInputCountry } from './PhoneInputCountry'
 import { toast } from 'sonner'
 import type { CobrancaPainelRow } from '@/lib/database.types'
 import type { PessoaTelefoneWhatsappInput } from '../types/cobranca.types'
@@ -41,7 +41,7 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
             key: t.id,
             id: t.id,
             nome: t.nome,
-            telefone: formatPhoneMasked(t.telefone),
+            telefone: t.telefone,
           })),
         )
       } else if (row.pessoa_telefone?.trim()) {
@@ -49,7 +49,7 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
           {
             key: 'legacy',
             nome: row.pessoa_nome?.trim() || 'Principal',
-            telefone: formatPhoneMasked(row.pessoa_telefone),
+            telefone: row.pessoa_telefone,
           },
         ])
       } else {
@@ -134,29 +134,17 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
               {telefones.map((t) => (
                 <div
                   key={t.key}
-                  className="grid gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1fr_1fr_auto]"
+                  className="grid gap-3 rounded-lg border border-slate-200 p-3"
                 >
-                  <div className="space-y-1">
-                    <Label className="text-xs">Nome</Label>
-                    <Input
-                      value={t.nome}
-                      onChange={(e) => updateTelefone(t.key, { nome: e.target.value })}
-                      placeholder="Ex.: Juliana (Financeiro)"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Telefone</Label>
-                    <Input
-                      type="tel"
-                      inputMode="tel"
-                      value={t.telefone}
-                      onChange={(e) =>
-                        updateTelefone(t.key, { telefone: maskPhoneOnChange(e.target.value) })
-                      }
-                      placeholder="+55 (11) 99999-9999 ou +351 912 345 678"
-                    />
-                  </div>
-                  <div className="flex items-end justify-end">
+                  <div className="flex items-end gap-2">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <Label className="text-xs">Nome</Label>
+                      <Input
+                        value={t.nome}
+                        onChange={(e) => updateTelefone(t.key, { nome: e.target.value })}
+                        placeholder="Ex.: Juliana (Financeiro)"
+                      />
+                    </div>
                     <Button
                       type="button"
                       variant="ghost"
@@ -167,6 +155,14 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
                     >
                       <Trash2 className="h-4 w-4 text-slate-400" />
                     </Button>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Telefone</Label>
+                    <PhoneInputCountry
+                      value={t.telefone}
+                      disabled={saving}
+                      onChange={(telefone) => updateTelefone(t.key, { telefone })}
+                    />
                   </div>
                 </div>
               ))}

@@ -1,3 +1,5 @@
+import { isValidPhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js'
+
 /** DDD + número (celular 9 dígitos ou fixo 8), sem DDI. */
 const MAX_LOCAL_DIGITS = 11
 const MIN_LOCAL_DIGITS = 10
@@ -16,10 +18,21 @@ function isBrazilWithDdi(d: string): boolean {
   return d.startsWith('55') && d.length >= 12 && d.length <= 13
 }
 
-/** Telefone plausível: BR local/com DDI ou internacional (E.164). */
+function toE164(raw: string): string {
+  const d = parsePhoneDigits(raw)
+  return d ? `+${d}` : ''
+}
+
+/** Telefone plausível: validação libphonenumber ou fallback heurístico. */
 export function isPlausiblePhoneDigits(raw: string | null | undefined): boolean {
+  const e164 = toE164(raw ?? '')
+  if (!e164) return false
+  try {
+    if (isValidPhoneNumber(e164)) return true
+  } catch {
+    // fallback abaixo
+  }
   const d = parsePhoneDigits(raw ?? '')
-  if (!d) return false
   if (isBrazilLocalDigits(d)) return true
   if (isBrazilWithDdi(d)) return true
   return d.length >= MIN_E164_DIGITS && d.length <= MAX_E164_DIGITS
@@ -47,7 +60,6 @@ function formatBrazilWithDdi(digits: string): string {
 
 /**
  * Extrai só a parte local BR (DDD + número), removendo DDI 55 quando presente.
- * Usado apenas para entrada no formato brasileiro sem prefixo internacional.
  */
 export function extractLocalDigits(raw: string | null | undefined): string {
   let d = parsePhoneDigits(raw ?? '')
@@ -66,23 +78,24 @@ export function extractLocalDigits(raw: string | null | undefined): string {
   return d
 }
 
-/**
- * Formata para exibição. BR recebe máscara (+55 (DD) NNNNN-NNNN); demais países, +DDI dígitos.
- */
+/** Formata para exibição (internacional quando possível). */
 export function formatPhoneMasked(raw: string | null | undefined): string {
   const d = parsePhoneDigits(raw ?? '')
   if (!d) return ''
 
+  try {
+    const phone = parsePhoneNumberFromString(`+${d}`)
+    if (phone) return phone.formatInternational()
+  } catch {
+    // fallback abaixo
+  }
+
   if (isBrazilWithDdi(d)) return formatBrazilWithDdi(d)
-
   if (isBrazilLocalDigits(d)) return formatBrazilLocalDigits(d)
-
   return `+${d}`
 }
 
-/**
- * Formata dígitos de JID WhatsApp usando DDD nas posições 2–3 após o DDI quando BR.
- */
+/** Formata dígitos de JID WhatsApp. */
 export function formatPhoneFromWhatsappDigits(raw: string | null | undefined): string {
   const d = parsePhoneDigits(raw ?? '')
   if (!d || !isPlausiblePhoneDigits(d)) return ''
@@ -94,46 +107,23 @@ export function formatPhoneFromWhatsappDigits(raw: string | null | undefined): s
   return formatPhoneMasked(d)
 }
 
-function maskBrazilOnChange(value: string): string {
-  const local = extractLocalDigits(value)
-  if (!local) {
-    const digits = parsePhoneDigits(value)
-    if (digits === '55' || digits === '5') return '+55 '
-    return ''
-  }
-  return formatBrazilLocalDigits(local)
-}
-
-function maskInternationalOnChange(value: string): string {
-  const digits = parsePhoneDigits(value)
-  if (!digits) return value.trimStart().startsWith('+') ? '+' : ''
-
-  if (digits.startsWith('55') && digits.length <= 13) {
-    const brMasked = maskBrazilOnChange(`+${digits}`)
-    if (brMasked) return brMasked
-  }
-
-  return `+${digits}`
-}
-
-/** Aplica máscara durante a digitação (BR ou internacional). */
+/** @deprecated Use PhoneInputCountry — mantido para compatibilidade pontual. */
 export function maskPhoneOnChange(value: string): string {
-  const trimmed = value.trimStart()
-
-  if (trimmed.startsWith('+') || parsePhoneDigits(value).length > MAX_LOCAL_DIGITS) {
-    return maskInternationalOnChange(value)
-  }
-
-  return maskBrazilOnChange(value)
+  return formatPhoneMasked(value)
 }
 
-/**
- * Valor para persistência: dígitos com DDI.
- * BR local (10–11 dígitos) recebe prefixo 55; demais países mantêm o DDI informado.
- */
-export function parsePhoneForStorage(masked: string): string | null {
-  const digits = parsePhoneDigits(masked)
+/** Valor para persistência: dígitos com DDI (E.164 sem +). */
+export function parsePhoneForStorage(raw: string): string | null {
+  const digits = parsePhoneDigits(raw)
   if (!digits) return null
+
+  const e164 = `+${digits}`
+  try {
+    const phone = parsePhoneNumberFromString(e164)
+    if (phone?.isValid()) return phone.number.replace('+', '')
+  } catch {
+    // fallback abaixo
+  }
 
   if (isBrazilLocalDigits(digits)) return `55${digits}`
 
