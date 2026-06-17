@@ -1,53 +1,25 @@
-import { parsePhoneForStorage, parsePhoneDigits, isPlausiblePhoneDigits } from './phoneMask'
+import {
+  normalizePhoneE164,
+  phoneKeyFromE164,
+  phonesMatchE164,
+} from './normalizePhoneE164'
 
-/**
- * Normaliza telefone para dígitos E.164 (sem +), formato Evolution/WhatsApp.
- * BR local recebe DDI 55; internacional mantém o DDI informado.
- */
+/** @alias normalizePhoneE164 */
 export function normalizePhone(raw: string | null | undefined): string | null {
-  if (!raw?.trim()) return null
-  const stored = parsePhoneForStorage(raw)
-  if (stored) return stored
-  const digits = parsePhoneDigits(raw)
-  if (digits.length >= 8 && digits.length <= 15 && isPlausiblePhoneDigits(digits)) {
-    return digits
-  }
-  return null
+  return normalizePhoneE164(raw)
 }
 
-function brazilPhoneKey(digits: string): string | null {
-  let d = digits
-  if (d.startsWith('55') && d.length >= 12) d = d.slice(2)
-  if (d.length < 8) return null
-  if (d.length >= 10) return d.slice(0, 2) + d.slice(-8)
-  return d.slice(-8)
-}
-
-/**
- * Chave comparável: BR usa DDD+8 dígitos (9º dígito); internacional usa E.164 completo.
- */
 export function phoneKey(raw: string | null | undefined): string | null {
-  const n = normalizePhone(raw)
-  if (!n) return null
-  if (n.startsWith('55')) return brazilPhoneKey(n)
-  return n
+  return phoneKeyFromE164(raw)
 }
 
-/** Compara telefones normalizados (BR tolerante ao 9º dígito). */
 export function phonesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
-  const na = normalizePhone(a)
-  const nb = normalizePhone(b)
-  if (!na || !nb) return false
-  if (na === nb) return true
-  if (na.startsWith('55') && nb.startsWith('55')) {
-    return brazilPhoneKey(na) === brazilPhoneKey(nb)
-  }
-  return false
+  return phonesMatchE164(a, b)
 }
 
 /** Converte telefone normalizado para remoteJid do WhatsApp. */
 export function phoneToRemoteJid(phone: string): string {
-  const n = normalizePhone(phone)
+  const n = normalizePhoneE164(phone)
   return n ? `${n}@s.whatsapp.net` : ''
 }
 

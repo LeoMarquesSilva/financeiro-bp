@@ -1,4 +1,4 @@
-import { parsePhoneNumberFromString } from 'npm:libphonenumber-js@1.12.9'
+import { parsePhoneNumberFromString } from 'libphonenumber-js'
 
 function cleanDigits(raw: string): string {
   return raw.replace(/\D/g, '').replace(/^0+/, '')
@@ -19,7 +19,7 @@ function tryParseE164Digits(digits: string): string | null {
  * Normaliza para E.164 sem "+" (ex.: 34656349183, 5511999998888).
  * Tenta internacional antes de forçar BR; repara 55 colado em DDI estrangeiro.
  */
-export function normalizePhone(raw: string | null | undefined): string | null {
+export function normalizePhoneE164(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null
   const digits = cleanDigits(raw)
   if (!digits) return null
@@ -30,6 +30,7 @@ export function normalizePhone(raw: string | null | undefined): string | null {
     candidates.push(`55${digits}`)
   }
 
+  // Repara ex.: 5534656349183 → 34656349183 (55 + Espanha +34…)
   if (digits.startsWith('55') && digits.length > 2) {
     candidates.push(digits.slice(2))
   }
@@ -54,16 +55,16 @@ function brazilPhoneKey(digits: string): string | null {
   return d.slice(-8)
 }
 
-export function phoneKey(raw: string | null | undefined): string | null {
-  const n = normalizePhone(raw)
+export function phoneKeyFromE164(raw: string | null | undefined): string | null {
+  const n = normalizePhoneE164(raw)
   if (!n) return null
   if (n.startsWith('55')) return brazilPhoneKey(n)
   return n
 }
 
-export function phonesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
-  const na = normalizePhone(a)
-  const nb = normalizePhone(b)
+export function phonesMatchE164(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizePhoneE164(a)
+  const nb = normalizePhoneE164(b)
   if (!na || !nb) return false
   if (na === nb) return true
   if (na.startsWith('55') && nb.startsWith('55')) {

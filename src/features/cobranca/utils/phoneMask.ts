@@ -1,4 +1,5 @@
 import { isValidPhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js'
+import { normalizePhoneE164 } from './normalizePhoneE164'
 
 /** DDD + número (celular 9 dígitos ou fixo 8), sem DDI. */
 const MAX_LOCAL_DIGITS = 11
@@ -114,22 +115,5 @@ export function maskPhoneOnChange(value: string): string {
 
 /** Valor para persistência: dígitos com DDI (E.164 sem +). */
 export function parsePhoneForStorage(raw: string): string | null {
-  const digits = parsePhoneDigits(raw)
-  if (!digits) return null
-
-  const e164 = `+${digits}`
-  try {
-    const phone = parsePhoneNumberFromString(e164)
-    if (phone?.isValid()) return phone.number.replace('+', '')
-  } catch {
-    // fallback abaixo
-  }
-
-  if (isBrazilLocalDigits(digits)) return `55${digits}`
-
-  if (digits.length >= MIN_E164_DIGITS && digits.length <= MAX_E164_DIGITS) {
-    return digits
-  }
-
-  return null
+  return normalizePhoneE164(raw)
 }
