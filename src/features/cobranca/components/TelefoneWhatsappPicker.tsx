@@ -104,7 +104,7 @@ export const TelefoneWhatsappPicker = forwardRef<TelefoneWhatsappPickerHandle, P
             if (e.target.value === NEW_OPTION) {
               setMode('new')
               setNewNome('')
-              setNewTelefone('+55 ')
+              setNewTelefone('')
               return
             }
             setMode('select')
@@ -143,10 +143,7 @@ export const TelefoneWhatsappPicker = forwardRef<TelefoneWhatsappPickerHandle, P
                 value={newTelefone}
                 disabled={disabled}
                 onChange={(e) => setNewTelefone(maskPhoneOnChange(e.target.value))}
-                onFocus={() => {
-                  if (!newTelefone.trim()) setNewTelefone('+55 ')
-                }}
-                placeholder="+55 (11) 99999-9999"
+                placeholder="+55 (11) 99999-9999 ou +351 912 345 678"
               />
             </div>
             <Button

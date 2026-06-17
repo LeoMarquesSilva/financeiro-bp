@@ -153,10 +153,7 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
                       onChange={(e) =>
                         updateTelefone(t.key, { telefone: maskPhoneOnChange(e.target.value) })
                       }
-                      onFocus={() => {
-                        if (!t.telefone.trim()) updateTelefone(t.key, { telefone: '+55 ' })
-                      }}
-                      placeholder="+55 (11) 99999-9999"
+                      placeholder="+55 (11) 99999-9999 ou +351 912 345 678"
                     />
                   </div>
                   <div className="flex items-end justify-end">
