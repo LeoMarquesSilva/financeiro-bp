@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   MessageCircle,
+  Mail,
   Pencil,
   Archive,
   Phone,
@@ -31,6 +32,7 @@ interface Props {
   onToggle: (id: string) => void
   onToggleAll: () => void
   onCobrarGrupo: (rows: CobrancaPainelRow[]) => void
+  onCobrarEmail: (rows: CobrancaPainelRow[]) => void
   onEditContato: (row: CobrancaPainelRow) => void
   onArquivar: (row: CobrancaPainelRow) => void
   /** Abre a conversa WhatsApp da cobrança já enviada. */
@@ -60,6 +62,7 @@ export function CobrancaTable({
   onToggle,
   onToggleAll,
   onCobrarGrupo,
+  onCobrarEmail,
   onEditContato,
   onArquivar,
   onVerConversa,
@@ -218,6 +221,16 @@ export function CobrancaTable({
               </Button>
             )}
             <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1 text-[11px]"
+              title="Cobrar por e-mail (não contabiliza nos indicadores D+1)"
+              onClick={() => onCobrarEmail([r])}
+            >
+              <Mail className="h-3.5 w-3.5" />
+              E-mail
+            </Button>
+            <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8"
@@ -349,6 +362,18 @@ export function CobrancaTable({
                       >
                         <MessageCircle className="h-3.5 w-3.5" />
                         Cobrar grupo
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1 text-[11px]"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onCobrarEmail(group.rows)
+                        }}
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        E-mail
                       </Button>
                       <span>{expanded ? 'Ocultar' : 'Expandir'}</span>
                     </div>

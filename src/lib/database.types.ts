@@ -430,6 +430,7 @@ export interface Database {
           valor_aberto: number
           valor_pago: number
           valor_em_atraso: number
+          valor_em_atraso_ativos: number
         }
         Insert: unknown
         Update: unknown
@@ -606,6 +607,7 @@ export interface Database {
           tem_email: boolean
           cobrancas_total: number
           ultima_cobranca_at: string | null
+          ultima_cobranca_canal: 'whatsapp' | 'email' | null
           concluido: boolean
         }
         Insert: unknown
@@ -635,6 +637,7 @@ export interface Database {
           tem_email: boolean
           cobrancas_total: number
           ultima_cobranca_at: string | null
+          ultima_cobranca_canal: 'whatsapp' | 'email' | null
           arquivado: boolean
         }
         Insert: unknown

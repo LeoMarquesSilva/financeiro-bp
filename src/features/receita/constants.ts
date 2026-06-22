@@ -24,8 +24,36 @@ export const MESES_ABREV = [
   'dez',
 ] as const
 
+export const MESES_NOME = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+] as const
+
 export function mesAbrev(mes: number): string {
   return MESES_ABREV[mes - 1] ?? String(mes)
+}
+
+export function mesNome(mes: number): string {
+  return MESES_NOME[mes - 1] ?? String(mes)
+}
+
+/** Último mês encerrado disponível para o ano (ex.: em jun/2026 → 5). */
+export function mesMaxDisponivelInadimplencia(ano: number, ref = new Date()): number {
+  const y = ref.getFullYear()
+  const m = ref.getMonth() + 1
+  if (ano > y) return 0
+  if (ano < y) return 12
+  return m - 1
 }
 
 /** Paleta fixa do módulo Receita (gráfico, tabela, KPIs, formulário). */

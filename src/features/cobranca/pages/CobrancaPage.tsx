@@ -21,6 +21,7 @@ import { CobrancaDashboard } from '../components/CobrancaDashboard'
 import { EditarContatoModal } from '../components/EditarContatoModal'
 import { ConfirmarCobrancaModal } from '../components/ConfirmarCobrancaModal'
 import { CobrarGrupoModal } from '../components/CobrarGrupoModal'
+import { CobrarEmailModal } from '../components/CobrarEmailModal'
 import { WhatsappInbox } from '../components/WhatsappInbox'
 import {
   BellRing,
@@ -79,6 +80,7 @@ export function CobrancaPage() {
   const [pendingWhatsapp, setPendingWhatsapp] = useState<PendingWhatsappCobranca | null>(null)
   const [openWhatsapp, setOpenWhatsapp] = useState<OpenWhatsappConversa | null>(null)
   const [grupoParaCobrar, setGrupoParaCobrar] = useState<CobrancaPainelRow[]>([])
+  const [grupoParaEmail, setGrupoParaEmail] = useState<CobrancaPainelRow[]>([])
 
   const filtrosBase = {
     busca,
@@ -414,6 +416,7 @@ export function CobrancaPage() {
                 onToggle={toggle}
                 onToggleAll={toggleAll}
                 onCobrarGrupo={setGrupoParaCobrar}
+                onCobrarEmail={setGrupoParaEmail}
                 onEditContato={setEditRow}
                 onArquivar={handleArquivar}
                 onVerConversa={handleVerConversa}
@@ -489,6 +492,11 @@ export function CobrancaPage() {
           setSelectedIds(new Set())
           refreshPainel()
         }}
+      />
+      <CobrarEmailModal
+        open={grupoParaEmail.length > 0}
+        rows={grupoParaEmail}
+        onClose={() => setGrupoParaEmail([])}
       />
     </div>
   )

@@ -7,6 +7,7 @@ import { FinanceiroLayout } from './layouts/FinanceiroLayout'
 import { InadimplenciaPage } from '@/features/inadimplencia/pages/InadimplenciaPage'
 import { InadimplenciaDashboardPage } from '@/features/inadimplencia/pages/InadimplenciaDashboardPage'
 import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
+import { EscritorioFinanceiroDetalhePage } from '@/features/escritorio/pages/EscritorioFinanceiroDetalhePage'
 import { CobrancaPage } from '@/features/cobranca/pages/CobrancaPage'
 import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
 import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesPage'
@@ -61,6 +62,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
                 <EscritorioPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="escritorio/financeiro/:metrica"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
+                <EscritorioFinanceiroDetalhePage />
               </ProtectedRoute>
             }
           />

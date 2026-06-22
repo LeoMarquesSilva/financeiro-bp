@@ -32,6 +32,20 @@ export function formatDate(dateStr: string | null | undefined): string {
   }).format(d)
 }
 
+/** Formata data/hora ISO para exibição (DD/MM/AAAA HH:mm). */
+export function formatDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '–'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '–'
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d)
+}
+
 /** Formata o valor digitado como DD/MM/AAAA (máscara em tempo real). */
 export function formatDateInputBR(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 8)

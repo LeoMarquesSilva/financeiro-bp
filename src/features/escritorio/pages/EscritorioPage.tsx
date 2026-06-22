@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { GrupoEscritorio, FiltroFinanceiro, OrdenacaoEscritorio } from '../services/escritorioService'
 import { GRUPO_SEM_NOME } from '../services/escritorioService'
 import { GrupoEscritorioCard } from '../components/GrupoEscritorioCard'
@@ -16,8 +16,14 @@ import { useDebounce } from '@/shared/hooks/useDebounce'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent } from '@/components/ui/card'
-import { formatCurrency, parseCurrencyBr } from '@/shared/utils/format'
+import { EscritorioTotalCard } from '../components/EscritorioTotalCard'
+import {
+  METRICAS_FINANCEIRAS,
+  countGruposMetrica,
+  valorTotalMetrica,
+  type MetricaFinanceiraEscritorio,
+} from '../constants/financeiroTotais'
+import { parseCurrencyBr } from '@/shared/utils/format'
 import { Search, Building2, Loader2, RefreshCw, Filter, ArrowUpDown, AlertTriangle, CircleDollarSign, Banknote, CalendarClock, ChevronLeft, ChevronRight, Scale, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -36,6 +42,7 @@ const GRUPOS_POR_PAGINA = 12
 const DEBOUNCE_BUSCA_MS = 350
 
 export function EscritorioPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [busca, setBusca] = useState('')
   const debouncedBusca = useDebounce(busca, DEBOUNCE_BUSCA_MS)
@@ -106,6 +113,11 @@ export function EscritorioPage() {
     setPage(1)
   }, [debouncedBusca, filtroFinanceiro, filtroInadimplencia, minValor, ordenacao])
 
+  const handleOpenMetrica = (metrica: MetricaFinanceiraEscritorio) => {
+    const config = METRICAS_FINANCEIRAS.find((m) => m.id === metrica)
+    if (config) navigate(`/financeiro/escritorio/financeiro/${config.slug}`)
+  }
+
   return (
     <div className="space-y-6">
       <header>
@@ -118,45 +130,18 @@ export function EscritorioPage() {
         </p>
       </header>
 
-      {/* Cards de totais */}
-      {!loading && !error && totalCount > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-amber-200 bg-amber-50/50">
-            <CardContent className="pt-4">
-              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-amber-700">
-                <CalendarClock className="h-3.5 w-3.5" /> A vencer
-              </p>
-              <p className="mt-1 text-xl font-bold text-amber-900">{formatCurrency(totais.aVencer)}</p>
-              <p className="text-xs text-amber-600">{totais.countAVencer} grupo(s)</p>
-            </CardContent>
-          </Card>
-          <Card className="border-red-200 bg-red-50/50">
-            <CardContent className="pt-4">
-              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-red-700">
-                <AlertTriangle className="h-3.5 w-3.5" /> Em atraso
-              </p>
-              <p className="mt-1 text-xl font-bold text-red-900">{formatCurrency(totais.emAtraso)}</p>
-              <p className="text-xs text-red-600">{totais.countAtraso} grupo(s)</p>
-            </CardContent>
-          </Card>
-          <Card className="border-slate-200 bg-slate-50/50">
-            <CardContent className="pt-4">
-              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-600">
-                <CircleDollarSign className="h-3.5 w-3.5" /> Em aberto (total)
-              </p>
-              <p className="mt-1 text-xl font-bold text-slate-900">{formatCurrency(totais.emAberto)}</p>
-              <p className="text-xs text-slate-500">{totais.countAberto} grupo(s)</p>
-            </CardContent>
-          </Card>
-          <Card className="border-emerald-200 bg-emerald-50/50">
-            <CardContent className="pt-4">
-              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-emerald-700">
-                <Banknote className="h-3.5 w-3.5" /> Pago
-              </p>
-              <p className="mt-1 text-xl font-bold text-emerald-900">{formatCurrency(totais.pago)}</p>
-              <p className="text-xs text-emerald-600">{totais.countPago} grupo(s)</p>
-            </CardContent>
-          </Card>
+      {/* Cards de totais — scroll horizontal no mobile, grid no desktop */}
+      {!loading && !error && resumoAll.length > 0 && (
+        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 snap-x snap-mandatory sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3 2xl:grid-cols-5">
+          {METRICAS_FINANCEIRAS.map((config) => (
+            <EscritorioTotalCard
+              key={config.id}
+              config={config}
+              valor={valorTotalMetrica(totais, config.id)}
+              countGrupos={countGruposMetrica(totais, config.id)}
+              onClick={() => handleOpenMetrica(config.id)}
+            />
+          ))}
         </div>
       )}
 
