@@ -146,7 +146,10 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   const primeiroMes = dashboard.evolucao[0]
   const ultimoMes = dashboard.evolucao[dashboard.evolucao.length - 1]
   const mesDetalheRow = mesDetalhe != null ? dashboard.evolucao.find((m) => m.mes === mesDetalhe) : null
-  const mesDetalheBase = mesDetalhe != null && data ? data.evolucao.find((m) => m.mes === mesDetalhe) : null
+  const mesDetalheBase =
+    mesDetalhe != null && data
+      ? data.evolucao.find((m: ReceitaInadimplenciaEvolucaoMes) => m.mes === mesDetalhe)
+      : null
 
   return (
     <section className="space-y-5">
