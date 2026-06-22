@@ -300,12 +300,83 @@ export function WhatsappInbox({
   }, [chatsRaw, filtroCategoria])
   const nomesPorTelefone = useContatoNomes()
   const lidIndex = useLidContactIndex()
-  const { mensagens, loading: loadingMsgs, refetch: refetchMsgs } = useWhatsappConversa(
+  const { mensagens: mensagensRecentes, loading: loadingMsgs, refetch: refetchMsgs } = useWhatsappConversa(
     selected?.remote_jid ?? null,
   )
+  const [mensagensAntigas, setMensagensAntigas] = useState<WhatsappMensagemRow[]>([])
+  const [hasMoreAntigas, setHasMoreAntigas] = useState(true)
+  const [loadingAntigas, setLoadingAntigas] = useState(false)
+  const loadingAntigasRef = useRef(false)
+
+  useEffect(() => {
+    setMensagensAntigas([])
+    setHasMoreAntigas(true)
+    setLoadingAntigas(false)
+    loadingAntigasRef.current = false
+  }, [selected?.remote_jid])
+
+  const mensagens = useMemo(() => {
+    if (mensagensAntigas.length === 0) return mensagensRecentes
+    const seen = new Set<string>()
+    const merged: WhatsappMensagemRow[] = []
+    for (const m of [...mensagensAntigas, ...mensagensRecentes]) {
+      const id = m.message_id || m.id
+      if (seen.has(id)) continue
+      seen.add(id)
+      merged.push(m)
+    }
+    return merged
+  }, [mensagensAntigas, mensagensRecentes])
+
+  useEffect(() => {
+    if (!loadingMsgs && mensagensRecentes.length < 200) {
+      setHasMoreAntigas(false)
+    }
+  }, [loadingMsgs, mensagensRecentes.length, selected?.remote_jid])
   const groupJid = selected && isGroupJid(selected.remote_jid) ? selected.remote_jid : null
   const { members: groupMembersRaw, loading: loadingMembers } = useGroupParticipants(groupJid)
   const messagesScrollRef = useRef<HTMLDivElement>(null)
+
+  const carregarMensagensAntigas = useCallback(async () => {
+    if (!selected?.remote_jid || loadingAntigasRef.current || !hasMoreAntigas) return
+    const oldest = mensagens[0]?.timestamp
+    if (!oldest) return
+
+    loadingAntigasRef.current = true
+    setLoadingAntigas(true)
+    const scrollEl = messagesScrollRef.current
+    const prevHeight = scrollEl?.scrollHeight ?? 0
+
+    try {
+      const batch = await whatsappService.fetchMensagensAntigas(selected.remote_jid, oldest)
+      if (batch.length === 0) {
+        setHasMoreAntigas(false)
+        return
+      }
+      setMensagensAntigas((prev) => {
+        const seen = new Set(prev.map((m) => m.message_id || m.id))
+        const novas = batch.filter((m) => !seen.has(m.message_id || m.id))
+        return [...novas, ...prev]
+      })
+      if (batch.length < 50) setHasMoreAntigas(false)
+
+      if (scrollEl) {
+        requestAnimationFrame(() => {
+          scrollEl.scrollTop = scrollEl.scrollHeight - prevHeight
+        })
+      }
+    } finally {
+      loadingAntigasRef.current = false
+      setLoadingAntigas(false)
+    }
+  }, [selected?.remote_jid, hasMoreAntigas, mensagens])
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesScrollRef.current
+    if (!el || loadingMsgs || loadingAntigasRef.current || !hasMoreAntigas) return
+    if (el.scrollTop > 120) return
+    void carregarMensagensAntigas()
+  }, [loadingMsgs, hasMoreAntigas, carregarMensagensAntigas])
 
   const senderNames = useMemo(
     () => buildSenderNamesFromMessages(mensagens),
@@ -597,6 +668,14 @@ export function WhatsappInbox({
         .catch(() => {})
     }
     void refetchMsgs()
+    void (async () => {
+      try {
+        await whatsappService.syncConversa(chat.remote_jid, { limit: 200 })
+        await refetchMsgs()
+      } catch {
+        /* best-effort: exibe o que já está no banco */
+      }
+    })()
     if (isGroupJid(chat.remote_jid)) {
       void queryClient.invalidateQueries({
         queryKey: ['whatsapp', 'group-members', chat.remote_jid],
@@ -1126,8 +1205,12 @@ export function WhatsappInbox({
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div
                   ref={messagesScrollRef}
+                  onScroll={handleMessagesScroll}
                   className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4"
                 >
+                  {loadingAntigas && (
+                    <p className="mb-2 text-center text-xs text-slate-400">Carregando mensagens anteriores…</p>
+                  )}
                   {loadingMsgs && (
                     <p className="text-center text-sm text-slate-400">Carregando mensagens…</p>
                   )}
