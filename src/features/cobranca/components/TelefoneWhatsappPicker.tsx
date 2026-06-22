@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { cobrancaService } from '../services/cobrancaService'
 import { useTelefonesWhatsapp } from '../hooks/useTelefonesWhatsapp'
-import { formatPhoneMasked, maskPhoneOnChange, parsePhoneForStorage } from '../utils/phoneMask'
+import { formatPhoneMasked, parsePhoneForStorage } from '../utils/phoneMask'
+import { PhoneInputCountry } from './PhoneInputCountry'
 
 const NEW_OPTION = '__new__'
 
@@ -67,7 +68,7 @@ export const TelefoneWhatsappPicker = forwardRef<TelefoneWhatsappPickerHandle, P
           if (pessoaId) {
             const saved = await cobrancaService.addTelefoneWhatsapp(pessoaId, {
               nome,
-              telefone: newTelefone,
+              telefone: tel,
             })
             if (saved) return { telefone: saved.telefone, nome: saved.nome }
           }
@@ -104,7 +105,7 @@ export const TelefoneWhatsappPicker = forwardRef<TelefoneWhatsappPickerHandle, P
             if (e.target.value === NEW_OPTION) {
               setMode('new')
               setNewNome('')
-              setNewTelefone('+55 ')
+              setNewTelefone('')
               return
             }
             setMode('select')
@@ -137,16 +138,10 @@ export const TelefoneWhatsappPicker = forwardRef<TelefoneWhatsappPickerHandle, P
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Telefone (WhatsApp)</Label>
-              <Input
-                type="tel"
-                inputMode="tel"
+              <PhoneInputCountry
                 value={newTelefone}
                 disabled={disabled}
-                onChange={(e) => setNewTelefone(maskPhoneOnChange(e.target.value))}
-                onFocus={() => {
-                  if (!newTelefone.trim()) setNewTelefone('+55 ')
-                }}
-                placeholder="+55 (11) 99999-9999"
+                onChange={setNewTelefone}
               />
             </div>
             <Button

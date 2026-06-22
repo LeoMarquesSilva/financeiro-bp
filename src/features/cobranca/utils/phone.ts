@@ -1,18 +1,25 @@
-/** Normaliza telefone BR para dígitos com DDI 55 (formato Evolution). */
+import {
+  normalizePhoneE164,
+  phoneKeyFromE164,
+  phonesMatchE164,
+} from './normalizePhoneE164'
+
+/** @alias normalizePhoneE164 */
 export function normalizePhone(raw: string | null | undefined): string | null {
-  if (!raw) return null
-  let digits = String(raw).replace(/\D/g, '')
-  if (digits.length === 0) return null
-  digits = digits.replace(/^0+/, '')
-  if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) {
-    digits = '55' + digits
-  }
-  return digits.length >= 10 ? digits : null
+  return normalizePhoneE164(raw)
+}
+
+export function phoneKey(raw: string | null | undefined): string | null {
+  return phoneKeyFromE164(raw)
+}
+
+export function phonesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  return phonesMatchE164(a, b)
 }
 
 /** Converte telefone normalizado para remoteJid do WhatsApp. */
 export function phoneToRemoteJid(phone: string): string {
-  const n = normalizePhone(phone)
+  const n = normalizePhoneE164(phone)
   return n ? `${n}@s.whatsapp.net` : ''
 }
 
@@ -24,29 +31,6 @@ export function canonicalJid(jid: string): string {
   const [user, domain] = jid.split('@')
   const base = (user ?? '').split(':')[0]
   return domain ? `${base}@${domain}` : base
-}
-
-/**
- * Gera uma chave comparável de telefone: DDD + 8 últimos dígitos.
- * Resolve as diferenças entre o WhatsApp (com DDI 55, sem 9º dígito) e os
- * telefones cadastrados (sem DDI, com/sem 9º dígito). Retorna null se inválido.
- */
-export function phoneKey(raw: string | null | undefined): string | null {
-  let d = String(raw ?? '').replace(/\D/g, '')
-  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2)
-  if (d.length < 8) return null
-  if (d.length >= 10) {
-    const ddd = d.slice(0, 2)
-    return ddd + d.slice(-8)
-  }
-  return d.slice(-8)
-}
-
-/** Compara dois telefones por DDD + 8 últimos dígitos (tolerante a DDI/9º dígito). */
-export function phonesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
-  const ka = phoneKey(a)
-  const kb = phoneKey(b)
-  return !!ka && ka === kb
 }
 
 /** Extrai mensagem de erro legível de invoke de Edge Function. */

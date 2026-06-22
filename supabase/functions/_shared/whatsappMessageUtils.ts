@@ -1,5 +1,7 @@
 /** Utilitários compartilhados entre webhook, sync e send. */
 
+import { normalizePhone } from './phoneNormalize.ts'
+
 export function extractText(message: Record<string, unknown> | undefined, messageType?: string | null): string {
   if (!message) return labelForType(messageType)
   const m = message as Record<string, any>
@@ -159,11 +161,7 @@ export function isValidWhatsappRemoteJid(jid: string | null | undefined): boolea
 }
 
 function normalizePhoneDigits(raw: string): string | null {
-  let d = raw.replace(/\D/g, '')
-  if (!d) return null
-  d = d.replace(/^0+/, '')
-  if (!d.startsWith('55') && (d.length === 10 || d.length === 11)) d = '55' + d
-  return d.length >= 12 ? d : null
+  return normalizePhone(raw)
 }
 
 /** Extrai telefone canônico a partir de remoteJidAlt (Evolution/Baileys). Ignora @lid. */

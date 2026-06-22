@@ -79,12 +79,12 @@ async function main() {
   await page.click('#Pesq');
  
   console.log('1️⃣1️⃣ Aguardando link de download...');
-  const linkHandle = await page.waitForSelector(
-    "a[href*='clientes'][href$='.csv'], a[href*='rel-'][href$='.csv']",
-    { timeout: 0 }
-  );
+  const linkHandle = await page.waitForSelector("a[href*='clientes'][href$='.csv']", { timeout: 0 });
   const href = await linkHandle.getAttribute('href');
   const finalUrl = href.startsWith('http') ? href : `${config.baseUrl}/${href.replace(/^\.\//, '')}`;
+  if (!finalUrl.toLowerCase().includes('clientes')) {
+    throw new Error(`URL do CSV não parece ser relatório de clientes: ${finalUrl}`);
+  }
   console.log(`🔗 URL final do CSV: ${finalUrl}`);
  
   console.log('1️⃣2️⃣ Baixando CSV...');
@@ -127,9 +127,13 @@ async function main() {
   if (process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY) {
     console.log('1️⃣3️⃣ Sincronizando com Supabase (tabela pessoas)...');
     try {
-      const { runSyncPessoas } = await import('./sync-vios-to-supabase.js');
+      const { runSyncPessoas, validatePessoasCsvHeader } = await import('./sync-vios-to-supabase.js');
+      const headerLine = csvData.split(/\r?\n/).find((line) => line.trim());
+      const headerRow = headerLine.split(';').map((c) => c.trim().replace(/^"|"$/g, ''));
+      validatePessoasCsvHeader(headerRow);
+      console.log('✅ Cabeçalho validado: relatório de clientes.');
       const result = await runSyncPessoas(csvData);
-      console.log(`✅ Supabase atualizado. Inseridos: ${result.inserted}, erros: ${result.errors}`);
+      console.log(`✅ Supabase atualizado. Upserted: ${result.upserted}, erros: ${result.errors}`);
     } catch (err) {
       console.error('❌ Erro ao sincronizar Supabase:', err.message);
       if (err.stack) console.error(err.stack);

@@ -89,6 +89,39 @@ async function resolveSyncJids(supabase: SupabaseClient, remoteJid: string): Pro
   return [...jids]
 }
 
+async function fetchEvolutionMessagePage(
+  apiUrl: string,
+  instance: string,
+  apiKey: string,
+  queryJid: string,
+  page: number,
+  sinceTs?: number,
+): Promise<{ records: any[]; totalPages: number; currentPage: number } | null> {
+  const headers = { 'Content-Type': 'application/json', apikey: apiKey }
+  const inst = encodeURIComponent(instance)
+  const where: Record<string, unknown> = { key: { remoteJid: queryJid } }
+  if (sinceTs) where.messageTimestamp = { gte: sinceTs }
+
+  const resp = await fetch(`${apiUrl}/chat/findMessages/${inst}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ where, page, offset: PAGE_SIZE }),
+  })
+  const data = await resp.json().catch(() => ({}))
+  if (!resp.ok) {
+    console.error('[whatsapp-sync] findMessages falhou:', queryJid, JSON.stringify(data))
+    return null
+  }
+
+  const bloco = data?.messages ?? {}
+  const records: any[] = bloco.records ?? data?.records ?? (Array.isArray(data) ? data : [])
+  return {
+    records,
+    totalPages: Number(bloco.pages ?? 1) || 1,
+    currentPage: Number(bloco.currentPage ?? page) || page,
+  }
+}
+
 async function syncMessagesFromEvolution(
   supabase: SupabaseClient,
   apiUrl: string,
@@ -97,38 +130,32 @@ async function syncMessagesFromEvolution(
   queryJid: string,
   opts: { maxMensagens: number; sinceTs?: number; storeAsJid: string },
 ): Promise<{ gravadas: number; lidas: number }> {
-  const headers = { 'Content-Type': 'application/json', apikey: apiKey }
-  const inst = encodeURIComponent(instance)
   let gravadas = 0
   let lidas = 0
-  let page = 1
-  let totalPages = 1
 
-  while (page <= totalPages && lidas < opts.maxMensagens) {
-    const where: Record<string, unknown> = { key: { remoteJid: queryJid } }
-    if (opts.sinceTs) where.messageTimestamp = { gte: opts.sinceTs }
+  // Página 1 só para descobrir totalPages; em seguida paginamos do fim para o início
+  // (a Evolution retorna as mais antigas primeiro — precisamos das mais recentes).
+  const probe = await fetchEvolutionMessagePage(
+    apiUrl,
+    instance,
+    apiKey,
+    queryJid,
+    1,
+    opts.sinceTs,
+  )
+  if (!probe) return { gravadas, lidas }
 
-    const resp = await fetch(`${apiUrl}/chat/findMessages/${inst}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ where, page, offset: PAGE_SIZE }),
-    })
-    const data = await resp.json().catch(() => ({}))
-    if (!resp.ok) {
-      console.error('[whatsapp-sync] findMessages falhou:', queryJid, JSON.stringify(data))
-      break
-    }
+  let page = probe.totalPages
+  while (page >= 1 && lidas < opts.maxMensagens) {
+    const batch =
+      page === 1 && probe.currentPage === 1
+        ? probe
+        : await fetchEvolutionMessagePage(apiUrl, instance, apiKey, queryJid, page, opts.sinceTs)
+    if (!batch || batch.records.length === 0) break
 
-    const bloco = data?.messages ?? {}
-    const records: any[] = bloco.records ?? data?.records ?? (Array.isArray(data) ? data : [])
-    if (records.length === 0) break
-
-    gravadas += await upsertMessages(supabase, instance, records, opts.storeAsJid)
-    lidas += records.length
-
-    totalPages = Number(bloco.pages ?? 1) || 1
-    const current = Number(bloco.currentPage ?? page) || page
-    page = current + 1
+    gravadas += await upsertMessages(supabase, instance, batch.records, opts.storeAsJid)
+    lidas += batch.records.length
+    page--
   }
 
   return { gravadas, lidas }

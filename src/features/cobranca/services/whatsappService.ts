@@ -46,6 +46,20 @@ let lidCacheAt = 0
 const MENSAGEM_LIST_COLUMNS =
   'id, message_id, remote_jid, from_me, tipo, conteudo, timestamp, status, reaction_to, reactions, media_meta, instance'
 
+const MENSAGENS_RECENTES_LIMIT = 200
+const MENSAGENS_ANTIGAS_LIMIT = 50
+
+function dedupeMensagensRows(rows: WhatsappMensagemRow[]): WhatsappMensagemRow[] {
+  const seen = new Set<string>()
+  return rows.filter((row) => {
+    if (row.tipo === 'reactionMessage') return false
+    const id = row.message_id || row.id
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+}
+
 async function getLidCaches(): Promise<{
   participants: Pick<GroupParticipantRow, 'lid_id' | 'phone_number' | 'display_name'>[]
   lidPhone: Map<string, string>
@@ -431,6 +445,7 @@ export const whatsappService = {
     return [...jids]
   },
 
+  /** Últimas N mensagens da thread, em ordem cronológica (mais antiga → mais recente). */
   async fetchMensagens(remoteJid: string): Promise<WhatsappMensagemRow[]> {
     const threadJids = await this.resolveThreadJids(remoteJid)
     const extraJids = threadJids.filter((j) => canonicalJid(j) !== canonicalJid(remoteJid))
@@ -440,23 +455,44 @@ export const whatsappService = {
         .from('whatsapp_mensagens')
         .select(MENSAGEM_LIST_COLUMNS)
         .or(mensagensFilterParts(remoteJid, extraJids))
-        .order('timestamp', { ascending: true, nullsFirst: true })
-        .limit(200)
+        .order('timestamp', { ascending: false, nullsFirst: false })
+        .limit(MENSAGENS_RECENTES_LIMIT)
 
       if (error) {
         console.warn('[whatsappService] fetchMensagens', error.message)
         return []
       }
 
-      const rows = (data ?? []) as WhatsappMensagemRow[]
-      const seen = new Set<string>()
-      return rows.filter((row) => {
-        if (row.tipo === 'reactionMessage') return false
-        const id = row.message_id || row.id
-        if (seen.has(id)) return false
-        seen.add(id)
-        return true
-      })
+      return dedupeMensagensRows((data ?? []) as WhatsappMensagemRow[]).reverse()
+    } catch {
+      return []
+    }
+  },
+
+  /** Mensagens anteriores a `beforeTimestamp` (para scroll infinito para cima). */
+  async fetchMensagensAntigas(
+    remoteJid: string,
+    beforeTimestamp: string,
+    limit = MENSAGENS_ANTIGAS_LIMIT,
+  ): Promise<WhatsappMensagemRow[]> {
+    const threadJids = await this.resolveThreadJids(remoteJid)
+    const extraJids = threadJids.filter((j) => canonicalJid(j) !== canonicalJid(remoteJid))
+
+    try {
+      const { data, error } = await supabase
+        .from('whatsapp_mensagens')
+        .select(MENSAGEM_LIST_COLUMNS)
+        .or(mensagensFilterParts(remoteJid, extraJids))
+        .lt('timestamp', beforeTimestamp)
+        .order('timestamp', { ascending: false, nullsFirst: false })
+        .limit(limit)
+
+      if (error) {
+        console.warn('[whatsappService] fetchMensagensAntigas', error.message)
+        return []
+      }
+
+      return dedupeMensagensRows((data ?? []) as WhatsappMensagemRow[]).reverse()
     } catch {
       return []
     }
