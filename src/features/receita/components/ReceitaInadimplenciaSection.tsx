@@ -246,7 +246,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               {formatCurrency(dashboard.valor_total_periodo)}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-              Saldo do período por grupo (Σ vencimento − Σ pagamento das empresas) — clique para ver
+              Saldo do período por grupo (Σ vencimento − Σ pagamento) — somente clientes ativos — clique para ver
               empresas e títulos
               {dashboard.clientes_ajustado && (
                 <span className="block text-amber-700/90">Total ajustado pela seleção de grupos</span>

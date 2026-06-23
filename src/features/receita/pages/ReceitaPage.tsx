@@ -72,7 +72,7 @@ export function ReceitaPage() {
             Receita
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Metas, projeções e realizados por mês (itens financeiros — cota de honorários).
+            Metas, projeções e realizados por mês (cota de honorários, somente clientes ativos).
           </p>
           <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
             <Cloud className="h-3.5 w-3.5 shrink-0" aria-hidden />
