@@ -1,8 +1,12 @@
 import { supabase } from '@/lib/supabaseClient'
 import type {
+  ReceitaInadimplenciaClientePeriodo,
+  ReceitaInadimplenciaClienteTituloPeriodo,
   ReceitaInadimplenciaDashboard,
+  ReceitaInadimplenciaDepartamentoMes,
   ReceitaInadimplenciaFechamentoMes,
   ReceitaInadimplenciaGrupoMes,
+  ReceitaInadimplenciaGrupoPeriodo,
 } from '../types/receitaInadimplencia.types'
 
 export type ReceitaInadimplenciaFiltro = {
@@ -92,6 +96,94 @@ export const receitaInadimplenciaService = {
     )
     if (error) throw error
     return parseFechamento(data)
+  },
+
+  async fetchDepartamentosMes(ano: number, mes: number): Promise<ReceitaInadimplenciaDepartamentoMes[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_departamento_mes' as never,
+      { p_ano: ano, p_mes: mes } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      departamento: String(row.departamento ?? 'Sem departamento'),
+      inadimplencia: Number(row.inadimplencia) || 0,
+    }))
+  },
+
+  async fetchClientesPeriodo(
+    ano: number,
+    mesInicio: number,
+    mesFim: number,
+  ): Promise<ReceitaInadimplenciaClientePeriodo[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_clientes_periodo' as never,
+      {
+        p_ano: ano,
+        p_mes_inicio: mesInicio,
+        p_mes_fim: mesFim,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      cliente: String(row.cliente ?? 'Sem cliente'),
+      grupo_cliente: String(row.grupo_cliente ?? 'Sem grupo'),
+      valor: Number(row.valor) || 0,
+      qtd_meses: Number(row.qtd_meses) || 0,
+    }))
+  },
+
+  async fetchGruposPeriodo(
+    ano: number,
+    mesInicio: number,
+    mesFim: number,
+  ): Promise<ReceitaInadimplenciaGrupoPeriodo[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_grupos_periodo' as never,
+      {
+        p_ano: ano,
+        p_mes_inicio: mesInicio,
+        p_mes_fim: mesFim,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      grupo_cliente: String(row.grupo_cliente ?? 'Sem grupo'),
+      valor: Number(row.valor) || 0,
+      qtd_meses: Number(row.qtd_meses) || 0,
+      qtd_clientes: Number(row.qtd_clientes) || 0,
+    }))
+  },
+
+  async fetchClienteDetalhePeriodo(
+    ano: number,
+    mesInicio: number,
+    mesFim: number,
+    cliente: string,
+  ): Promise<ReceitaInadimplenciaClienteTituloPeriodo[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_cliente_detalhe_periodo' as never,
+      {
+        p_ano: ano,
+        p_mes_inicio: mesInicio,
+        p_mes_fim: mesFim,
+        p_cliente: cliente,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      mes: Number(row.mes) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      nro_titulo: String(row.nro_titulo ?? ''),
+      descricao: row.descricao != null ? String(row.descricao) : null,
+      plano_contas: row.plano_contas != null ? String(row.plano_contas) : null,
+      situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+      data_vencimento: row.data_vencimento != null ? String(row.data_vencimento) : null,
+      data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
+      valor_item: Number(row.valor_item) || 0,
+      valor_pago_item: Number(row.valor_pago_item) || 0,
+      inadimplencia: Number(row.inadimplencia) || 0,
+      qtd_itens: Number(row.qtd_itens) || 1,
+    }))
   },
 
   async fetchGruposMes(ano: number, mes: number): Promise<ReceitaInadimplenciaGrupoMes[]> {

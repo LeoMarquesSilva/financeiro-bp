@@ -2,6 +2,7 @@ import type {
   ReceitaInadimplenciaDashboard,
   ReceitaInadimplenciaEvolucaoMes,
   ReceitaInadimplenciaGrupoMes,
+  ReceitaInadimplenciaGrupoPeriodo,
 } from '../types/receitaInadimplencia.types'
 
 /** Grupos incluídos por mês (chave = número do mês). Ausente = usa valor original do servidor. */
@@ -43,15 +44,22 @@ export function aplicarSelecaoGrupos(
   gruposPorMes: Record<number, ReceitaInadimplenciaGrupoMes[]>,
   selecaoPorMes: SelecaoGruposPorMes,
 ): ReceitaInadimplenciaDashboard {
+  let algumMesAjustado = false
   const evolucao: ReceitaInadimplenciaEvolucaoMes[] = dashboard.evolucao.map((m) => {
     const grupos = gruposPorMes[m.mes]
     const incluidos = selecaoPorMes[m.mes]
     if (!grupos?.length || !incluidos) return m
 
+    algumMesAjustado = true
     const previsto = previstoMesEvolucao(m)
     const { valor, pct } = calcularMesAjustado(grupos, incluidos, previsto)
     return { ...m, valor, pct, ajustado: true }
   })
+
+  // KPI do período = saldo por grupo (RPC), não soma dos meses da evolução.
+  if (!algumMesAjustado) {
+    return dashboard
+  }
 
   const valor_total_periodo = evolucao.reduce((s, m) => s + valorCalculadoMes(m), 0)
   const previsto_periodo = evolucao.reduce((s, m) => s + previstoMesEvolucao(m), 0)
@@ -72,5 +80,43 @@ export function aplicarSelecaoGrupos(
     valor_total_periodo,
     pct_periodo,
     top5_pct,
+  }
+}
+
+export function gruposPeriodoPadrao(grupos: ReceitaInadimplenciaGrupoPeriodo[]): Set<string> {
+  return new Set(grupos.map((g) => g.grupo_cliente))
+}
+
+export function aplicarSelecaoGruposPeriodo(
+  dashboard: ReceitaInadimplenciaDashboard,
+  grupos: ReceitaInadimplenciaGrupoPeriodo[] | null,
+  incluidos: Set<string> | null,
+): ReceitaInadimplenciaDashboard {
+  if (!grupos?.length || !incluidos) return dashboard
+
+  const valor_total_periodo = grupos
+    .filter((g) => incluidos.has(g.grupo_cliente))
+    .reduce((s, g) => s + g.valor, 0)
+
+  const todosIncluidos =
+    grupos.length === incluidos.size && grupos.every((g) => incluidos.has(g.grupo_cliente))
+
+  const previsto_periodo = dashboard.evolucao.reduce((s, m) => s + previstoMesEvolucao(m), 0)
+  const pct_periodo =
+    previsto_periodo > 0
+      ? Math.round((valor_total_periodo / previsto_periodo) * 1000) / 10
+      : dashboard.pct_periodo
+
+  const top5_pct =
+    valor_total_periodo > 0
+      ? Math.round((dashboard.top5_total / valor_total_periodo) * 1000) / 10
+      : dashboard.top5_pct
+
+  return {
+    ...dashboard,
+    valor_total_periodo,
+    pct_periodo,
+    top5_pct,
+    clientes_ajustado: !todosIncluidos,
   }
 }

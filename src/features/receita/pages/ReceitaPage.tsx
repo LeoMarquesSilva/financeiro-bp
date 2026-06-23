@@ -129,7 +129,11 @@ export function ReceitaPage() {
             ano={data.ano}
             departamentoCores={coresParaGrafico}
           />
-          <ReceitaAcumuladoChart rows={data.rows} ano={data.ano} />
+          <ReceitaAcumuladoChart
+            rows={data.rows}
+            ano={data.ano}
+            departamentoCores={coresParaGrafico}
+          />
         </>
       )}
 

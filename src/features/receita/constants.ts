@@ -180,6 +180,12 @@ export const RECEITA_CHART_LABEL = {
   minStackHeight: 20,
 } as const
 
+/** Cores de eixo e rótulos — preto para legibilidade em fundo branco (PPT). */
+export const RECEITA_CHART_AXIS = {
+  tick: '#111827',
+  label: '#111827',
+} as const
+
 /** Séries em linha no gráfico de colunas (somente recebido é barra empilhada). */
 export const RECEITA_COLUNAS_METRICAS = [
   {

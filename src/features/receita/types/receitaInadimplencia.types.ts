@@ -3,6 +3,40 @@ export type ReceitaInadimplenciaTopCliente = {
   valor: number
 }
 
+export type ReceitaInadimplenciaClientePeriodo = {
+  cliente: string
+  grupo_cliente: string
+  valor: number
+  qtd_meses: number
+}
+
+export type ReceitaInadimplenciaGrupoPeriodo = {
+  grupo_cliente: string
+  valor: number
+  qtd_meses: number
+  qtd_clientes: number
+}
+
+export type ReceitaInadimplenciaClienteTituloPeriodo = {
+  mes: number
+  ci_titulo: number
+  nro_titulo: string
+  descricao: string | null
+  plano_contas: string | null
+  situacao_titulo: string | null
+  data_vencimento: string | null
+  data_pagamento: string | null
+  valor_item: number
+  valor_pago_item: number
+  inadimplencia: number
+  qtd_itens: number
+}
+
+export type ReceitaInadimplenciaDepartamentoMes = {
+  departamento: string
+  inadimplencia: number
+}
+
 export type ReceitaInadimplenciaFechamentoMes = {
   congelado: boolean
   valor_total?: number
@@ -49,4 +83,6 @@ export type ReceitaInadimplenciaDashboard = {
   top5_pct: number
   evolucao: ReceitaInadimplenciaEvolucaoMes[]
   destaque_reducao_pct: number | null
+  /** Acumulado recalculado após exclusão manual de clientes no período. */
+  clientes_ajustado?: boolean
 }

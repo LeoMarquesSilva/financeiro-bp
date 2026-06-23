@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, BarChart3, ClipboardList, DollarSign, Loader2, Percent, Target } from 'lucide-react'
+import { AlertTriangle, BarChart3, ChevronRight, ClipboardList, DollarSign, Loader2, Percent, Target } from 'lucide-react'
 import { formatCurrency } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type {
@@ -7,11 +7,16 @@ import type {
   ReceitaInadimplenciaEvolucaoMes,
   ReceitaInadimplenciaGrupoMes,
   ReceitaInadimplenciaTopCliente,
+  ReceitaInadimplenciaGrupoPeriodo,
 } from '../types/receitaInadimplencia.types'
 import { MESES_NOME, mesAbrev, mesMaxDisponivelInadimplencia, mesNome } from '../constants'
 import { useReceitaInadimplencia } from '../hooks/useReceitaInadimplencia'
 import { ReceitaInadimplenciaGrupoSheet } from './ReceitaInadimplenciaGrupoSheet'
+import { ReceitaInadimplenciaClientesSheet } from './ReceitaInadimplenciaClientesSheet'
+import { ReceitaInadimplenciaMesValorButton } from './ReceitaInadimplenciaMesValorButton'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import {
+  aplicarSelecaoGruposPeriodo,
   aplicarSelecaoGrupos,
   previstoMesEvolucao,
   type SelecaoGruposPorMes,
@@ -77,6 +82,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   const [mesInicio, setMesInicio] = useState(1)
   const [mesFim, setMesFim] = useState(mesMaxDefault > 0 ? mesMaxDefault : 1)
   const [mesDetalhe, setMesDetalhe] = useState<number | null>(null)
+  const [clientesSheetOpen, setClientesSheetOpen] = useState(false)
+  const [gruposPeriodo, setGruposPeriodo] = useState<ReceitaInadimplenciaGrupoPeriodo[] | null>(null)
+  const [gruposIncluidos, setGruposIncluidos] = useState<Set<string> | null>(null)
   const [gruposPorMes, setGruposPorMes] = useState<Record<number, ReceitaInadimplenciaGrupoMes[]>>({})
   const [selecaoPorMes, setSelecaoPorMes] = useState<SelecaoGruposPorMes>({})
 
@@ -85,9 +93,16 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
     setMesInicio(1)
     setMesFim(max > 0 ? max : 1)
     setMesDetalhe(null)
+    setGruposPeriodo(null)
+    setGruposIncluidos(null)
     setGruposPorMes({})
     setSelecaoPorMes({})
   }, [ano])
+
+  useEffect(() => {
+    setGruposPeriodo(null)
+    setGruposIncluidos(null)
+  }, [mesInicio, mesFim])
 
   const { data, isLoading, isFetching, error, refetch } = useReceitaInadimplencia(
     ano,
@@ -108,8 +123,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
 
   const dashboard = useMemo(() => {
     if (!data || data.mes_fim <= 0) return null
-    return aplicarSelecaoGrupos(data, gruposPorMes, selecaoPorMes)
-  }, [data, gruposPorMes, selecaoPorMes])
+    const comGrupos = aplicarSelecaoGrupos(data, gruposPorMes, selecaoPorMes)
+    return aplicarSelecaoGruposPeriodo(comGrupos, gruposPeriodo, gruposIncluidos)
+  }, [data, gruposPorMes, selecaoPorMes, gruposPeriodo, gruposIncluidos])
 
   const handleAplicarGrupos = (
     mes: number,
@@ -152,6 +168,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
       : null
 
   return (
+    <TooltipProvider delayDuration={200}>
     <section className="space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -202,44 +219,78 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
         </div>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div
-          className="flex items-center gap-4 rounded-2xl border border-slate-200/50 px-5 py-4 shadow-sm"
+      <div className="grid gap-4 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setClientesSheetOpen(true)}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 text-left shadow-sm transition-colors sm:gap-4 sm:px-5',
+            'cursor-pointer hover:border-slate-300 hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2',
+          )}
           style={{ backgroundColor: CREAM }}
         >
-          <IconCircle>
+          <IconCircle className="h-10 w-10 sm:h-11 sm:w-11">
             <DollarSign className="h-5 w-5" strokeWidth={2.5} />
           </IconCircle>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
-              Valor inadimplência – {periodoCurto}
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 sm:text-[11px]">
+              Inadimplência acumulada – {periodoCurto}
             </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: GOLD }}>
+            <p
+              className={cn(
+                'mt-1 text-xl font-bold tabular-nums sm:text-2xl',
+                dashboard.clientes_ajustado && 'text-amber-800',
+              )}
+              style={dashboard.clientes_ajustado ? undefined : { color: GOLD }}
+            >
               {formatCurrency(dashboard.valor_total_periodo)}
             </p>
+            <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+              Saldo do período por grupo (Σ vencimento − Σ pagamento das empresas) — clique para ver
+              empresas e títulos
+              {dashboard.clientes_ajustado && (
+                <span className="block text-amber-700/90">Total ajustado pela seleção de grupos</span>
+              )}
+            </p>
           </div>
-        </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+        </button>
 
         <div
-          className="flex items-center gap-4 rounded-2xl border border-slate-200/50 px-5 py-4 shadow-sm"
+          className="flex items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 shadow-sm sm:gap-4 sm:px-5"
           style={{ backgroundColor: CREAM }}
         >
-          <IconCircle>
+          <IconCircle className="h-10 w-10 sm:h-11 sm:w-11">
             <Percent className="h-5 w-5" strokeWidth={2.5} />
           </IconCircle>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 sm:text-[11px]">
               % de inadimplência
             </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: GOLD }}>
+            <p
+              className="mt-1 text-xl font-bold tabular-nums sm:text-2xl"
+              style={{ color: GOLD }}
+            >
               {dashboard.pct_periodo.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
             </p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Inadimplência ÷ faturado — item quitado até o fim do mês (incl. antecipado) ou regra Lira
+            <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+              Saldo proporcional do período ÷ previsto acumulado (regra planilha VIOS)
             </p>
           </div>
         </div>
       </div>
+
+      <ReceitaInadimplenciaClientesSheet
+        open={clientesSheetOpen}
+        onOpenChange={setClientesSheetOpen}
+        ano={dashboard.ano}
+        mesInicio={dashboard.mes_inicio}
+        mesFim={dashboard.mes_fim}
+        periodoLabel={periodoCurto}
+        incluidos={gruposIncluidos}
+        onGruposLoaded={setGruposPeriodo}
+        onIncluidosChange={setGruposIncluidos}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div
@@ -259,7 +310,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
             <table className="w-full min-w-[280px] text-sm">
               <thead>
                 <tr className="border-b border-slate-300/60 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600">
-                  <th className="pb-2 pl-1 pr-2">Cliente</th>
+                  <th className="pb-2 pl-1 pr-2">Grupo</th>
                   <th className="pb-2 pl-2 text-right">Valor (R$)</th>
                 </tr>
               </thead>
@@ -337,18 +388,13 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                   </td>
                   {dashboard.evolucao.map((m: ReceitaInadimplenciaEvolucaoMes) => (
                     <td key={`v-${m.mes}`} className="px-1 py-1.5 text-center sm:px-2">
-                      <button
-                        type="button"
+                      <ReceitaInadimplenciaMesValorButton
+                        ano={dashboard.ano}
+                        mes={m.mes}
+                        valor={m.valor}
+                        ajustado={m.ajustado}
                         onClick={() => setMesDetalhe(m.mes)}
-                        title="Ver e ajustar grupos inadimplentes"
-                        className={cn(
-                          'w-full min-w-[4.5rem] rounded-lg px-1.5 py-1.5 text-sm font-semibold tabular-nums transition-colors sm:px-2',
-                          'hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-1',
-                          m.ajustado ? 'text-amber-800 ring-1 ring-amber-200/80 bg-amber-50/60' : 'text-slate-900',
-                        )}
-                      >
-                        {formatCurrency(m.valor)}
-                      </button>
+                      />
                     </td>
                   ))}
                 </tr>
@@ -449,5 +495,6 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
         />
       )}
     </section>
+    </TooltipProvider>
   )
 }
