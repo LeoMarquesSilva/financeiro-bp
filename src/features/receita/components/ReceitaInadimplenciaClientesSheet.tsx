@@ -250,7 +250,7 @@ function GrupoEmpresasDetalhe({
   return (
     <div className="mb-2 mt-1 space-y-2 border-l-2 border-slate-200 pl-3 ml-7">
       <p className="text-[11px] text-slate-500">
-        Empresas do grupo — valores por razão social (o total do grupo consolida todas as empresas).
+        Empresas de {grupo} — valores por razão social (o total do grupo consolida todas as empresas).
       </p>
       <ul className="space-y-1">
         {empresas.map((e) => {
