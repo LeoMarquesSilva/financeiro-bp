@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Sheet,
@@ -38,7 +38,9 @@ import {
 } from '@/features/escritorio/services/escritorioService'
 import { fetchParcelasPorCliente, type ParcelaRow } from '../services/parcelasService'
 import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { useInadimplenciaMutations } from '../hooks/useInadimplenciaMutations'
 
 const ULTIMOS_LOGS = 5
 
@@ -402,6 +404,96 @@ function FollowUpsList({ providenciaId, clientId, onRefresh }: { providenciaId: 
   )
 }
 
+/* ── Observações (edição inline) ── */
+function ObservacoesSection({
+  client,
+  canEdit,
+  onRefresh,
+}: {
+  client: ClientInadimplenciaRow
+  canEdit: boolean
+  onRefresh?: () => void
+}) {
+  const { updateCliente } = useInadimplenciaMutations()
+  const [editando, setEditando] = useState(false)
+  const [texto, setTexto] = useState(client.observacoes_gerais ?? '')
+
+  useEffect(() => {
+    if (editando) return
+    setTexto(client.observacoes_gerais ?? '')
+  }, [client.id, client.observacoes_gerais, editando])
+
+  const handleSave = async () => {
+    const { error } = await updateCliente.mutateAsync({
+      id: client.id,
+      input: { observacoes_gerais: texto.trim() || null },
+    })
+    if (error) {
+      toast.error('Erro ao salvar observações')
+      return
+    }
+    toast.success('Observações salvas')
+    setEditando(false)
+    onRefresh?.()
+  }
+
+  const handleCancel = () => {
+    setTexto(client.observacoes_gerais ?? '')
+    setEditando(false)
+  }
+
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800">
+          <MessageSquare className="h-4 w-4 text-slate-500" />
+          Observações
+        </h3>
+        {canEdit && !editando && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setEditando(true)}
+            className="h-7 gap-1 px-2 text-xs text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+          >
+            <Pencil className="h-3 w-3" />
+            {client.observacoes_gerais ? 'Editar' : 'Adicionar'}
+          </Button>
+        )}
+      </div>
+      <div className="rounded-xl border border-slate-200/60 bg-white p-4">
+        {canEdit && editando ? (
+          <div className="space-y-3">
+            <Textarea
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder="Observações gerais sobre o cliente ou a inadimplência..."
+              rows={4}
+              className="resize-none"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={handleCancel}>
+                Cancelar
+              </Button>
+              <Button type="button" size="sm" onClick={handleSave} disabled={updateCliente.isPending}>
+                {updateCliente.isPending ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </div>
+        ) : client.observacoes_gerais ? (
+          <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">{client.observacoes_gerais}</p>
+        ) : (
+          <p className="text-sm italic text-slate-400">
+            {canEdit ? 'Nenhuma observação registrada. Clique em Adicionar para incluir.' : 'Nenhuma observação registrada.'}
+          </p>
+        )}
+      </div>
+    </section>
+  )
+}
+
 /* ══════════════════════════════════════════════════════ */
 /*  MAIN COMPONENT                                       */
 /* ══════════════════════════════════════════════════════ */
@@ -663,14 +755,7 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
               </section>
 
               {/* ── Observações ── */}
-              {client.observacoes_gerais && (
-                <section>
-                  <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800"><MessageSquare className="h-4 w-4 text-slate-500" />Observações</h3>
-                  <div className="rounded-xl border border-slate-200/60 bg-white p-4">
-                    <p className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">{client.observacoes_gerais}</p>
-                  </div>
-                </section>
-              )}
+              <ObservacoesSection client={client} canEdit={canEdit} onRefresh={onRefresh} />
 
               {/* ── Empresas ── */}
               {linkedEscritorio && empresasDoGrupo.length > 0 && (
