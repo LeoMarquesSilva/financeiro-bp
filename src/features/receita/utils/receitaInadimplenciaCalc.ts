@@ -71,6 +71,42 @@ export function gruposPeriodoPadrao(grupos: ReceitaInadimplenciaGrupoPeriodo[]):
   return new Set(grupos.map((g) => g.grupo_cliente))
 }
 
+/** Grupos do período após exclusões feitas na seleção mensal (por mês). */
+export function incluidosPeriodoDeSelecoesMensais(
+  mesInicio: number,
+  mesFim: number,
+  gruposPeriodo: ReceitaInadimplenciaGrupoPeriodo[],
+  gruposPorMes: Record<number, ReceitaInadimplenciaGrupoMes[]>,
+  selecaoPorMes: SelecaoGruposPorMes,
+): Set<string> | null {
+  const mesesComSelecao = Object.keys(selecaoPorMes)
+    .map(Number)
+    .filter((m) => m >= mesInicio && m <= mesFim)
+  if (mesesComSelecao.length === 0 || gruposPeriodo.length === 0) return null
+
+  const incluidos = new Set(gruposPeriodo.map((g) => g.grupo_cliente))
+  for (const mes of mesesComSelecao) {
+    const sel = selecaoPorMes[mes]
+    const grupos = gruposPorMes[mes] ?? []
+    for (const g of grupos) {
+      if (g.inadimplencia > 0 && !sel.has(g.grupo_cliente)) {
+        incluidos.delete(g.grupo_cliente)
+      }
+    }
+  }
+  return incluidos
+}
+
+export function mesclarIncluidosPeriodo(
+  manual: Set<string> | null,
+  derivadoMensal: Set<string> | null,
+): Set<string> | null {
+  if (manual && derivadoMensal) {
+    return new Set([...manual].filter((g) => derivadoMensal.has(g)))
+  }
+  return manual ?? derivadoMensal
+}
+
 export function aplicarSelecaoGruposPeriodo(
   dashboard: ReceitaInadimplenciaDashboard,
   grupos: ReceitaInadimplenciaGrupoPeriodo[] | null,

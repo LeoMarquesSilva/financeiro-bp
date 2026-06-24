@@ -87,25 +87,66 @@ function AcumuladoBarLabel({
   )
 }
 
-function AcumuladoAreaSegmentLabel(props: LabelProps) {
-  const { x, y, width, height, value } = props
+function AcumuladoAreaSegmentLabel(
+  props: LabelProps & { segmentColor?: string },
+) {
+  const { x, y, width, height, value, segmentColor } = props
   const num = typeof value === 'number' ? value : Number(value)
   if (!num || x == null || y == null || width == null || height == null) return null
-  if (num < 5 || Number(height) < RECEITA_CHART_LABEL.minStackHeight) return null
+
+  const label = formatPercentLabel(num)
+  if (!label) return null
+
+  const w = Number(width)
+  const h = Number(height)
+  const cx = Number(x) + w / 2
+  const segmentCy = Number(y) + h / 2
+  const barRight = Number(x) + w
+  const stroke =
+    segmentColor ?? (typeof props.fill === 'string' ? props.fill : RECEITA_CHART_AXIS.label)
+  const MIN_INSIDE_HEIGHT = 22
+
+  if (h >= MIN_INSIDE_HEIGHT) {
+    return (
+      <text
+        x={cx}
+        y={segmentCy}
+        fill="#fff"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={RECEITA_CHART_LABEL.barInside}
+        fontWeight={600}
+        pointerEvents="none"
+      >
+        {label}
+      </text>
+    )
+  }
+
+  const labelX = barRight + 10
 
   return (
-    <text
-      x={Number(x) + Number(width) / 2}
-      y={Number(y) + Number(height) / 2}
-      fill="#fff"
-      textAnchor="middle"
-      dominantBaseline="middle"
-      fontSize={RECEITA_CHART_LABEL.barInside}
-      fontWeight={600}
-      pointerEvents="none"
-    >
-      {formatPercentLabel(num)}
-    </text>
+    <g pointerEvents="none">
+      <line
+        x1={barRight}
+        y1={segmentCy}
+        x2={labelX - 3}
+        y2={segmentCy}
+        stroke={stroke}
+        strokeWidth={1.25}
+      />
+      <text
+        x={labelX}
+        y={segmentCy}
+        fill={stroke}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={9}
+        fontWeight={600}
+      >
+        {label}
+      </text>
+    </g>
   )
 }
 
@@ -420,7 +461,12 @@ export function ReceitaAcumuladoChart({
         <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={340}>
           <ComposedChart
             data={chartData}
-            margin={{ left: 4, right: 28, top: 40, bottom: 4 }}
+            margin={{
+              left: 4,
+              right: showRecebidoPorArea ? 68 : 28,
+              top: 40,
+              bottom: 4,
+            }}
             barCategoryGap="22%"
             barGap={4}
           >
@@ -476,7 +522,12 @@ export function ReceitaAcumuladoChart({
                     segIndex === areaSlices.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]
                   }
                 >
-                  <LabelList dataKey={seg.dataKey} content={<AcumuladoAreaSegmentLabel />} />
+                  <LabelList
+                    dataKey={seg.dataKey}
+                    content={(props) => (
+                      <AcumuladoAreaSegmentLabel {...props} segmentColor={seg.color} />
+                    )}
+                  />
                   {segIndex === areaSlices.length - 1 && (
                     <LabelList
                       dataKey="recebidoAcumulado"

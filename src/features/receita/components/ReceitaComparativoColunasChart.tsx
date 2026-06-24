@@ -66,9 +66,11 @@ function StackSegmentLabel(
     stackTotal?: number
     planoShareLabels?: boolean
     percentMetaMode?: boolean
+    segmentColor?: string
   },
 ) {
-  const { x, y, width, height, value, stackTotal, planoShareLabels, percentMetaMode } = props
+  const { x, y, width, height, value, stackTotal, planoShareLabels, percentMetaMode, segmentColor } =
+    props
   const num = typeof value === 'number' ? value : Number(value)
   const total = stackTotal ?? 0
   if (!num || x == null || y == null || width == null || height == null) return null
@@ -78,36 +80,65 @@ function StackSegmentLabel(
 
   let label: string
   if (percentMetaMode) {
-    if (num < 3 || h < RECEITA_CHART_LABEL.minStackHeight) return null
     label = formatPercentLabel(num)
   } else if (planoShareLabels) {
     if (!total) return null
-    const share = num / total
-    if (share < 0.06 || h < RECEITA_CHART_LABEL.minStackHeight) return null
-    label = formatPercentLabel(share * 100)
+    label = formatPercentLabel((num / total) * 100)
   } else {
     if (!total) return null
-    const share = num / total
-    if (share < 0.07 || h < RECEITA_CHART_LABEL.minStackHeight) return null
     label = formatColunaLabel(num)
   }
 
+  if (!label) return null
+
   const cx = Number(x) + w / 2
-  const cy = Number(y) + h / 2
+  const segmentCy = Number(y) + h / 2
+  const barRight = Number(x) + w
+  const stroke =
+    segmentColor ?? (typeof props.fill === 'string' ? props.fill : RECEITA_CHART_AXIS.label)
+  const MIN_INSIDE_HEIGHT = 22
+
+  if (h >= MIN_INSIDE_HEIGHT) {
+    return (
+      <text
+        x={cx}
+        y={segmentCy}
+        fill="#fff"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={RECEITA_CHART_LABEL.barInside}
+        fontWeight={600}
+        pointerEvents="none"
+      >
+        {label}
+      </text>
+    )
+  }
+
+  const labelX = barRight + 10
 
   return (
-    <text
-      x={cx}
-      y={cy}
-      fill="#fff"
-      textAnchor="middle"
-      dominantBaseline="middle"
-      fontSize={RECEITA_CHART_LABEL.barInside}
-      fontWeight={600}
-      pointerEvents="none"
-    >
-      {label}
-    </text>
+    <g pointerEvents="none">
+      <line
+        x1={barRight}
+        y1={segmentCy}
+        x2={labelX - 3}
+        y2={segmentCy}
+        stroke={stroke}
+        strokeWidth={1.25}
+      />
+      <text
+        x={labelX}
+        y={segmentCy}
+        fill={stroke}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={9}
+        fontWeight={600}
+      >
+        {label}
+      </text>
+    </g>
   )
 }
 
@@ -117,15 +148,17 @@ function ConsolidadoBarLabel(
   const { x, y, width, height, value, percentMetaMode } = props
   const num = typeof value === 'number' ? value : Number(value)
   if (!num || x == null || y == null || width == null || height == null) return null
-  if (Number(height) < RECEITA_CHART_LABEL.minBarHeight) return null
+
+  const h = Number(height)
+  const fontSize = h >= 20 ? RECEITA_CHART_LABEL.barTop : h >= 12 ? 10 : 9
 
   return (
     <text
       x={Number(x) + Number(width) / 2}
-      y={Number(y) - 6}
+      y={h >= 12 ? Number(y) - 6 : Number(y) - 2}
       fill="#475569"
       textAnchor="middle"
-      fontSize={RECEITA_CHART_LABEL.barTop}
+      fontSize={fontSize}
       fontWeight={600}
       pointerEvents="none"
     >
@@ -891,7 +924,12 @@ export function ReceitaComparativoColunasChart({
                     : `receita-colunas-area-${porArea ? 'stack' : 'cons'}`
                 }
                 data={chartData}
-                margin={{ left: 4, right: 12, top: 32, bottom: 4 }}
+                margin={{
+                  left: 4,
+                  right: showStackBreakdown ? 68 : 12,
+                  top: 32,
+                  bottom: 4,
+                }}
                 barCategoryGap="18%"
                 barGap={2}
                 onMouseMove={handleChartMouseMove}
@@ -949,6 +987,7 @@ export function ReceitaComparativoColunasChart({
                         content={(props) => (
                           <StackSegmentLabel
                             {...props}
+                            segmentColor={seg.color}
                             planoShareLabels={planoMode && !percentMetaMode}
                             percentMetaMode={percentMetaMode}
                             stackTotal={

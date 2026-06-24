@@ -47,13 +47,13 @@ export function mesNome(mes: number): string {
   return MESES_NOME[mes - 1] ?? String(mes)
 }
 
-/** Último mês encerrado disponível para o ano (ex.: em jun/2026 → 5). */
+/** Último mês disponível para o ano (inclui o mês corrente; ex.: em jun/2026 → 6). */
 export function mesMaxDisponivelInadimplencia(ano: number, ref = new Date()): number {
   const y = ref.getFullYear()
   const m = ref.getMonth() + 1
   if (ano > y) return 0
   if (ano < y) return 12
-  return m - 1
+  return m
 }
 
 /** Paleta fixa do módulo Receita (gráfico, tabela, KPIs, formulário). */

@@ -19,6 +19,8 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import {
   aplicarSelecaoGruposPeriodo,
   aplicarSelecaoGrupos,
+  incluidosPeriodoDeSelecoesMensais,
+  mesclarIncluidosPeriodo,
   previstoMesEvolucao,
   type SelecaoGruposPorMes,
 } from '../utils/receitaInadimplenciaCalc'
@@ -119,11 +121,14 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
 
     ;(async () => {
       try {
-        const [selecoesMensais, gruposPeriodoSalvos] = await Promise.all([
+        const [selecoesMensais, gruposPeriodoSalvos, gruposPeriodoData] = await Promise.all([
           receitaInadimplenciaService.fetchSelecoesMesPeriodo(data.ano, data.mes_inicio, data.mes_fim),
           receitaInadimplenciaService.fetchSelecaoPeriodo(data.ano, data.mes_inicio, data.mes_fim),
+          receitaInadimplenciaService.fetchGruposPeriodo(data.ano, data.mes_inicio, data.mes_fim),
         ])
         if (cancelled) return
+
+        setGruposPeriodo(gruposPeriodoData)
 
         if (selecoesMensais.length > 0) {
           const selecao: SelecaoGruposPorMes = {}
@@ -142,16 +147,8 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
           }
         }
 
-        if (gruposPeriodoSalvos) {
-          const grupos = await receitaInadimplenciaService.fetchGruposPeriodo(
-            data.ano,
-            data.mes_inicio,
-            data.mes_fim,
-          )
-          if (!cancelled) {
-            setGruposPeriodo(grupos)
-            setGruposIncluidos(new Set(gruposPeriodoSalvos))
-          }
+        if (gruposPeriodoSalvos && !cancelled) {
+          setGruposIncluidos(new Set(gruposPeriodoSalvos))
         }
       } catch {
         // Mantém defaults do servidor se a tabela de seleção ainda não existir.
@@ -177,7 +174,39 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   const dashboard = useMemo(() => {
     if (!data || data.mes_fim <= 0) return null
     const comGrupos = aplicarSelecaoGrupos(data, gruposPorMes, selecaoPorMes)
-    return aplicarSelecaoGruposPeriodo(comGrupos, gruposPeriodo, gruposIncluidos)
+    const incluidosMensal =
+      gruposPeriodo != null
+        ? incluidosPeriodoDeSelecoesMensais(
+            data.mes_inicio,
+            data.mes_fim,
+            gruposPeriodo,
+            gruposPorMes,
+            selecaoPorMes,
+          )
+        : null
+    const incluidosEfetivos = mesclarIncluidosPeriodo(gruposIncluidos, incluidosMensal)
+    let result = aplicarSelecaoGruposPeriodo(comGrupos, gruposPeriodo, incluidosEfetivos)
+
+    // Período de um único mês: KPI = valor mensal ajustado (mesma base da evolução).
+    if (
+      data.mes_inicio === data.mes_fim &&
+      result.evolucao.length === 1 &&
+      result.evolucao[0].ajustado
+    ) {
+      const m = result.evolucao[0]
+      const previsto = previstoMesEvolucao(m)
+      result = {
+        ...result,
+        valor_total_periodo: m.valor,
+        pct_periodo:
+          previsto > 0
+            ? Math.round((m.valor / previsto) * 1000) / 10
+            : result.pct_periodo,
+        clientes_ajustado: true,
+      }
+    }
+
+    return result
   }, [data, gruposPorMes, selecaoPorMes, gruposPeriodo, gruposIncluidos])
 
   const handleAplicarGrupos = (
@@ -192,6 +221,12 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
       .catch(() => {
         // Falha silenciosa: estado local permanece até próximo refresh.
       })
+    if (!gruposPeriodo && data) {
+      void receitaInadimplenciaService
+        .fetchGruposPeriodo(data.ano, data.mes_inicio, data.mes_fim)
+        .then(setGruposPeriodo)
+        .catch(() => {})
+    }
   }
 
   const handleAplicarSelecaoPeriodo = (incluidos: Set<string>) => {
@@ -205,7 +240,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   if (mesMaxDefault <= 0 && !isLoading) {
     return (
       <section className="rounded-xl border border-slate-200/60 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-        Ainda não há meses encerrados no ano {ano} para exibir inadimplência.
+        Ainda não há meses disponíveis no ano {ano} para exibir inadimplência.
       </section>
     )
   }
@@ -305,9 +340,14 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
             <p
               className={cn(
                 'mt-1 text-xl font-bold tabular-nums sm:text-2xl',
-                dashboard.clientes_ajustado && 'text-amber-800',
+                (dashboard.clientes_ajustado || dashboard.evolucao.some((m) => m.ajustado)) &&
+                  'text-amber-800',
               )}
-              style={dashboard.clientes_ajustado ? undefined : { color: GOLD }}
+              style={
+                dashboard.clientes_ajustado || dashboard.evolucao.some((m) => m.ajustado)
+                  ? undefined
+                  : { color: GOLD }
+              }
             >
               {formatCurrency(dashboard.valor_total_periodo)}
             </p>
@@ -316,6 +356,11 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               empresas e títulos
               {dashboard.clientes_ajustado && (
                 <span className="block text-amber-700/90">Total ajustado pela seleção de grupos</span>
+              )}
+              {!dashboard.clientes_ajustado && dashboard.evolucao.some((m) => m.ajustado) && (
+                <span className="block text-amber-700/90">
+                  Total ajustado pela seleção mensal de grupos
+                </span>
               )}
             </p>
           </div>

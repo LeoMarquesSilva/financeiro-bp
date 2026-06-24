@@ -4,17 +4,19 @@ import {
   Area,
   CartesianGrid,
   ComposedChart,
+  LabelList,
   Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  type LabelProps,
 } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
 import type { ReceitaMesRow } from '../types/receita.types'
-import { RECEITA_COLORS, RECEITA_CHART_AXIS } from '../constants'
+import { RECEITA_CHART_AXIS, RECEITA_CHART_LABEL, RECEITA_COLORS } from '../constants'
 import { ReceitaRecebidoDetalheSheet } from './ReceitaRecebidoDetalheSheet'
 import { isMesFuturo, valorRecebidoGrafico } from '../utils/receitaMes'
 import { formatPercentLabel } from '../utils/receitaColunasChart'
@@ -117,6 +119,7 @@ function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
 }
 
 const SERIES_PERCENT_LEGEND: Partial<Record<SeriesKey, string>> = {
+  meta: 'Meta (100%)',
   recebido: 'Recebido (% meta)',
   previsto: 'Previsto (% meta)',
   projetadoBaseAbril: 'Proj. base abril (% meta)',
@@ -126,6 +129,26 @@ const SERIES_PERCENT_LEGEND: Partial<Record<SeriesKey, string>> = {
 function pctMeta(recebido: number, meta: number): number | null {
   if (!meta) return null
   return (recebido / meta) * 100
+}
+
+function RecebidoPercentDotLabel(props: LabelProps) {
+  const { x, y, value } = props
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num) || x == null || y == null) return null
+
+  return (
+    <text
+      x={Number(x) + 8}
+      y={Number(y)}
+      fill={RECEITA_COLORS.recebido.hex}
+      textAnchor="start"
+      dominantBaseline="middle"
+      fontSize={RECEITA_CHART_LABEL.linePoint}
+      fontWeight={600}
+    >
+      {formatPercentLabel(num)}
+    </text>
+  )
 }
 
 function PctBadge({ pct }: { pct: number | null }) {
@@ -193,7 +216,9 @@ function ReceitaChartTooltip({
                 />
                 {percentMode && series.key !== 'meta'
                   ? (SERIES_PERCENT_LEGEND[series.key] ?? `${series.legend} (% meta)`)
-                  : series.legend}
+                  : percentMode && series.key === 'meta'
+                    ? SERIES_PERCENT_LEGEND.meta
+                    : series.legend}
               </span>
               <span className="font-semibold tabular-nums text-slate-900">
                 {percentMode ? formatPercentLabel(value) : formatCurrency(value)}
@@ -217,7 +242,7 @@ function ReceitaChartLegend({
 }) {
   return (
     <div className="mt-3 flex flex-wrap items-center justify-center gap-2 px-1">
-      {SERIES.filter((s) => !percentMode || s.key !== 'meta').map((s) => {
+      {SERIES.map((s) => {
         const on = visible.has(s.key)
         return (
           <button
@@ -293,12 +318,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     [percentMode, rawChartData],
   )
 
-  const visibleSeries = useMemo(() => {
-    if (!percentMode) return visible
-    const next = new Set(visible)
-    next.delete('meta')
-    return next
-  }, [percentMode, visible])
+  const visibleSeries = visible
 
   const rowsComDados = useMemo(
     () => rows.filter((r) => !isMesFuturo(ano, r.mes)),
@@ -337,7 +357,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
               </h2>
               <p className="text-xs text-slate-500">
                 {percentMode ? (
-                  <>Séries em % da meta de cada mês · ideal para apresentação ({ano})</>
+                  <>Séries em % da meta de cada mês · linha tracejada = 100% ({ano})</>
                 ) : (
                   <>
                     <span className={RECEITA_COLORS.meta.textStrong}>Meta</span>
@@ -374,7 +394,10 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
         <div ref={chartExportRef} className="flex flex-col">
           <div data-chart-plot className="h-[300px] min-h-[300px] w-full min-w-0">
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
-            <ComposedChart data={chartData} margin={{ left: 4, right: 12, top: 8, bottom: 4 }}>
+            <ComposedChart
+              data={chartData}
+              margin={{ left: 4, right: percentMode ? 40 : 12, top: 8, bottom: 4 }}
+            >
               <defs>
                 <linearGradient id="receitaRecebidoGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={RECEITA_COLORS.recebido.hex} stopOpacity={0.25} />
@@ -425,7 +448,11 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   }}
                   activeDot={{ r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
                   connectNulls={false}
-                />
+                >
+                  {percentMode && s.key === 'recebido' && (
+                    <LabelList dataKey="recebido" content={<RecebidoPercentDotLabel />} />
+                  )}
+                </Area>
               ))}
 
               {SERIES.filter((s) => s.type === 'line' && visibleSeries.has(s.key)).map((s) => (
