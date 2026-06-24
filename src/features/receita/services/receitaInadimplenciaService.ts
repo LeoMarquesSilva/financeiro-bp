@@ -201,4 +201,74 @@ export const receitaInadimplenciaService = {
       qtd_clientes_inad: Number(row.qtd_clientes_inad) || 0,
     }))
   },
+
+  async fetchSelecaoMes(ano: number, mes: number): Promise<string[] | null> {
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_selecoes_mes_periodo' as never,
+      { p_ano: ano, p_mes_inicio: mes, p_mes_fim: mes } as never,
+    )
+    if (error) throw error
+    const rows = (data ?? []) as Array<{ mes: number; grupos_incluidos: string[] }>
+    const row = rows.find((r) => r.mes === mes)
+    return row?.grupos_incluidos ?? null
+  },
+
+  async fetchSelecoesMesPeriodo(
+    ano: number,
+    mesInicio: number,
+    mesFim: number,
+  ): Promise<Array<{ mes: number; grupos_incluidos: string[] }>> {
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_selecoes_mes_periodo' as never,
+      { p_ano: ano, p_mes_inicio: mesInicio, p_mes_fim: mesFim } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      mes: Number(row.mes) || 0,
+      grupos_incluidos: (row.grupos_incluidos as string[] | null) ?? [],
+    }))
+  },
+
+  async salvarSelecaoMes(ano: number, mes: number, gruposIncluidos: string[]): Promise<void> {
+    const { error } = await supabase.rpc(
+      'receita_inadimplencia_salvar_selecao_mes' as never,
+      {
+        p_ano: ano,
+        p_mes: mes,
+        p_grupos_incluidos: gruposIncluidos,
+      } as never,
+    )
+    if (error) throw error
+  },
+
+  async fetchSelecaoPeriodo(
+    ano: number,
+    mesInicio: number,
+    mesFim: number,
+  ): Promise<string[] | null> {
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_selecao_periodo' as never,
+      { p_ano: ano, p_mes_inicio: mesInicio, p_mes_fim: mesFim } as never,
+    )
+    if (error) throw error
+    return data != null ? (data as string[]) : null
+  },
+
+  async salvarSelecaoPeriodo(
+    ano: number,
+    mesInicio: number,
+    mesFim: number,
+    gruposIncluidos: string[],
+  ): Promise<void> {
+    const { error } = await supabase.rpc(
+      'receita_inadimplencia_salvar_selecao_periodo' as never,
+      {
+        p_ano: ano,
+        p_mes_inicio: mesInicio,
+        p_mes_fim: mesFim,
+        p_grupos_incluidos: gruposIncluidos,
+      } as never,
+    )
+    if (error) throw error
+  },
 }

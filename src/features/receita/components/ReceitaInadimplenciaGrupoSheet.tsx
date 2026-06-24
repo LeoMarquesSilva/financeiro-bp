@@ -79,15 +79,18 @@ export function ReceitaInadimplenciaGrupoSheet({
     Promise.all([
       receitaInadimplenciaService.fetchGruposMes(ano, mes),
       receitaInadimplenciaService.fetchFechamentoMes(ano, mes),
+      receitaInadimplenciaService.fetchSelecaoMes(ano, mes),
     ])
-      .then(([data, fech]) => {
+      .then(([data, fech, salvos]) => {
         if (cancelled) return
         setGrupos(data)
         setFechamento(fech)
         const inicial =
-          incluidosInicial && incluidosInicial.size > 0
-            ? new Set(incluidosInicial)
-            : gruposInadimplentesPadrao(data)
+          salvos && salvos.length > 0
+            ? new Set(salvos)
+            : incluidosInicial && incluidosInicial.size > 0
+              ? new Set(incluidosInicial)
+              : gruposInadimplentesPadrao(data)
         setIncluidos(inicial)
       })
       .catch((e) => {

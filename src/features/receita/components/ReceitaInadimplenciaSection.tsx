@@ -11,6 +11,7 @@ import type {
 } from '../types/receitaInadimplencia.types'
 import { MESES_NOME, mesAbrev, mesMaxDisponivelInadimplencia, mesNome } from '../constants'
 import { useReceitaInadimplencia } from '../hooks/useReceitaInadimplencia'
+import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
 import { ReceitaInadimplenciaGrupoSheet } from './ReceitaInadimplenciaGrupoSheet'
 import { ReceitaInadimplenciaClientesSheet } from './ReceitaInadimplenciaClientesSheet'
 import { ReceitaInadimplenciaMesValorButton } from './ReceitaInadimplenciaMesValorButton'
@@ -102,6 +103,8 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   useEffect(() => {
     setGruposPeriodo(null)
     setGruposIncluidos(null)
+    setGruposPorMes({})
+    setSelecaoPorMes({})
   }, [mesInicio, mesFim])
 
   const { data, isLoading, isFetching, error, refetch } = useReceitaInadimplencia(
@@ -109,6 +112,56 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
     mesInicio,
     mesFim,
   )
+
+  useEffect(() => {
+    if (!data || data.mes_fim <= 0) return
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const [selecoesMensais, gruposPeriodoSalvos] = await Promise.all([
+          receitaInadimplenciaService.fetchSelecoesMesPeriodo(data.ano, data.mes_inicio, data.mes_fim),
+          receitaInadimplenciaService.fetchSelecaoPeriodo(data.ano, data.mes_inicio, data.mes_fim),
+        ])
+        if (cancelled) return
+
+        if (selecoesMensais.length > 0) {
+          const selecao: SelecaoGruposPorMes = {}
+          const porMes: Record<number, ReceitaInadimplenciaGrupoMes[]> = {}
+          await Promise.all(
+            selecoesMensais.map(async ({ mes, grupos_incluidos }) => {
+              const grupos = await receitaInadimplenciaService.fetchGruposMes(data.ano, mes)
+              if (cancelled) return
+              porMes[mes] = grupos
+              selecao[mes] = new Set(grupos_incluidos)
+            }),
+          )
+          if (!cancelled) {
+            setGruposPorMes(porMes)
+            setSelecaoPorMes(selecao)
+          }
+        }
+
+        if (gruposPeriodoSalvos) {
+          const grupos = await receitaInadimplenciaService.fetchGruposPeriodo(
+            data.ano,
+            data.mes_inicio,
+            data.mes_fim,
+          )
+          if (!cancelled) {
+            setGruposPeriodo(grupos)
+            setGruposIncluidos(new Set(gruposPeriodoSalvos))
+          }
+        }
+      } catch {
+        // Mantém defaults do servidor se a tabela de seleção ainda não existir.
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [data])
 
   const mesMax = data?.mes_max_disponivel ?? mesMaxDefault
   const mesesDisponiveis = useMemo(
@@ -134,6 +187,19 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   ) => {
     setGruposPorMes((prev) => ({ ...prev, [mes]: grupos }))
     setSelecaoPorMes((prev) => ({ ...prev, [mes]: incluidos }))
+    void receitaInadimplenciaService
+      .salvarSelecaoMes(ano, mes, [...incluidos])
+      .catch(() => {
+        // Falha silenciosa: estado local permanece até próximo refresh.
+      })
+  }
+
+  const handleAplicarSelecaoPeriodo = (incluidos: Set<string>) => {
+    setGruposIncluidos(incluidos)
+    if (!data) return
+    void receitaInadimplenciaService
+      .salvarSelecaoPeriodo(data.ano, data.mes_inicio, data.mes_fim, [...incluidos])
+      .catch(() => {})
   }
 
   if (mesMaxDefault <= 0 && !isLoading) {
@@ -290,6 +356,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
         incluidos={gruposIncluidos}
         onGruposLoaded={setGruposPeriodo}
         onIncluidosChange={setGruposIncluidos}
+        onAplicarSelecao={handleAplicarSelecaoPeriodo}
       />
 
       <div className="grid gap-4 lg:grid-cols-2">

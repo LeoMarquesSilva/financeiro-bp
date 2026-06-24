@@ -56,30 +56,14 @@ export function aplicarSelecaoGrupos(
     return { ...m, valor, pct, ajustado: true }
   })
 
-  // KPI do período = saldo por grupo (RPC), não soma dos meses da evolução.
   if (!algumMesAjustado) {
     return dashboard
   }
 
-  const valor_total_periodo = evolucao.reduce((s, m) => s + valorCalculadoMes(m), 0)
-  const previsto_periodo = evolucao.reduce((s, m) => s + previstoMesEvolucao(m), 0)
-
-  const pct_periodo =
-    previsto_periodo > 0
-      ? Math.round((valor_total_periodo / previsto_periodo) * 1000) / 10
-      : dashboard.pct_periodo
-
-  const top5_pct =
-    valor_total_periodo > 0
-      ? Math.round((dashboard.top5_total / valor_total_periodo) * 1000) / 10
-      : dashboard.top5_pct
-
+  // Ajuste mensal altera só a evolução; KPI do período vem do RPC / seleção por período.
   return {
     ...dashboard,
     evolucao,
-    valor_total_periodo,
-    pct_periodo,
-    top5_pct,
   }
 }
 

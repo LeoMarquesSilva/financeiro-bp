@@ -34,6 +34,7 @@ type Props = {
   incluidos: Set<string> | null
   onGruposLoaded: (grupos: ReceitaInadimplenciaGrupoPeriodo[]) => void
   onIncluidosChange: (incluidos: Set<string>) => void
+  onAplicarSelecao: (incluidos: Set<string>) => void
 }
 
 function mesLabel(mes: number, ano: number): string {
@@ -301,6 +302,7 @@ export function ReceitaInadimplenciaClientesSheet({
   incluidos,
   onGruposLoaded,
   onIncluidosChange,
+  onAplicarSelecao,
 }: Props) {
   const [grupos, setGrupos] = useState<ReceitaInadimplenciaGrupoPeriodo[]>([])
   const [empresas, setEmpresas] = useState<ReceitaInadimplenciaClientePeriodo[]>([])
@@ -330,7 +332,10 @@ export function ReceitaInadimplenciaClientesSheet({
         setEmpresas(dataEmpresas)
         onGruposLoaded(dataGrupos)
         if (incluidos == null) {
-          onIncluidosChange(gruposPeriodoPadrao(dataGrupos))
+          const salvos = await receitaInadimplenciaService.fetchSelecaoPeriodo(ano, mesInicio, mesFim)
+          if (cancelled) return
+          if (salvos) onIncluidosChange(new Set(salvos))
+          else onIncluidosChange(gruposPeriodoPadrao(dataGrupos))
         }
       })
       .catch((e) => {
@@ -575,7 +580,14 @@ export function ReceitaInadimplenciaClientesSheet({
         </div>
 
         <SheetFooter className="border-t border-slate-200 bg-slate-50 px-4 sm:px-6">
-          <Button type="button" className="w-full sm:w-auto" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            className="w-full sm:w-auto"
+            onClick={() => {
+              onAplicarSelecao(incluidosAtivos)
+              onOpenChange(false)
+            }}
+          >
             Aplicar ({formatCurrency(totalSelecionado)})
           </Button>
         </SheetFooter>
