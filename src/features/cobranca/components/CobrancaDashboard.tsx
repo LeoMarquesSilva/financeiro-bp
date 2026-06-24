@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useCobrancaKpiRows } from '../hooks/useWhatsapp'
 import type { CobrancaPainelKpiRow } from '../services/cobrancaService'
+import { isTituloSaldoParcial } from '../utils/titulo'
 import { formatCurrency } from '@/shared/utils/format'
 import {
   Target,
@@ -8,6 +9,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   AlertTriangle,
   RefreshCw,
   Filter,
@@ -15,6 +17,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import {
+  CobrancaKpiDetalheSheet,
+  type KpiCardTipo,
+} from './CobrancaKpiDetalheSheet'
 
 const META_PCT = 100
 const TODOS = '__all__'
@@ -128,12 +134,14 @@ function StatCard({
   sub,
   icon: Icon,
   tone = 'slate',
+  onClick,
 }: {
   label: string
   valor: string
   sub?: string
   icon: React.ElementType
   tone?: 'slate' | 'emerald' | 'rose' | 'amber'
+  onClick?: () => void
 }) {
   const tones: Record<string, string> = {
     slate: 'text-slate-600 bg-slate-100',
@@ -141,19 +149,31 @@ function StatCard({
     rose: 'text-rose-600 bg-rose-100',
     amber: 'text-amber-600 bg-amber-100',
   }
+  const Comp = onClick ? 'button' : 'div'
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <Comp
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={cn(
+        'w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors',
+        onClick &&
+          'cursor-pointer hover:border-slate-300 hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2',
+      )}
+    >
       <div className="flex items-center gap-3">
-        <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', tones[tone])}>
+        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tones[tone])}>
           <Icon className="h-4 w-4" />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-xs text-slate-400">{label}</p>
-          <p className="text-lg font-semibold text-slate-900">{valor}</p>
-          {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
+          <p className="text-lg font-semibold text-slate-900 sm:text-xl">{valor}</p>
+          {sub && <p className="truncate text-[11px] text-slate-400 sm:text-xs">{sub}</p>}
         </div>
+        {onClick && (
+          <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" aria-hidden />
+        )}
       </div>
-    </div>
+    </Comp>
   )
 }
 
@@ -167,6 +187,7 @@ export function CobrancaDashboard() {
   const [buscaGrupo, setBuscaGrupo] = useState('')
   const [status, setStatus] = useState<string>(TODOS)
   const [faixa, setFaixa] = useState<string>(TODOS)
+  const [detalheCard, setDetalheCard] = useState<KpiCardTipo | null>(null)
 
   const opcoes = useMemo(() => {
     const anos = new Set<string>()
@@ -186,6 +207,7 @@ export function CobrancaDashboard() {
 
   const filtradas = useMemo(() => {
     return rows.filter((r) => {
+      if (isTituloSaldoParcial(r.nro_titulo)) return false
       const venc = r.data_vencimento ?? ''
       if (ano !== TODOS && venc.slice(0, 4) !== ano) return false
       if (mes !== TODOS && venc.slice(5, 7) !== mes) return false
@@ -213,6 +235,17 @@ export function CobrancaDashboard() {
   }, [opcoes.grupos, buscaGrupo])
 
   const kpi = useMemo(() => agregar(filtradas), [filtradas])
+
+  const rowsPorCard = useMemo(
+    () => ({
+      vencidos: filtradas,
+      d1: filtradas.filter(cobradoIndicadorD1),
+      fora_prazo: filtradas.filter(cobradoForaPrazo),
+      sem_cobranca: filtradas.filter(semCobrancaWhatsapp),
+      com_whatsapp: filtradas.filter((r) => r.tem_whatsapp),
+    }),
+    [filtradas],
+  )
 
   const algumFiltro =
     ano !== TODOS ||
@@ -455,35 +488,39 @@ export function CobrancaDashboard() {
         </div>
       </div>
 
-      {/* Cards de apoio */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {/* Cards de apoio — clique para ver composição */}
+      <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 xl:gap-4">
         <StatCard
           label="Títulos vencidos"
           valor={String(kpi.titulos_vencidos)}
           sub={formatCurrency(kpi.valor_vencido)}
           icon={AlertTriangle}
           tone="slate"
+          onClick={() => setDetalheCard('vencidos')}
         />
         <StatCard
           label="No D+1 (indicador)"
           valor={String(kpi.titulos_cobrados)}
-          sub={`${pctD1.toFixed(0)}% · ${formatCurrency(kpi.valor_cobrado)}`}
+          sub={`${pctD1.toFixed(0)}% do total · ${formatCurrency(kpi.valor_cobrado)}`}
           icon={CheckCircle2}
           tone="emerald"
+          onClick={() => setDetalheCard('d1')}
         />
         <StatCard
           label="Fora do prazo D+1"
           valor={String(kpi.titulos_fora_prazo)}
-          sub={formatCurrency(kpi.valor_fora_prazo)}
+          sub={`Cobrado após o D+1 · ${formatCurrency(kpi.valor_fora_prazo)}`}
           icon={MessageCircle}
           tone="amber"
+          onClick={() => setDetalheCard('fora_prazo')}
         />
         <StatCard
           label="Sem cobrança"
           valor={String(kpi.titulos_sem_cobranca)}
-          sub={formatCurrency(kpi.valor_sem_cobranca)}
+          sub={`Ainda sem WhatsApp · ${formatCurrency(kpi.valor_sem_cobranca)}`}
           icon={AlertTriangle}
           tone="rose"
+          onClick={() => setDetalheCard('sem_cobranca')}
         />
         <StatCard
           label="Com WhatsApp (total)"
@@ -491,8 +528,31 @@ export function CobrancaDashboard() {
           sub={`de ${kpi.titulos_vencidos} título(s)`}
           icon={MessageCircle}
           tone="slate"
+          onClick={() => setDetalheCard('com_whatsapp')}
         />
       </div>
+
+      <p className="text-xs text-slate-500">
+        Cada título vencido cai em uma única categoria:{' '}
+        <strong className="font-medium text-emerald-700">{kpi.titulos_cobrados} no D+1</strong>
+        {' + '}
+        <strong className="font-medium text-amber-700">{kpi.titulos_fora_prazo} fora do prazo</strong>
+        {' + '}
+        <strong className="font-medium text-rose-600">{kpi.titulos_sem_cobranca} sem cobrança</strong>
+        {' = '}
+        <strong className="font-medium text-slate-700">{kpi.titulos_vencidos} títulos</strong>. O indicador
+        ({efet.toFixed(1)}%) é apenas <strong>no D+1 ÷ total</strong> — títulos sem cobrança reduzem a meta,
+        mas não entram em &quot;fora do prazo&quot;.
+      </p>
+
+      <CobrancaKpiDetalheSheet
+        open={detalheCard !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetalheCard(null)
+        }}
+        tipo={detalheCard}
+        rows={detalheCard ? rowsPorCard[detalheCard] : []}
+      />
 
       {/* Pendência de valor */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

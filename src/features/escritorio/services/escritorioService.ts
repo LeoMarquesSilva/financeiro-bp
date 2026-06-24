@@ -166,6 +166,12 @@ function normalizeContagemRow(row: Record<string, unknown>): ContagemCiPorGrupoR
 const PAGE_SIZE = 1000
 
 /** Resumo por grupo (uma linha por grupo): leve para filtros, ordenação e totais. View escritorio_grupos_resumo. */
+export const CATEGORIA_CLIENTE_INATIVO = 'Cliente inativo'
+
+export function isClienteInativo(categoria: string | null | undefined): boolean {
+  return (categoria ?? '').trim() === CATEGORIA_CLIENTE_INATIVO
+}
+
 export interface GrupoResumoRow {
   grupo_cliente: string
   total_empresas: number
@@ -174,6 +180,8 @@ export interface GrupoResumoRow {
   valor_aberto: number
   valor_pago: number
   valor_em_atraso: number
+  /** Valor em atraso desconsiderando empresas inativas e sem grupo_cliente. */
+  valor_em_atraso_ativos: number
 }
 
 function normalizeResumoRow(row: Record<string, unknown>): GrupoResumoRow {
@@ -185,6 +193,7 @@ function normalizeResumoRow(row: Record<string, unknown>): GrupoResumoRow {
     valor_aberto: Number(row.valor_aberto) || 0,
     valor_pago: Number(row.valor_pago) || 0,
     valor_em_atraso: Number(row.valor_em_atraso) || 0,
+    valor_em_atraso_ativos: Number(row.valor_em_atraso_ativos) || 0,
   }
 }
 
@@ -200,7 +209,9 @@ export async function fetchGruposResumo(): Promise<GrupoResumoRow[]> {
     const to = from + PAGE_SIZE - 1
     const { data, error } = await supabase
       .from('escritorio_grupos_resumo')
-      .select('grupo_cliente, total_empresas, total_geral, horas_total, valor_aberto, valor_pago, valor_em_atraso')
+      .select(
+        'grupo_cliente, total_empresas, total_geral, horas_total, valor_aberto, valor_pago, valor_em_atraso, valor_em_atraso_ativos',
+      )
       .order('grupo_cliente', { ascending: true })
       .range(from, to)
     if (error) throw error

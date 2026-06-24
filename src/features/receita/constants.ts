@@ -24,8 +24,36 @@ export const MESES_ABREV = [
   'dez',
 ] as const
 
+export const MESES_NOME = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+] as const
+
 export function mesAbrev(mes: number): string {
   return MESES_ABREV[mes - 1] ?? String(mes)
+}
+
+export function mesNome(mes: number): string {
+  return MESES_NOME[mes - 1] ?? String(mes)
+}
+
+/** Último mês disponível para o ano (inclui o mês corrente; ex.: em jun/2026 → 6). */
+export function mesMaxDisponivelInadimplencia(ano: number, ref = new Date()): number {
+  const y = ref.getFullYear()
+  const m = ref.getMonth() + 1
+  if (ano > y) return 0
+  if (ano < y) return 12
+  return m
 }
 
 /** Paleta fixa do módulo Receita (gráfico, tabela, KPIs, formulário). */
@@ -150,6 +178,12 @@ export const RECEITA_CHART_LABEL = {
   linePoint: 12,
   minBarHeight: 14,
   minStackHeight: 20,
+} as const
+
+/** Cores de eixo e rótulos — preto para legibilidade em fundo branco (PPT). */
+export const RECEITA_CHART_AXIS = {
+  tick: '#111827',
+  label: '#111827',
 } as const
 
 /** Séries em linha no gráfico de colunas (somente recebido é barra empilhada). */

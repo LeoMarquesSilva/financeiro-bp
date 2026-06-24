@@ -25,6 +25,8 @@ interface EmailItem {
 interface Payload {
   itens: EmailItem[]
   created_by?: string | null
+  /** Quando false, envia o e-mail sem registrar em cobranca_eventos (não afeta indicadores). */
+  registrar_evento?: boolean
 }
 
 async function getGraphToken(tenant: string, clientId: string, clientSecret: string): Promise<string> {
@@ -74,6 +76,8 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Nenhum item para enviar.' }, 400)
   }
 
+  const registrarEvento = payload.registrar_evento !== false
+
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE)
 
   let token: string
@@ -89,21 +93,24 @@ Deno.serve(async (req: Request) => {
   for (const item of itens) {
     const destino = (item.email ?? '').trim()
     if (!destino || !emailRegex.test(destino)) {
-      await supabase.from('cobranca_eventos').insert({
-        parcela_id: item.parcela_id,
-        pessoa_id: item.pessoa_id ?? null,
-        canal: 'email',
-        status: 'erro',
-        destino: destino || null,
-        mensagem: item.corpo,
-        erro: 'E-mail inválido ou ausente',
-        created_by: payload.created_by ?? null,
-      })
+      if (registrarEvento) {
+        await supabase.from('cobranca_eventos').insert({
+          parcela_id: item.parcela_id,
+          pessoa_id: item.pessoa_id ?? null,
+          canal: 'email',
+          status: 'erro',
+          destino: destino || null,
+          mensagem: item.corpo,
+          erro: 'E-mail inválido ou ausente',
+          created_by: payload.created_by ?? null,
+        })
+      }
       results.push({ parcela_id: item.parcela_id, ok: false, erro: 'E-mail inválido' })
       continue
     }
 
     try {
+      const isHtml = /<[a-z][\s\S]*>/i.test(item.corpo)
       const resp = await fetch(
         `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(MS_SENDER)}/sendMail`,
         {
@@ -112,7 +119,10 @@ Deno.serve(async (req: Request) => {
           body: JSON.stringify({
             message: {
               subject: item.assunto,
-              body: { contentType: 'Text', content: item.corpo },
+              body: {
+                contentType: isHtml ? 'HTML' : 'Text',
+                content: item.corpo,
+              },
               toRecipients: [{ emailAddress: { address: destino } }],
             },
             saveToSentItems: true,
@@ -123,6 +133,37 @@ Deno.serve(async (req: Request) => {
       if (!resp.ok && resp.status !== 202) {
         const data = await resp.json().catch(() => ({}))
         const erro = JSON.stringify(data)
+        if (registrarEvento) {
+          await supabase.from('cobranca_eventos').insert({
+            parcela_id: item.parcela_id,
+            pessoa_id: item.pessoa_id ?? null,
+            canal: 'email',
+            status: 'erro',
+            destino,
+            mensagem: item.corpo,
+            erro: erro.slice(0, 1000),
+            created_by: payload.created_by ?? null,
+          })
+        }
+        results.push({ parcela_id: item.parcela_id, ok: false, erro })
+        continue
+      }
+
+      if (registrarEvento) {
+        await supabase.from('cobranca_eventos').insert({
+          parcela_id: item.parcela_id,
+          pessoa_id: item.pessoa_id ?? null,
+          canal: 'email',
+          status: 'enviado',
+          destino,
+          mensagem: item.corpo,
+          created_by: payload.created_by ?? null,
+        })
+      }
+      results.push({ parcela_id: item.parcela_id, ok: true })
+    } catch (e) {
+      const erro = e instanceof Error ? e.message : String(e)
+      if (registrarEvento) {
         await supabase.from('cobranca_eventos').insert({
           parcela_id: item.parcela_id,
           pessoa_id: item.pessoa_id ?? null,
@@ -133,32 +174,7 @@ Deno.serve(async (req: Request) => {
           erro: erro.slice(0, 1000),
           created_by: payload.created_by ?? null,
         })
-        results.push({ parcela_id: item.parcela_id, ok: false, erro })
-        continue
       }
-
-      await supabase.from('cobranca_eventos').insert({
-        parcela_id: item.parcela_id,
-        pessoa_id: item.pessoa_id ?? null,
-        canal: 'email',
-        status: 'enviado',
-        destino,
-        mensagem: item.corpo,
-        created_by: payload.created_by ?? null,
-      })
-      results.push({ parcela_id: item.parcela_id, ok: true })
-    } catch (e) {
-      const erro = e instanceof Error ? e.message : String(e)
-      await supabase.from('cobranca_eventos').insert({
-        parcela_id: item.parcela_id,
-        pessoa_id: item.pessoa_id ?? null,
-        canal: 'email',
-        status: 'erro',
-        destino,
-        mensagem: item.corpo,
-        erro: erro.slice(0, 1000),
-        created_by: payload.created_by ?? null,
-      })
       results.push({ parcela_id: item.parcela_id, ok: false, erro })
     }
   }

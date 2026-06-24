@@ -10,6 +10,7 @@ import { ReceitaComparativoChart } from '../components/ReceitaComparativoChart'
 import { ReceitaComparativoColunasChart } from '../components/ReceitaComparativoColunasChart'
 import { ReceitaAcumuladoChart } from '../components/ReceitaAcumuladoChart'
 import { ReceitaKpis } from '../components/ReceitaKpis'
+import { ReceitaInadimplenciaSection } from '../components/ReceitaInadimplenciaSection'
 import {
   PLANOS_CONTAS_INCLUIDOS_COTA,
   RECEITA_COLORS,
@@ -71,7 +72,7 @@ export function ReceitaPage() {
             Receita
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Metas, projeções e realizados por mês (itens financeiros — cota de honorários).
+            Metas, projeções e realizados por mês (cota de honorários, somente clientes ativos).
           </p>
           <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
             <Cloud className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -110,6 +111,8 @@ export function ReceitaPage() {
 
       <ReceitaKpis rows={data?.rows ?? []} ano={data?.ano ?? metas.ano} loading={dashLoading} />
 
+      <ReceitaInadimplenciaSection ano={metas.ano} />
+
       {dashLoading && (
         <div className="space-y-6">
           <div className="h-80 animate-pulse rounded-xl border border-slate-200/60 bg-slate-100" />
@@ -126,7 +129,11 @@ export function ReceitaPage() {
             ano={data.ano}
             departamentoCores={coresParaGrafico}
           />
-          <ReceitaAcumuladoChart rows={data.rows} ano={data.ano} />
+          <ReceitaAcumuladoChart
+            rows={data.rows}
+            ano={data.ano}
+            departamentoCores={coresParaGrafico}
+          />
         </>
       )}
 

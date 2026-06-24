@@ -300,11 +300,15 @@ export function useGruposEscritorioPaginado(
 
     let emAtraso = 0
 
+    let emAtrasoAtivos = 0
+
     let emAberto = 0
 
     let pago = 0
 
     let countAtraso = 0
+
+    let countAtrasoAtivos = 0
 
     let countAVencer = 0
 
@@ -320,11 +324,15 @@ export function useGruposEscritorioPaginado(
 
       emAtraso += r.valor_em_atraso
 
+      emAtrasoAtivos += r.valor_em_atraso_ativos
+
       emAberto += r.valor_aberto
 
       pago += r.valor_pago
 
       if (r.valor_em_atraso > 0) countAtraso++
+
+      if (r.valor_em_atraso_ativos > 0) countAtrasoAtivos++
 
       if (vA > 0) countAVencer++
 
@@ -334,7 +342,18 @@ export function useGruposEscritorioPaginado(
 
     }
 
-    return { aVencer, emAtraso, emAberto, pago, countAtraso, countAVencer, countAberto, countPago }
+    return {
+      aVencer,
+      emAtraso,
+      emAtrasoAtivos,
+      emAberto,
+      pago,
+      countAtraso,
+      countAtrasoAtivos,
+      countAVencer,
+      countAberto,
+      countPago,
+    }
 
   }, [filtrado])
 

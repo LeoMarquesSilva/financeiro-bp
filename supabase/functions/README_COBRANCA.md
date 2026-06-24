@@ -63,7 +63,7 @@ supabase secrets set \
   MS_TENANT_ID="<tenant-id>" \
   MS_CLIENT_ID="<application-id>" \
   MS_CLIENT_SECRET="<client-secret>" \
-  MS_SENDER="financeiro@bpplaw.com.br" \
+  MS_SENDER="financeiro@bismarchipires.com.br" \
   WHATSAPP_WEBHOOK_SECRET="<string-aleatoria-forte>"
 ```
 
@@ -76,7 +76,7 @@ supabase secrets set \
 3. Clique em **Grant admin consent**.
 4. Em **Certificates & secrets** > New client secret (copie o valor → `MS_CLIENT_SECRET`).
 5. Copie **Directory (tenant) ID** → `MS_TENANT_ID` e **Application (client) ID** → `MS_CLIENT_ID`.
-6. `MS_SENDER` = a caixa remetente (ex.: `financeiro@bpplaw.com.br`). Recomendado restringir o app a essa caixa via *Application Access Policy* (Exchange Online PowerShell).
+6. `MS_SENDER` = a caixa remetente (`financeiro@bismarchipires.com.br`). App recomendado: **VIOS-OUTLOOK-FINANCEIRO** com permissão `Mail.Send`.
 
 ## Evolution API – Webhook
 

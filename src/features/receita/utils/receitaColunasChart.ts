@@ -97,6 +97,15 @@ export function formatPercentLabel(value: number): string {
   return `${Math.round(value)}%`
 }
 
+/** % da meta — uma casa decimal para soma bater com o total exibido. */
+export function formatPercentMeta(value: number): string {
+  if (!value) return '0,0%'
+  return `${value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`
+}
+
 export function formatColunaLabel(value: number): string {
   if (!value) return ''
   const abs = Math.abs(value)
@@ -192,6 +201,35 @@ export function buildPlanoSlices(
       dataKey: planoDataKey(plano),
       color: planoColor(plano, usedColors),
     }))
+}
+
+/** Converte valores mensais em % da meta do mês (meta = 100%, não exibida). */
+export function toColunasPercentData(
+  data: ReceitaColunasChartPoint[],
+  stackSlices: ReceitaAreaChartSlice[],
+): ReceitaColunasChartPoint[] {
+  return data.map((p) => {
+    const meta = p.meta
+    if (meta <= 0) return { ...p }
+
+    const point: ReceitaColunasChartPoint = {
+      ...p,
+      meta: 100,
+      projetadoBaseAbril: (p.projetadoBaseAbril / meta) * 100,
+      projetadoReal: (p.projetadoReal / meta) * 100,
+      previsto: (p.previsto / meta) * 100,
+      recebidoTotal:
+        p.recebidoTotal != null ? (p.recebidoTotal / meta) * 100 : null,
+    }
+
+    for (const slice of stackSlices) {
+      const v = p[slice.dataKey]
+      point[slice.dataKey] =
+        typeof v === 'number' ? (v / meta) * 100 : v
+    }
+
+    return point
+  })
 }
 
 export function buildColunasChartDataPorPlano(

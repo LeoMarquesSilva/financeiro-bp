@@ -9,6 +9,7 @@ import type {
   CobrancaKpiRow,
 } from '@/lib/database.types'
 import type { PessoaTelefoneWhatsapp, PessoaTelefoneWhatsappInput, PessoaTelefoneMatch } from '../types/cobranca.types'
+import { isTituloSaldoParcial } from '../utils/titulo'
 
 function normalizeTelefoneForStorage(raw: string): string | null {
   return parsePhoneForStorage(raw) ?? normalizePhone(raw)
@@ -23,6 +24,7 @@ function isTelefoneStorable(raw: string): boolean {
 export type CobrancaPainelKpiRow = Pick<
   CobrancaPainelRow,
   | 'parcela_id'
+  | 'nro_titulo'
   | 'data_vencimento'
   | 'data_prazo_d1'
   | 'valor'
@@ -34,6 +36,8 @@ export type CobrancaPainelKpiRow = Pick<
   | 'grupo_cliente'
   | 'cliente'
   | 'dias_atraso'
+  | 'ultima_cobranca_at'
+  | 'ultima_cobranca_canal'
 >
 
 export interface PainelFiltros {
@@ -635,14 +639,16 @@ export const cobrancaService = {
   async listPainelKpi(): Promise<CobrancaPainelKpiRow[]> {
     const { data, error } = await supabase
       .from('cobranca_painel')
-      .select('parcela_id, data_vencimento, data_prazo_d1, valor, tem_whatsapp, tem_whatsapp_d1, tem_email, concluido, plano_contas, grupo_cliente, cliente, dias_atraso')
+      .select(
+        'parcela_id, nro_titulo, data_vencimento, data_prazo_d1, valor, tem_whatsapp, tem_whatsapp_d1, tem_email, concluido, plano_contas, grupo_cliente, cliente, dias_atraso, ultima_cobranca_at, ultima_cobranca_canal',
+      )
       .gte('data_vencimento', '2026-05-01')
       .limit(10000)
     if (error || !data) {
       console.error('[cobrancaService] listPainelKpi', error)
       return []
     }
-    return data as CobrancaPainelKpiRow[]
+    return (data as CobrancaPainelKpiRow[]).filter((r) => !isTituloSaldoParcial(r.nro_titulo))
   },
 
   /** Planos de conta distintos no painel (parcelas vencidas em aberto). */
@@ -765,9 +771,13 @@ export const cobrancaService = {
     return data as EnvioResult
   },
 
-  async enviarEmail(itens: EnvioItemEmail[], created_by?: string | null): Promise<EnvioResult> {
+  async enviarEmail(
+    itens: EnvioItemEmail[],
+    created_by?: string | null,
+    options?: { registrar_evento?: boolean },
+  ): Promise<EnvioResult> {
     const { data, error } = await supabase.functions.invoke('cobranca-enviar-email', {
-      body: { itens, created_by },
+      body: { itens, created_by, registrar_evento: options?.registrar_evento ?? true },
     })
     if (error) {
       throw new Error(await parseEdgeFunctionError(error))

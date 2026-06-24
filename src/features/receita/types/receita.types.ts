@@ -33,6 +33,8 @@ export type ReceitaAcumuladoChartPoint = {
   recebidoAcumulado: number | null
   previstoAcumulado: number
   metaAcumulada: number
+  /** % da meta acumulada por área (modo apresentação por área). */
+  [areaDataKey: string]: number | string | null
 }
 
 export type ReceitaRecebidoPlanoRow = {

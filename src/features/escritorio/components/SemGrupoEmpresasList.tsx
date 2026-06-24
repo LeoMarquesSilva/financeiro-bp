@@ -22,7 +22,7 @@ import { Label } from '@/components/ui/label'
 
 import { formatCurrency, formatHorasHHMMSS } from '@/shared/utils/format'
 
-import { Briefcase, Clock, Banknote, ChevronRight, Filter, ArrowUpDown } from 'lucide-react'
+import { Briefcase, Clock, Banknote, ChevronRight, Filter, ArrowUpDown, AlertTriangle } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -308,6 +308,8 @@ export function SemGrupoEmpresasList({ empresas, onSelectCliente }: SemGrupoEmpr
 
               <th className="hidden w-24 px-2 py-2 text-right md:table-cell">TimeSheet</th>
 
+              <th className="hidden w-28 px-2 py-2 text-right md:table-cell">Pendente</th>
+
               <th className="hidden w-24 px-2 py-2 text-right lg:table-cell">Valor</th>
 
               {onSelectCliente && <th className="w-8 px-1 py-2" aria-hidden />}
@@ -322,7 +324,7 @@ export function SemGrupoEmpresasList({ empresas, onSelectCliente }: SemGrupoEmpr
 
               <tr>
 
-                <td colSpan={onSelectCliente ? 5 : 4} className="px-3 py-4 text-center italic text-slate-400">
+                <td colSpan={onSelectCliente ? 6 : 5} className="px-3 py-4 text-center italic text-slate-400">
 
                   Nenhuma empresa corresponde aos filtros
 
@@ -398,7 +400,31 @@ export function SemGrupoEmpresasList({ empresas, onSelectCliente }: SemGrupoEmpr
 
                         )}
 
-                        {valor > 0 && (
+                        {fin.valorEmAtraso > 0 && (
+
+                          <span className="font-medium text-red-700">
+
+                            <AlertTriangle className="mr-0.5 inline h-3 w-3" />
+
+                            {formatCurrency(fin.valorEmAtraso)} pendente
+
+                          </span>
+
+                        )}
+
+                        {fin.valorAberto - fin.valorEmAtraso > 0 && (
+
+                          <span className="text-amber-700">
+
+                            <Banknote className="mr-0.5 inline h-3 w-3" />
+
+                            {formatCurrency(fin.valorAberto - fin.valorEmAtraso)} a vencer
+
+                          </span>
+
+                        )}
+
+                        {valor > 0 && fin.valorAberto <= 0 && (
 
                           <span>
 
@@ -426,6 +452,15 @@ export function SemGrupoEmpresasList({ empresas, onSelectCliente }: SemGrupoEmpr
 
                     </td>
 
+                    <td className="hidden px-2 py-1.5 text-right md:table-cell">
+                      {fin.valorEmAtraso > 0 ? (
+                        <span className="tabular-nums font-medium text-red-700">
+                          {formatCurrency(fin.valorEmAtraso)}
+                        </span>
+                      ) : (
+                        '–'
+                      )}
+                    </td>
                     <td className="hidden px-2 py-1.5 text-right lg:table-cell">
 
                       {valor > 0 ? (

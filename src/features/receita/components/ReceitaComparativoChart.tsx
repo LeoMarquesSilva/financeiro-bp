@@ -1,22 +1,26 @@
-import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronUp, ListTree, Table2, TrendingUp } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp, ListTree, Percent, Table2, TrendingUp } from 'lucide-react'
 import {
   Area,
   CartesianGrid,
   ComposedChart,
+  LabelList,
   Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  type LabelProps,
 } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
 import type { ReceitaMesRow } from '../types/receita.types'
-import { RECEITA_COLORS } from '../constants'
+import { RECEITA_CHART_AXIS, RECEITA_CHART_LABEL, RECEITA_COLORS } from '../constants'
 import { ReceitaRecebidoDetalheSheet } from './ReceitaRecebidoDetalheSheet'
 import { isMesFuturo, valorRecebidoGrafico } from '../utils/receitaMes'
+import { formatPercentLabel } from '../utils/receitaColunasChart'
+import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 
 const SERIES = [
   {
@@ -85,9 +89,66 @@ function formatYAxis(value: number): string {
   }).format(value)
 }
 
+function formatYAxisPercent(value: number): string {
+  if (value >= 100) return `${Math.round(value)}%`
+  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`
+}
+
+function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
+  return data.map((p) => {
+    const meta = p.meta
+    if (meta <= 0) {
+      return {
+        ...p,
+        meta: 0,
+        projetadoBaseAbril: 0,
+        projetadoReal: 0,
+        previsto: 0,
+        recebido: p.recebido != null ? 0 : null,
+      }
+    }
+    return {
+      mesLabel: p.mesLabel,
+      meta: 100,
+      projetadoBaseAbril: (p.projetadoBaseAbril / meta) * 100,
+      projetadoReal: (p.projetadoReal / meta) * 100,
+      previsto: (p.previsto / meta) * 100,
+      recebido: p.recebido != null ? (p.recebido / meta) * 100 : null,
+    }
+  })
+}
+
+const SERIES_PERCENT_LEGEND: Partial<Record<SeriesKey, string>> = {
+  meta: 'Meta (100%)',
+  recebido: 'Recebido (% meta)',
+  previsto: 'Previsto (% meta)',
+  projetadoBaseAbril: 'Proj. base abril (% meta)',
+  projetadoReal: 'Proj. real (% meta)',
+}
+
 function pctMeta(recebido: number, meta: number): number | null {
   if (!meta) return null
   return (recebido / meta) * 100
+}
+
+function RecebidoPercentDotLabel(props: LabelProps) {
+  const { x, y, value } = props
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num) || x == null || y == null) return null
+
+  return (
+    <text
+      x={Number(x) + 8}
+      y={Number(y)}
+      fill={RECEITA_COLORS.recebido.hex}
+      textAnchor="start"
+      dominantBaseline="middle"
+      fontSize={RECEITA_CHART_LABEL.linePoint}
+      fontWeight={600}
+    >
+      {formatPercentLabel(num)}
+    </text>
+  )
 }
 
 function PctBadge({ pct }: { pct: number | null }) {
@@ -120,11 +181,13 @@ function ReceitaChartTooltip({
   payload,
   label,
   visible,
+  percentMode,
 }: {
   active?: boolean
   payload?: TooltipEntry[]
   label?: string
   visible: Set<SeriesKey>
+  percentMode: boolean
 }) {
   if (!active || !payload?.length) return null
 
@@ -151,9 +214,15 @@ function ReceitaChartTooltip({
                   className="inline-block h-2 w-2 shrink-0 rounded-full"
                   style={{ backgroundColor: series.color }}
                 />
-                {series.legend}
+                {percentMode && series.key !== 'meta'
+                  ? (SERIES_PERCENT_LEGEND[series.key] ?? `${series.legend} (% meta)`)
+                  : percentMode && series.key === 'meta'
+                    ? SERIES_PERCENT_LEGEND.meta
+                    : series.legend}
               </span>
-              <span className="font-semibold tabular-nums text-slate-900">{formatCurrency(value)}</span>
+              <span className="font-semibold tabular-nums text-slate-900">
+                {percentMode ? formatPercentLabel(value) : formatCurrency(value)}
+              </span>
             </li>
           )
         })}
@@ -164,13 +233,15 @@ function ReceitaChartTooltip({
 
 function ReceitaChartLegend({
   visible,
+  percentMode,
   onToggle,
 }: {
   visible: Set<SeriesKey>
+  percentMode: boolean
   onToggle: (key: SeriesKey) => void
 }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center justify-center gap-2 px-1">
+    <div className="mt-3 flex flex-wrap items-center justify-center gap-2 px-1">
       {SERIES.map((s) => {
         const on = visible.has(s.key)
         return (
@@ -191,11 +262,15 @@ function ReceitaChartLegend({
               style={{ backgroundColor: s.color }}
               aria-hidden
             />
-            {s.legend}
+            {percentMode
+              ? (SERIES_PERCENT_LEGEND[s.key] ?? `${s.legend} (% meta)`)
+              : s.legend}
           </button>
         )
       })}
-      <span className="hidden text-[10px] text-slate-400 sm:inline">Clique para exibir/ocultar</span>
+      <span className="hidden text-[10px] text-slate-400 sm:inline" data-chart-export-ignore>
+        Clique para exibir/ocultar
+      </span>
     </div>
   )
 }
@@ -208,7 +283,9 @@ type Props = {
 export function ReceitaComparativoChart({ rows, ano }: Props) {
   const [detalheMes, setDetalheMes] = useState<ReceitaMesRow | null>(null)
   const [tabelaAberta, setTabelaAberta] = useState(true)
+  const [percentMode, setPercentMode] = useState(false)
   const [visible, setVisible] = useState<Set<SeriesKey>>(() => new Set(DEFAULT_VISIBLE))
+  const chartExportRef = useRef<HTMLDivElement>(null)
 
   const toggleSeries = (key: SeriesKey) => {
     setVisible((prev) => {
@@ -223,14 +300,25 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     })
   }
 
-  const chartData: ChartPoint[] = rows.map((r) => ({
-    mesLabel: r.mesLabel,
-    meta: r.meta,
-    projetadoBaseAbril: r.projetadoBaseAbril,
-    projetadoReal: r.projetadoReal,
-    recebido: valorRecebidoGrafico(r.recebido, ano, r.mes),
-    previsto: r.previsto,
-  }))
+  const rawChartData: ChartPoint[] = useMemo(
+    () =>
+      rows.map((r) => ({
+        mesLabel: r.mesLabel,
+        meta: r.meta,
+        projetadoBaseAbril: r.projetadoBaseAbril,
+        projetadoReal: r.projetadoReal,
+        recebido: valorRecebidoGrafico(r.recebido, ano, r.mes),
+        previsto: r.previsto,
+      })),
+    [rows, ano],
+  )
+
+  const chartData = useMemo(
+    () => (percentMode ? toComparativoPercentData(rawChartData) : rawChartData),
+    [percentMode, rawChartData],
+  )
+
+  const visibleSeries = visible
 
   const rowsComDados = useMemo(
     () => rows.filter((r) => !isMesFuturo(ano, r.mes)),
@@ -264,24 +352,52 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
               <TrendingUp className="h-4 w-4" aria-hidden />
             </span>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">Comparativo mensal</h2>
+              <h2 className="text-sm font-semibold text-slate-900">
+                {percentMode ? 'Comparativo mensal (% da meta)' : 'Comparativo mensal'}
+              </h2>
               <p className="text-xs text-slate-500">
-                <span className={RECEITA_COLORS.meta.textStrong}>Meta</span>
-                {' · '}
-                <span className={RECEITA_COLORS.projetadoBaseAbril.text}>Proj. base abril</span>
-                {' · '}
-                <span className={RECEITA_COLORS.projetadoReal.text}>Proj. real</span>
-                {' · áreas = recebido e previsto ('}{ano})
+                {percentMode ? (
+                  <>Séries em % da meta de cada mês · linha tracejada = 100% ({ano})</>
+                ) : (
+                  <>
+                    <span className={RECEITA_COLORS.meta.textStrong}>Meta</span>
+                    {' · '}
+                    <span className={RECEITA_COLORS.projetadoBaseAbril.text}>Proj. base abril</span>
+                    {' · '}
+                    <span className={RECEITA_COLORS.projetadoReal.text}>Proj. real</span>
+                    {' · áreas = recebido e previsto ('}{ano})
+                  </>
+                )}
               </p>
             </div>
           </div>
+          <ChartCopyButton containerRef={chartExportRef} />
         </div>
 
-        <ReceitaChartLegend visible={visible} onToggle={toggleSeries} />
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPercentMode((v) => !v)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+              percentMode
+                ? 'border-violet-200 bg-violet-50 text-violet-800 shadow-sm'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+            )}
+            aria-pressed={percentMode}
+          >
+            <Percent className="h-3 w-3 shrink-0" aria-hidden />
+            {percentMode ? 'Ver valores (R$)' : 'Ver % da meta'}
+          </button>
+        </div>
 
-        <div className="h-[300px] min-h-[300px] w-full min-w-0">
+        <div ref={chartExportRef} className="flex flex-col">
+          <div data-chart-plot className="h-[300px] min-h-[300px] w-full min-w-0">
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
-            <ComposedChart data={chartData} margin={{ left: 4, right: 12, top: 8, bottom: 4 }}>
+            <ComposedChart
+              data={chartData}
+              margin={{ left: 4, right: percentMode ? 40 : 12, top: 8, bottom: 4 }}
+            >
               <defs>
                 <linearGradient id="receitaRecebidoGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={RECEITA_COLORS.recebido.hex} stopOpacity={0.25} />
@@ -297,28 +413,28 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
 
               <XAxis
                 dataKey="mesLabel"
-                tick={{ fontSize: 12, fill: '#64748b' }}
+                tick={{ fontSize: 12, fill: RECEITA_CHART_AXIS.tick }}
                 axisLine={false}
                 tickLine={false}
                 dy={4}
               />
               <YAxis
-                tickFormatter={formatYAxis}
-                tick={{ fontSize: 11, fill: '#94a3b8' }}
+                tickFormatter={percentMode ? formatYAxisPercent : formatYAxis}
+                tick={{ fontSize: 11, fill: RECEITA_CHART_AXIS.tick }}
                 axisLine={false}
                 tickLine={false}
-                width={60}
+                width={percentMode ? 48 : 60}
                 domain={[0, 'auto']}
               />
 
               <Tooltip
                 wrapperStyle={{ pointerEvents: 'auto', zIndex: 60 }}
                 allowEscapeViewBox={{ x: true, y: true }}
-                content={<ReceitaChartTooltip visible={visible} />}
+                content={<ReceitaChartTooltip visible={visibleSeries} percentMode={percentMode} />}
                 cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
               />
 
-              {SERIES.filter((s) => s.type === 'area' && visible.has(s.key)).map((s) => (
+              {SERIES.filter((s) => s.type === 'area' && visibleSeries.has(s.key)).map((s) => (
                 <Area
                   key={s.key}
                   type="monotone"
@@ -332,10 +448,14 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   }}
                   activeDot={{ r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
                   connectNulls={false}
-                />
+                >
+                  {percentMode && s.key === 'recebido' && (
+                    <LabelList dataKey="recebido" content={<RecebidoPercentDotLabel />} />
+                  )}
+                </Area>
               ))}
 
-              {SERIES.filter((s) => s.type === 'line' && visible.has(s.key)).map((s) => (
+              {SERIES.filter((s) => s.type === 'line' && visibleSeries.has(s.key)).map((s) => (
                 <Line
                   key={s.key}
                   type="monotone"
@@ -350,6 +470,15 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
               ))}
             </ComposedChart>
           </ResponsiveContainer>
+        </div>
+
+          <div data-chart-legend className="mt-3">
+            <ReceitaChartLegend
+              visible={visibleSeries}
+              percentMode={percentMode}
+              onToggle={toggleSeries}
+            />
+          </div>
         </div>
       </section>
 
