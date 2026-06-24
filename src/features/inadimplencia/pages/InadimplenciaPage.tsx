@@ -117,12 +117,23 @@ export function InadimplenciaPage() {
     listagemParams.orderBy,
     listagemParams.orderDesc,
   ])
+
   const { data: clientes, total, loading, error, refetch } = useInadimplencia({
     ...listagemParams,
     incluirResolvidos: mostrarResolvidos,
     page,
     pageSize: PAGE_SIZE,
   })
+
+  useEffect(() => {
+    if (!selectedClient?.id) return
+    const updated = clientes.find((c: ClientInadimplenciaRow) => c.id === selectedClient.id)
+    if (!updated) return
+    if (updated.updated_at !== selectedClient.updated_at) {
+      setSelectedClient(updated)
+    }
+  }, [clientes, selectedClient?.id, selectedClient?.updated_at])
+
   const { data: dashboardData, loading: dashboardLoading } = useDashboard()
   const { exibirTaxaRecuperacaoComite } = useExibirTaxaRecuperacaoComite()
   const { fullName } = useAuth()

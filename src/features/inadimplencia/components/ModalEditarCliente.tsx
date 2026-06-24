@@ -58,6 +58,10 @@ export function ModalEditarCliente({ open, onClose, client, onSuccess }: ModalEd
     client.data_follow_up ? client.data_follow_up.slice(0, 10) : ''
   )
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const formInitializedRef = useRef<{ open: boolean; clientId: string | null }>({
+    open: false,
+    clientId: null,
+  })
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -70,28 +74,38 @@ export function ModalEditarCliente({ open, onClose, client, onSuccess }: ModalEd
   }, [areasDropdownOpen])
 
   useEffect(() => {
-    if (open) {
-      setRazaoSocial(client.razao_social)
-      setCnpj(client.cnpj ?? '')
-      setContato(client.contato ?? '')
-      const gestorArr: string[] = Array.isArray(client.gestor) ? client.gestor : client.gestor ? [client.gestor] : []
-      const resolvedGestors = gestorArr.map((g) => {
-        const resolved = resolveTeamMember(g, allTeamMembers)
-        return resolved?.email ?? g
-      })
-      setGestores(resolvedGestors)
-      const areaArr: string[] = Array.isArray(client.area) ? client.area : client.area ? [client.area] : []
-      setSelectedAreas(areaArr)
-      setStatusClasse(client.status_classe)
-      setValorEmAberto(String(client.valor_em_aberto ?? 0))
-      setDataVencimento(client.data_vencimento ? client.data_vencimento.slice(0, 10) : '')
-      setObservacoesGerais(client.observacoes_gerais ?? '')
-      setUltimaProvidencia(client.ultima_providencia ?? '')
-      setDataProvidencia(client.data_providencia ? client.data_providencia.slice(0, 10) : '')
-      setFollowUp(client.follow_up ?? '')
-      setDataFollowUp(client.data_follow_up ? client.data_follow_up.slice(0, 10) : '')
+    if (!open) {
+      formInitializedRef.current = { open: false, clientId: null }
+      return
     }
-  }, [open, client, teamMembers])
+
+    const alreadyInitialized =
+      formInitializedRef.current.open && formInitializedRef.current.clientId === client.id
+    if (alreadyInitialized) return
+
+    formInitializedRef.current = { open: true, clientId: client.id }
+
+    setRazaoSocial(client.razao_social)
+    setCnpj(client.cnpj ?? '')
+    setContato(client.contato ?? '')
+    const gestorArr: string[] = Array.isArray(client.gestor) ? client.gestor : client.gestor ? [client.gestor] : []
+    const resolvedGestors = gestorArr.map((g) => {
+      const resolved = resolveTeamMember(g, allTeamMembers)
+      return resolved?.email ?? g
+    })
+    setGestores(resolvedGestors)
+    const areaArr: string[] = Array.isArray(client.area) ? client.area : client.area ? [client.area] : []
+    setSelectedAreas(areaArr)
+    setStatusClasse(client.status_classe)
+    setValorEmAberto(String(client.valor_em_aberto ?? 0))
+    setDataVencimento(client.data_vencimento ? client.data_vencimento.slice(0, 10) : '')
+    setObservacoesGerais(client.observacoes_gerais ?? '')
+    setUltimaProvidencia(client.ultima_providencia ?? '')
+    setDataProvidencia(client.data_providencia ? client.data_providencia.slice(0, 10) : '')
+    setFollowUp(client.follow_up ?? '')
+    setDataFollowUp(client.data_follow_up ? client.data_follow_up.slice(0, 10) : '')
+    setSubmitError(null)
+  }, [open, client, allTeamMembers])
 
   const toggleArea = (area: string) => {
     setSelectedAreas((prev) =>
@@ -117,7 +131,7 @@ export function ModalEditarCliente({ open, onClose, client, onSuccess }: ModalEd
         status_classe: statusClasse,
         valor_em_aberto: Number(valorEmAberto) || 0,
         data_vencimento: dataVencimento || undefined,
-        observacoes_gerais: observacoesGerais || undefined,
+        observacoes_gerais: observacoesGerais.trim() || null,
         ultima_providencia: ultimaProvidencia || undefined,
         data_providencia: dataProvidencia || undefined,
         follow_up: followUp || undefined,
