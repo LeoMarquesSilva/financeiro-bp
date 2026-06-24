@@ -282,7 +282,7 @@ type Props = {
 
 export function ReceitaComparativoChart({ rows, ano }: Props) {
   const [detalheMes, setDetalheMes] = useState<ReceitaMesRow | null>(null)
-  const [tabelaAberta, setTabelaAberta] = useState(true)
+  const [tabelaAberta, setTabelaAberta] = useState(false)
   const [percentMode, setPercentMode] = useState(false)
   const [visible, setVisible] = useState<Set<SeriesKey>>(() => new Set(DEFAULT_VISIBLE))
   const chartExportRef = useRef<HTMLDivElement>(null)
