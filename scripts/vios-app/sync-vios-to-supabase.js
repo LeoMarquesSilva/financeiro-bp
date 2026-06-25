@@ -1001,6 +1001,16 @@ export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
     console.log('[Sync Supabase] financeiro_parcelas duplicatas removidas por ci_titulo:', rows.length, '->', rowsDedup.length);
   }
 
+  const tipos = rowsDedup.reduce(
+    (acc, r) => {
+      const t = (r.tipo ?? 'RECEBER').toUpperCase();
+      acc[t] = (acc[t] ?? 0) + 1;
+      return acc;
+    },
+    /** @type {Record<string, number>} */ ({}),
+  );
+  console.log('[Sync Supabase] financeiro_parcelas por tipo:', tipos);
+
   const p_ci_titulos = rowsDedup.map((r) => r.ci_titulo);
   console.log('[Sync Supabase] Linhas válidas para sync replace:', rowsDedup.length);
 
@@ -1190,6 +1200,15 @@ export async function runSyncRelatorioFinanceiroItens(filePathOrCsvContent) {
 
   const p_ci_items = rowsDedup.map((r) => r.ci_item);
 
+  const tiposItens = rowsDedup.reduce(
+    (acc, r) => {
+      const t = (r.tipo ?? 'RECEBER').toUpperCase();
+      acc[t] = (acc[t] ?? 0) + 1;
+      return acc;
+    },
+    /** @type {Record<string, number>} */ ({}),
+  );
+  console.log('[Sync Supabase] financeiro_parcelas_itens por tipo:', tiposItens);
   console.log('[Sync Supabase] Itens para sync:', rowsDedup.length, '| Ignoradas:', skipped);
 
   const { data: result, error } = await supabase.rpc('sync_relatorio_financeiro_itens_replace', {

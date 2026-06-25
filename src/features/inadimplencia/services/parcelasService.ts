@@ -1,4 +1,8 @@
 import { supabase } from '@/lib/supabaseClient'
+import {
+  FINANCEIRO_PARCELAS_SO_RECEBER_OR,
+  financeiroTituloEhReceber,
+} from '@/shared/utils/financeiroTitulo'
 
 export interface ParcelaRow {
   id: string
@@ -48,6 +52,7 @@ export async function fetchParcelasPorCliente(params: {
   let query = supabase
     .from('financeiro_parcelas')
     .select('id, pessoa_id, nro_titulo, parcela, parcelas, data_vencimento, data_baixa, situacao, valor, valor_pago, descricao, competencia, tipo, forma, cliente, plano_contas')
+    .or(FINANCEIRO_PARCELAS_SO_RECEBER_OR)
 
   if (ids.length > 0) {
     query = query.in('pessoa_id', ids)
@@ -65,7 +70,7 @@ export async function fetchParcelasPorCliente(params: {
     return { pagas: [], emAtraso: [], aVencer: [] }
   }
 
-  const parcelas = (rows ?? []) as ParcelaRow[]
+  const parcelas = ((rows ?? []) as ParcelaRow[]).filter((p) => financeiroTituloEhReceber(p.tipo))
 
   const pagas = parcelas
     .filter((p) => (p.situacao ?? '').toUpperCase() === 'PAGO')
@@ -102,6 +107,7 @@ export async function fetchPagamentosPorPeriodo(params: {
   let query = supabase
     .from('financeiro_parcelas')
     .select('id, pessoa_id, nro_titulo, parcela, parcelas, data_vencimento, data_baixa, situacao, valor, valor_pago, descricao, competencia, tipo, forma, cliente, plano_contas')
+    .or(FINANCEIRO_PARCELAS_SO_RECEBER_OR)
     .not('data_baixa', 'is', null)
     .gte('data_baixa', dataInicio)
     .lte('data_baixa', dataFim)
@@ -123,6 +129,7 @@ export async function fetchPagamentosPorPeriodo(params: {
   }
 
   const parcelas = ((rows ?? []) as ParcelaRow[])
+    .filter((p) => financeiroTituloEhReceber(p.tipo))
     .filter((p) => (p.situacao ?? '').toUpperCase() === 'PAGO' || p.data_baixa)
     .sort((a, b) => (b.data_baixa ?? '').localeCompare(a.data_baixa ?? ''))
 

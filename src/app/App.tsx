@@ -12,6 +12,7 @@ import { CobrancaPage } from '@/features/cobranca/pages/CobrancaPage'
 import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
 import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesPage'
 import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
+import { OpexPage } from '@/features/opex/pages/OpexPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 
 function ProtectedRoute({
@@ -94,6 +95,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <ReceitaPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="opex"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
+                <OpexPage />
               </ProtectedRoute>
             }
           />

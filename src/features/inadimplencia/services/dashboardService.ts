@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabaseClient'
 import { startOfMonth, endOfMonth } from 'date-fns'
 import { DATA_INICIO_COMITE } from '@/shared/constants/inadimplencia'
+import { FINANCEIRO_PARCELAS_SO_RECEBER_OR } from '@/shared/utils/financeiroTitulo'
 
 export interface DashboardTotais {
   totalEmAberto: number
@@ -247,6 +248,7 @@ async function getTaxaRecuperacaoComite(clients: ClientListRow[]): Promise<TaxaR
     const parcelasRes = await supabase
       .from('financeiro_parcelas')
       .select('pessoa_id, valor, valor_pago')
+      .or(FINANCEIRO_PARCELAS_SO_RECEBER_OR)
       .not('data_baixa', 'is', null)
       .gte('data_baixa', DATA_INICIO_COMITE)
       .in('pessoa_id', pessoaIdsComite)

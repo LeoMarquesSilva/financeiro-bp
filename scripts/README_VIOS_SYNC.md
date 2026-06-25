@@ -136,15 +136,27 @@ Por padrão, o sync **substitui** no Supabase todas as linhas cujas datas existe
 
 ## Relatório Financeiro (tabela `financeiro_parcelas`)
 
-O **Relatório de Parcelas** (financeiro) do VIOS pode ser baixado e sincronizado para a tabela **financeiro_parcelas**. Use o script **`FinanceiroRelatorioParcelas.js`** na pasta `scripts/vios-app/` (ou `scripts/para-vios-app/` se existir): ele faz login no VIOS, gera o CSV do relatório de parcelas, baixa em memória e chama **`runSyncRelatorioFinanceiro(csvData)`** (aceita caminho de arquivo ou string com conteúdo CSV). Copie esse script e o `sync-vios-to-supabase.js` para a pasta do vios-app onde roda a automação.
+O **Relatório de Parcelas** (financeiro) do VIOS pode ser baixado e sincronizado para a tabela **financeiro_parcelas**. Use o script **`FinanceiroRelatorioParcelas.js`** na pasta `scripts/vios-app/`: ele faz login no VIOS, gera o CSV com **títulos RECEBER e PAGAR** (base para OPEX), baixa em memória e chama **`runSyncRelatorioFinanceiro(csvData)`**.
+
+Para parcelas **e** itens na mesma sessão: **`FinanceiroRelatorioCompleto.js`**.
+
+Variáveis opcionais no `.env` do vios-app:
+
+- `VIOS_FIN_TIPOS=RECEBER,PAGAR` (padrão)
+- `VIOS_FIN_DATA_INICIO` / `VIOS_FIN_DATA_FIM`
+- `VIOS_FIN_REL_PARCELAS_PATH` / `VIOS_FIN_REL_ITENS_PATH` (caminho da página no VIOS)
 
 **Estratégia replace (fonte da verdade):** o sync usa a RPC `sync_relatorio_financeiro_replace`, que em uma transação (1) remove da tabela todos os registros cujo `ci_titulo` **não** está no relatório atual, (2) faz upsert das linhas do arquivo e (3) executa a vinculação com pessoas. Assim, **parcelas/faturas excluídas no VIOS passam a sumir do banco** no próximo sync. É essencial que o relatório exportado seja o **conjunto completo** de parcelas; se no futuro houver exportação parcial, será necessário outro critério (ex.: escopo por cliente ou data) para não apagar dados que não fazem parte do relatório.
+
+**Módulos que filtram RECEBER:** Cobrança, inadimplência (lista de clientes) e Receita continuam usando apenas títulos a receber. Títulos PAGAR ficam disponíveis para a futura tela de OPEX.
 
 **Migrações:** a função `sync_relatorio_financeiro_replace` está definida no arquivo `supabase/migrations/20260309170100_sync_relatorio_financeiro_replace.sql`. Para aplicar migrações no projeto, use o **MCP do Supabase** (Cursor): ferramenta `apply_migration` com `project_id`, `name` (ex.: `sync_relatorio_financeiro_replace`) e `query` (conteúdo SQL). A migration já foi aplicada via MCP no projeto configurado em `.cursor/mcp.json`.
 
 ## Relatório Financeiro Itens (tabela `financeiro_parcelas_itens`)
 
 Detalhamento por **CI Item** de cada título (`ci_titulo`), vinculado a `financeiro_parcelas`. CSV com separador `;` (ex.: `financeiro_parcelas_itens.csv`).
+
+Script de download automatizado: **`FinanceiroRelatorioItens.js`** (mesmos filtros RECEBER + PAGAR).
 
 ```js
 import { runSyncRelatorioFinanceiro, runSyncRelatorioFinanceiroItens } from './sync-vios-to-supabase.js';
