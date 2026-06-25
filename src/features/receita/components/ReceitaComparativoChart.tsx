@@ -19,7 +19,7 @@ import type { ReceitaMesRow } from '../types/receita.types'
 import { RECEITA_CHART_AXIS, RECEITA_CHART_LABEL, RECEITA_COLORS } from '../constants'
 import { ReceitaRecebidoDetalheSheet } from './ReceitaRecebidoDetalheSheet'
 import { isMesFuturo, valorRecebidoGrafico } from '../utils/receitaMes'
-import { formatPercentLabel } from '../utils/receitaColunasChart'
+import { formatPercentLabel, formatColunaLabel } from '../utils/receitaColunasChart'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 
 const SERIES = [
@@ -131,24 +131,73 @@ function pctMeta(recebido: number, meta: number): number | null {
   return (recebido / meta) * 100
 }
 
-function RecebidoPercentDotLabel(props: LabelProps) {
-  const { x, y, value } = props
-  const num = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(num) || x == null || y == null) return null
+function ComparativoDotLabel({
+  color,
+  percentMode,
+  position = 'right',
+}: {
+  color: string
+  percentMode: boolean
+  position?: 'right' | 'above' | 'below'
+}) {
+  return function Label(props: LabelProps) {
+    const { x, y, value } = props
+    if (value == null || x == null || y == null) return null
+    const num = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(num)) return null
 
-  return (
-    <text
-      x={Number(x) + 8}
-      y={Number(y)}
-      fill={RECEITA_COLORS.recebido.hex}
-      textAnchor="start"
-      dominantBaseline="middle"
-      fontSize={RECEITA_CHART_LABEL.linePoint}
-      fontWeight={600}
-    >
-      {formatPercentLabel(num)}
-    </text>
-  )
+    const text = percentMode ? formatPercentLabel(num) : formatColunaLabel(num)
+    if (!text) return null
+
+    const cx = Number(x)
+    const cy = Number(y)
+
+    if (position === 'above') {
+      return (
+        <text
+          x={cx}
+          y={cy - 10}
+          fill={color}
+          textAnchor="middle"
+          dominantBaseline="auto"
+          fontSize={RECEITA_CHART_LABEL.linePoint}
+          fontWeight={600}
+        >
+          {text}
+        </text>
+      )
+    }
+
+    if (position === 'below') {
+      return (
+        <text
+          x={cx}
+          y={cy + 14}
+          fill={color}
+          textAnchor="middle"
+          dominantBaseline="hanging"
+          fontSize={RECEITA_CHART_LABEL.linePoint}
+          fontWeight={600}
+        >
+          {text}
+        </text>
+      )
+    }
+
+    return (
+      <text
+        x={cx + 8}
+        y={cy}
+        fill={color}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={RECEITA_CHART_LABEL.linePoint}
+        fontWeight={600}
+      >
+        {text}
+      </text>
+    )
+  }
 }
 
 function PctBadge({ pct }: { pct: number | null }) {
@@ -396,7 +445,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
             <ComposedChart
               data={chartData}
-              margin={{ left: 4, right: percentMode ? 40 : 12, top: 8, bottom: 4 }}
+              margin={{ left: 4, right: percentMode ? 48 : 12, top: percentMode ? 8 : 16, bottom: 4 }}
             >
               <defs>
                 <linearGradient id="receitaRecebidoGradient" x1="0" y1="0" x2="0" y2="1">
@@ -449,8 +498,15 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   activeDot={{ r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
                   connectNulls={false}
                 >
-                  {percentMode && s.key === 'recebido' && (
-                    <LabelList dataKey="recebido" content={<RecebidoPercentDotLabel />} />
+                  {s.key === 'recebido' && (
+                    <LabelList
+                      dataKey="recebido"
+                      content={ComparativoDotLabel({
+                        color: s.color,
+                        percentMode,
+                        position: percentMode ? 'right' : 'above',
+                      })}
+                    />
                   )}
                 </Area>
               ))}
