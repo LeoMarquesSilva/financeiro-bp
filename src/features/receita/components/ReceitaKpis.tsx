@@ -172,7 +172,7 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           value={formatCurrency(totalPrevisto)}
           valueClassName="text-[11px] min-[420px]:text-xs sm:text-sm"
           periodo={previstoPeriodo}
-          hint="Por vencimento · ver detalhe"
+          hint="Por vencimento · inclui inativos · ver detalhe"
           iconColor="bg-violet-50 text-violet-600"
           valueColor={RECEITA_COLORS.previsto.textStrong}
           onClick={() => setPrevistoAberto(true)}

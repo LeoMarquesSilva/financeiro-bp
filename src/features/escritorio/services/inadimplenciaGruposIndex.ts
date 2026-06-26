@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { collectPaginatedRows } from '@/lib/supabasePaginate'
 import type { InadimplenciaClasse } from '@/lib/database.types'
 import type { ClienteEscritorioRow } from '@/lib/database.types'
 import type { GrupoEscritorio } from './escritorioService'
@@ -27,7 +28,13 @@ export interface InadimplenciaGrupoStatus {
   resolvida: InadimplenciaGrupoRef | null
 }
 
-const PAGE_SIZE = 1000
+type InadimplenciaRow = {
+  id: string
+  razao_social: string
+  pessoa_id: string | null
+  resolvido_at: string | null
+  status_classe: InadimplenciaClasse
+}
 
 function preferRef(
   current: InadimplenciaGrupoRef | undefined,
@@ -96,42 +103,29 @@ export async function fetchInadimplenciaGruposIndex(): Promise<InadimplenciaGrup
   const byPessoaId = new Map<string, InadimplenciaGrupoRef>()
   const byGrupoNorm = new Map<string, InadimplenciaGrupoRef>()
 
-  let from = 0
-  while (true) {
-    const { data, error } = await supabase
+  const rows = await collectPaginatedRows<InadimplenciaRow>(async (from, to) =>
+    supabase
       .from('clients_inadimplencia')
       .select('id, razao_social, pessoa_id, resolvido_at, status_classe')
-      .range(from, from + PAGE_SIZE - 1)
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
 
-    if (error) throw error
-
-    const chunk = (data ?? []) as {
-      id: string
-      razao_social: string
-      pessoa_id: string | null
-      resolvido_at: string | null
-      status_classe: InadimplenciaClasse
-    }[]
-
-    for (const row of chunk) {
-      const ref: InadimplenciaGrupoRef = {
-        id: row.id,
-        status_classe: row.status_classe,
-        resolvido_at: row.resolvido_at,
-      }
-
-      if (row.pessoa_id) {
-        byPessoaId.set(row.pessoa_id, preferRef(byPessoaId.get(row.pessoa_id), ref))
-      }
-
-      const norm = normalizarNomeGrupo(row.razao_social)
-      if (norm) {
-        byGrupoNorm.set(norm, preferRef(byGrupoNorm.get(norm), ref))
-      }
+  for (const row of rows) {
+    const ref: InadimplenciaGrupoRef = {
+      id: row.id,
+      status_classe: row.status_classe,
+      resolvido_at: row.resolvido_at,
     }
 
-    if (chunk.length < PAGE_SIZE) break
-    from += PAGE_SIZE
+    if (row.pessoa_id) {
+      byPessoaId.set(row.pessoa_id, preferRef(byPessoaId.get(row.pessoa_id), ref))
+    }
+
+    const norm = normalizarNomeGrupo(row.razao_social)
+    if (norm) {
+      byGrupoNorm.set(norm, preferRef(byGrupoNorm.get(norm), ref))
+    }
   }
 
   const pessoaGrupos = await fetchGruposByPessoaIds([...byPessoaId.keys()])

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { collectPaginatedRows } from '@/lib/supabasePaginate'
 import type {
   ClienteEscritorioRow,
   ContagemCiPorGrupoRow,
@@ -162,8 +163,6 @@ function normalizeContagemRow(row: Record<string, unknown>): ContagemCiPorGrupoR
   } as ContagemCiPorGrupoRow
 }
 
-/** Tamanho do lote (Supabase/PostgREST limitam a 1000 por requisição). */
-const PAGE_SIZE = 1000
 
 /** Resumo por grupo (uma linha por grupo): leve para filtros, ordenação e totais. View escritorio_grupos_resumo. */
 export const CATEGORIA_CLIENTE_INATIVO = 'Cliente inativo'
@@ -202,24 +201,15 @@ export const GRUPO_SEM_NOME = 'Sem grupo'
 
 /** Lista resumo de todos os grupos (leve: uma linha por grupo). */
 export async function fetchGruposResumo(): Promise<GrupoResumoRow[]> {
-  const allRows: Record<string, unknown>[] = []
-  let from = 0
-  let hasMore = true
-  while (hasMore) {
-    const to = from + PAGE_SIZE - 1
-    const { data, error } = await supabase
+  const allRows = await collectPaginatedRows<Record<string, unknown>>(async (from, to) =>
+    supabase
       .from('escritorio_grupos_resumo')
       .select(
         'grupo_cliente, total_empresas, total_geral, horas_total, valor_aberto, valor_pago, valor_em_atraso, valor_em_atraso_ativos',
       )
       .order('grupo_cliente', { ascending: true })
-      .range(from, to)
-    if (error) throw error
-    const chunk = (data ?? []) as Record<string, unknown>[]
-    allRows.push(...chunk)
-    hasMore = chunk.length === PAGE_SIZE
-    from += PAGE_SIZE
-  }
+      .range(from, to),
+  )
   return allRows.map(normalizeResumoRow)
 }
 
@@ -228,15 +218,12 @@ async function fetchEmpresasDeUmGrupo(
   grupoCliente: string | null,
   options?: { semGrupoComDados?: boolean },
 ): Promise<Record<string, unknown>[]> {
-  const allRows: Record<string, unknown>[] = []
-  let from = 0
-  let hasMore = true
-  while (hasMore) {
-    const to = from + PAGE_SIZE - 1
+  return collectPaginatedRows(async (from, to) => {
     let query = supabase
       .from('escritorio_empresas_por_grupo')
       .select(ESCRITORIO_EMPRESA_LIST_SELECT)
       .order('nome', { ascending: true })
+      .order('id', { ascending: true })
       .range(from, to)
 
     if (grupoCliente === null) {
@@ -248,14 +235,8 @@ async function fetchEmpresasDeUmGrupo(
       query = query.eq('grupo_cliente', grupoCliente)
     }
 
-    const { data, error } = await query
-    if (error) throw error
-    const chunk = (data ?? []) as Record<string, unknown>[]
-    allRows.push(...chunk)
-    hasMore = chunk.length === PAGE_SIZE
-    from += PAGE_SIZE
-  }
-  return allRows
+    return await query
+  })
 }
 
 /** Detalhe de uma empresa (com horas_por_ano). Usar só ao abrir o painel. */
@@ -293,23 +274,15 @@ export async function fetchEmpresasPorGrupos(groupKeys: string[]): Promise<Escri
 
 /** Lista empresas por grupo (view escritorio_empresas_por_grupo). Busca em lotes de 1000 para ultrapassar o limite do Supabase. */
 export async function fetchClientesEscritorio(): Promise<EscritorioEmpresaRow[]> {
-  const allRows: Record<string, unknown>[] = []
-  let from = 0
-  let hasMore = true
-  while (hasMore) {
-    const to = from + PAGE_SIZE - 1
-    const { data, error } = await supabase
+  const allRows = await collectPaginatedRows<Record<string, unknown>>(async (from, to) =>
+    supabase
       .from('escritorio_empresas_por_grupo')
       .select(ESCRITORIO_EMPRESA_LIST_SELECT)
       .order('grupo_cliente', { ascending: true, nullsFirst: true })
       .order('nome', { ascending: true })
-      .range(from, to)
-    if (error) throw error
-    const chunk = (data ?? []) as Record<string, unknown>[]
-    allRows.push(...chunk)
-    hasMore = chunk.length === PAGE_SIZE
-    from += PAGE_SIZE
-  }
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
   return allRows.map(normalizeEscritorioEmpresaRow)
 }
 
@@ -376,22 +349,15 @@ export async function fetchRelatorioFinanceiroResumoPorCliente(): Promise<
     parcelas_pagas: number
     parcelas_em_atraso: number
   }
-  const allRows: FinanceiroRow[] = []
-  let from = 0
-  let hasMore = true
-  while (hasMore) {
-    const to = from + PAGE_SIZE - 1
-    const { data, error } = await supabase
+  const allRows = await collectPaginatedRows<FinanceiroRow>(async (from, to) =>
+    supabase
       .from('relatorio_financeiro_resumo_por_cliente')
-      .select('pessoa_id, valor_aberto, valor_pago, valor_em_atraso, parcelas_abertas, parcelas_pagas, parcelas_em_atraso')
+      .select(
+        'pessoa_id, valor_aberto, valor_pago, valor_em_atraso, parcelas_abertas, parcelas_pagas, parcelas_em_atraso',
+      )
       .order('pessoa_id', { ascending: true })
-      .range(from, to)
-    if (error) throw error
-    const chunk = (data ?? []) as FinanceiroRow[]
-    allRows.push(...chunk)
-    hasMore = chunk.length === PAGE_SIZE
-    from += PAGE_SIZE
-  }
+      .range(from, to),
+  )
   const out: Record<string, FinanceiroEmpresaResumoCompleto> = {}
   for (const r of allRows) {
     const id = r.pessoa_id

@@ -105,7 +105,13 @@ export function ReceitaPrevistoDetalheSheet({
     receitaService
       .fetchPrevistoPorPlano(ano, mesSelecionado.mes)
       .then((data) => {
-        if (!cancelled) setPlanos(data)
+        if (!cancelled) {
+          setPlanos(data)
+          setPlanoSelecionado((atual) => {
+            if (!atual) return atual
+            return data.find((p) => p.plano_contas === atual.plano_contas) ?? atual
+          })
+        }
       })
       .catch((e) => {
         if (!cancelled) {
@@ -170,6 +176,8 @@ export function ReceitaPrevistoDetalheSheet({
     () => agruparPrevistoPorGrupo(itens, clienteGrupoMap),
     [itens, clienteGrupoMap],
   )
+
+  const somaGrupos = gruposAgg.reduce((s, g) => s + g.total, 0)
 
   const gruposFiltrados = useMemo(() => {
     const q = buscaDebounced.trim().toLowerCase()
@@ -294,7 +302,7 @@ export function ReceitaPrevistoDetalheSheet({
                 {labelPlanoContas(planoSelecionado.plano_contas)}
               </SheetTitle>
               <SheetDescription className="text-xs text-violet-100">
-                {mesSelecionado.mesLabel} / {ano} · por grupo de empresas
+                {mesSelecionado.mesLabel} / {ano} · por grupo de empresas · inclui inativos
               </SheetDescription>
               <p className="mt-2 text-xl font-bold tabular-nums text-white">
                 {formatCurrency(planoSelecionado.total)}
@@ -316,7 +324,7 @@ export function ReceitaPrevistoDetalheSheet({
                 Previsto — {mesSelecionado.mesLabel} / {ano}
               </SheetTitle>
               <SheetDescription className="text-xs text-violet-100">
-                Por plano de contas · data de vencimento
+                Por plano de contas · data de vencimento · inclui inativos
               </SheetDescription>
               <p className="mt-2 text-xl font-bold tabular-nums text-white">
                 {formatCurrency(mesSelecionado.previsto)}
@@ -333,7 +341,7 @@ export function ReceitaPrevistoDetalheSheet({
                     Previsto — {ano}
                   </SheetTitle>
                   <SheetDescription className="mt-1 text-xs text-violet-100">
-                    Por vencimento · clique no mês para detalhar
+                    Por vencimento · inclui clientes inativos
                   </SheetDescription>
                 </div>
               </div>
@@ -574,6 +582,20 @@ export function ReceitaPrevistoDetalheSheet({
               {mesSelecionado && Math.abs(somaPlanos - mesSelecionado.previsto) > 0.01 && (
                 <p className="mt-1 text-[11px] text-amber-700">
                   Resumo do mês: {formatCurrency(mesSelecionado.previsto)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {view === 'grupos' && !loadingItens && gruposAgg.length > 0 && planoSelecionado && (
+            <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-6 py-3">
+              <div className="flex items-center justify-between text-sm font-semibold text-slate-800">
+                <span>Total grupos ({gruposAgg.length})</span>
+                <span className="tabular-nums text-violet-800">{formatCurrency(somaGrupos)}</span>
+              </div>
+              {Math.abs(somaGrupos - planoSelecionado.total) > 0.01 && (
+                <p className="mt-1 text-[11px] text-amber-700">
+                  Total do plano: {formatCurrency(planoSelecionado.total)}
                 </p>
               )}
             </div>

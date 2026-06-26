@@ -39,7 +39,12 @@ export function buildClienteGrupoMap(
     const raw = e.grupo_cliente?.trim() ?? ''
     const display = raw === '' ? GRUPO_SEM_NOME : raw
     const norm = normalizarNomeCliente(nome)
-    if (!map.has(norm)) map.set(norm, display)
+    const existing = map.get(norm)
+    if (existing === undefined) {
+      map.set(norm, display)
+    } else if (existing === GRUPO_SEM_NOME && display !== GRUPO_SEM_NOME) {
+      map.set(norm, display)
+    }
   }
   return map
 }

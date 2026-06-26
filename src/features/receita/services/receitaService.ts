@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { collectPaginatedRows } from '@/lib/supabasePaginate'
 import { mesAbrev } from '../constants'
 import type {
   ReceitaDashboardData,
@@ -102,23 +103,13 @@ export const receitaService = {
 
   /** Nome + grupo para vincular cliente do financeiro ao grupo de empresas. */
   async fetchEmpresasNomeGrupo(): Promise<Array<{ nome: string; grupo_cliente: string | null }>> {
-    const PAGE_SIZE = 1000
-    const all: Array<{ nome: string; grupo_cliente: string | null }> = []
-    let from = 0
-    let hasMore = true
-    while (hasMore) {
-      const to = from + PAGE_SIZE - 1
-      const { data, error } = await supabase
+    return collectPaginatedRows(async (from, to) =>
+      supabase
         .from('escritorio_empresas_por_grupo')
         .select('nome, grupo_cliente')
-        .range(from, to)
-      if (error) throw error
-      const chunk = (data ?? []) as Array<{ nome: string; grupo_cliente: string | null }>
-      all.push(...chunk)
-      hasMore = chunk.length === PAGE_SIZE
-      from += PAGE_SIZE
-    }
-    return all
+        .order('id', { ascending: true })
+        .range(from, to),
+    )
   },
 
   async fetchRecebidoItens(
@@ -147,7 +138,7 @@ export const receitaService = {
   async fetchPrevistoPorPlano(ano: number, mes: number): Promise<ReceitaRecebidoPlanoRow[]> {
     const { data, error } = await supabase.rpc(
       'receita_previsto_por_plano' as never,
-      { p_ano: ano, p_mes: mes } as never,
+      { p_ano: ano, p_mes: mes, p_incluir_inativos: true } as never,
     )
     if (error) throw error
     return ((data ?? []) as Array<{ plano_contas: string; quantidade: number; total: number }>).map(
@@ -166,7 +157,7 @@ export const receitaService = {
   ): Promise<ReceitaPrevistoItemRow[]> {
     const { data, error } = await supabase.rpc(
       'receita_previsto_itens' as never,
-      { p_ano: ano, p_mes: mes, p_plano_contas: planoContas } as never,
+      { p_ano: ano, p_mes: mes, p_plano_contas: planoContas, p_incluir_inativos: true } as never,
     )
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
