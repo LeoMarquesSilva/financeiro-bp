@@ -6,6 +6,7 @@ import type { ReceitaMesRow } from '../types/receita.types'
 import { mesAbrev, RECEITA_COLORS } from '../constants'
 import { isMesFuturo } from '../utils/receitaMes'
 import { ReceitaPrevistoDetalheSheet } from './ReceitaPrevistoDetalheSheet'
+import { ReceitaRecebidoKpiDetalheSheet } from './ReceitaRecebidoKpiDetalheSheet'
 
 type Props = {
   rows: ReceitaMesRow[]
@@ -23,6 +24,7 @@ interface KPIItemProps {
   hint?: React.ReactNode
   iconColor: string
   valueColor?: string
+  accent?: 'sky' | 'violet'
   onClick?: () => void
 }
 
@@ -50,10 +52,16 @@ function KPIItem({
   hint,
   iconColor,
   valueColor = 'text-slate-900',
+  accent = 'violet',
   onClick,
 }: KPIItemProps) {
   const interactive = Boolean(onClick)
   const Tag = interactive ? 'button' : 'div'
+  const accentHover =
+    accent === 'sky'
+      ? 'hover:border-sky-200 hover:bg-sky-50/30 focus-visible:ring-sky-400/60'
+      : 'hover:border-violet-200 hover:bg-violet-50/30 focus-visible:ring-violet-400/60'
+  const chevronAccent = accent === 'sky' ? 'text-sky-500' : 'text-violet-500'
 
   return (
     <Tag
@@ -62,7 +70,10 @@ function KPIItem({
       className={cn(
         'relative w-full rounded-xl border border-slate-200/60 bg-white p-3 text-left shadow-sm sm:p-4',
         interactive &&
-          'cursor-pointer transition-colors hover:border-violet-200 hover:bg-violet-50/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60',
+          cn(
+            'cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2',
+            accentHover,
+          ),
       )}
     >
       <div
@@ -94,7 +105,7 @@ function KPIItem({
           <p className="mt-1 flex flex-wrap items-center gap-1 text-[10px] leading-snug text-slate-500 sm:text-[11px]">
             {hint}
             {interactive && (
-              <ChevronRight className="h-3 w-3 shrink-0 text-violet-500" aria-hidden />
+              <ChevronRight className={cn('h-3 w-3 shrink-0', chevronAccent)} aria-hidden />
             )}
           </p>
         )}
@@ -116,6 +127,7 @@ function KPISkeleton() {
 }
 
 export function ReceitaKpis({ rows, ano, loading }: Props) {
+  const [recebidoAberto, setRecebidoAberto] = useState(false)
   const [previstoAberto, setPrevistoAberto] = useState(false)
 
   if (loading) {
@@ -133,8 +145,6 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
   const totalPrevisto = rows.reduce((s, r) => s + r.previsto, 0)
   const metaAcumulada = rowsComDados.reduce((s, r) => s + r.meta, 0)
   const pctMeta = metaAcumulada > 0 ? (totalRecebido / metaAcumulada) * 100 : 0
-  const mesesLabel =
-    rowsComDados.length === 1 ? '1 mês' : `${rowsComDados.length} meses`
   const metaMensal = rows[0]?.meta ?? 0
 
   const pctColor =
@@ -152,6 +162,8 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
 
   const mesesNoResumo = rows.map((r) => r.mes)
   const previstoPeriodo = periodoAnoLabel(mesesNoResumo, ano)
+  const mesesComRecebido = rowsComDados.filter((r) => r.recebido > 0).map((r) => r.mes)
+  const recebidoPeriodo = periodoAnoLabel(mesesComRecebido, ano)
 
   return (
     <section>
@@ -160,11 +172,14 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
         <KPIItem
           icon={Banknote}
           label="Recebido"
-          value={formatCurrencyCompact(totalRecebido)}
-          valueTitle={formatCurrency(totalRecebido)}
-          hint={mesesLabel}
+          value={formatCurrency(totalRecebido)}
+          valueClassName="text-[11px] min-[420px]:text-xs sm:text-sm"
+          periodo={recebidoPeriodo}
+          hint="Por pagamento · inclui inativos · ver detalhe"
           iconColor="bg-sky-50 text-sky-600"
           valueColor={RECEITA_COLORS.recebido.textStrong}
+          accent="sky"
+          onClick={() => setRecebidoAberto(true)}
         />
         <KPIItem
           icon={CalendarClock}
@@ -175,6 +190,7 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           hint="Por vencimento · inclui inativos · ver detalhe"
           iconColor="bg-violet-50 text-violet-600"
           valueColor={RECEITA_COLORS.previsto.textStrong}
+          accent="violet"
           onClick={() => setPrevistoAberto(true)}
         />
         <KPIItem
@@ -195,6 +211,14 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           valueColor={pctColor}
         />
       </div>
+
+      <ReceitaRecebidoKpiDetalheSheet
+        open={recebidoAberto}
+        onOpenChange={setRecebidoAberto}
+        ano={ano}
+        rows={rows}
+        totalRecebido={totalRecebido}
+      />
 
       <ReceitaPrevistoDetalheSheet
         open={previstoAberto}
