@@ -1,5 +1,5 @@
 import { GRUPO_SEM_NOME } from '@/features/escritorio/services/escritorioService'
-import type { ReceitaRecebidoItemRow } from '../types/receita.types'
+import type { ReceitaEncargosItemRow, ReceitaRecebidoItemRow } from '../types/receita.types'
 
 export type ReceitaRecebidoGrupoAgg = {
   grupo: string
@@ -49,6 +49,10 @@ export function buildClienteGrupoMap(
   return map
 }
 
+export function valorRecebidoItem(item: ReceitaRecebidoItemRow): number {
+  return item.valor_recebido ?? item.valor_pago_item ?? 0
+}
+
 export function resolverGrupoCliente(
   cliente: string | null | undefined,
   clienteGrupoMap: Map<string, string>,
@@ -67,7 +71,7 @@ export function agruparRecebidoPorGrupo(
   for (const item of itens) {
     const grupo = resolverGrupoCliente(item.cliente, clienteGrupoMap)
     const cur = byGrupo.get(grupo) ?? { total: 0, titulos: new Set<number>(), itens: 0 }
-    cur.total += item.valor_pago_item
+    cur.total += valorRecebidoItem(item)
     cur.titulos.add(item.ci_titulo)
     cur.itens += 1
     byGrupo.set(grupo, cur)
@@ -102,12 +106,12 @@ export function agruparRecebidoPorTitulo(
         cliente: item.cliente,
         descricao: item.descricao,
         data_pagamento: item.data_pagamento,
-        total: item.valor_pago_item,
+        total: valorRecebidoItem(item),
         quantidadeItens: 1,
       })
       continue
     }
-    cur.total += item.valor_pago_item
+    cur.total += valorRecebidoItem(item)
     cur.quantidadeItens += 1
     if (!cur.nro_titulo && item.nro_titulo) cur.nro_titulo = item.nro_titulo
     if (!cur.descricao && item.descricao) cur.descricao = item.descricao
@@ -120,4 +124,36 @@ export function agruparRecebidoPorTitulo(
   }
 
   return [...byTitulo.values()].sort((a, b) => b.total - a.total)
+}
+
+export function encargosItensParaRecebido(itens: ReceitaEncargosItemRow[]): ReceitaRecebidoItemRow[] {
+  return itens.map((item) => ({
+    ci_item: item.ci_item,
+    ci_titulo: item.ci_titulo,
+    cliente: item.cliente,
+    descricao: item.descricao,
+    nro_titulo: item.nro_titulo,
+    data_pagamento: item.data_pagamento,
+    valor_recebido: item.valor_encargos,
+    valor_encargos: item.valor_encargos,
+    valor_pago_item: item.valor_pago_item,
+    valor_fluxo_item: item.valor_fluxo_item,
+    plano_contas: item.plano_contas,
+    situacao_titulo: item.situacao_titulo,
+  }))
+}
+
+export function agruparEncargosPorGrupo(
+  itens: ReceitaEncargosItemRow[],
+  clienteGrupoMap: Map<string, string>,
+): ReceitaRecebidoGrupoAgg[] {
+  return agruparRecebidoPorGrupo(encargosItensParaRecebido(itens), clienteGrupoMap)
+}
+
+export function agruparEncargosPorTitulo(
+  itens: ReceitaEncargosItemRow[],
+  grupo: string,
+  clienteGrupoMap: Map<string, string>,
+): ReceitaRecebidoTituloAgg[] {
+  return agruparRecebidoPorTitulo(encargosItensParaRecebido(itens), grupo, clienteGrupoMap)
 }

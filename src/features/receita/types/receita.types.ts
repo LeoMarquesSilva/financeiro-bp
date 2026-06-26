@@ -19,6 +19,7 @@ export type ReceitaMesRow = {
   projetadoReal: number
   recebido: number
   previsto: number
+  encargos: number
 }
 
 export type ReceitaDashboardData = {
@@ -80,7 +81,25 @@ export type ReceitaRecebidoItemRow = {
   descricao: string | null
   nro_titulo: string | null
   data_pagamento: string | null
+  /** Honorários líquidos (sem encargos de boleto/juros). */
+  valor_recebido: number
+  valor_encargos: number
   valor_pago_item: number
+  valor_fluxo_item: number | null
+  plano_contas: string
+  situacao_titulo: string | null
+}
+
+export type ReceitaEncargosItemRow = {
+  ci_item: number
+  ci_titulo: number
+  cliente: string | null
+  descricao: string | null
+  nro_titulo: string | null
+  data_pagamento: string | null
+  valor_encargos: number
+  valor_pago_item: number
+  valor_fluxo_item: number | null
   plano_contas: string
   situacao_titulo: string | null
 }

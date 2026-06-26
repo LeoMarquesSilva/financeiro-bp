@@ -94,6 +94,12 @@ export const RECEITA_COLORS = {
     text: 'text-violet-700',
     textStrong: 'text-violet-800',
   },
+  encargos: {
+    hex: '#ea580c',
+    text: 'text-orange-700',
+    textStrong: 'text-orange-800',
+    bgIcon: 'bg-orange-50 text-orange-600',
+  },
 } as const
 
 /**
