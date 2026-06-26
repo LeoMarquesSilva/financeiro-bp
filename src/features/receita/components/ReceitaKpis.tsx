@@ -1,9 +1,11 @@
-import { Banknote, CalendarClock, Target, TrendingUp } from 'lucide-react'
-import { formatCurrency } from '@/shared/utils/format'
+import { useState } from 'react'
+import { Banknote, CalendarClock, ChevronRight, Target, TrendingUp } from 'lucide-react'
+import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type { ReceitaMesRow } from '../types/receita.types'
-import { RECEITA_COLORS } from '../constants'
+import { mesAbrev, RECEITA_COLORS } from '../constants'
 import { isMesFuturo } from '../utils/receitaMes'
+import { ReceitaPrevistoDetalheSheet } from './ReceitaPrevistoDetalheSheet'
 
 type Props = {
   rows: ReceitaMesRow[]
@@ -15,31 +17,97 @@ interface KPIItemProps {
   icon: React.ElementType
   label: string
   value: string
-  hint?: string
+  valueTitle?: string
+  valueClassName?: string
+  periodo?: string
+  hint?: React.ReactNode
   iconColor: string
   valueColor?: string
+  onClick?: () => void
 }
 
-function KPIItem({ icon: Icon, label, value, hint, iconColor, valueColor = 'text-slate-900' }: KPIItemProps) {
+function periodoAnoLabel(meses: number[], ano: number): string {
+  const sorted = [...meses].sort((a, b) => a - b)
+  if (sorted.length === 0) return String(ano)
+  const cap = (m: number) => {
+    const abrev = mesAbrev(m)
+    return abrev.charAt(0).toUpperCase() + abrev.slice(1)
+  }
+  const ini = cap(sorted[0])
+  const fim = cap(sorted[sorted.length - 1]!)
+  if (sorted.length === 1) return `${ini}/${ano}`
+  if (sorted.length === 12 && sorted[0] === 1 && sorted[11] === 12) return `Jan–Dez/${ano}`
+  return `${ini}–${fim}/${ano}`
+}
+
+function KPIItem({
+  icon: Icon,
+  label,
+  value,
+  valueTitle,
+  valueClassName,
+  periodo,
+  hint,
+  iconColor,
+  valueColor = 'text-slate-900',
+  onClick,
+}: KPIItemProps) {
+  const interactive = Boolean(onClick)
+  const Tag = interactive ? 'button' : 'div'
+
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
-      <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', iconColor)}>
-        <Icon className="h-5 w-5" />
+    <Tag
+      type={interactive ? 'button' : undefined}
+      onClick={onClick}
+      className={cn(
+        'relative w-full rounded-xl border border-slate-200/60 bg-white p-3 text-left shadow-sm sm:p-4',
+        interactive &&
+          'cursor-pointer transition-colors hover:border-violet-200 hover:bg-violet-50/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60',
+      )}
+    >
+      <div
+        className={cn(
+          'absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg sm:right-4 sm:top-4 sm:h-9 sm:w-9',
+          iconColor,
+        )}
+      >
+        <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" aria-hidden />
       </div>
-      <div className="min-w-0">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
-        <p className={cn('mt-0.5 text-lg font-bold tabular-nums leading-tight', valueColor)}>{value}</p>
-        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
+      <div className="min-w-0 pr-10 sm:pr-11">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400 sm:text-[11px]">
+          {label}
+        </p>
+        <p
+          className={cn(
+            'mt-1 text-sm font-bold tabular-nums leading-tight sm:text-base',
+            valueColor,
+            valueClassName,
+          )}
+          title={valueTitle ?? value}
+        >
+          {value}
+        </p>
+        {periodo != null && periodo !== '' && (
+          <p className="mt-0.5 text-[10px] font-medium text-slate-600 sm:text-[11px]">{periodo}</p>
+        )}
+        {hint != null && hint !== '' && (
+          <p className="mt-1 flex flex-wrap items-center gap-1 text-[10px] leading-snug text-slate-500 sm:text-[11px]">
+            {hint}
+            {interactive && (
+              <ChevronRight className="h-3 w-3 shrink-0 text-violet-500" aria-hidden />
+            )}
+          </p>
+        )}
       </div>
-    </div>
+    </Tag>
   )
 }
 
 function KPISkeleton() {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
-      <div className="h-10 w-10 animate-pulse rounded-lg bg-slate-100" />
-      <div className="flex-1">
+    <div className="relative rounded-xl border border-slate-200/60 bg-white p-3 shadow-sm sm:p-4">
+      <div className="absolute right-3 top-3 h-8 w-8 animate-pulse rounded-lg bg-slate-100 sm:right-4 sm:top-4 sm:h-9 sm:w-9" />
+      <div className="min-w-0 pr-10 sm:pr-11">
         <div className="h-3 w-20 animate-pulse rounded bg-slate-100" />
         <div className="mt-2 h-5 w-24 animate-pulse rounded bg-slate-100" />
       </div>
@@ -48,9 +116,11 @@ function KPISkeleton() {
 }
 
 export function ReceitaKpis({ rows, ano, loading }: Props) {
+  const [previstoAberto, setPrevistoAberto] = useState(false)
+
   if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 2xl:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
           <KPISkeleton key={i} />
         ))}
@@ -65,6 +135,7 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
   const pctMeta = metaAcumulada > 0 ? (totalRecebido / metaAcumulada) * 100 : 0
   const mesesLabel =
     rowsComDados.length === 1 ? '1 mês' : `${rowsComDados.length} meses`
+  const metaMensal = rows[0]?.meta ?? 0
 
   const pctColor =
     pctMeta >= 100
@@ -79,14 +150,18 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
         ? RECEITA_COLORS.meta.bgIcon
         : 'bg-emerald-50/80 text-emerald-600'
 
+  const mesesNoResumo = rows.map((r) => r.mes)
+  const previstoPeriodo = periodoAnoLabel(mesesNoResumo, ano)
+
   return (
     <section>
       <h2 className="mb-3 text-lg font-semibold text-slate-800">Resumo {ano}</h2>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 2xl:grid-cols-4">
         <KPIItem
           icon={Banknote}
           label="Recebido"
-          value={formatCurrency(totalRecebido)}
+          value={formatCurrencyCompact(totalRecebido)}
+          valueTitle={formatCurrency(totalRecebido)}
           hint={mesesLabel}
           iconColor="bg-sky-50 text-sky-600"
           valueColor={RECEITA_COLORS.recebido.textStrong}
@@ -95,15 +170,19 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           icon={CalendarClock}
           label="Previsto"
           value={formatCurrency(totalPrevisto)}
-          hint="Por vencimento"
+          valueClassName="text-[11px] min-[420px]:text-xs sm:text-sm"
+          periodo={previstoPeriodo}
+          hint="Por vencimento · ver detalhe"
           iconColor="bg-violet-50 text-violet-600"
           valueColor={RECEITA_COLORS.previsto.textStrong}
+          onClick={() => setPrevistoAberto(true)}
         />
         <KPIItem
           icon={Target}
           label="Meta acumulada"
-          value={formatCurrency(metaAcumulada)}
-          hint={rows[0] ? `${formatCurrency(rows[0].meta)}/mês` : undefined}
+          value={formatCurrencyCompact(metaAcumulada)}
+          valueTitle={formatCurrency(metaAcumulada)}
+          hint={metaMensal > 0 ? `${formatCurrencyCompact(metaMensal)}/mês` : undefined}
           iconColor={RECEITA_COLORS.meta.bgIcon}
           valueColor={RECEITA_COLORS.meta.textStrong}
         />
@@ -116,6 +195,14 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           valueColor={pctColor}
         />
       </div>
+
+      <ReceitaPrevistoDetalheSheet
+        open={previstoAberto}
+        onOpenChange={setPrevistoAberto}
+        ano={ano}
+        rows={rows}
+        totalPrevisto={totalPrevisto}
+      />
     </section>
   )
 }

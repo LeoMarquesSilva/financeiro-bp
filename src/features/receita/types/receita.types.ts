@@ -84,3 +84,15 @@ export type ReceitaRecebidoItemRow = {
   plano_contas: string
   situacao_titulo: string | null
 }
+
+export type ReceitaPrevistoItemRow = {
+  ci_item: number
+  ci_titulo: number
+  cliente: string | null
+  descricao: string | null
+  nro_titulo: string | null
+  data_vencimento: string | null
+  valor_item: number
+  plano_contas: string
+  situacao_titulo: string | null
+}

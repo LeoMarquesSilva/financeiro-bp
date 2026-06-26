@@ -335,7 +335,6 @@ export function ReceitaInadimplenciaClientesSheet({
           const salvos = await receitaInadimplenciaService.fetchSelecaoPeriodo(ano, mesInicio, mesFim)
           if (cancelled) return
           if (salvos) onIncluidosChange(new Set(salvos))
-          else onIncluidosChange(gruposPeriodoPadrao(dataGrupos))
         }
       })
       .catch((e) => {

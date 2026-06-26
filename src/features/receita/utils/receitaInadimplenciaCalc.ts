@@ -107,6 +107,34 @@ export function mesclarIncluidosPeriodo(
   return manual ?? derivadoMensal
 }
 
+export function calcularIncluidosEfetivosPeriodo(
+  mesInicio: number,
+  mesFim: number,
+  gruposPeriodo: ReceitaInadimplenciaGrupoPeriodo[] | null,
+  gruposPorMes: Record<number, ReceitaInadimplenciaGrupoMes[]>,
+  selecaoPorMes: SelecaoGruposPorMes,
+  gruposIncluidos: Set<string> | null,
+): Set<string> | null {
+  const incluidosMensal =
+    gruposPeriodo != null
+      ? incluidosPeriodoDeSelecoesMensais(
+          mesInicio,
+          mesFim,
+          gruposPeriodo,
+          gruposPorMes,
+          selecaoPorMes,
+        )
+      : null
+  return mesclarIncluidosPeriodo(gruposIncluidos, incluidosMensal)
+}
+
+export function calcularValorTotalPeriodo(
+  grupos: ReceitaInadimplenciaGrupoPeriodo[],
+  incluidos: Set<string>,
+): number {
+  return grupos.filter((g) => incluidos.has(g.grupo_cliente)).reduce((s, g) => s + g.valor, 0)
+}
+
 export function aplicarSelecaoGruposPeriodo(
   dashboard: ReceitaInadimplenciaDashboard,
   grupos: ReceitaInadimplenciaGrupoPeriodo[] | null,

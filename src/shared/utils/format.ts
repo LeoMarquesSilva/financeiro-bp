@@ -5,6 +5,16 @@ export function formatCurrency(value: number): string {
   }).format(value)
 }
 
+/** Ex.: R$ 8,9 mi — para KPIs e rótulos em espaço reduzido. */
+export function formatCurrencyCompact(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
 /**
  * Parsea string YYYY-MM-DD como data local (meia-noite no fuso do usuário).
  * Evita o deslocamento de -1 dia quando new Date(str) interpreta "YYYY-MM-DD" como UTC.

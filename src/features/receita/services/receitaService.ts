@@ -8,6 +8,7 @@ import type {
   ReceitaRecebidoPlanoMensalRow,
   ReceitaRecebidoItemRow,
   ReceitaRecebidoPlanoRow,
+  ReceitaPrevistoItemRow,
 } from '../types/receita.types'
 
 type TotaisMensaisRow = {
@@ -138,6 +139,44 @@ export const receitaService = {
       nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
       data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
       valor_pago_item: Number(row.valor_pago_item) || 0,
+      plano_contas: String(row.plano_contas ?? planoContas),
+      situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+    }))
+  },
+
+  async fetchPrevistoPorPlano(ano: number, mes: number): Promise<ReceitaRecebidoPlanoRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_previsto_por_plano' as never,
+      { p_ano: ano, p_mes: mes } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<{ plano_contas: string; quantidade: number; total: number }>).map(
+      (row) => ({
+        plano_contas: row.plano_contas,
+        quantidade: Number(row.quantidade) || 0,
+        total: Number(row.total) || 0,
+      }),
+    )
+  },
+
+  async fetchPrevistoItens(
+    ano: number,
+    mes: number,
+    planoContas: string,
+  ): Promise<ReceitaPrevistoItemRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_previsto_itens' as never,
+      { p_ano: ano, p_mes: mes, p_plano_contas: planoContas } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ci_item: Number(row.ci_item) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      cliente: row.cliente != null ? String(row.cliente) : null,
+      descricao: row.descricao != null ? String(row.descricao) : null,
+      nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
+      data_vencimento: row.data_vencimento != null ? String(row.data_vencimento) : null,
+      valor_item: Number(row.valor_item) || 0,
       plano_contas: String(row.plano_contas ?? planoContas),
       situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
     }))

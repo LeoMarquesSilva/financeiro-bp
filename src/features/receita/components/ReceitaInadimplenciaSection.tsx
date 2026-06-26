@@ -19,8 +19,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import {
   aplicarSelecaoGruposPeriodo,
   aplicarSelecaoGrupos,
-  incluidosPeriodoDeSelecoesMensais,
-  mesclarIncluidosPeriodo,
+  calcularIncluidosEfetivosPeriodo,
   previstoMesEvolucao,
   type SelecaoGruposPorMes,
 } from '../utils/receitaInadimplenciaCalc'
@@ -171,43 +170,23 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
     if (value > mesFim) setMesFim(value)
   }
 
+  const incluidosEfetivos = useMemo(() => {
+    if (!data || data.mes_fim <= 0) return null
+    return calcularIncluidosEfetivosPeriodo(
+      data.mes_inicio,
+      data.mes_fim,
+      gruposPeriodo,
+      gruposPorMes,
+      selecaoPorMes,
+      gruposIncluidos,
+    )
+  }, [data, gruposPeriodo, gruposPorMes, selecaoPorMes, gruposIncluidos])
+
   const dashboard = useMemo(() => {
     if (!data || data.mes_fim <= 0) return null
     const comGrupos = aplicarSelecaoGrupos(data, gruposPorMes, selecaoPorMes)
-    const incluidosMensal =
-      gruposPeriodo != null
-        ? incluidosPeriodoDeSelecoesMensais(
-            data.mes_inicio,
-            data.mes_fim,
-            gruposPeriodo,
-            gruposPorMes,
-            selecaoPorMes,
-          )
-        : null
-    const incluidosEfetivos = mesclarIncluidosPeriodo(gruposIncluidos, incluidosMensal)
-    let result = aplicarSelecaoGruposPeriodo(comGrupos, gruposPeriodo, incluidosEfetivos)
-
-    // Período de um único mês: KPI = valor mensal ajustado (mesma base da evolução).
-    if (
-      data.mes_inicio === data.mes_fim &&
-      result.evolucao.length === 1 &&
-      result.evolucao[0].ajustado
-    ) {
-      const m = result.evolucao[0]
-      const previsto = previstoMesEvolucao(m)
-      result = {
-        ...result,
-        valor_total_periodo: m.valor,
-        pct_periodo:
-          previsto > 0
-            ? Math.round((m.valor / previsto) * 1000) / 10
-            : result.pct_periodo,
-        clientes_ajustado: true,
-      }
-    }
-
-    return result
-  }, [data, gruposPorMes, selecaoPorMes, gruposPeriodo, gruposIncluidos])
+    return aplicarSelecaoGruposPeriodo(comGrupos, gruposPeriodo, incluidosEfetivos)
+  }, [data, gruposPorMes, selecaoPorMes, gruposPeriodo, incluidosEfetivos])
 
   const handleAplicarGrupos = (
     mes: number,
@@ -398,7 +377,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
         mesInicio={dashboard.mes_inicio}
         mesFim={dashboard.mes_fim}
         periodoLabel={periodoCurto}
-        incluidos={gruposIncluidos}
+        incluidos={gruposIncluidos ?? incluidosEfetivos}
         onGruposLoaded={setGruposPeriodo}
         onIncluidosChange={setGruposIncluidos}
         onAplicarSelecao={handleAplicarSelecaoPeriodo}
