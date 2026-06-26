@@ -312,6 +312,223 @@ async function compositeToPngBlob(
   })
 }
 
+function inlineNodeStyles(source: Element, target: Element): void {
+  if (!(source instanceof HTMLElement) || !(target instanceof HTMLElement)) return
+
+  const computed = window.getComputedStyle(source)
+  for (let i = 0; i < computed.length; i++) {
+    const prop = computed[i]
+    target.style.setProperty(prop, computed.getPropertyValue(prop), computed.getPropertyPriority(prop))
+  }
+
+  for (let i = 0; i < source.children.length; i++) {
+    const targetChild = target.children[i]
+    if (targetChild) inlineNodeStyles(source.children[i], targetChild)
+  }
+}
+
+function isColorSwatch(el: HTMLElement): boolean {
+  const inline = el.style.backgroundColor
+  if (inline && inline !== 'transparent') return true
+  const bg = window.getComputedStyle(el).backgroundColor
+  return bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)'
+}
+
+function applyExportHtmlColors(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    if (isColorSwatch(el)) return
+    const bg = window.getComputedStyle(el).backgroundColor
+    if (bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+      el.style.setProperty('background', 'transparent', 'important')
+    }
+  })
+
+  root.querySelectorAll<HTMLElement>('p, span, li, div').forEach((el) => {
+    if (isColorSwatch(el)) return
+    el.style.setProperty('color', EXPORT_TEXT_COLOR, 'important')
+  })
+}
+
+function applyExportLayoutFixes(root: HTMLElement): void {
+  root.style.setProperty('width', 'max-content', 'important')
+  root.style.setProperty('min-width', 'max-content', 'important')
+  root.style.setProperty('max-width', 'none', 'important')
+  root.style.setProperty('overflow', 'visible', 'important')
+
+  root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    el.style.setProperty('overflow', 'visible', 'important')
+    el.style.setProperty('text-overflow', 'clip', 'important')
+    el.style.setProperty('white-space', 'normal', 'important')
+    el.style.setProperty('word-break', 'normal', 'important')
+    el.style.setProperty('max-width', 'none', 'important')
+    el.style.setProperty('min-width', 'auto', 'important')
+    el.style.setProperty('-webkit-line-clamp', 'unset', 'important')
+    el.style.setProperty('line-clamp', 'unset', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('table').forEach((table) => {
+    table.style.setProperty('border-collapse', 'collapse', 'important')
+    table.style.setProperty('width', '100%', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('td, th').forEach((cell) => {
+    cell.style.setProperty('vertical-align', 'top', 'important')
+    cell.style.setProperty('padding-bottom', '10px', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('[data-legend-item-value] p').forEach((p) => {
+    p.style.setProperty('display', 'block', 'important')
+    p.style.setProperty('margin', '0', 'important')
+    p.style.setProperty('line-height', '1.35', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('[data-legend-item-value] p + p').forEach((p) => {
+    p.style.setProperty('margin-top', '2px', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('li').forEach((li) => {
+    li.style.setProperty('display', 'flex', 'important')
+    li.style.setProperty('flex-wrap', 'nowrap', 'important')
+    li.style.setProperty('align-items', 'flex-start', 'important')
+    li.style.setProperty('gap', '16px', 'important')
+    li.style.setProperty('margin-bottom', '6px', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('ul').forEach((ul) => {
+    ul.style.setProperty('display', 'block', 'important')
+    ul.style.setProperty('line-height', '1.45', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('.truncate, .line-clamp-2, .line-clamp-1').forEach((el) => {
+    el.classList.remove('truncate', 'line-clamp-1', 'line-clamp-2')
+  })
+
+  root.querySelectorAll<HTMLElement>('span, p').forEach((el) => {
+    if (el.closest('[data-legend-item-value]')) return
+    el.style.setProperty('flex-shrink', '0', 'important')
+  })
+}
+
+function measurePreparedElement(prepared: HTMLElement): { width: number; height: number } {
+  prepared.style.position = 'absolute'
+  prepared.style.left = '-9999px'
+  prepared.style.top = '0'
+  prepared.style.visibility = 'hidden'
+  prepared.style.height = 'auto'
+  prepared.style.width = 'max-content'
+  prepared.style.maxWidth = 'none'
+  prepared.style.boxSizing = 'border-box'
+
+  document.body.appendChild(prepared)
+  const width = Math.ceil(prepared.scrollWidth)
+  const height = Math.ceil(prepared.scrollHeight)
+  document.body.removeChild(prepared)
+
+  return { width, height }
+}
+
+function prepareHtmlExportElement(source: HTMLElement): HTMLElement {
+  const clone = source.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
+  inlineNodeStyles(source, clone)
+
+  clone.style.setProperty('background', 'transparent', 'important')
+  clone.style.setProperty('box-shadow', 'none', 'important')
+  clone.style.setProperty('border', 'none', 'important')
+  clone.style.setProperty('outline', 'none', 'important')
+
+  applyExportHtmlColors(clone)
+  applyExportLayoutFixes(clone)
+
+  clone.querySelectorAll<HTMLElement>('p').forEach((el) => {
+    el.style.setProperty('display', 'block', 'important')
+    el.style.setProperty('line-height', '1.45', 'important')
+    el.style.setProperty('margin', '0', 'important')
+  })
+
+  clone.querySelectorAll<HTMLElement>('[data-legend-export] > div > p + p, [data-legend-export] div.space-y-1 > p + p').forEach(
+    (el) => {
+      el.style.setProperty('margin-top', '4px', 'important')
+    },
+  )
+
+  clone.style.margin = '0'
+  clone.style.padding = window.getComputedStyle(source).padding
+
+  return clone
+}
+
+async function htmlElementToPngBlob(element: HTMLElement, scale = DEFAULT_SCALE): Promise<Blob> {
+  const prepared = prepareHtmlExportElement(element)
+  const { width, height } = measurePreparedElement(prepared)
+
+  if (width === 0 || height === 0) {
+    throw new Error('Legenda ainda não renderizada')
+  }
+
+  prepared.style.position = 'static'
+  prepared.style.left = 'auto'
+  prepared.style.visibility = 'visible'
+  prepared.style.width = `${width}px`
+  const exportHeight = height + 4
+
+  prepared.style.height = `${exportHeight}px`
+
+  const xhtmlNs = 'http://www.w3.org/1999/xhtml'
+  const wrapper = document.createElement('div')
+  wrapper.setAttribute('xmlns', xhtmlNs)
+  wrapper.appendChild(prepared)
+
+  const svgNs = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(svgNs, 'svg')
+  svg.setAttribute('xmlns', svgNs)
+  svg.setAttribute('width', String(width))
+  svg.setAttribute('height', String(exportHeight))
+
+  const foreignObject = document.createElementNS(svgNs, 'foreignObject')
+  foreignObject.setAttribute('width', '100%')
+  foreignObject.setAttribute('height', '100%')
+  foreignObject.appendChild(wrapper)
+  svg.appendChild(foreignObject)
+
+  const serialized = new XMLSerializer().serializeToString(svg)
+  const img = await loadImageFromSvgString(serialized)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width * scale
+  canvas.height = exportHeight * scale
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas não suportado neste navegador')
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.scale(scale, scale)
+  ctx.drawImage(img, 0, 0, width, exportHeight)
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Falha ao gerar imagem PNG'))),
+      'image/png',
+    )
+  })
+}
+
+async function copyPngBlobToClipboard(blob: Blob): Promise<void> {
+  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+    throw new Error('Cópia de imagem não suportada neste navegador')
+  }
+
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+}
+
+export async function copyElementImageToClipboard(
+  element: HTMLElement,
+  scale = DEFAULT_SCALE,
+): Promise<void> {
+  const blob = await htmlElementToPngBlob(element, scale)
+  await copyPngBlobToClipboard(blob)
+}
+
 export async function copyChartImageToClipboard(
   exportRoot: HTMLElement,
   scale = DEFAULT_SCALE,
@@ -324,10 +541,5 @@ export async function copyChartImageToClipboard(
   }
 
   const blob = await compositeToPngBlob(legendEl, plotEl, scale)
-
-  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
-    throw new Error('Cópia de imagem não suportada neste navegador')
-  }
-
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+  await copyPngBlobToClipboard(blob)
 }

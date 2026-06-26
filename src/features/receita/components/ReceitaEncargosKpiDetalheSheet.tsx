@@ -542,7 +542,9 @@ export function ReceitaEncargosKpiDetalheSheet({
                                 <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
                                 <div className="min-w-0">
                                   <p className="font-medium text-slate-800">
-                                    {item.nro_titulo ? `Tít. ${item.nro_titulo}` : `CI ${item.ci_item}`}
+                                    {item.nro_titulo
+                                      ? `Tít. ${item.nro_titulo}`
+                                      : `Tít. ${item.ci_titulo}`}
                                   </p>
                                   <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">
                                     {item.descricao || '—'}

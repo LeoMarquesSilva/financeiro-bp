@@ -1,6 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, Layers, Loader2, Percent, X } from 'lucide-react'
+import { BarChart3, Check, Copy, Layers, Loader2, Percent, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Bar,
@@ -36,6 +45,7 @@ import {
   toColunasPercentData,
 } from '../utils/receitaColunasChart'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
+import { copyElementImageToClipboard } from '@/shared/utils/copyChartImage'
 
 type MetricKey = (typeof RECEITA_COLUNAS_METRICAS)[number]['key']
 
@@ -264,10 +274,8 @@ function MesDetalheItemValor({
   if (percentMetaMode) {
     return (
       <>
-        {formatPercentLabel(item.valor)}
-        <span className={cn('block font-normal text-sky-700', subClassName)}>
-          da meta
-        </span>
+        <p className="m-0 font-semibold leading-5">{formatPercentLabel(item.valor)}</p>
+        <p className={cn('m-0 mt-0.5 font-normal leading-4 text-sky-700', subClassName)}>da meta</p>
       </>
     )
   }
@@ -275,14 +283,14 @@ function MesDetalheItemValor({
   if (planoShareMode && item.pctShare != null) {
     return (
       <>
-        {formatPercentLabel(item.pctShare)}
-        <span className={cn('block font-normal text-slate-500', subClassName)}>
+        <p className="m-0 font-semibold leading-5">{formatPercentLabel(item.pctShare)}</p>
+        <p className={cn('m-0 mt-0.5 font-normal leading-4 text-slate-500', subClassName)}>
           {formatCurrency(item.valor)}
-        </span>
+        </p>
         {item.pctMeta != null && (
-          <span className={cn('block font-normal text-sky-700', subClassName)}>
+          <p className={cn('m-0 mt-0.5 font-normal leading-4 text-sky-700', subClassName)}>
             {formatPercentMeta(item.pctMeta)} da meta
-          </span>
+          </p>
         )}
       </>
     )
@@ -290,11 +298,11 @@ function MesDetalheItemValor({
 
   return (
     <>
-      {formatCurrency(item.valor)}
+      <p className="m-0 font-semibold leading-5">{formatCurrency(item.valor)}</p>
       {item.pctMeta != null && (
-        <span className={cn('block font-normal text-sky-700', subClassName)}>
+        <p className={cn('m-0 mt-0.5 font-normal leading-4 text-sky-700', subClassName)}>
           {formatPercentMeta(item.pctMeta)} da meta
-        </span>
+        </p>
       )}
     </>
   )
@@ -312,9 +320,12 @@ function resolveChartHoverIndex(
 }
 
 function MonthTick(
-  props: XAxisTickContentProps & { onHoverIndex: (index: number) => void },
+  props: XAxisTickContentProps & {
+    onHoverIndex: (index: number) => void
+    onSelectIndex?: (index: number) => void
+  },
 ) {
-  const { x, y, payload, index, onHoverIndex } = props
+  const { x, y, payload, index, onHoverIndex, onSelectIndex } = props
   const xNum = Number(x)
   const yNum = Number(y)
   if (!Number.isFinite(xNum) || !Number.isFinite(yNum)) return null
@@ -328,7 +339,12 @@ function MonthTick(
         width={64}
         height={320}
         fill="transparent"
+        style={{ cursor: onSelectIndex ? 'pointer' : undefined }}
         onMouseEnter={() => onHoverIndex(index)}
+        onClick={(e) => {
+          e.stopPropagation()
+          onSelectIndex?.(index)
+        }}
       />
       <text
         dy={16}
@@ -343,30 +359,88 @@ function MonthTick(
   )
 }
 
+function ColunasLegendaCopyButton({
+  exportRef,
+  className,
+}: {
+  exportRef: RefObject<HTMLElement | null>
+  className?: string
+}) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle')
+
+  const handleCopy = async () => {
+    const element = exportRef.current
+    if (!element) {
+      toast.error('Legenda não disponível para cópia')
+      return
+    }
+
+    setStatus('loading')
+    try {
+      await copyElementImageToClipboard(element)
+      setStatus('done')
+      toast.success('Legenda copiada — cole no PowerPoint com Ctrl+V')
+      window.setTimeout(() => setStatus('idle'), 2000)
+    } catch (error) {
+      setStatus('idle')
+      const message =
+        error instanceof Error ? error.message : 'Não foi possível copiar a legenda'
+      toast.error(message)
+    }
+  }
+
+  const Icon = status === 'loading' ? Loader2 : status === 'done' ? Check : Copy
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className={cn('pointer-events-auto h-7 shrink-0 gap-1 px-2 text-[11px] text-slate-500', className)}
+      onClick={(e) => {
+        e.stopPropagation()
+        void handleCopy()
+      }}
+      disabled={status === 'loading'}
+      aria-label="Copiar legenda como imagem com fundo transparente"
+    >
+      <Icon className={cn('h-3.5 w-3.5', status === 'loading' && 'animate-spin')} aria-hidden />
+      Copiar
+    </Button>
+  )
+}
+
 function ColunasTooltipContent({
   point,
+  breakdownPoint,
   mesLabel,
   stackSlices,
   planoShareMode,
   percentMetaMode,
   porArea,
   visibleMetrics,
+  pinned = false,
+  onUnpin,
 }: {
   point: ReceitaColunasChartPoint
+  breakdownPoint?: ReceitaColunasChartPoint
   mesLabel?: string
   stackSlices: { dataKey: string; departamento: string; color: string }[]
   planoShareMode: boolean
   percentMetaMode: boolean
   porArea: boolean
   visibleMetrics: Set<MetricKey>
+  pinned?: boolean
+  onUnpin?: () => void
 }) {
+  const areaPoint = breakdownPoint ?? point
   const items = porArea
-    ? buildMesDetalheItems(point, stackSlices, planoShareMode, percentMetaMode)
+    ? buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
     : []
   const recebidoMes = porArea
-    ? resolveRecebidoMes(point, stackSlices).recebidoMes
+    ? Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
     : Number(point.recebidoTotal) || 0
-  const semArea = porArea ? resolveRecebidoMes(point, stackSlices).semArea : 0
+  const semArea = porArea ? resolveRecebidoMes(areaPoint, stackSlices).semArea : 0
   const metaMes = Number(point.meta) || 0
   const pctAtingido = percentMetaMode
     ? recebidoMes > 0
@@ -376,31 +450,44 @@ function ColunasTooltipContent({
   const metricEntries = RECEITA_COLUNAS_METRICAS.filter((m) => visibleMetrics.has(m.key))
     .map((m) => ({ ...m, valor: Number(point[m.key]) || 0 }))
     .filter((m) => m.valor > 0)
+  const exportRef = useRef<HTMLDivElement>(null)
 
   return (
     <div
-      className="pointer-events-auto z-50 w-max min-w-[16rem] max-w-lg rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm shadow-lg"
-      style={{ pointerEvents: 'auto' }}
-      onWheel={(e) => e.stopPropagation()}
+      className={cn(
+        'z-50 w-max min-w-[16rem] max-w-lg rounded-xl border bg-white text-sm shadow-lg',
+        pinned
+          ? 'pointer-events-auto border-sky-300 ring-2 ring-sky-200/80'
+          : 'pointer-events-none border-slate-200/80',
+      )}
     >
-      <p className="mb-1.5 font-semibold capitalize text-slate-800">{mesLabel ?? point.mesLabel}</p>
+      <div
+        ref={exportRef}
+        data-legend-export
+        className="px-3 py-2.5"
+      >
+        <div className="mb-1.5 flex items-start justify-between gap-2">
+          <p className="font-semibold capitalize text-slate-800">{mesLabel ?? point.mesLabel}</p>
+        </div>
 
       {!percentMetaMode && metaMes > 0 && (
-        <p className="mb-1 text-xs text-slate-500">
-          Meta do mês:{' '}
-          <span className="font-semibold tabular-nums text-slate-800">
-            {formatCurrency(metaMes)}
-          </span>
-          {pctAtingido != null && recebidoMes > 0 && (
-            <span className="ml-1.5 font-medium text-sky-700">
-              ({formatPercentMeta(pctAtingido)} atingido)
+        <div className="mb-2 space-y-1 text-xs text-slate-500">
+          <p className="m-0 leading-4">
+            Meta do mês:{' '}
+            <span className="font-semibold tabular-nums text-slate-800">
+              {formatCurrency(metaMes)}
             </span>
+          </p>
+          {pctAtingido != null && recebidoMes > 0 && (
+            <p className="m-0 font-medium leading-4 text-sky-700">
+              {formatPercentMeta(pctAtingido)} atingido
+            </p>
           )}
-        </p>
+        </div>
       )}
 
       {recebidoMes > 0 && (
-        <p className="mb-2 text-xs text-slate-500">
+        <p className="mb-3 mt-0 text-xs leading-4 text-slate-500">
           Total recebido:{' '}
           <span className="font-semibold tabular-nums text-slate-800">
             {percentMetaMode
@@ -408,7 +495,7 @@ function ColunasTooltipContent({
               : formatCurrency(recebidoMes)}
           </span>
           {!percentMetaMode && semArea > 1 && (
-            <span className="mt-0.5 block text-[10px] text-amber-700">
+            <span className="mt-1 block text-[10px] leading-4 text-amber-700">
               + {formatCurrency(semArea)} recebido sem departamento (não entra no rateio)
             </span>
           )}
@@ -416,26 +503,33 @@ function ColunasTooltipContent({
       )}
 
       {items.length > 0 ? (
-        <ul className="mb-2 space-y-1">
-          {items.map((item) => (
-            <li key={item.key} className="flex items-center justify-between gap-4">
-              <span className="flex min-w-0 items-center gap-1.5 text-slate-600">
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="truncate">{item.name}</span>
-              </span>
-              <span className="shrink-0 text-right font-semibold tabular-nums text-slate-900">
-                <MesDetalheItemValor
-                  item={item}
-                  planoShareMode={planoShareMode}
-                  percentMetaMode={percentMetaMode}
-                />
-              </span>
-            </li>
-          ))}
-        </ul>
+        <table className="mb-2 w-full border-collapse">
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.key} className="align-top">
+                <td className="pb-2.5 pr-4 text-slate-600">
+                  <span className="inline-flex items-start gap-1.5">
+                    <span
+                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="min-w-0 whitespace-normal">{item.name}</span>
+                  </span>
+                </td>
+                <td
+                  data-legend-item-value
+                  className="pb-2.5 text-right align-top tabular-nums text-slate-900"
+                >
+                  <MesDetalheItemValor
+                    item={item}
+                    planoShareMode={planoShareMode}
+                    percentMetaMode={percentMetaMode}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       ) : recebidoMes <= 0 ? (
         <p className="mb-2 text-xs text-slate-500">Sem recebido neste mês.</p>
       ) : !porArea ? (
@@ -468,7 +562,34 @@ function ColunasTooltipContent({
         </ul>
       )}
 
-      <p className="text-[10px] text-slate-400">Clique na coluna para fixar o detalhe</p>
+      </div>
+
+      {pinned && (
+        <div
+          data-chart-export-ignore
+          className="flex items-center justify-end gap-0.5 border-t border-slate-100 px-2 py-1"
+        >
+          <ColunasLegendaCopyButton exportRef={exportRef} />
+          {onUnpin && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 shrink-0 p-0 text-slate-500"
+              onClick={onUnpin}
+              aria-label="Fechar legenda fixada"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      )}
+
+      <p className="px-3 pb-2 text-[10px] text-slate-400" data-chart-export-ignore>
+        {pinned
+          ? 'Legenda fixada · use Copiar para colar no PowerPoint'
+          : 'Clique na coluna para fixar a legenda e copiar'}
+      </p>
     </div>
   )
 }
@@ -506,48 +627,52 @@ function ColunasMesDetalhePanel({
       ? recebidoMes
       : null
     : pctDaMeta(recebidoMes, metaMes)
+  const exportRef = useRef<HTMLDivElement>(null)
 
   return (
     <div className="mt-4 rounded-xl border border-sky-200/80 bg-sky-50/40 p-3 sm:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-sky-800/80">
-            Detalhe do mês
-          </p>
-          <p className="text-sm font-semibold capitalize text-slate-900">
-            {point.mesLabel}
-            {recebidoMes > 0 && (
-              <span className="ml-2 font-normal text-slate-600">
-                recebido{' '}
-                {percentMetaMode
-                  ? `${formatPercentLabel(recebidoMes)} da meta`
-                  : formatCurrency(recebidoMes)}
-              </span>
-            )}
-          </p>
-          {!percentMetaMode && metaMes > 0 && (
-            <p className="mt-0.5 text-xs text-slate-600">
-              Meta {formatCurrency(metaMes)}
-              {pctAtingido != null && recebidoMes > 0 && (
-                <span className="ml-1.5 font-medium text-sky-800">
-                  · {formatPercentMeta(pctAtingido)} atingido
-                </span>
-              )}
-            </p>
-          )}
-          {!percentMetaMode && semArea > 1 && (
-            <p className="mt-0.5 text-[11px] text-amber-800">
-              Há {formatCurrency(semArea)} recebido sem departamento fora do rateio por área.
-            </p>
-          )}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2" data-chart-export-ignore>
+        <p className="text-xs font-medium uppercase tracking-wide text-sky-800/80">
+          Detalhe do mês
+        </p>
+        <div className="flex shrink-0 items-center gap-1">
+          <ColunasLegendaCopyButton exportRef={exportRef} className="text-sky-700 hover:text-sky-900" />
+          <Button type="button" variant="ghost" size="sm" className="h-8 gap-1" onClick={onClose}>
+            <X className="h-3.5 w-3.5" />
+            Fechar
+          </Button>
         </div>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1" onClick={onClose}>
-          <X className="h-3.5 w-3.5" />
-          Fechar
-        </Button>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-1.5">
+      <div ref={exportRef} data-legend-export>
+        <p className="text-sm font-semibold capitalize text-slate-900">
+          {point.mesLabel}
+          {recebidoMes > 0 && (
+            <span className="ml-2 font-normal text-slate-600">
+              recebido{' '}
+              {percentMetaMode
+                ? `${formatPercentLabel(recebidoMes)} da meta`
+                : formatCurrency(recebidoMes)}
+            </span>
+          )}
+        </p>
+        {!percentMetaMode && metaMes > 0 && (
+          <div className="mt-0.5 space-y-0.5 text-xs text-slate-600">
+            <p>Meta {formatCurrency(metaMes)}</p>
+            {pctAtingido != null && recebidoMes > 0 && (
+              <p className="font-medium text-sky-800">
+                {formatPercentMeta(pctAtingido)} atingido
+              </p>
+            )}
+          </div>
+        )}
+        {!percentMetaMode && semArea > 1 && (
+          <p className="mt-0.5 text-[11px] text-amber-800">
+            Há {formatCurrency(semArea)} recebido sem departamento fora do rateio por área.
+          </p>
+        )}
+
+      <div className="mb-3 flex flex-wrap gap-1.5" data-chart-export-ignore>
         {chartData.map((d) => (
           <button
             key={d.mes}
@@ -586,34 +711,43 @@ function ColunasMesDetalhePanel({
         </ul>
       )}
 
-      <ul className="space-y-2 pr-1 text-sm">
-        {items.length === 0 ? (
-          <li className="text-slate-500">Sem recebido neste mês.</li>
-        ) : (
-          items.map((item) => (
-            <li
-              key={item.key}
-              className="flex items-center justify-between gap-4 rounded-lg bg-white/80 px-2.5 py-1.5"
-            >
-              <span className="flex min-w-0 items-center gap-2 text-slate-700">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="truncate">{item.name}</span>
-              </span>
-              <span className="shrink-0 text-right font-semibold tabular-nums text-slate-900">
-                <MesDetalheItemValor
-                  item={item}
-                  planoShareMode={planoShareMode}
-                  percentMetaMode={percentMetaMode}
-                  subClassName="text-xs"
-                />
-              </span>
-            </li>
-          ))
-        )}
-      </ul>
+      <table className="w-full border-collapse pr-1 text-sm">
+        <tbody>
+          {items.length === 0 ? (
+            <tr>
+              <td colSpan={2} className="py-1 text-slate-500">
+                Sem recebido neste mês.
+              </td>
+            </tr>
+          ) : (
+            items.map((item) => (
+              <tr key={item.key} className="align-top">
+                <td className="rounded-l-lg bg-white/80 px-2.5 py-2 text-slate-700">
+                  <span className="inline-flex items-start gap-2">
+                    <span
+                      className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="min-w-0 whitespace-normal">{item.name}</span>
+                  </span>
+                </td>
+                <td
+                  data-legend-item-value
+                  className="rounded-r-lg bg-white/80 px-2.5 py-2 text-right align-top tabular-nums text-slate-900"
+                >
+                  <MesDetalheItemValor
+                    item={item}
+                    planoShareMode={planoShareMode}
+                    percentMetaMode={percentMetaMode}
+                    subClassName="text-xs"
+                  />
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+      </div>
     </div>
   )
 }
@@ -717,8 +851,12 @@ export function ReceitaComparativoColunasChart({
     setSelectedMes((prev) => (prev === mes ? null : mes))
   }
 
-  const handleBarClick = (_data: unknown, index: number) => {
+  const handleSelectMesAtIndex = (index: number) => {
     selectMesAtIndex(chartData, index, setSelectedMes)
+  }
+
+  const handleBarClick = (_data: unknown, index: number) => {
+    handleSelectMesAtIndex(index)
   }
 
   const handleChartMouseMove = (state: MouseHandlerDataParam) => {
@@ -726,9 +864,13 @@ export function ReceitaComparativoColunasChart({
     if (idx != null) setHoveredIndex(idx)
   }
 
-  const handleChartMouseLeave = () => setHoveredIndex(null)
+  const handleChartMouseLeave = () => {
+    if (selectedMes == null) setHoveredIndex(null)
+  }
 
   const hoveredPoint = hoveredIndex != null ? chartData[hoveredIndex] : null
+  const legendPinned = selectedMes != null && selectedPoint != null
+  const legendPoint = legendPinned ? selectedPoint : hoveredPoint
 
   const renderColunasTooltip = () => null
 
@@ -904,15 +1046,23 @@ export function ReceitaComparativoColunasChart({
             className="relative h-[360px] min-h-[360px] w-full min-w-0"
             onMouseLeave={handleChartMouseLeave}
           >
-            {hoveredPoint && (
-              <div className="pointer-events-none absolute left-1/2 top-3 z-[70] w-max max-w-[min(32rem,calc(100%-1rem))] -translate-x-1/2">
+            {legendPoint && (
+              <div
+                className={cn(
+                  'absolute left-1/2 top-3 z-[70] w-max max-w-[min(32rem,calc(100%-1rem))] -translate-x-1/2',
+                  legendPinned && 'pointer-events-auto',
+                )}
+              >
                 <ColunasTooltipContent
-                  point={hoveredPoint}
+                  point={legendPoint}
+                  breakdownPoint={legendPinned ? breakdownSelectedPoint ?? legendPoint : undefined}
                   stackSlices={stackSlices}
                   planoShareMode={planoMode}
                   percentMetaMode={percentMetaMode}
                   porArea={porArea}
                   visibleMetrics={chartVisibleMetrics}
+                  pinned={legendPinned}
+                  onUnpin={legendPinned ? () => setSelectedMes(null) : undefined}
                 />
               </div>
             )}
@@ -947,6 +1097,7 @@ export function ReceitaComparativoColunasChart({
                     <MonthTick
                       {...tickProps}
                       onHoverIndex={(index) => setHoveredIndex(index)}
+                      onSelectIndex={handleSelectMesAtIndex}
                     />
                   )}
                 />
