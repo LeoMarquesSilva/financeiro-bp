@@ -96,16 +96,48 @@ export function formatPhoneMasked(raw: string | null | undefined): string {
   return `+${d}`
 }
 
-/** Formata dígitos de JID WhatsApp. */
-export function formatPhoneFromWhatsappDigits(raw: string | null | undefined): string {
-  const d = parsePhoneDigits(raw ?? '')
-  if (!d || !isPlausiblePhoneDigits(d)) return ''
+/** Formata telefone BR para exibição na UI (DDD + número completo, preserva 9º dígito). */
+export function formatBrazilDisplayPhone(raw: string | null | undefined): string | null {
+  let d = parsePhoneDigits(raw ?? '')
+  if (!d) return null
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2)
+  if (d.length < 10 || d.length > 11) return null
+  const ddd = d.slice(0, 2)
+  const rest = d.slice(2)
+  if (rest.length === 9) return `(${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`
+  if (rest.length === 8) return `(${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`
+  return null
+}
 
-  if (d.startsWith('55') && d.length >= 12) {
-    return formatBrazilWithDdi(d)
+/**
+ * Formata telefone para exibição: BR nacional ou internacional (libphonenumber).
+ * Nunca trunca dígitos — usa E.164 completo.
+ */
+export function formatPhoneDisplay(raw: string | null | undefined): string | null {
+  const e164 = normalizePhoneE164(raw)
+  if (!e164) return null
+
+  try {
+    const phone = parsePhoneNumberFromString(`+${e164}`)
+    if (phone?.isValid()) {
+      if (phone.country === 'BR') {
+        const br = formatBrazilDisplayPhone(e164)
+        if (br) return br
+      }
+      return phone.formatInternational()
+    }
+  } catch {
+    // fallback abaixo
   }
 
-  return formatPhoneMasked(d)
+  const br = formatBrazilDisplayPhone(e164)
+  if (br) return br
+  return `+${e164}`
+}
+
+/** Formata dígitos de JID WhatsApp. */
+export function formatPhoneFromWhatsappDigits(raw: string | null | undefined): string {
+  return formatPhoneDisplay(raw) ?? ''
 }
 
 /** @deprecated Use PhoneInputCountry — mantido para compatibilidade pontual. */

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AvatarImage } from '@/components/ui/avatar'
 import { whatsappService } from '../services/whatsappService'
-import { isDirectAvatarUrl } from '../utils/whatsappAvatar'
+import { isDirectAvatarUrl, normalizeAvatarRemoteJid } from '../utils/whatsappAvatar'
 
 interface Props {
   src?: string | null
@@ -28,7 +28,8 @@ export function WhatsappAvatarImage({
   lazy = false,
 }: Props) {
   const observerRef = useRef<HTMLSpanElement>(null)
-  const identity = remoteJid ?? src ?? alt
+  const avatarJid = normalizeAvatarRemoteJid(remoteJid)
+  const identity = avatarJid ?? src ?? alt
 
   const directSrc = isDirectAvatarUrl(src) ? src!.trim() : null
   const [proxySrc, setProxySrc] = useState<string | null>(null)
@@ -41,11 +42,11 @@ export function WhatsappAvatarImage({
     setProxySrc(null)
     setVisible(!lazy)
 
-    if (!needsProxyFetch(src, fetchIfNeeded, remoteJid) || !remoteJid) return
+    if (!needsProxyFetch(src, fetchIfNeeded, avatarJid ?? undefined) || !avatarJid) return
 
-    const cached = whatsappService.getCachedAvatarDataUrl(remoteJid)
+    const cached = whatsappService.getCachedAvatarDataUrl(avatarJid)
     if (cached) setProxySrc(cached)
-  }, [identity, src, fetchIfNeeded, remoteJid, lazy])
+  }, [identity, src, fetchIfNeeded, avatarJid, lazy])
 
   useEffect(() => {
     if (!lazy || !fetchIfNeeded) {
@@ -70,18 +71,18 @@ export function WhatsappAvatarImage({
       failed ||
       proxySrc ||
       directSrc ||
-      !needsProxyFetch(src, fetchIfNeeded, remoteJid) ||
-      !remoteJid
+      !needsProxyFetch(src, fetchIfNeeded, avatarJid ?? undefined) ||
+      !avatarJid
     ) {
       return
     }
 
     let cancelled = false
-    const jidAtFetch = remoteJid
+    const jidAtFetch = avatarJid
     whatsappService
-      .fetchAvatarDataUrl(remoteJid)
+      .fetchAvatarDataUrl(avatarJid)
       .then((dataUrl) => {
-        if (cancelled || jidAtFetch !== remoteJid) return
+        if (cancelled || jidAtFetch !== avatarJid) return
         if (dataUrl) setProxySrc(dataUrl)
         else setFailed(true)
       })
@@ -92,7 +93,7 @@ export function WhatsappAvatarImage({
     return () => {
       cancelled = true
     }
-  }, [visible, failed, proxySrc, directSrc, src, fetchIfNeeded, remoteJid, identity])
+  }, [visible, failed, proxySrc, directSrc, src, fetchIfNeeded, avatarJid, identity])
 
   const displaySrc = directSrc ?? proxySrc
   const showObserver = lazy && fetchIfNeeded && !displaySrc && !failed

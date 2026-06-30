@@ -4,7 +4,9 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Crown, Loader2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isPhoneFormattedLabel } from '../utils/contactDisplay'
 import type { ResolvedParticipant } from '../utils/participants'
+import { avatarRemoteJidForParticipant } from '../utils/participants'
 
 function initials(name: string): string {
   const partes = name.replace(/[^a-zA-ZÀ-ÿ ]/g, ' ').trim().split(/\s+/).filter(Boolean)
@@ -56,7 +58,7 @@ export function WhatsappGroupMembers({ members, loading }: Props) {
                   <WhatsappAvatarImage
                     src={m.profile_pic_url}
                     alt=""
-                    remoteJid={m.phone_number ?? m.participant_jid}
+                    remoteJid={avatarRemoteJidForParticipant(m) ?? undefined}
                     fetchIfNeeded
                     lazy
                   />
@@ -66,8 +68,8 @@ export function WhatsappGroupMembers({ members, loading }: Props) {
                 </Avatar>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-medium text-slate-800">{m.name}</p>
-                  {m.lid_id && (
-                    <p className="truncate text-[10px] text-slate-400">@{m.lid_id.slice(-8)}</p>
+                  {m.phoneLabel && m.name !== m.phoneLabel && !isPhoneFormattedLabel(m.name) && (
+                    <p className="truncate text-[10px] text-slate-400">{m.phoneLabel}</p>
                   )}
                 </div>
                 {m.admin_role && (

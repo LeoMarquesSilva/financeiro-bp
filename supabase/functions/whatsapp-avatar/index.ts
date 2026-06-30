@@ -49,11 +49,15 @@ Deno.serve(async (req: Request) => {
   }
 
   const canonical = canonicalJid(payload.remoteJid ?? '')
-  if (!isValidWhatsappRemoteJid(canonical) || canonical.includes('@lid') || canonical.endsWith('@g.us')) {
+  let avatarJid = canonical
+  if (!avatarJid.includes('@') && /^\d+$/.test(avatarJid)) {
+    avatarJid = `${avatarJid}@s.whatsapp.net`
+  }
+  if (!isValidWhatsappRemoteJid(avatarJid) || avatarJid.includes('@lid') || avatarJid.endsWith('@g.us')) {
     return jsonResponse({ unavailable: true, reason: 'JID inválido para avatar.' })
   }
 
-  const number = canonical.split('@')[0]
+  const number = avatarJid.split('@')[0]
 
   try {
     const profileResp = await fetch(

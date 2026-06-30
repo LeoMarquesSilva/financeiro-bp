@@ -46,16 +46,13 @@ export function useLidContactIndex() {
   const query = useQuery({
     queryKey: ['whatsapp', 'lid-index'],
     queryFn: async () => {
-      const [participants, chatsRes, msgsRes, altMsgsRes] = await Promise.all([
+      const [participants, chatsRes, msgsRes, altMsgsRes, groupMsgsRes] = await Promise.all([
         whatsappService.listLidParticipantRows(),
         supabase.from('whatsapp_chats').select('remote_jid, push_name, phone_jid').limit(1000),
-        // Extrai só os campos necessários no servidor (pushName / participant),
-        // nunca o raw inteiro — evita timeout/sobrecarga do banco.
         supabase
           .from('whatsapp_mensagens')
           .select('remote_jid, pushName:raw->>pushName, participant:raw->key->>participant')
           .like('remote_jid', '%@lid')
-          .eq('from_me', false)
           .order('timestamp', { ascending: false })
           .limit(300),
         supabase
@@ -63,6 +60,15 @@ export function useLidContactIndex() {
           .select('remote_jid, alt:raw->key->>remoteJidAlt')
           .like('remote_jid', '%@lid')
           .not('raw->key->>remoteJidAlt', 'is', null)
+          .order('timestamp', { ascending: false })
+          .limit(500),
+        supabase
+          .from('whatsapp_mensagens')
+          .select(
+            'pushName:raw->>pushName, participant:raw->key->>participant, alt:raw->key->>participantAlt',
+          )
+          .like('remote_jid', '%@g.us')
+          .not('raw->key->>participant', 'is', null)
           .order('timestamp', { ascending: false })
           .limit(500),
       ])
@@ -98,6 +104,25 @@ export function useLidContactIndex() {
           if (!jid.includes('@lid') || !pushName || !isUsableContactName(pushName)) continue
           const lid = jid.split('@')[0]
           if (lid && !messageNames.has(lid)) messageNames.set(lid, pushName)
+        }
+      }
+
+      for (const m of (groupMsgsRes.data ?? []) as {
+        pushName: string | null
+        participant: string | null
+        alt: string | null
+      }[]) {
+        const participant = m.participant ?? ''
+        if (!participant.includes('@lid')) continue
+        const lid = participant.split('@')[0]
+        if (!lid) continue
+        const pushName = m.pushName?.trim()
+        if (pushName && isUsableContactName(pushName) && !messageNames.has(lid)) {
+          messageNames.set(lid, pushName)
+        }
+        if (!lidToPhoneDigits.has(lid)) {
+          const alt = phoneFromJidAlt(m.alt ?? undefined)
+          if (alt) lidToPhoneDigits.set(lid, alt)
         }
       }
 

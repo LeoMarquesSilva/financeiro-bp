@@ -68,9 +68,12 @@ import { resolveChatDisplayName, lidFromJid, phoneFromJidAlt } from '../utils/li
 import {
   buildMentionMap,
   buildSenderNamesFromMessages,
+  buildLidToPhoneFromMessages,
+  mergeParticipantsFromMessages,
   resolveGroupParticipants,
   senderLabelFromMessage,
 } from '../utils/participants'
+import { buildMentionDisplayMap, buildSendMentionPayload } from '../utils/mentions'
 import { WhatsappMessageBubble } from './WhatsappMessageBubble'
 import { WhatsappComposer } from './WhatsappComposer'
 import { WhatsappGroupMembers } from './WhatsappGroupMembers'
@@ -378,15 +381,44 @@ export function WhatsappInbox({
     void carregarMensagensAntigas()
   }, [loadingMsgs, hasMoreAntigas, carregarMensagensAntigas])
 
+  const lidToPhoneFromMsgs = useMemo(
+    () => (groupJid ? buildLidToPhoneFromMessages(mensagens) : new Map<string, string>()),
+    [groupJid, mensagens],
+  )
   const senderNames = useMemo(
     () => buildSenderNamesFromMessages(mensagens),
     [mensagens],
   )
-  const resolvedMembers = useMemo(
-    () => resolveGroupParticipants(groupMembersRaw, senderNames, nomesPorTelefone),
-    [groupMembersRaw, senderNames, nomesPorTelefone],
+  const groupMembersMerged = useMemo(
+    () =>
+      groupJid
+        ? mergeParticipantsFromMessages(groupMembersRaw, groupJid, mensagens)
+        : groupMembersRaw,
+    [groupJid, groupMembersRaw, mensagens],
   )
-  const mentionMap = useMemo(() => buildMentionMap(resolvedMembers), [resolvedMembers])
+  const profilePicByJid = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const c of chatsRaw) {
+      if (!c.profile_pic_url || isGroupJid(c.remote_jid)) continue
+      map.set(canonicalJid(c.remote_jid), c.profile_pic_url)
+      if (c.phone_jid) map.set(canonicalJid(c.phone_jid), c.profile_pic_url)
+    }
+    return map
+  }, [chatsRaw])
+  const resolvedMembers = useMemo(
+    () =>
+      resolveGroupParticipants(groupMembersMerged, senderNames, nomesPorTelefone, {
+        lidIndex,
+        lidToPhone: lidToPhoneFromMsgs,
+        profilePicByJid,
+      }),
+    [groupMembersMerged, senderNames, nomesPorTelefone, lidIndex, lidToPhoneFromMsgs, profilePicByJid],
+  )
+  const senderLookup = useMemo(() => buildMentionMap(resolvedMembers), [resolvedMembers])
+  const mentionMap = useMemo(
+    () => buildMentionDisplayMap(resolvedMembers, senderNames),
+    [resolvedMembers, senderNames],
+  )
 
   const messagesById = useMemo(() => {
     const map = new Map<string, WhatsappMensagemRow>()
@@ -672,15 +704,15 @@ export function WhatsappInbox({
       try {
         await whatsappService.syncConversa(chat.remote_jid, { limit: 200 })
         await refetchMsgs()
+        if (isGroupJid(chat.remote_jid)) {
+          await queryClient.invalidateQueries({
+            queryKey: ['whatsapp', 'group-members', chat.remote_jid],
+          })
+        }
       } catch {
         /* best-effort: exibe o que já está no banco */
       }
     })()
-    if (isGroupJid(chat.remote_jid)) {
-      void queryClient.invalidateQueries({
-        queryKey: ['whatsapp', 'group-members', chat.remote_jid],
-      })
-    }
   }
 
   const handleToggleMute = () => {
@@ -757,10 +789,19 @@ export function WhatsappInbox({
           toast.error(erro ?? 'Não foi possível enviar a cobrança')
         }
       } else {
-        const corpo = `${prefixoAtendente(fullName)}${texto.trim()}`
+        const prefix = prefixoAtendente(fullName)
+        const rawBody = texto.trim()
+        const mentionPayload =
+          groupJid && resolvedMembers.length > 0
+            ? buildSendMentionPayload(rawBody, resolvedMembers)
+            : { text: rawBody, displayText: rawBody, mentioned: [] as string[] }
+        const corpo = `${prefix}${mentionPayload.text}`
+        const corpoExibicao = `${prefix}${mentionPayload.displayText}`
         await whatsappService.sendMessage({
           remoteJid: selected.remote_jid,
           text: corpo,
+          displayText: corpoExibicao,
+          mentioned: mentionPayload.mentioned.length > 0 ? mentionPayload.mentioned : undefined,
           quote: buildQuote(),
         })
         setTexto('')
@@ -843,7 +884,7 @@ export function WhatsappInbox({
     const authorLabel = message.from_me
       ? 'Você'
       : groupJid
-        ? senderLabelFromMessage(message, mentionMap) ?? undefined
+        ? senderLabelFromMessage(message, senderLookup) ?? undefined
         : resolveName(selected)
     const target = replyTargetFromMessage(message, authorLabel)
     if (!target) {
@@ -1224,7 +1265,9 @@ export function WhatsappInbox({
                   <div className="flex flex-col gap-2">
                     {mensagens.map((m: WhatsappMensagemRow) => {
                       const senderLabel =
-                        groupJid && !m.from_me ? senderLabelFromMessage(m, mentionMap) : null
+                        groupJid && !m.from_me
+                          ? senderLabelFromMessage(m, senderLookup) ?? 'Participante'
+                          : null
                       return (
                         <div
                           key={m.id}
@@ -1275,6 +1318,7 @@ export function WhatsappInbox({
                   modoCobranca={modoCobranca}
                   replyTo={replyTo}
                   onClearReply={() => setReplyTo(null)}
+                  groupMembers={groupJid ? resolvedMembers : undefined}
                   placeholder={
                     modoCobranca
                       ? 'Edite a mensagem de cobrança…'

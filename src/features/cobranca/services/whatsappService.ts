@@ -7,6 +7,7 @@ import {
   telefoneToRemoteJid,
 } from '../utils/chatSearch'
 import { parsePhoneDigits } from '../utils/phoneMask'
+import { normalizeAvatarRemoteJid } from '../utils/whatsappAvatar'
 import { isGroupJid, isValidWhatsappRemoteJid } from '../utils/jid'
 import { phoneFromJidAlt } from '../utils/lidIndex'
 import type { WhatsappChatRow, WhatsappMensagemRow } from '@/lib/database.types'
@@ -44,7 +45,35 @@ let lidPhoneCache: Map<string, string> | null = null
 let lidCacheAt = 0
 
 const MENSAGEM_LIST_COLUMNS =
-  'id, message_id, remote_jid, from_me, tipo, conteudo, timestamp, status, reaction_to, reactions, media_meta, instance'
+  'id, message_id, remote_jid, from_me, tipo, conteudo, timestamp, status, reaction_to, reactions, media_meta, instance, pushName:raw->>pushName, participant:raw->key->>participant, participantAlt:raw->key->>participantAlt'
+
+type MensagemListRow = WhatsappMensagemRow & {
+  pushName?: string | null
+  participant?: string | null
+  participantAlt?: string | null
+}
+
+/** Reconstrói um raw mínimo para remetente/citações sem carregar o JSON inteiro. */
+function enrichMensagemRow(row: MensagemListRow): WhatsappMensagemRow {
+  const { pushName, participant, participantAlt, ...rest } = row
+  const hasSenderMeta = !!(pushName?.trim() || participant || participantAlt)
+  return {
+    ...(rest as WhatsappMensagemRow),
+    raw: hasSenderMeta
+      ? ({
+          pushName: pushName?.trim() || undefined,
+          key: {
+            ...(participant ? { participant } : {}),
+            ...(participantAlt ? { participantAlt } : {}),
+          },
+        } as WhatsappMensagemRow['raw'])
+      : (rest.raw ?? null),
+  }
+}
+
+function mapMensagemRows(rows: MensagemListRow[]): WhatsappMensagemRow[] {
+  return dedupeMensagensRows(rows.map(enrichMensagemRow))
+}
 
 const MENSAGENS_RECENTES_LIMIT = 200
 const MENSAGENS_ANTIGAS_LIMIT = 50
@@ -89,7 +118,9 @@ function runNextMediaLoad(): void {
 }
 
 async function fetchAvatarDataUrl(remoteJid: string): Promise<string | null> {
-  const key = chatKey(remoteJid)
+  const normalized = normalizeAvatarRemoteJid(remoteJid)
+  if (!normalized) return null
+  const key = chatKey(normalized)
   const cached = avatarDataUrlCache.get(key)
   if (cached) return cached
 
@@ -345,9 +376,7 @@ export const whatsappService = {
 
   async listLidPhoneMappings(): Promise<Map<string, string>> {
     try {
-      const [msgsRes, chatsRes] = await Promise.all([
-        // Extrai só o campo necessário (remoteJidAlt) no servidor — NUNCA o raw
-        // inteiro, que para milhares de linhas estoura o timeout do banco.
+      const [msgsRes, groupMsgsRes, chatsRes] = await Promise.all([
         supabase
           .from('whatsapp_mensagens')
           .select('remote_jid, alt:raw->key->>remoteJidAlt')
@@ -355,6 +384,13 @@ export const whatsappService = {
           .not('raw->key->>remoteJidAlt', 'is', null)
           .order('timestamp', { ascending: false })
           .limit(500),
+        supabase
+          .from('whatsapp_mensagens')
+          .select('participant:raw->key->>participant, alt:raw->key->>participantAlt')
+          .like('remote_jid', '%@g.us')
+          .not('raw->key->>participantAlt', 'is', null)
+          .order('timestamp', { ascending: false })
+          .limit(1000),
         supabase
           .from('whatsapp_chats')
           .select('remote_jid, phone_jid')
@@ -367,12 +403,26 @@ export const whatsappService = {
         const digits = row.phone_jid ? phoneFromJidAlt(row.phone_jid) : null
         if (lid && digits) map.set(lid, digits)
       }
-      if (msgsRes.error) return map
-      for (const row of (msgsRes.data ?? []) as { remote_jid: string; alt: string | null }[]) {
-        const lid = row.remote_jid.split('@')[0]
-        if (!lid || map.has(lid)) continue
-        const alt = phoneFromJidAlt(row.alt ?? undefined)
-        if (alt) map.set(lid, alt)
+      if (!msgsRes.error) {
+        for (const row of (msgsRes.data ?? []) as { remote_jid: string; alt: string | null }[]) {
+          const lid = row.remote_jid.split('@')[0]
+          if (!lid || map.has(lid)) continue
+          const alt = phoneFromJidAlt(row.alt ?? undefined)
+          if (alt) map.set(lid, alt)
+        }
+      }
+      if (!groupMsgsRes.error) {
+        for (const row of (groupMsgsRes.data ?? []) as {
+          participant: string | null
+          alt: string | null
+        }[]) {
+          const participant = row.participant ?? ''
+          if (!participant.includes('@lid')) continue
+          const lid = participant.split('@')[0]
+          if (!lid || map.has(lid)) continue
+          const alt = phoneFromJidAlt(row.alt ?? undefined)
+          if (alt) map.set(lid, alt)
+        }
       }
       return map
     } catch {
@@ -463,7 +513,7 @@ export const whatsappService = {
         return []
       }
 
-      return dedupeMensagensRows((data ?? []) as WhatsappMensagemRow[]).reverse()
+      return mapMensagemRows((data ?? []) as MensagemListRow[]).reverse()
     } catch {
       return []
     }
@@ -492,7 +542,7 @@ export const whatsappService = {
         return []
       }
 
-      return dedupeMensagensRows((data ?? []) as WhatsappMensagemRow[]).reverse()
+      return mapMensagemRows((data ?? []) as MensagemListRow[]).reverse()
     } catch {
       return []
     }
@@ -512,7 +562,9 @@ export const whatsappService = {
   fetchAvatarDataUrl,
 
   getCachedAvatarDataUrl(remoteJid: string): string | null {
-    return avatarDataUrlCache.get(chatKey(remoteJid)) ?? null
+    const normalized = normalizeAvatarRemoteJid(remoteJid)
+    if (!normalized) return null
+    return avatarDataUrlCache.get(chatKey(normalized)) ?? null
   },
 
   async resolveSendTarget(remoteJid: string): Promise<{ remoteJid: string; number: string }> {
@@ -540,6 +592,8 @@ export const whatsappService = {
     remoteJid?: string
     number?: string
     text: string
+    displayText?: string
+    mentioned?: string[]
     quote?: QuoteSendPayload
   }): Promise<void> {
     const target = params.remoteJid
@@ -551,6 +605,8 @@ export const whatsappService = {
           remoteJid: target.remoteJid,
           number: target.number,
           text: params.text,
+          displayText: params.displayText,
+          mentioned: params.mentioned,
           quote: params.quote,
         }
       : { kind: 'text' as const, ...params }

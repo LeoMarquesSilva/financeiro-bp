@@ -164,7 +164,7 @@ export function resolveQuotedAuthorLabel(
   if (fromMe) return { label: 'Você', fromMe: true }
 
   return {
-    label: quotedAuthorLabel(quoted, mentionMap) ?? contactLabel ?? 'Contato',
+    label: quotedAuthorLabel(quoted, mentionMap) ?? contactLabel ?? 'Participante',
     fromMe: false,
   }
 }

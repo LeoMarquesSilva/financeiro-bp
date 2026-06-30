@@ -15,14 +15,27 @@ function tryParseE164Digits(digits: string): string | null {
   return null
 }
 
+/** DDD brasileiro plausível (11–99) com 8 ou 9 dígitos locais. */
+export function isPossibleBrazilLocal(digits: string): boolean {
+  if (digits.length !== 10 && digits.length !== 11) return false
+  const ddd = Number.parseInt(digits.slice(0, 2), 10)
+  return ddd >= 11 && ddd <= 99
+}
+
 /**
  * Normaliza para E.164 sem "+" (ex.: 34656349183, 5511999998888).
- * Tenta internacional antes de forçar BR; repara 55 colado em DDI estrangeiro.
+ * BR local (10/11 dígitos) prioriza +55 antes de interpretar como DDI estrangeiro.
  */
 export function normalizePhoneE164(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null
   const digits = cleanDigits(raw)
   if (!digits) return null
+
+  // Evita 3588754584 ser lido como Finlândia (+358): trata como BR local primeiro.
+  if (isPossibleBrazilLocal(digits)) {
+    const asBr = tryParseE164Digits(`55${digits}`)
+    if (asBr) return asBr
+  }
 
   const candidates: string[] = [digits]
 
@@ -60,6 +73,25 @@ export function phoneKeyFromE164(raw: string | null | undefined): string | null 
   if (!n) return null
   if (n.startsWith('55')) return brazilPhoneKey(n)
   return n
+}
+
+/** Chaves alternativas para cruzar telefone (cadastro, JID, menções). */
+export function phoneLookupAliases(raw: string | null | undefined): string[] {
+  const keys = new Set<string>()
+  const rawDigits = cleanDigits(raw ?? '')
+  if (rawDigits) keys.add(rawDigits)
+
+  const e164 = normalizePhoneE164(raw)
+  if (!e164) return [...keys]
+
+  keys.add(e164)
+  if (e164.startsWith('55') && e164.length >= 12) {
+    keys.add(e164.slice(2))
+    const pk = brazilPhoneKey(e164)
+    if (pk) keys.add(pk)
+  }
+
+  return [...keys].filter(Boolean)
 }
 
 export function phonesMatchE164(a: string | null | undefined, b: string | null | undefined): boolean {

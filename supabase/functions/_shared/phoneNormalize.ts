@@ -15,14 +15,26 @@ function tryParseE164Digits(digits: string): string | null {
   return null
 }
 
+/** DDD brasileiro plausível (11–99) com 8 ou 9 dígitos locais. */
+function isPossibleBrazilLocal(digits: string): boolean {
+  if (digits.length !== 10 && digits.length !== 11) return false
+  const ddd = Number.parseInt(digits.slice(0, 2), 10)
+  return ddd >= 11 && ddd <= 99
+}
+
 /**
  * Normaliza para E.164 sem "+" (ex.: 34656349183, 5511999998888).
- * Tenta internacional antes de forçar BR; repara 55 colado em DDI estrangeiro.
+ * BR local (10/11 dígitos) prioriza +55 antes de interpretar como DDI estrangeiro.
  */
 export function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null
   const digits = cleanDigits(raw)
   if (!digits) return null
+
+  if (isPossibleBrazilLocal(digits)) {
+    const asBr = tryParseE164Digits(`55${digits}`)
+    if (asBr) return asBr
+  }
 
   const candidates: string[] = [digits]
 

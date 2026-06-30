@@ -1,10 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { ImageIcon, Mic, Paperclip, Send, Square, X, ZoomIn } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { WhatsappImageLightbox } from './WhatsappImageLightbox'
 import { WhatsappQuotedBlock } from './WhatsappQuotedBlock'
+import { WhatsappMentionPopover } from './WhatsappMentionPopover'
 import type { ReplyTarget } from '../utils/quotedMessage'
+import type { ResolvedParticipant } from '../utils/participants'
+import {
+  filterMembersForMention,
+  findMentionTrigger,
+  insertMentionToken,
+} from '../utils/mentions'
 import {
   blobToBase64,
   COMPOSER_FILE_ACCEPT,
@@ -44,6 +52,8 @@ interface Props {
   panelHeight: number
   replyTo?: ReplyTarget | null
   onClearReply?: () => void
+  /** Membros do grupo — habilita menção com @. */
+  groupMembers?: ResolvedParticipant[]
 }
 
 export function WhatsappComposer({
@@ -59,6 +69,7 @@ export function WhatsappComposer({
   panelHeight,
   replyTo,
   onClearReply,
+  groupMembers,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -69,6 +80,77 @@ export function WhatsappComposer({
   const [pending, setPending] = useState<PendingAttachment | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const composerWrapRef = useRef<HTMLDivElement>(null)
+
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0)
+  const [cursorPos, setCursorPos] = useState(0)
+  const [mentionAnchor, setMentionAnchor] = useState<DOMRect | null>(null)
+
+  const mentionTrigger = useMemo(() => {
+    if (!groupMembers?.length || modoCobranca) return null
+    return findMentionTrigger(texto, cursorPos)
+  }, [groupMembers, modoCobranca, texto, cursorPos])
+
+  const mentionCandidates = useMemo(() => {
+    if (!mentionTrigger || !groupMembers) return []
+    return filterMembersForMention(groupMembers, mentionTrigger.query)
+  }, [mentionTrigger, groupMembers])
+
+  const mentionOpen = !!mentionTrigger && !!groupMembers?.length
+
+  useEffect(() => {
+    setMentionActiveIndex(0)
+  }, [mentionTrigger?.query, mentionTrigger?.atIndex])
+
+  const updateMentionAnchor = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) {
+      setMentionAnchor(null)
+      return
+    }
+    setMentionAnchor(el.getBoundingClientRect())
+  }, [])
+
+  useEffect(() => {
+    if (!mentionOpen) {
+      setMentionAnchor(null)
+      return
+    }
+    updateMentionAnchor()
+    window.addEventListener('resize', updateMentionAnchor)
+    window.addEventListener('scroll', updateMentionAnchor, true)
+    return () => {
+      window.removeEventListener('resize', updateMentionAnchor)
+      window.removeEventListener('scroll', updateMentionAnchor, true)
+    }
+  }, [mentionOpen, updateMentionAnchor, texto, panelHeight, pending, replyTo])
+
+  const selectMention = useCallback(
+    (member: ResolvedParticipant) => {
+      if (!mentionTrigger) return
+      const { text, cursorPos: nextCursor } = insertMentionToken(
+        texto,
+        mentionTrigger,
+        member,
+        cursorPos,
+        groupMembers,
+      )
+      onTextoChange(text)
+      setCursorPos(nextCursor)
+      requestAnimationFrame(() => {
+        const el = textareaRef.current
+        if (!el) return
+        el.focus()
+        el.setSelectionRange(nextCursor, nextCursor)
+      })
+    },
+    [mentionTrigger, texto, cursorPos, onTextoChange, groupMembers],
+  )
+
+  const syncCursor = () => {
+    const el = textareaRef.current
+    if (el) setCursorPos(el.selectionStart ?? texto.length)
+  }
 
   useEffect(() => {
     return () => {
@@ -348,40 +430,98 @@ export function WhatsappComposer({
             </Button>
           </div>
         )}
-        <textarea
-          ref={textareaRef}
-          value={texto}
-          onChange={(e) => onTextoChange(e.target.value)}
-          onPaste={handlePaste}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape' && replyTo) {
-              e.preventDefault()
-              onClearReply?.()
-              return
+        <div ref={composerWrapRef} className="relative min-w-0 flex-1">
+          {mentionOpen &&
+            mentionAnchor &&
+            createPortal(
+              <div
+                className="pointer-events-auto fixed z-[9999]"
+                style={{
+                  left: mentionAnchor.left,
+                  top: mentionAnchor.top - 6,
+                  transform: 'translateY(-100%)',
+                  width: Math.min(288, mentionAnchor.width),
+                }}
+              >
+                <WhatsappMentionPopover
+                  members={mentionCandidates}
+                  activeIndex={mentionActiveIndex}
+                  onSelect={selectMention}
+                  onHover={setMentionActiveIndex}
+                />
+              </div>,
+              document.body,
+            )}
+          <textarea
+            ref={textareaRef}
+            value={texto}
+            onChange={(e) => {
+              onTextoChange(e.target.value)
+              setCursorPos(e.target.selectionStart ?? e.target.value.length)
+            }}
+            onSelect={syncCursor}
+            onClick={syncCursor}
+            onKeyUp={syncCursor}
+            onPaste={handlePaste}
+            onKeyDown={(e) => {
+              if (mentionOpen && mentionCandidates.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setMentionActiveIndex((i) => (i + 1) % mentionCandidates.length)
+                  return
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setMentionActiveIndex(
+                    (i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length,
+                  )
+                  return
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault()
+                  selectMention(mentionCandidates[mentionActiveIndex]!)
+                  return
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  setCursorPos(mentionTrigger!.atIndex)
+                  return
+                }
+              }
+
+              if (e.key === 'Escape' && replyTo) {
+                e.preventDefault()
+                onClearReply?.()
+                return
+              }
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                if (canSend && !enviando && !disabled) void handleSend()
+              }
+            }}
+            placeholder={
+              pending
+                ? 'Legenda opcional…'
+                : (placeholder ??
+                  (modoCobranca
+                    ? 'Digite uma mensagem…'
+                    : groupMembers?.length
+                      ? 'Digite uma mensagem… (@ para mencionar)'
+                      : 'Digite uma mensagem… (Ctrl+V para colar print)'))
             }
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              if (canSend && !enviando && !disabled) void handleSend()
-            }
-          }}
-          placeholder={
-            pending
-              ? 'Legenda opcional…'
-              : (placeholder ??
-                (modoCobranca ? 'Digite uma mensagem…' : 'Digite uma mensagem… (Ctrl+V para colar print)'))
-          }
-          disabled={disabled || enviando}
-          rows={3}
-          className={cn(
-            'min-h-0 w-full flex-1 resize-none rounded-lg border border-slate-200 bg-white',
-            'px-3 py-2 text-sm leading-snug shadow-sm transition-colors',
-            'placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2',
-            'focus-visible:ring-emerald-500/40 focus-visible:ring-offset-1',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-            'overflow-y-auto',
-          )}
-          style={{ height: '100%' }}
-        />
+            disabled={disabled || enviando}
+            rows={3}
+            className={cn(
+              'min-h-0 w-full flex-1 resize-none rounded-lg border border-slate-200 bg-white',
+              'px-3 py-2 text-sm leading-snug shadow-sm transition-colors',
+              'placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2',
+              'focus-visible:ring-emerald-500/40 focus-visible:ring-offset-1',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              'overflow-y-auto',
+            )}
+            style={{ height: '100%' }}
+          />
+        </div>
         <Button
           onClick={() => void handleSend()}
           disabled={enviando || !canSend || disabled}
