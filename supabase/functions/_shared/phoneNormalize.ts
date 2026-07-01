@@ -15,11 +15,18 @@ function tryParseE164Digits(digits: string): string | null {
   return null
 }
 
-/** DDD brasileiro plausível (11–99) com 8 ou 9 dígitos locais. */
+/**
+ * Número local brasileiro plausível (para priorizar +55 antes de DDI estrangeiro).
+ * - 11 dígitos: DDD (11–99) + celular que começa com 9 (9º dígito obrigatório).
+ * - 10 dígitos: DDD (11–99) + fixo começando em 2–5.
+ * Assim números como 34656349183 (Espanha +34) não são forçados para o Brasil.
+ */
 function isPossibleBrazilLocal(digits: string): boolean {
-  if (digits.length !== 10 && digits.length !== 11) return false
   const ddd = Number.parseInt(digits.slice(0, 2), 10)
-  return ddd >= 11 && ddd <= 99
+  if (ddd < 11 || ddd > 99) return false
+  if (digits.length === 11) return digits[2] === '9'
+  if (digits.length === 10) return digits[2] >= '2' && digits[2] <= '5'
+  return false
 }
 
 /**
@@ -34,6 +41,16 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   if (isPossibleBrazilLocal(digits)) {
     const asBr = tryParseE164Digits(`55${digits}`)
     if (asBr) return asBr
+  }
+
+  // 55 + trecho que NÃO é BR-local válido (ex.: 5534656349183 = +34 Espanha):
+  // a libphonenumber aceitaria como BR, então removemos o 55 espúrio.
+  if (digits.startsWith('55') && digits.length >= 12) {
+    const rest = digits.slice(2)
+    if (!isPossibleBrazilLocal(rest)) {
+      const asForeign = tryParseE164Digits(rest)
+      if (asForeign) return asForeign
+    }
   }
 
   const candidates: string[] = [digits]
