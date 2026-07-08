@@ -30,6 +30,21 @@ export interface ParcelasPorCliente {
 }
 
 const HOJE = new Date().toISOString().slice(0, 10)
+const ULTIMOS_MESES_PAGAS = 10
+
+function limitarPagasPorUltimosMeses(parcelas: ParcelaRow[], maxMeses: number): ParcelaRow[] {
+  const ordenadas = [...parcelas]
+    .filter((p) => p.data_baixa)
+    .sort((a, b) => (b.data_baixa ?? '').localeCompare(a.data_baixa ?? ''))
+
+  const mesesPermitidos = new Set<string>()
+  for (const p of ordenadas) {
+    mesesPermitidos.add(p.data_baixa!.slice(0, 7))
+    if (mesesPermitidos.size >= maxMeses) break
+  }
+
+  return ordenadas.filter((p) => mesesPermitidos.has(p.data_baixa!.slice(0, 7)))
+}
 
 /**
  * Busca parcelas do cliente inadimplente.
@@ -72,10 +87,10 @@ export async function fetchParcelasPorCliente(params: {
 
   const parcelas = ((rows ?? []) as ParcelaRow[]).filter((p) => financeiroTituloEhReceber(p.tipo))
 
-  const pagas = parcelas
-    .filter((p) => (p.situacao ?? '').toUpperCase() === 'PAGO')
-    .sort((a, b) => (b.data_baixa ?? '').localeCompare(a.data_baixa ?? ''))
-    .slice(0, 10)
+  const pagas = limitarPagasPorUltimosMeses(
+    parcelas.filter((p) => (p.situacao ?? '').toUpperCase() === 'PAGO'),
+    ULTIMOS_MESES_PAGAS,
+  )
 
   const abertas = parcelas.filter((p) => (p.situacao ?? '').toUpperCase() === 'ABERTO')
   const emAtraso = abertas
