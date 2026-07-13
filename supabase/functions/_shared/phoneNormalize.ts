@@ -30,6 +30,20 @@ function isPossibleBrazilLocal(digits: string): boolean {
 }
 
 /**
+ * Converte celular BR legado (DDD + 8 dígitos, iniciando em 6–9) para o
+ * formato atual, inserindo o nono dígito. Ex.: 3588968831 -> 5535988968831.
+ */
+function normalizeLegacyBrazilMobile(digits: string): string | null {
+  if (digits.length !== 10) return null
+  const ddd = Number.parseInt(digits.slice(0, 2), 10)
+  const firstSubscriberDigit = digits[2]
+  if (ddd < 11 || ddd > 99 || firstSubscriberDigit < '6' || firstSubscriberDigit > '9') {
+    return null
+  }
+  return `55${digits.slice(0, 2)}9${digits.slice(2)}`
+}
+
+/**
  * Normaliza para E.164 sem "+" (ex.: 34656349183, 5511999998888).
  * BR local (10/11 dígitos) prioriza +55 antes de interpretar como DDI estrangeiro.
  */
@@ -37,6 +51,19 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null
   const digits = cleanDigits(raw)
   if (!digits) return null
+
+  // Sem um "+" internacional explícito, 35 8896-8831 deve ser tratado como
+  // celular brasileiro antigo, e não como um telefone da Finlândia (+358).
+  // Também repara o mesmo caso quando o DDI 55 já veio informado.
+  const explicitInternational = raw.trim().startsWith('+') || raw.trim().startsWith('00')
+  const brazilLocalDigits = digits.startsWith('55') ? digits.slice(2) : digits
+  if (!explicitInternational || digits.startsWith('55')) {
+    const legacyBrazilMobile = normalizeLegacyBrazilMobile(brazilLocalDigits)
+    if (legacyBrazilMobile) {
+      const asBr = tryParseE164Digits(legacyBrazilMobile)
+      if (asBr) return asBr
+    }
+  }
 
   if (isPossibleBrazilLocal(digits)) {
     const asBr = tryParseE164Digits(`55${digits}`)
