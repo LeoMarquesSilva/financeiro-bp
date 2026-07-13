@@ -79,17 +79,18 @@ export function extractLocalDigits(raw: string | null | undefined): string {
   return d
 }
 
-/** Formata para exibição (internacional quando possível). */
+/**
+ * Formata para exibição usando a mesma normalização aplicada no envio.
+ * Isso impede que um telefone BR sem DDI (ex.: 19 3846-7736) seja exibido
+ * como se o primeiro dígito fosse um DDI internacional (ex.: +1).
+ */
 export function formatPhoneMasked(raw: string | null | undefined): string {
+  const normalizedDisplay = formatPhoneDisplay(raw)
+  if (normalizedDisplay) return normalizedDisplay
+
+  // Fallback para entrada parcial/incompleta, que ainda não pode ser normalizada.
   const d = parsePhoneDigits(raw ?? '')
   if (!d) return ''
-
-  try {
-    const phone = parsePhoneNumberFromString(`+${d}`)
-    if (phone) return phone.formatInternational()
-  } catch {
-    // fallback abaixo
-  }
 
   if (isBrazilWithDdi(d)) return formatBrazilWithDdi(d)
   if (isBrazilLocalDigits(d)) return formatBrazilLocalDigits(d)
