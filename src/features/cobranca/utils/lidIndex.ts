@@ -1,5 +1,7 @@
 import { phoneKey, canonicalJid } from './phone'
 import { isUsableContactName } from './contactDisplay'
+import { normalizePhoneE164 } from './normalizePhoneE164'
+import { formatPhoneDisplay } from './phoneMask'
 import type { GroupParticipantRow } from './participants'
 
 export interface LidContactEntry {
@@ -7,20 +9,8 @@ export interface LidContactEntry {
   lid_jid: string
   phone_number: string | null
   phone_jid: string | null
-  /** Nome no WhatsApp (pushName / agenda), sem cadastro. */
   whatsapp_name: string | null
-  /** Nome resolvido para exibição (cadastro > whatsapp > telefone). */
   name: string | null
-}
-
-function formatPhoneBr(phone: string | null | undefined): string | null {
-  const key = phoneKey(phone)
-  if (!key || key.length < 10) return null
-  const ddd = key.slice(0, 2)
-  const rest = key.slice(2)
-  if (rest.length === 9) return `(${ddd}) ${rest.slice(0, 1)} ${rest.slice(1, 5)}-${rest.slice(5)}`
-  if (rest.length === 8) return `(${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`
-  return key
 }
 
 function pickWhatsappName(candidates: (string | null | undefined)[]): string | null {
@@ -44,10 +34,11 @@ export function resolveContactLabel(
   for (const w of whatsappNames) {
     if (isUsableContactName(w)) return w!.trim()
   }
-  const formatted = formatPhoneBr(phone)
-  if (formatted) return formatted
   const digits = (phone ?? '').replace(/\D/g, '')
-  return digits || 'Contato'
+  const formatted = formatPhoneDisplay(phone)
+  if (formatted) return formatted
+  if (digits.length >= 8) return `+${normalizePhoneE164(phone) ?? digits}`
+  return 'Participante'
 }
 
 /** Extrai telefone canônico a partir de remoteJidAlt (Evolution/Baileys). */

@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react'
+import { resolveMentionChipLabel } from '../utils/mentions'
 import { cn } from '@/lib/utils'
 import { WhatsappFormattedText } from './WhatsappFormattedText'
 
@@ -29,7 +30,7 @@ export function WhatsappMessageText({ text, mentionMap, fromMe, className }: Pro
         )
       }
 
-      const name = mentionMap.get(lidId)
+      const label = resolveMentionChipLabel(lidId, mentionMap)
       parts.push(
         <span
           key={`${start}-${lidId}`}
@@ -37,9 +38,9 @@ export function WhatsappMessageText({ text, mentionMap, fromMe, className }: Pro
             'rounded px-0.5 font-medium',
             fromMe ? 'bg-emerald-400/30 text-emerald-50' : 'bg-sky-100 text-sky-800',
           )}
-          title={name ? `@${lidId}` : undefined}
+          title={`@${lidId}`}
         >
-          {name ? `@${name}` : full}
+          @{label}
         </span>,
       )
       last = start + full.length

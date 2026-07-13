@@ -677,7 +677,7 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
                   )}
 
                   {parcelasData.pagas.length > 0 && (
-                    <CollapsibleSection icon={CheckCircle2} title="Últimas pagas" count={parcelasData.pagas.length} variant="success">
+                    <CollapsibleSection icon={CheckCircle2} title="Últimas pagas" count={pagasPorMes.length} variant="success">
                       <div className="space-y-2">
                         {pagasPorMes.map((grupo, index) => (
                           <ParcelasMesCollapsible

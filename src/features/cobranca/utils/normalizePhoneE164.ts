@@ -16,13 +16,43 @@ function tryParseE164Digits(digits: string): string | null {
 }
 
 /**
+ * Número local brasileiro plausível (para priorizar +55 antes de DDI estrangeiro).
+ * - 11 dígitos: DDD (11–99) + celular que começa com 9 (9º dígito obrigatório).
+ * - 10 dígitos: DDD (11–99) + fixo começando em 2–5.
+ * Assim números como 34656349183 (Espanha +34) não são forçados para o Brasil.
+ */
+export function isPossibleBrazilLocal(digits: string): boolean {
+  const ddd = Number.parseInt(digits.slice(0, 2), 10)
+  if (ddd < 11 || ddd > 99) return false
+  if (digits.length === 11) return digits[2] === '9'
+  if (digits.length === 10) return digits[2] >= '2' && digits[2] <= '5'
+  return false
+}
+
+/**
  * Normaliza para E.164 sem "+" (ex.: 34656349183, 5511999998888).
- * Tenta internacional antes de forçar BR; repara 55 colado em DDI estrangeiro.
+ * BR local (10/11 dígitos) prioriza +55 antes de interpretar como DDI estrangeiro.
  */
 export function normalizePhoneE164(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null
   const digits = cleanDigits(raw)
   if (!digits) return null
+
+  // Evita 3588754584 ser lido como Finlândia (+358): trata como BR local primeiro.
+  if (isPossibleBrazilLocal(digits)) {
+    const asBr = tryParseE164Digits(`55${digits}`)
+    if (asBr) return asBr
+  }
+
+  // 55 + trecho que NÃO é BR-local válido (ex.: 5534656349183 = +34 Espanha):
+  // a libphonenumber aceitaria como BR, então removemos o 55 espúrio.
+  if (digits.startsWith('55') && digits.length >= 12) {
+    const rest = digits.slice(2)
+    if (!isPossibleBrazilLocal(rest)) {
+      const asForeign = tryParseE164Digits(rest)
+      if (asForeign) return asForeign
+    }
+  }
 
   const candidates: string[] = [digits]
 
@@ -60,6 +90,25 @@ export function phoneKeyFromE164(raw: string | null | undefined): string | null 
   if (!n) return null
   if (n.startsWith('55')) return brazilPhoneKey(n)
   return n
+}
+
+/** Chaves alternativas para cruzar telefone (cadastro, JID, menções). */
+export function phoneLookupAliases(raw: string | null | undefined): string[] {
+  const keys = new Set<string>()
+  const rawDigits = cleanDigits(raw ?? '')
+  if (rawDigits) keys.add(rawDigits)
+
+  const e164 = normalizePhoneE164(raw)
+  if (!e164) return [...keys]
+
+  keys.add(e164)
+  if (e164.startsWith('55') && e164.length >= 12) {
+    keys.add(e164.slice(2))
+    const pk = brazilPhoneKey(e164)
+    if (pk) keys.add(pk)
+  }
+
+  return [...keys].filter(Boolean)
 }
 
 export function phonesMatchE164(a: string | null | undefined, b: string | null | undefined): boolean {

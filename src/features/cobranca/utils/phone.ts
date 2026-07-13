@@ -1,6 +1,7 @@
 import {
   normalizePhoneE164,
   phoneKeyFromE164,
+  phoneLookupAliases,
   phonesMatchE164,
 } from './normalizePhoneE164'
 
@@ -8,6 +9,8 @@ import {
 export function normalizePhone(raw: string | null | undefined): string | null {
   return normalizePhoneE164(raw)
 }
+
+export { phoneLookupAliases }
 
 export function phoneKey(raw: string | null | undefined): string | null {
   return phoneKeyFromE164(raw)

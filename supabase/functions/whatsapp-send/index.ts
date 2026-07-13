@@ -51,7 +51,15 @@ interface QuoteInput {
 }
 
 type Payload =
-  | { kind?: 'text'; remoteJid?: string; number?: string; text: string; quote?: QuoteInput }
+  | {
+      kind?: 'text'
+      remoteJid?: string
+      number?: string
+      text: string
+      displayText?: string
+      mentioned?: string[]
+      quote?: QuoteInput
+    }
   | { kind: 'audio'; remoteJid?: string; number?: string; audio: string; quote?: QuoteInput }
   | {
       kind: 'media'
@@ -330,14 +338,26 @@ Deno.serve(async (req: Request) => {
     // Text (default / legacy)
     const textPayload = payload as {
       text: string
+      displayText?: string
       remoteJid?: string
       number?: string
+      mentioned?: string[]
       quote?: QuoteInput
     }
     const text = (textPayload.text ?? '').trim()
     if (!text) return jsonResponse({ error: 'Mensagem vazia.' }, 400)
+    const conteudoExibicao = (textPayload.displayText ?? text).trim()
 
     const quoted = resolveQuoted(textPayload.quote, chatJid)
+    const mentionedRaw =
+      isGroup && textPayload.mentioned?.length ? textPayload.mentioned : undefined
+    const mentioned = mentionedRaw
+      ?.map((id) => {
+        if (id.includes('@')) return id
+        const digits = normalizePhone(id)
+        return digits ?? id
+      })
+      .filter(Boolean)
     const resp = await fetchEvolution(`${EVOLUTION_API_URL}/message/sendText/${inst}`, {
       method: 'POST',
       headers,
@@ -347,6 +367,7 @@ Deno.serve(async (req: Request) => {
         delay: SEND_DELAY_MS,
         linkPreview: true,
         ...(quoted ? { quoted } : {}),
+        ...(mentioned ? { mentioned } : {}),
       }),
     })
     const data = await resp.json().catch(() => ({}))
@@ -359,7 +380,7 @@ Deno.serve(async (req: Request) => {
       remoteJid,
       data,
       'conversation',
-      text,
+      conteudoExibicao,
       null,
       quoted,
     )

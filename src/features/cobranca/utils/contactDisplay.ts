@@ -11,6 +11,16 @@ export function isWeakPushName(name: string | null | undefined): boolean {
   return n === 'você' || n === 'voce' || n === 'you'
 }
 
+/** Rótulo formatado como telefone — não serve como nome na UI. */
+export function isPhoneFormattedLabel(name: string): boolean {
+  const t = name.trim()
+  return (
+    /^\(\d{2}\)\s*\d/.test(t) ||
+    /^\+\d[\d\s()-]+$/.test(t) ||
+    (/^\d+$/.test(t.replace(/\D/g, '')) && t.replace(/\D/g, '').length >= 8)
+  )
+}
+
 /** Nome utilizável para exibir contato. */
 export function isUsableContactName(name: string | null | undefined): boolean {
   const raw = (name ?? '').trim()
