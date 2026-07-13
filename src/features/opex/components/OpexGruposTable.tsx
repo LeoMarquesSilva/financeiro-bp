@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Fragment, useState } from 'react'
 import { ChevronDown, ChevronRight, Pin } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { opexService } from '../services/opexService'
 import { OPEX_COLORS } from '../constants'
 import { formatPeriodoOpex, mesesFiltroKey, temFiltroMeses } from '../utils/opexPeriodo'
@@ -17,7 +17,7 @@ type Props = {
 
 function pct(realizado: number, previsto: number): string {
   if (!previsto) return '—'
-  return `${((realizado / previsto) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`
+  return formatPercent((realizado / previsto) * 100)
 }
 
 function PlanoRow({

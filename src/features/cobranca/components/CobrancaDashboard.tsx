@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useCobrancaKpiRows } from '../hooks/useWhatsapp'
 import type { CobrancaPainelKpiRow } from '../services/cobrancaService'
 import { isTituloSaldoParcial } from '../utils/titulo'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import {
   Target,
   MessageCircle,
@@ -121,8 +121,8 @@ function RadialMeta({ valor }: { valor: number }) {
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="text-3xl font-bold text-slate-900">{pct.toFixed(1)}%</span>
-        <span className="text-xs text-slate-400">meta {META_PCT}%</span>
+        <span className="text-3xl font-bold text-slate-900">{formatPercent(pct)}</span>
+        <span className="text-xs text-slate-400">meta {formatPercent(META_PCT)}</span>
       </div>
     </div>
   )
@@ -501,7 +501,7 @@ export function CobrancaDashboard() {
         <StatCard
           label="No D+1 (indicador)"
           valor={String(kpi.titulos_cobrados)}
-          sub={`${pctD1.toFixed(0)}% do total · ${formatCurrency(kpi.valor_cobrado)}`}
+          sub={`${formatPercent(pctD1)} do total · ${formatCurrency(kpi.valor_cobrado)}`}
           icon={CheckCircle2}
           tone="emerald"
           onClick={() => setDetalheCard('d1')}
@@ -541,7 +541,7 @@ export function CobrancaDashboard() {
         <strong className="font-medium text-rose-600">{kpi.titulos_sem_cobranca} sem cobrança</strong>
         {' = '}
         <strong className="font-medium text-slate-700">{kpi.titulos_vencidos} títulos</strong>. O indicador
-        ({efet.toFixed(1)}%) é apenas <strong>no D+1 ÷ total</strong> — títulos sem cobrança reduzem a meta,
+        ({formatPercent(efet)}) é apenas <strong>no D+1 ÷ total</strong> — títulos sem cobrança reduzem a meta,
         mas não entram em &quot;fora do prazo&quot;.
       </p>
 

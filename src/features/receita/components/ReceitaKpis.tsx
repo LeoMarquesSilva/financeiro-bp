@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Banknote, CalendarClock, ChevronRight, Receipt, Target, TrendingUp } from 'lucide-react'
-import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
+import { formatCurrency, formatCurrencyCompact, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type { ReceitaMesRow } from '../types/receita.types'
 import { mesAbrev, RECEITA_COLORS } from '../constants'
@@ -227,7 +227,7 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
         <KPIItem
           icon={TrendingUp}
           label="Atingimento da meta"
-          value={`${pctMeta.toFixed(1)}%`}
+          value={formatPercent(pctMeta)}
           hint={totalRecebido >= metaAcumulada ? 'Meta atingida no período' : 'Recebido ÷ meta acumulada'}
           iconColor={pctIcon}
           valueColor={pctColor}

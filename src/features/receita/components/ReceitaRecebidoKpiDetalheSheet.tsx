@@ -19,7 +19,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { formatCurrency, formatDate } from '@/shared/utils/format'
+import { formatCurrency, formatDate, formatPercent } from '@/shared/utils/format'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 import { receitaService } from '../services/receitaService'
 import { labelPlanoContas } from '../utils/planoContasLabel'
@@ -396,7 +396,7 @@ export function ReceitaRecebidoKpiDetalheSheet({
                               />
                             </div>
                             <span className="w-9 text-right text-[11px] font-medium tabular-nums text-slate-500">
-                              {pct.toFixed(0)}%
+                              {formatPercent(pct)}
                             </span>
                           </div>
                         </button>
@@ -450,7 +450,7 @@ export function ReceitaRecebidoKpiDetalheSheet({
                             />
                           </div>
                           <span className="w-9 text-right text-[11px] font-medium tabular-nums text-slate-500">
-                            {l.pct.toFixed(0)}%
+                            {formatPercent(l.pct)}
                           </span>
                         </div>
                       </button>

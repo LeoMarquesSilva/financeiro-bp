@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { formatCurrency, formatDateTime } from '@/shared/utils/format'
+import { formatCurrency, formatDateTime, formatPercent } from '@/shared/utils/format'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
 import type {
@@ -20,6 +20,7 @@ import type {
 } from '../types/receitaInadimplencia.types'
 import {
   calcularMesAjustado,
+  calcularPctInadimplencia,
   gruposInadimplentesPadrao,
 } from '../utils/receitaInadimplenciaCalc'
 
@@ -121,6 +122,21 @@ export function ReceitaInadimplenciaGrupoSheet({
     [grupos, incluidos, previstoMes],
   )
 
+  const totalExibido = useMemo(() => {
+    if (congelado && fechamento?.valor_total != null) {
+      const valor = fechamento.valor_total
+      const pct =
+        fechamento.pct != null && fechamento.pct > 0
+          ? fechamento.pct
+          : calcularPctInadimplencia(valor, previstoMes)
+      return { valor, pct, congelado: true as const }
+    }
+    return { ...preview, congelado: false as const }
+  }, [congelado, fechamento, preview, previstoMes])
+
+  const recalculoAoVivo =
+    congelado && Math.abs(preview.valor - totalExibido.valor) > 0.01 ? preview : null
+
   const toggle = (grupo: string) => {
     setIncluidos((prev) => {
       const next = new Set(prev)
@@ -138,8 +154,8 @@ export function ReceitaInadimplenciaGrupoSheet({
 
   const handleCongelar = async () => {
     const msg = congelado
-      ? `Atualizar o congelamento de ${mesLabel}/${String(ano).slice(-2)} com ${formatCurrency(preview.valor)} (${preview.pct.toFixed(1)}%)? A data será renovada.`
-      : `Congelar ${formatCurrency(preview.valor)} (${preview.pct.toFixed(1)}%) como valor oficial de ${mesLabel}/${String(ano).slice(-2)}?`
+      ? `Atualizar o congelamento de ${mesLabel}/${String(ano).slice(-2)} com ${formatCurrency(preview.valor)} (${formatPercent(preview.pct)})? A data será renovada.`
+      : `Congelar ${formatCurrency(preview.valor)} (${formatPercent(preview.pct)}) como valor oficial de ${mesLabel}/${String(ano).slice(-2)}?`
     if (!window.confirm(msg)) return
 
     setCongelando(true)
@@ -180,8 +196,12 @@ export function ReceitaInadimplenciaGrupoSheet({
             Selecione os grupos que compõem a inadimplência do mês.
             {congelado && fechamento?.valor_total != null && (
               <span className="mt-1 block text-slate-600">
-                Valor congelado: {formatCurrency(fechamento.valor_total)}
-                {fechamento.pct != null && ` · ${fechamento.pct.toFixed(1)}%`}
+                Valor congelado na evolução: {formatCurrency(fechamento.valor_total)}
+                {fechamento.pct != null && ` · ${formatPercent(fechamento.pct)}`}
+                <span className="mt-1 block text-slate-500">
+                  A seleção de grupos continua editável e afeta o KPI do período. Para alterar o
+                  valor oficial do mês, use &quot;Atualizar congelamento&quot;.
+                </span>
               </span>
             )}
           </SheetDescription>
@@ -191,13 +211,27 @@ export function ReceitaInadimplenciaGrupoSheet({
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Total selecionado
+                {congelado ? 'Total congelado' : 'Total selecionado'}
               </p>
               <p className="text-xl font-bold tabular-nums text-slate-900">
-                {formatCurrency(preview.valor)}
+                {formatCurrency(totalExibido.valor)}
               </p>
               <p className="text-xs text-slate-500">
-                Original: {formatCurrency(valorOriginal)} · {preview.pct.toFixed(1)}% do previsto
+                {congelado ? (
+                  <>
+                    {formatPercent(totalExibido.pct)} do previsto
+                    {recalculoAoVivo != null && (
+                      <span className="mt-0.5 block text-amber-700/90">
+                        Recálculo ao vivo (grupos atuais): {formatCurrency(recalculoAoVivo.valor)} — não
+                        altera o valor congelado
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    Original: {formatCurrency(valorOriginal)} · {formatPercent(totalExibido.pct)} do previsto
+                  </>
+                )}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -309,7 +343,7 @@ export function ReceitaInadimplenciaGrupoSheet({
 
         <SheetFooter className="px-4 sm:px-6">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
+            {congelado ? 'Fechar' : 'Cancelar'}
           </Button>
           <Button
             type="button"

@@ -27,6 +27,15 @@ export function parseDateAsLocal(dateStr: string | null | undefined): Date | nul
   return Number.isNaN(d.getTime()) ? null : d
 }
 
+/** Formata percentual sempre com 2 casas decimais fixas (pt-BR, vírgula). Ex.: 12.3 -> "12,30%". */
+export function formatPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '0,00%'
+  return `${value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`
+}
+
 /**
  * Formata data para exibição (DD/MM/AAAA).
  * Strings YYYY-MM-DD são tratadas como data local para evitar d-1 por timezone.

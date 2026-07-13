@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, BarChart3, ChevronRight, ClipboardList, DollarSign, Loader2, Percent, Target } from 'lucide-react'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type {
   ReceitaInadimplenciaDashboard,
@@ -20,6 +20,7 @@ import {
   aplicarSelecaoGruposPeriodo,
   aplicarSelecaoGrupos,
   calcularIncluidosEfetivosPeriodo,
+  normalizarEvolucaoCalculada,
   previstoMesEvolucao,
   type SelecaoGruposPorMes,
 } from '../utils/receitaInadimplenciaCalc'
@@ -185,7 +186,12 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   const dashboard = useMemo(() => {
     if (!data || data.mes_fim <= 0) return null
     const comGrupos = aplicarSelecaoGrupos(data, gruposPorMes, selecaoPorMes)
-    return aplicarSelecaoGruposPeriodo(comGrupos, gruposPeriodo, incluidosEfetivos)
+    const comCalculo = normalizarEvolucaoCalculada(comGrupos)
+    const comPeriodo = aplicarSelecaoGruposPeriodo(comCalculo, gruposPeriodo, incluidosEfetivos)
+    if (comGrupos.evolucao.some((m) => m.ajustado) && !comPeriodo.clientes_ajustado) {
+      return { ...comPeriodo, clientes_ajustado: true }
+    }
+    return comPeriodo
   }, [data, gruposPorMes, selecaoPorMes, gruposPeriodo, incluidosEfetivos])
 
   const handleAplicarGrupos = (
@@ -331,7 +337,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               {formatCurrency(dashboard.valor_total_periodo)}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-              Saldo do período por grupo (Σ vencimento − Σ pagamento) — somente clientes ativos — clique para ver
+              Soma da inadimplência mensal no período (mesma regra da evolução) — clique para ver
               empresas e títulos
               {dashboard.clientes_ajustado && (
                 <span className="block text-amber-700/90">Total ajustado pela seleção de grupos</span>
@@ -361,10 +367,10 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               className="mt-1 text-xl font-bold tabular-nums sm:text-2xl"
               style={{ color: GOLD }}
             >
-              {dashboard.pct_periodo.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+              {formatPercent(dashboard.pct_periodo)}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-              Saldo proporcional do período ÷ previsto acumulado (regra planilha VIOS)
+              Saldo proporcional do período ÷ previsto acumulado — inclui clientes inativos (regra planilha VIOS)
             </p>
           </div>
         </div>
@@ -396,6 +402,10 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               5 maiores inadimplentes
             </h3>
           </div>
+
+          <p className="px-5 pb-2 text-[11px] text-slate-500">
+            Somente clientes ativos
+          </p>
 
           <div className="overflow-x-auto px-4 pb-2">
             <table className="w-full min-w-[280px] text-sm">
@@ -495,14 +505,15 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                   </td>
                   {dashboard.evolucao.map((m: ReceitaInadimplenciaEvolucaoMes) => (
                     <td key={`p-${m.mes}`} className="px-2 py-2.5 text-center font-bold tabular-nums" style={{ color: GOLD }}>
-                      {m.pct.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%
+                      {formatPercent(m.pct)}
                     </td>
                   ))}
                 </tr>
               </tbody>
             </table>
             <p className="mt-2 text-center text-[11px] text-slate-500">
-              Valores faturados no mês (vencimento) em inadimplência — clique no valor para selecionar grupos
+              Valores faturados no mês (vencimento) em inadimplência — inclui clientes inativos — clique no valor para
+              selecionar grupos
               {dashboard.evolucao.some((m: ReceitaInadimplenciaEvolucaoMes) => !m.congelado) && (
                 <span className="block text-amber-700/90">
                   * Mês ainda não congelado — valor calculado com dados atuais do VIOS
@@ -532,7 +543,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               <p className="mt-1 text-sm font-medium leading-snug text-slate-800">
                 Redução de{' '}
                 <span className="text-lg font-bold" style={{ color: GOLD }}>
-                  {dashboard.destaque_reducao_pct}%
+                  {formatPercent(dashboard.destaque_reducao_pct)}
                 </span>{' '}
                 no valor da inadimplência de {primeiroMes.mes_label} para {ultimoMes.mes_label}/
                 {String(dashboard.ano).slice(-2)}
@@ -556,7 +567,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
             <p className="mt-1 text-sm font-medium leading-snug text-slate-800">
               Os 5 maiores inadimplentes representam do total da inadimplência do período{' '}
               <span className="text-lg font-bold" style={{ color: GOLD }}>
-                {dashboard.top5_pct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                {formatPercent(dashboard.top5_pct)}
               </span>
             </p>
           </div>

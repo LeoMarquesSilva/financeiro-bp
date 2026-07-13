@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabaseClient'
 import { collectPaginatedRows } from '@/lib/supabasePaginate'
 import { mesAbrev } from '../constants'
+import { aplicarMetaComRateioDeGap } from '../utils/receitaMes'
 import type {
   ReceitaDashboardData,
   ReceitaMetasConfig,
@@ -11,6 +12,7 @@ import type {
   ReceitaRecebidoPlanoRow,
   ReceitaPrevistoItemRow,
   ReceitaEncargosItemRow,
+  ReceitaRecebidoSemAreaItemRow,
 } from '../types/receita.types'
 
 type TotaisMensaisRow = {
@@ -44,7 +46,7 @@ export const receitaService = {
     const totais = await this.fetchTotaisMensais(metas.ano)
     const mesesOrdenados = [...metas.meses].sort((a, b) => a - b)
 
-    const rows: ReceitaMesRow[] = mesesOrdenados.map((mes) => {
+    const rowsBase: ReceitaMesRow[] = mesesOrdenados.map((mes) => {
       const t = totais.get(mes)
       const key = String(mes)
       return {
@@ -58,6 +60,10 @@ export const receitaService = {
         encargos: t?.encargos ?? 0,
       }
     })
+
+    // Gap de meses fechados que não bateram a meta é rateado (partes iguais) entre os meses
+    // restantes do ano, reforçando a meta deles em cascata (ver aplicarMetaComRateioDeGap).
+    const rows = aplicarMetaComRateioDeGap(rowsBase, metas.ano)
 
     return { ano: metas.ano, rows }
   },
@@ -143,6 +149,31 @@ export const receitaService = {
           ? Number(row.valor_fluxo_item)
           : null,
       plano_contas: String(row.plano_contas ?? planoContas),
+      situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+    }))
+  },
+
+  /** Títulos recebidos sem departamento mapeado em uma das áreas do rateio; mes=null → ano todo. */
+  async fetchRecebidoItensSemArea(
+    ano: number,
+    mes: number | null,
+  ): Promise<ReceitaRecebidoSemAreaItemRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_recebido_itens_sem_area' as never,
+      { p_ano: ano, p_mes: mes } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ci_item: Number(row.ci_item) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      cliente: row.cliente != null ? String(row.cliente) : null,
+      descricao: row.descricao != null ? String(row.descricao) : null,
+      nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
+      data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
+      valor_recebido: Number(row.valor_recebido) || 0,
+      valor_pago_item: Number(row.valor_pago_item) || 0,
+      plano_contas: String(row.plano_contas ?? ''),
+      departamento: String(row.departamento ?? 'Sem departamento'),
       situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
     }))
   },

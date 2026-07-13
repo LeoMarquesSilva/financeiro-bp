@@ -1,0 +1,42 @@
+---
+description: Todo valor percentual (%) exibido na UI deve usar sempre 2 casas decimais
+alwaysApply: true
+---
+
+# Formato de percentuais (%)
+
+Todo número exibido ao usuário que representa um percentual (`%`) deve **sempre**
+usar exatamente **2 casas decimais após a vírgula**, no padrão pt-BR (vírgula como
+separador decimal). Isso vale para KPIs, cards, tooltips, eixos de gráficos, badges,
+mensagens de confirmação, exports, etc. — qualquer lugar que exiba um `%`.
+
+## Como formatar
+
+Use a função utilitária compartilhada em vez de `toFixed`/`toLocaleString` inline:
+
+```typescript
+import { formatPercent } from '@/shared/utils/format'
+
+formatPercent(12.3)   // "12,30%"
+formatPercent(0)      // "0,00%"
+formatPercent(null)   // "0,00%"
+```
+
+```tsx
+// ❌ BAD — decimais inconsistentes (0, 1, ou variável)
+<span>{pct.toFixed(0)}%</span>
+<span>{pct.toFixed(1)}%</span>
+<span>{value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>
+
+// ✅ GOOD — sempre 2 casas decimais
+<span>{formatPercent(pct)}</span>
+```
+
+Se precisar formatar percentual dentro de uma função utilitária própria do domínio
+(ex.: helpers de gráficos), garanta `minimumFractionDigits: 2` e
+`maximumFractionDigits: 2` (ou delegue para `formatPercent`).
+
+## Escopo
+
+Isso **não** se aplica a valores que não são percentuais (ex.: `formatCurrencyCompact`
+com `maximumFractionDigits: 1` para moeda compacta) — apenas a números seguidos de `%`.

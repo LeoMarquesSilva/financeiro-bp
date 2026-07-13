@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { DollarSign, TrendingUp, AlertTriangle, AlertCircle, ShieldCheck } from 'lucide-react'
 
@@ -105,7 +105,7 @@ export function KPIsHeader({
         <KPIItem
           icon={TrendingUp}
           label={isComite ? 'Recuperação (comitê)' : 'Recuperação'}
-          value={`${percentualRecuperacao.toFixed(1)}%`}
+          value={formatPercent(percentualRecuperacao)}
           iconColor="bg-emerald-50 text-emerald-600"
           valueColor="text-emerald-800"
         />

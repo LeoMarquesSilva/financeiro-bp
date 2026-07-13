@@ -25,7 +25,7 @@ import {
 import type { LabelProps, XAxisTickContentProps } from 'recharts'
 import type { MouseHandlerDataParam } from 'recharts/types/synchronisation/types'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { receitaService } from '../services/receitaService'
 import { RECEITA_CHART_LABEL, RECEITA_CHART_AXIS, RECEITA_COLUNAS_METRICAS, RECEITA_COLORS } from '../constants'
 import type {
@@ -67,8 +67,7 @@ function formatYAxisCurrency(value: number): string {
 }
 
 function formatYAxisPercent(value: number): string {
-  if (value >= 100) return `${Math.round(value)}%`
-  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`
+  return formatPercent(value)
 }
 
 function StackSegmentLabel(

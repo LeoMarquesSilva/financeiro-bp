@@ -151,6 +151,19 @@ export const RECEITA_DEPARTAMENTO_LABELS: Record<string, string> = {
   sem_departamento: 'Sem departamento',
 }
 
+/**
+ * Meta de contribuição por área para a meta mensal/anual de recebimento (fixa, definida pela
+ * gestão — não calculada a partir do recebido real). Soma = 100%. Usada no comparativo mensal,
+ * visão "por área", para ratear a meta do mês entre as áreas.
+ */
+export const RECEITA_META_CONTRIBUICAO_AREA: { key: string; pct: number }[] = [
+  { key: 'insolvencia', pct: 46.85 },
+  { key: 'trabalhista', pct: 15.33 },
+  { key: 'civel', pct: 15.33 },
+  { key: 'contratos', pct: 12.53 },
+  { key: 'recuperacao_de_credito', pct: 9.96 },
+]
+
 /** Cores para segmentos por plano de contas no gráfico (%). */
 export const RECEITA_PLANO_PALETTE = [
   '#2563eb',

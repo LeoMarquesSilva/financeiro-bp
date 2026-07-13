@@ -98,10 +98,14 @@ export const receitaInadimplenciaService = {
     return parseFechamento(data)
   },
 
-  async fetchDepartamentosMes(ano: number, mes: number): Promise<ReceitaInadimplenciaDepartamentoMes[]> {
+  async fetchDepartamentosMes(
+    ano: number,
+    mes: number,
+    incluirInativos = true,
+  ): Promise<ReceitaInadimplenciaDepartamentoMes[]> {
     const { data, error } = await supabase.rpc(
       'receita_inadimplencia_departamento_mes' as never,
-      { p_ano: ano, p_mes: mes } as never,
+      { p_ano: ano, p_mes: mes, p_incluir_inativos: incluirInativos } as never,
     )
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
@@ -114,6 +118,7 @@ export const receitaInadimplenciaService = {
     ano: number,
     mesInicio: number,
     mesFim: number,
+    incluirInativos = true,
   ): Promise<ReceitaInadimplenciaClientePeriodo[]> {
     const { data, error } = await supabase.rpc(
       'receita_inadimplencia_clientes_periodo' as never,
@@ -121,6 +126,7 @@ export const receitaInadimplenciaService = {
         p_ano: ano,
         p_mes_inicio: mesInicio,
         p_mes_fim: mesFim,
+        p_incluir_inativos: incluirInativos,
       } as never,
     )
     if (error) throw error
@@ -136,6 +142,7 @@ export const receitaInadimplenciaService = {
     ano: number,
     mesInicio: number,
     mesFim: number,
+    incluirInativos = true,
   ): Promise<ReceitaInadimplenciaGrupoPeriodo[]> {
     const { data, error } = await supabase.rpc(
       'receita_inadimplencia_grupos_periodo' as never,
@@ -143,6 +150,7 @@ export const receitaInadimplenciaService = {
         p_ano: ano,
         p_mes_inicio: mesInicio,
         p_mes_fim: mesFim,
+        p_incluir_inativos: incluirInativos,
       } as never,
     )
     if (error) throw error
@@ -159,6 +167,7 @@ export const receitaInadimplenciaService = {
     mesInicio: number,
     mesFim: number,
     cliente: string,
+    incluirInativos = true,
   ): Promise<ReceitaInadimplenciaClienteTituloPeriodo[]> {
     const { data, error } = await supabase.rpc(
       'receita_inadimplencia_cliente_detalhe_periodo' as never,
@@ -167,6 +176,7 @@ export const receitaInadimplenciaService = {
         p_mes_inicio: mesInicio,
         p_mes_fim: mesFim,
         p_cliente: cliente,
+        p_incluir_inativos: incluirInativos,
       } as never,
     )
     if (error) throw error
@@ -186,10 +196,14 @@ export const receitaInadimplenciaService = {
     }))
   },
 
-  async fetchGruposMes(ano: number, mes: number): Promise<ReceitaInadimplenciaGrupoMes[]> {
+  async fetchGruposMes(
+    ano: number,
+    mes: number,
+    incluirInativos = true,
+  ): Promise<ReceitaInadimplenciaGrupoMes[]> {
     const { data, error } = await supabase.rpc(
       'receita_inadimplencia_grupo_mes' as never,
-      { p_ano: ano, p_mes: mes } as never,
+      { p_ano: ano, p_mes: mes, p_incluir_inativos: incluirInativos } as never,
     )
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({

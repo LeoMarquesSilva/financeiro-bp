@@ -1,6 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, CalendarRange, Target, TrendingDown, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { OPEX_COLORS } from '../constants'
 import { formatPeriodoOpex, temFiltroMeses } from '../utils/opexPeriodo'
 import type { OpexKpis } from '../types/opex.types'
@@ -98,7 +98,7 @@ export function OpexKpis({ kpis, ano, mesAtual, mesesFiltro, loading }: Props) {
               ) : (
                 <ArrowDownRight className="h-5 w-5" aria-hidden />
               )}
-              {Math.abs(kpis.variancia_ytd_pct).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+              {formatPercent(Math.abs(kpis.variancia_ytd_pct))}
             </p>
             <p className="mt-1 text-xs text-slate-500">
               {filtroAtivo ? 'Realizado vs previsto no período selecionado' : 'Realizado vs previsto no período'}

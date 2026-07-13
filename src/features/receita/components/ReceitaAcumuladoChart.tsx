@@ -14,7 +14,7 @@ import {
 } from 'recharts'
 import type { LabelProps } from 'recharts'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { RECEITA_CHART_LABEL, RECEITA_CHART_AXIS, RECEITA_COLORS, RECEITA_DEPARTAMENTO_CORES } from '../constants'
 import { receitaService } from '../services/receitaService'
 import type {
@@ -179,8 +179,7 @@ function formatYAxis(value: number): string {
 }
 
 function formatYAxisPercent(value: number): string {
-  if (value >= 100) return `${Math.round(value)}%`
-  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`
+  return formatPercent(value)
 }
 
 type TooltipPayload = {

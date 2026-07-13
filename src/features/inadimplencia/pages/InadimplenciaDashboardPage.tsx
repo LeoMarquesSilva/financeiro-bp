@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
 import { Avatar } from '@/shared/components/Avatar'
@@ -66,7 +66,7 @@ export function InadimplenciaDashboardPage() {
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">% Recuperação</p>
-            <p className="text-2xl font-bold text-slate-900">{totais.percentualRecuperacao.toFixed(1)}%</p>
+            <p className="text-2xl font-bold text-slate-900">{formatPercent(totais.percentualRecuperacao)}</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">Tempo médio de recuperação</p>
@@ -97,7 +97,7 @@ export function InadimplenciaDashboardPage() {
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">% Recuperação comitê</p>
-            <p className="text-2xl font-bold text-slate-900">{taxaRecuperacaoComite.percentualRecuperacaoComite.toFixed(1)}%</p>
+            <p className="text-2xl font-bold text-slate-900">{formatPercent(taxaRecuperacaoComite.percentualRecuperacaoComite)}</p>
           </div>
         </div>
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -314,17 +314,17 @@ function GraficoClasses({ a, b, c }: { a: number; b: number; c: number }) {
       <div
         className="flex-1 rounded-t bg-blue-500 transition-all"
         style={{ height: `${Math.max(pctA, 2)}%` }}
-        title={`Classe A: ${pctA.toFixed(0)}%`}
+        title={`Classe A: ${formatPercent(pctA)}`}
       />
       <div
         className="flex-1 rounded-t bg-amber-500 transition-all"
         style={{ height: `${Math.max(pctB, 2)}%` }}
-        title={`Classe B: ${pctB.toFixed(0)}%`}
+        title={`Classe B: ${formatPercent(pctB)}`}
       />
       <div
         className="flex-1 rounded-t bg-red-500 transition-all"
         style={{ height: `${Math.max(pctC, 2)}%` }}
-        title={`Classe C: ${pctC.toFixed(0)}%`}
+        title={`Classe C: ${formatPercent(pctC)}`}
       />
     </div>
   )

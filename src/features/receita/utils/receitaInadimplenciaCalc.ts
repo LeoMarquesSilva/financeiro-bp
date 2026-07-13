@@ -39,6 +39,30 @@ export function valorCalculadoMes(m: ReceitaInadimplenciaEvolucaoMes): number {
   return m.valor_calculado ?? m.valor
 }
 
+/** Valor/pct efetivos: seleção manual > cálculo ao vivo (nunca snapshot congelado no acumulado). */
+export function valorEfetivoMes(m: ReceitaInadimplenciaEvolucaoMes): { valor: number; pct: number } {
+  if (m.ajustado) return { valor: m.valor, pct: m.pct }
+  const valor = m.valor_calculado ?? m.valor
+  const previsto = previstoMesEvolucao(m)
+  return { valor, pct: calcularPctInadimplencia(valor, previsto) }
+}
+
+/** Substitui snapshots congelados pelos valores calculados ao vivo (exceto meses com seleção manual). */
+export function normalizarEvolucaoCalculada(
+  dashboard: ReceitaInadimplenciaDashboard,
+): ReceitaInadimplenciaDashboard {
+  let alterou = false
+  const evolucao = dashboard.evolucao.map((m) => {
+    if (m.ajustado) return m
+    const { valor, pct } = valorEfetivoMes(m)
+    if (Math.abs(valor - m.valor) < 0.01 && Math.abs(pct - m.pct) < 0.01) return m
+    alterou = true
+    return { ...m, valor, pct }
+  })
+  if (!alterou) return dashboard
+  return { ...dashboard, evolucao }
+}
+
 export function aplicarSelecaoGrupos(
   dashboard: ReceitaInadimplenciaDashboard,
   gruposPorMes: Record<number, ReceitaInadimplenciaGrupoMes[]>,
@@ -53,14 +77,16 @@ export function aplicarSelecaoGrupos(
     algumMesAjustado = true
     const previsto = previstoMesEvolucao(m)
     const { valor, pct } = calcularMesAjustado(grupos, incluidos, previsto)
-    return { ...m, valor, pct, ajustado: true }
+    const ajustado =
+      Math.abs(valor - (m.valor_calculado ?? m.valor)) > 0.01 ||
+      (m.congelado && Math.abs(valor - m.valor) > 0.01)
+    return { ...m, valor, pct, ajustado }
   })
 
   if (!algumMesAjustado) {
     return dashboard
   }
 
-  // Ajuste mensal altera só a evolução; KPI do período vem do RPC / seleção por período.
   return {
     ...dashboard,
     evolucao,
@@ -135,19 +161,27 @@ export function calcularValorTotalPeriodo(
   return grupos.filter((g) => incluidos.has(g.grupo_cliente)).reduce((s, g) => s + g.valor, 0)
 }
 
-export function aplicarSelecaoGruposPeriodo(
+/** KPI acumulado = soma dos valores mensais da evolução (mesma regra VIOS por mês). */
+export function calcularValorTotalPeriodoFromEvolucao(
+  evolucao: ReceitaInadimplenciaEvolucaoMes[],
+): number {
+  return evolucao.reduce((s, m) => s + m.valor, 0)
+}
+
+export function finalizarKpiPeriodo(
   dashboard: ReceitaInadimplenciaDashboard,
   grupos: ReceitaInadimplenciaGrupoPeriodo[] | null,
   incluidos: Set<string> | null,
 ): ReceitaInadimplenciaDashboard {
-  if (!grupos?.length || !incluidos) return dashboard
+  const somaMensal = calcularValorTotalPeriodoFromEvolucao(dashboard.evolucao)
+  const usaSelecaoPeriodo =
+    Boolean(grupos?.length && incluidos) &&
+    dashboard.clientes_ajustado &&
+    !dashboard.evolucao.some((m) => m.ajustado)
 
-  const valor_total_periodo = grupos
-    .filter((g) => incluidos.has(g.grupo_cliente))
-    .reduce((s, g) => s + g.valor, 0)
-
-  const todosIncluidos =
-    grupos.length === incluidos.size && grupos.every((g) => incluidos.has(g.grupo_cliente))
+  const valor_total_periodo = usaSelecaoPeriodo
+    ? calcularValorTotalPeriodo(grupos!, incluidos!)
+    : somaMensal
 
   const previsto_periodo = dashboard.evolucao.reduce((s, m) => s + previstoMesEvolucao(m), 0)
   const pct_periodo =
@@ -165,6 +199,25 @@ export function aplicarSelecaoGruposPeriodo(
     valor_total_periodo,
     pct_periodo,
     top5_pct,
-    clientes_ajustado: !todosIncluidos,
   }
+}
+
+export function aplicarSelecaoGruposPeriodo(
+  dashboard: ReceitaInadimplenciaDashboard,
+  grupos: ReceitaInadimplenciaGrupoPeriodo[] | null,
+  incluidos: Set<string> | null,
+): ReceitaInadimplenciaDashboard {
+  if (!grupos?.length || !incluidos) return finalizarKpiPeriodo(dashboard, grupos, incluidos)
+
+  const todosIncluidos =
+    grupos.length === incluidos.size && grupos.every((g) => incluidos.has(g.grupo_cliente))
+
+  return finalizarKpiPeriodo(
+    {
+      ...dashboard,
+      clientes_ajustado: !todosIncluidos,
+    },
+    grupos,
+    incluidos,
+  )
 }

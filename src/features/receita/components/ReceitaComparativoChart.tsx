@@ -1,8 +1,21 @@
 import { useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, ListTree, Percent, Table2, TrendingUp } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import {
+  Building2,
+  ChevronDown,
+  ChevronUp,
+  ListTree,
+  Loader2,
+  Percent,
+  Search,
+  Table2,
+  TrendingUp,
+} from 'lucide-react'
 import {
   Area,
+  Bar,
   CartesianGrid,
+  Cell,
   ComposedChart,
   LabelList,
   Line,
@@ -14,12 +27,26 @@ import {
 } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/shared/utils/format'
-import type { ReceitaMesRow } from '../types/receita.types'
-import { RECEITA_CHART_AXIS, RECEITA_CHART_LABEL, RECEITA_COLORS } from '../constants'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
+import type { ReceitaMesRow, ReceitaRecebidoDepartamentoRow } from '../types/receita.types'
+import {
+  RECEITA_CHART_AXIS,
+  RECEITA_CHART_LABEL,
+  RECEITA_COLORS,
+  RECEITA_DEPARTAMENTO_CORES,
+  RECEITA_DEPARTAMENTO_LABELS,
+  RECEITA_META_CONTRIBUICAO_AREA,
+} from '../constants'
 import { ReceitaRecebidoDetalheSheet } from './ReceitaRecebidoDetalheSheet'
+import { ReceitaSemAreaDetalheSheet } from './ReceitaSemAreaDetalheSheet'
 import { isMesFuturo, valorRecebidoGrafico } from '../utils/receitaMes'
-import { formatPercentLabel, formatColunaLabel } from '../utils/receitaColunasChart'
+import {
+  departamentoNormKey,
+  formatPercentLabel,
+  formatColunaLabel,
+  formatPercentMeta,
+} from '../utils/receitaColunasChart'
+import { receitaService } from '../services/receitaService'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 
 const SERIES = [
@@ -90,8 +117,7 @@ function formatYAxis(value: number): string {
 }
 
 function formatYAxisPercent(value: number): string {
-  if (value >= 100) return `${Math.round(value)}%`
-  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%`
+  return formatPercent(value)
 }
 
 function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
@@ -129,6 +155,151 @@ const SERIES_PERCENT_LEGEND: Partial<Record<SeriesKey, string>> = {
 function pctMeta(recebido: number, meta: number): number | null {
   if (!meta) return null
   return (recebido / meta) * 100
+}
+
+const AREA_META_SLICES = RECEITA_META_CONTRIBUICAO_AREA.map((a) => ({
+  ...a,
+  label: RECEITA_DEPARTAMENTO_LABELS[a.key] ?? a.key,
+  color: RECEITA_DEPARTAMENTO_CORES[a.key] ?? '#64748b',
+}))
+
+type AreaGapRow = {
+  key: string
+  label: string
+  color: string
+  pct: number
+  meta: number
+  recebido: number
+  gap: number
+  pctAtingido: number | null
+}
+
+/**
+ * Meta vs. recebido real por área — recebido vem do banco (por departamento);
+ * meta é a meta do período × % de contribuição fixa da área. `mes` = null → acumulado
+ * (soma dos meses já com dado); caso contrário, apenas o mês selecionado.
+ */
+function buildAreaGapData(
+  rows: ReceitaMesRow[],
+  rowsComDados: ReceitaMesRow[],
+  deptRows: ReceitaRecebidoDepartamentoRow[],
+  mes: number | null,
+): AreaGapRow[] {
+  const escopo = mes == null ? rowsComDados : rows.filter((r) => r.mes === mes)
+  const metaTotalEscopo = escopo.reduce((s, r) => s + r.meta, 0)
+  const mesesEscopo = new Set(escopo.map((r) => r.mes))
+
+  const recebidoPorArea = new Map<string, number>()
+  for (const d of deptRows) {
+    if (!mesesEscopo.has(d.mes)) continue
+    const key = departamentoNormKey(d.departamento)
+    recebidoPorArea.set(key, (recebidoPorArea.get(key) ?? 0) + d.total)
+  }
+
+  return AREA_META_SLICES.map((area) => {
+    const meta = (metaTotalEscopo * area.pct) / 100
+    const recebido = recebidoPorArea.get(area.key) ?? 0
+    const gap = recebido - meta
+    return {
+      key: area.key,
+      label: area.label,
+      color: area.color,
+      pct: area.pct,
+      meta,
+      recebido,
+      gap,
+      pctAtingido: meta > 0 ? (recebido / meta) * 100 : null,
+    }
+  })
+}
+
+function formatGap(value: number): string {
+  const sign = value > 0 ? '+' : value < 0 ? '−' : ''
+  return `${sign}${formatCurrency(Math.abs(value))}`
+}
+
+function AreaGapBarLabel(props: LabelProps & { fill?: string }) {
+  const { x, y, width, height, value, fill } = props
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!num || x == null || y == null || width == null) return null
+  const h = Number(height) || 0
+
+  return (
+    <text
+      x={Number(x) + Number(width) / 2}
+      y={Number(y) - 6}
+      fill={typeof fill === 'string' ? fill : RECEITA_CHART_AXIS.label}
+      textAnchor="middle"
+      fontSize={h >= 20 ? RECEITA_CHART_LABEL.barTop : 10}
+      fontWeight={600}
+      pointerEvents="none"
+    >
+      {formatColunaLabel(num)}
+    </text>
+  )
+}
+
+function AreaGapTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: Array<{ dataKey?: string | number; value?: number; payload?: AreaGapRow }>
+  label?: string
+}) {
+  if (!active || !payload?.length) return null
+  const row = payload[0]?.payload
+  if (!row) return null
+
+  return (
+    <div
+      className="pointer-events-auto z-50 rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm shadow-lg"
+      style={{ pointerEvents: 'auto' }}
+      onWheel={(e) => e.stopPropagation()}
+    >
+      <p className="mb-1.5 flex items-center gap-1.5 font-semibold capitalize text-slate-800">
+        <span
+          className="inline-block h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: row.color }}
+        />
+        {label ?? row.label}
+        <span className="text-xs font-normal text-slate-400">
+          ({formatPercentMeta(row.pct)} da meta)
+        </span>
+      </p>
+      <ul className="space-y-1">
+        <li className="flex items-center justify-between gap-6">
+          <span className="text-slate-600">Recebido da área</span>
+          <span className="font-semibold tabular-nums text-slate-900">
+            {formatCurrency(row.recebido)}
+          </span>
+        </li>
+        <li className="flex items-center justify-between gap-6">
+          <span className="text-slate-600">Meta da área</span>
+          <span className="font-semibold tabular-nums text-slate-900">
+            {formatCurrency(row.meta)}
+          </span>
+        </li>
+        <li className="flex items-center justify-between gap-6 border-t border-slate-100 pt-1.5">
+          <span className="font-medium text-slate-600">Gap</span>
+          <span
+            className={cn(
+              'font-semibold tabular-nums',
+              row.gap >= 0 ? 'text-emerald-700' : 'text-red-600',
+            )}
+          >
+            {formatGap(row.gap)}
+          </span>
+        </li>
+      </ul>
+      {row.pctAtingido != null && (
+        <p className="mt-1.5 text-xs font-medium text-sky-700">
+          {formatPercentMeta(row.pctAtingido)} atingido
+        </p>
+      )}
+    </div>
+  )
 }
 
 function ComparativoDotLabel({
@@ -215,7 +386,7 @@ function PctBadge({ pct }: { pct: number | null }) {
         color,
       )}
     >
-      {pct.toFixed(0)}%
+      {formatPercent(pct)}
     </span>
   )
 }
@@ -331,10 +502,40 @@ type Props = {
 
 export function ReceitaComparativoChart({ rows, ano }: Props) {
   const [detalheMes, setDetalheMes] = useState<ReceitaMesRow | null>(null)
+  const [semAreaAberto, setSemAreaAberto] = useState(false)
   const [tabelaAberta, setTabelaAberta] = useState(false)
   const [percentMode, setPercentMode] = useState(false)
+  const [porAreaMode, setPorAreaMode] = useState(false)
+  const [areaMesSelecionado, setAreaMesSelecionado] = useState<number | null>(null)
   const [visible, setVisible] = useState<Set<SeriesKey>>(() => new Set(DEFAULT_VISIBLE))
   const chartExportRef = useRef<HTMLDivElement>(null)
+  const meses = useMemo(() => rows.map((r) => r.mes), [rows])
+
+  const {
+    data: deptRows,
+    isLoading: deptLoading,
+    error: deptError,
+  } = useQuery({
+    queryKey: ['receita', 'recebido-departamento', ano, meses],
+    queryFn: () => receitaService.fetchRecebidoPorDepartamento(ano),
+    enabled: porAreaMode && meses.length > 0,
+  })
+
+  const togglePercentMode = () => {
+    setPercentMode((v) => {
+      const next = !v
+      if (next) setPorAreaMode(false)
+      return next
+    })
+  }
+
+  const togglePorAreaMode = () => {
+    setPorAreaMode((v) => {
+      const next = !v
+      if (next) setPercentMode(false)
+      return next
+    })
+  }
 
   const toggleSeries = (key: SeriesKey) => {
     setVisible((prev) => {
@@ -374,6 +575,20 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     [rows, ano],
   )
 
+  const areaGapData = useMemo(
+    () => buildAreaGapData(rows, rowsComDados, deptRows ?? [], areaMesSelecionado),
+    [rows, rowsComDados, deptRows, areaMesSelecionado],
+  )
+
+  const areaGapMetaTotal = useMemo(
+    () => areaGapData.reduce((s, a) => s + a.meta, 0),
+    [areaGapData],
+  )
+  const areaGapRecebidoTotal = useMemo(
+    () => areaGapData.reduce((s, a) => s + a.recebido, 0),
+    [areaGapData],
+  )
+
   const totais = useMemo(
     () => ({
       meta: rowsComDados.reduce((s, r) => s + r.meta, 0),
@@ -386,6 +601,21 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
   )
 
   const pctTotal = pctMeta(totais.recebido, totais.meta)
+
+  const areaGapRecebidoOficial = useMemo(() => {
+    if (areaMesSelecionado == null) return totais.recebido
+    return rows.find((r) => r.mes === areaMesSelecionado)?.recebido ?? 0
+  }, [areaMesSelecionado, rows, totais.recebido])
+  const areaGapRecebidoSemDepartamento = Math.max(
+    0,
+    areaGapRecebidoOficial - areaGapRecebidoTotal,
+  )
+
+  const semAreaPeriodoLabel = useMemo(() => {
+    if (areaMesSelecionado == null) return `Acumulado ${ano}`
+    const row = rows.find((r) => r.mes === areaMesSelecionado)
+    return row ? `${row.mesLabel} / ${ano}` : `${ano}`
+  }, [areaMesSelecionado, rows, ano])
 
   return (
     <div className="space-y-6">
@@ -402,10 +632,18 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
             </span>
             <div>
               <h2 className="text-sm font-semibold text-slate-900">
-                {percentMode ? 'Comparativo mensal (% da meta)' : 'Comparativo mensal'}
+                {porAreaMode
+                  ? 'Meta vs. recebido por área'
+                  : percentMode
+                    ? 'Comparativo mensal (% da meta)'
+                    : 'Comparativo mensal'}
               </h2>
               <p className="text-xs text-slate-500">
-                {percentMode ? (
+                {porAreaMode ? (
+                  <>
+                    Meta (rateada pela % de cada área) contra o recebido real · veja o gap ({ano})
+                  </>
+                ) : percentMode ? (
                   <>Séries em % da meta de cada mês · linha tracejada = 100% ({ano})</>
                 ) : (
                   <>
@@ -426,7 +664,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
         <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
-            onClick={() => setPercentMode((v) => !v)}
+            onClick={togglePercentMode}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
               percentMode
@@ -438,9 +676,219 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
             <Percent className="h-3 w-3 shrink-0" aria-hidden />
             {percentMode ? 'Ver valores (R$)' : 'Ver % da meta'}
           </button>
+
+          <button
+            type="button"
+            onClick={togglePorAreaMode}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+              porAreaMode
+                ? 'border-sky-200 bg-sky-50 text-sky-800 shadow-sm'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+            )}
+            aria-pressed={porAreaMode}
+          >
+            <Building2 className="h-3 w-3 shrink-0" aria-hidden />
+            {porAreaMode ? 'Ver consolidado' : 'Ver por área'}
+          </button>
         </div>
 
+        {porAreaMode && (
+          <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+            <span className="text-[11px] font-medium text-slate-500">Período:</span>
+            <button
+              type="button"
+              onClick={() => setAreaMesSelecionado(null)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors',
+                areaMesSelecionado == null
+                  ? 'border-sky-400 bg-sky-100 text-sky-900 shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-sky-200 hover:bg-sky-50',
+              )}
+            >
+              Acumulado {ano}
+            </button>
+            {rowsComDados.map((r) => (
+              <button
+                key={r.mes}
+                type="button"
+                onClick={() => setAreaMesSelecionado(r.mes)}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors',
+                  areaMesSelecionado === r.mes
+                    ? 'border-sky-400 bg-sky-100 text-sky-900 shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-sky-200 hover:bg-sky-50',
+                )}
+              >
+                {r.mesLabel}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div ref={chartExportRef} className="flex flex-col">
+          {porAreaMode ? (
+          deptLoading ? (
+            <div className="flex h-[300px] items-center justify-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Carregando recebido por área…
+            </div>
+          ) : deptError ? (
+            <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Erro ao carregar recebido por área. Aplique a migration{' '}
+              <code className="text-xs">receita_recebido_por_departamento_mensal</code>.
+            </p>
+          ) : (
+          <>
+          <div data-chart-plot className="h-[300px] min-h-[300px] w-full min-w-0">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
+            <ComposedChart data={areaGapData} margin={{ left: 4, right: 12, top: 24, bottom: 4 }} barCategoryGap="22%" barGap={2}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
+
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11, fill: RECEITA_CHART_AXIS.tick }}
+                axisLine={false}
+                tickLine={false}
+                dy={4}
+                interval={0}
+              />
+              <YAxis
+                tickFormatter={formatYAxis}
+                tick={{ fontSize: 11, fill: RECEITA_CHART_AXIS.tick }}
+                axisLine={false}
+                tickLine={false}
+                width={60}
+                domain={[0, 'auto']}
+              />
+
+              <Tooltip
+                wrapperStyle={{ pointerEvents: 'auto', zIndex: 60 }}
+                allowEscapeViewBox={{ x: true, y: true }}
+                content={<AreaGapTooltip />}
+                cursor={{ fill: 'rgba(148,163,184,0.12)' }}
+              />
+
+              <Bar dataKey="recebido" name="Recebido da área" maxBarSize={56}>
+                {areaGapData.map((a) => (
+                  <Cell key={a.key} fill={a.color} />
+                ))}
+                <LabelList dataKey="recebido" content={(p) => <AreaGapBarLabel {...p} />} />
+              </Bar>
+              <Bar dataKey="meta" name="Meta da área" fill="#cbd5e1" maxBarSize={56}>
+                <LabelList dataKey="meta" content={(p) => <AreaGapBarLabel {...p} fill="#64748b" />} />
+              </Bar>
+            </ComposedChart>
+          </ResponsiveContainer>
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <th className="py-2 pr-3">Área</th>
+                  <th className="px-3 py-2 text-center">% meta</th>
+                  <th className="px-3 py-2 text-right">Recebido</th>
+                  <th className="px-3 py-2 text-right">Meta</th>
+                  <th className="px-3 py-2 text-right">Gap</th>
+                  <th className="px-3 py-2 text-center">Atingido</th>
+                </tr>
+              </thead>
+              <tbody>
+                {areaGapData.map((a, i) => (
+                  <tr
+                    key={a.key}
+                    className={cn(
+                      'border-b border-slate-100 last:border-0',
+                      i % 2 === 1 && 'bg-slate-50/40',
+                    )}
+                  >
+                    <td className="py-2.5 pr-3 font-medium text-slate-800">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: a.color }}
+                          aria-hidden
+                        />
+                        {a.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-center tabular-nums text-slate-500">
+                      {formatPercentMeta(a.pct)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-900">
+                      {formatCurrency(a.recebido)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-700">
+                      {formatCurrency(a.meta)}
+                    </td>
+                    <td
+                      className={cn(
+                        'px-3 py-2.5 text-right tabular-nums font-semibold',
+                        a.gap >= 0 ? 'text-emerald-700' : 'text-red-600',
+                      )}
+                    >
+                      {formatGap(a.gap)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <PctBadge pct={a.pctAtingido} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 font-semibold text-slate-800">
+                  <td className="py-2.5 pr-3">Total</td>
+                  <td className="px-3 py-2.5 text-center text-slate-400">100%</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    {formatCurrency(areaGapRecebidoTotal)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    {formatCurrency(areaGapMetaTotal)}
+                  </td>
+                  <td
+                    className={cn(
+                      'px-3 py-2.5 text-right tabular-nums',
+                      areaGapRecebidoTotal - areaGapMetaTotal >= 0
+                        ? 'text-emerald-700'
+                        : 'text-red-600',
+                    )}
+                  >
+                    {formatGap(areaGapRecebidoTotal - areaGapMetaTotal)}
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <PctBadge
+                      pct={
+                        areaGapMetaTotal > 0
+                          ? (areaGapRecebidoTotal / areaGapMetaTotal) * 100
+                          : null
+                      }
+                    />
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {areaGapRecebidoSemDepartamento > 1 && (
+            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-amber-700">
+              <span>
+                + {formatCurrency(areaGapRecebidoSemDepartamento)} recebido sem departamento
+                vinculado (não entra no rateio por área).
+              </span>
+              <button
+                type="button"
+                onClick={() => setSemAreaAberto(true)}
+                className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 font-medium text-amber-800 transition-colors hover:border-amber-400 hover:bg-amber-100"
+              >
+                <Search className="h-3 w-3 shrink-0" aria-hidden />
+                Ver títulos
+              </button>
+            </p>
+          )}
+          </>
+          )
+          ) : (
           <div data-chart-plot className="h-[300px] min-h-[300px] w-full min-w-0">
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
             <ComposedChart
@@ -526,15 +974,18 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
               ))}
             </ComposedChart>
           </ResponsiveContainer>
-        </div>
-
-          <div data-chart-legend className="mt-3">
-            <ReceitaChartLegend
-              visible={visibleSeries}
-              percentMode={percentMode}
-              onToggle={toggleSeries}
-            />
           </div>
+          )}
+
+          {!porAreaMode && (
+            <div data-chart-legend className="mt-3">
+              <ReceitaChartLegend
+                visible={visibleSeries}
+                percentMode={percentMode}
+                onToggle={toggleSeries}
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -748,6 +1199,15 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
           totalRecebido={detalheMes.recebido}
         />
       )}
+
+      <ReceitaSemAreaDetalheSheet
+        open={semAreaAberto}
+        onOpenChange={setSemAreaAberto}
+        ano={ano}
+        mes={areaMesSelecionado}
+        periodoLabel={semAreaPeriodoLabel}
+        totalSemArea={areaGapRecebidoSemDepartamento}
+      />
     </div>
   )
 }

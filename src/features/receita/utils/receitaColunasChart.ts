@@ -5,6 +5,7 @@ import {
 } from '../constants'
 import { isMesFuturo, valorRecebidoGrafico } from './receitaMes'
 import { labelPlanoContas } from './planoContasLabel'
+import { formatPercent } from '@/shared/utils/format'
 import type {
   ReceitaAreaChartSlice,
   ReceitaColunasChartPoint,
@@ -91,19 +92,12 @@ function planoColor(plano: string, usedColors: Set<string>): string {
 
 export function formatPercentLabel(value: number): string {
   if (!value) return ''
-  if (value < 10) {
-    return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
-  }
-  return `${Math.round(value)}%`
+  return formatPercent(value)
 }
 
-/** % da meta — uma casa decimal para soma bater com o total exibido. */
 export function formatPercentMeta(value: number): string {
-  if (!value) return '0,0%'
-  return `${value.toLocaleString('pt-BR', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })}%`
+  if (!value) return formatPercent(0)
+  return formatPercent(value)
 }
 
 export function formatColunaLabel(value: number): string {

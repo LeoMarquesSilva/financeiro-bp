@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { RECEITA_DEPARTAMENTO_LABELS } from '../constants'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
 import type { ReceitaInadimplenciaDepartamentoMes } from '../types/receitaInadimplencia.types'
@@ -48,9 +48,7 @@ export function ReceitaInadimplenciaMesValorButton({ ano, mes, valor, ajustado, 
   )
 
   const formatPct = (parte: number) =>
-    totalAreas > 0
-      ? `${((parte / totalAreas) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
-      : '—'
+    totalAreas > 0 ? formatPercent((parte / totalAreas) * 100) : '—'
 
   return (
     <Tooltip delayDuration={200}>
