@@ -113,6 +113,25 @@ export const receitaService = {
     )
   },
 
+  /** Previsto mensal por área (departamento) — usado no gráfico de linha por área da Receita. */
+  async fetchPrevistoPorDepartamento(
+    ano: number,
+    incluirInativos = true,
+  ): Promise<ReceitaRecebidoDepartamentoRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_previsto_por_departamento_mensal' as never,
+      { p_ano: ano, p_incluir_inativos: incluirInativos } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<{ mes: number; departamento: string; total: number }>).map(
+      (row) => ({
+        mes: Number(row.mes) || 0,
+        departamento: String(row.departamento ?? 'Sem departamento'),
+        total: Number(row.total) || 0,
+      }),
+    )
+  },
+
   /** Nome + grupo para vincular cliente do financeiro ao grupo de empresas. */
   async fetchEmpresasNomeGrupo(): Promise<Array<{ nome: string; grupo_cliente: string | null }>> {
     return collectPaginatedRows(async (from, to) =>

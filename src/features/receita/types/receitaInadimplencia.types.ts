@@ -37,6 +37,13 @@ export type ReceitaInadimplenciaDepartamentoMes = {
   inadimplencia: number
 }
 
+/** Inadimplência por área/mês, disponível apenas para meses já congelados. */
+export type ReceitaInadimplenciaDepartamentoMensalRow = {
+  mes: number
+  departamento: string
+  inadimplencia: number
+}
+
 export type ReceitaInadimplenciaFechamentoMes = {
   congelado: boolean
   valor_total?: number

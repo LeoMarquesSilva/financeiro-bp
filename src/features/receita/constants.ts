@@ -100,6 +100,11 @@ export const RECEITA_COLORS = {
     textStrong: 'text-orange-800',
     bgIcon: 'bg-orange-50 text-orange-600',
   },
+  inadimplencia: {
+    hex: '#dc2626',
+    text: 'text-red-700',
+    textStrong: 'text-red-800',
+  },
 } as const
 
 /**

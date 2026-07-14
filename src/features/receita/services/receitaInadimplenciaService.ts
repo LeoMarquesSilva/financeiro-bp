@@ -4,6 +4,7 @@ import type {
   ReceitaInadimplenciaClienteTituloPeriodo,
   ReceitaInadimplenciaDashboard,
   ReceitaInadimplenciaDepartamentoMes,
+  ReceitaInadimplenciaDepartamentoMensalRow,
   ReceitaInadimplenciaFechamentoMes,
   ReceitaInadimplenciaGrupoMes,
   ReceitaInadimplenciaGrupoPeriodo,
@@ -109,6 +110,23 @@ export const receitaInadimplenciaService = {
     )
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      departamento: String(row.departamento ?? 'Sem departamento'),
+      inadimplencia: Number(row.inadimplencia) || 0,
+    }))
+  },
+
+  /** Inadimplência mensal por área — só traz meses já congelados (fechamento manual). */
+  async fetchDepartamentosMensalCongelado(
+    ano: number,
+    incluirInativos = true,
+  ): Promise<ReceitaInadimplenciaDepartamentoMensalRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_departamento_mensal_congelado' as never,
+      { p_ano: ano, p_incluir_inativos: incluirInativos } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      mes: Number(row.mes) || 0,
       departamento: String(row.departamento ?? 'Sem departamento'),
       inadimplencia: Number(row.inadimplencia) || 0,
     }))

@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import type { ReceitaMesRow, ReceitaRecebidoDepartamentoRow } from '../types/receita.types'
+import type { ReceitaInadimplenciaDepartamentoMensalRow } from '../types/receitaInadimplencia.types'
 import {
   RECEITA_CHART_AXIS,
   RECEITA_CHART_LABEL,
@@ -47,6 +48,7 @@ import {
   formatPercentMeta,
 } from '../utils/receitaColunasChart'
 import { receitaService } from '../services/receitaService'
+import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 
 const SERIES = [
@@ -218,6 +220,234 @@ function formatGap(value: number): string {
   return `${sign}${formatCurrency(Math.abs(value))}`
 }
 
+type AreaLinhaPoint = {
+  mes: number
+  mesLabel: string
+  meta: number
+  previsto: number
+  recebido: number | null
+  inadimplencia: number | null
+}
+
+const AREA_LINHA_SERIES = [
+  {
+    key: 'meta',
+    legend: 'Meta da área',
+    color: RECEITA_COLORS.meta.hex,
+    type: 'line' as const,
+    strokeDasharray: '6 4',
+  },
+  {
+    key: 'previsto',
+    legend: 'Previsto',
+    color: RECEITA_COLORS.previsto.hex,
+    gradientId: 'areaLinhaPrevistoGradient',
+    type: 'area' as const,
+  },
+  {
+    key: 'recebido',
+    legend: 'Recebido',
+    color: RECEITA_COLORS.recebido.hex,
+    gradientId: 'areaLinhaRecebidoGradient',
+    type: 'area' as const,
+  },
+  {
+    key: 'inadimplencia',
+    legend: 'Inadimplência (congelada)',
+    color: RECEITA_COLORS.inadimplencia.hex,
+    type: 'line' as const,
+    strokeDasharray: '3 3',
+  },
+] as const
+
+/**
+ * Série mensal (ano todo) de uma única área: meta individual (meta do mês × % da área),
+ * previsto e recebido vindos do banco por departamento, e inadimplência somente nos meses
+ * já congelados (não recalcula ao vivo — usa o snapshot do fechamento mensal).
+ */
+function buildAreaLinhaData(
+  rows: ReceitaMesRow[],
+  deptRowsRecebido: ReceitaRecebidoDepartamentoRow[],
+  deptRowsPrevisto: ReceitaRecebidoDepartamentoRow[],
+  inadRows: ReceitaInadimplenciaDepartamentoMensalRow[],
+  areaKey: string,
+  ano: number,
+): AreaLinhaPoint[] {
+  const areaSlice = AREA_META_SLICES.find((a) => a.key === areaKey)
+  const pct = areaSlice?.pct ?? 0
+
+  const recebidoPorMes = new Map<number, number>()
+  for (const d of deptRowsRecebido) {
+    if (departamentoNormKey(d.departamento) !== areaKey) continue
+    recebidoPorMes.set(d.mes, (recebidoPorMes.get(d.mes) ?? 0) + d.total)
+  }
+
+  const previstoPorMes = new Map<number, number>()
+  for (const d of deptRowsPrevisto) {
+    if (departamentoNormKey(d.departamento) !== areaKey) continue
+    previstoPorMes.set(d.mes, (previstoPorMes.get(d.mes) ?? 0) + d.total)
+  }
+
+  const inadimplenciaPorMes = new Map<number, number>()
+  for (const d of inadRows) {
+    if (departamentoNormKey(d.departamento) !== areaKey) continue
+    inadimplenciaPorMes.set(d.mes, (inadimplenciaPorMes.get(d.mes) ?? 0) + d.inadimplencia)
+  }
+
+  return rows.map((r) => ({
+    mes: r.mes,
+    mesLabel: r.mesLabel,
+    meta: (r.meta * pct) / 100,
+    previsto: previstoPorMes.get(r.mes) ?? 0,
+    recebido: valorRecebidoGrafico(recebidoPorMes.get(r.mes) ?? 0, ano, r.mes),
+    inadimplencia: inadimplenciaPorMes.get(r.mes) ?? null,
+  }))
+}
+
+/**
+ * Rótulo do ponto que só aparece quando o valor muda em relação ao mês anterior —
+ * evita poluir o gráfico repetindo o mesmo número em várias séries "planas" (ex.: Meta).
+ */
+function AreaLinhaChangeLabel({
+  color,
+  data,
+  dataKey,
+  position = 'above',
+  offset = 10,
+  pctOfKey,
+}: {
+  color: string
+  data: AreaLinhaPoint[]
+  dataKey: keyof AreaLinhaPoint
+  position?: 'above' | 'below' | 'right'
+  offset?: number
+  /** Se informado, exibe na segunda linha o percentual do valor sobre este campo no mesmo mês. */
+  pctOfKey?: keyof AreaLinhaPoint
+}) {
+  return function Label(props: LabelProps & { index?: number }) {
+    const { x, y, value, index } = props
+    if (value == null || x == null || y == null || index == null) return null
+    const num = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(num)) return null
+
+    const prevRaw = index > 0 ? data[index - 1]?.[dataKey] : undefined
+    const prevNum = typeof prevRaw === 'number' ? prevRaw : null
+    if (index > 0 && prevNum != null && Math.round(prevNum * 100) === Math.round(num * 100)) {
+      return null
+    }
+
+    const text = formatCurrency(num)
+    let secondaryText: string | undefined
+    if (pctOfKey) {
+      const denomRaw = data[index]?.[pctOfKey]
+      const denomNum = typeof denomRaw === 'number' ? denomRaw : null
+      if (denomNum != null && denomNum > 0) {
+        secondaryText = formatPercent((num / denomNum) * 100)
+      }
+    }
+    const cx = Number(x)
+    const cy = Number(y)
+    const anchor = edgeAwareAnchor(index, data.length)
+
+    if (position === 'below') {
+      return (
+        <ChartLabelWithBackdrop
+          text={text}
+          secondaryText={secondaryText}
+          x={cx}
+          y={cy + offset}
+          color={color}
+          textAnchor={anchor}
+          dominantBaseline="hanging"
+        />
+      )
+    }
+
+    if (position === 'right') {
+      const rightAnchor = anchor === 'end' ? 'end' : 'start'
+      return (
+        <ChartLabelWithBackdrop
+          text={text}
+          secondaryText={secondaryText}
+          x={rightAnchor === 'end' ? cx - 8 : cx + 8}
+          y={cy}
+          color={color}
+          textAnchor={rightAnchor}
+          dominantBaseline="middle"
+        />
+      )
+    }
+
+    return (
+      <ChartLabelWithBackdrop
+        text={text}
+        secondaryText={secondaryText}
+        x={cx}
+        y={cy - offset}
+        color={color}
+        textAnchor={anchor}
+        dominantBaseline="auto"
+      />
+    )
+  }
+}
+
+function AreaLinhaTooltip({
+  active,
+  payload,
+  label,
+  color,
+}: {
+  active?: boolean
+  payload?: Array<{ dataKey?: string | number; value?: number; payload?: AreaLinhaPoint }>
+  label?: string
+  color: string
+}) {
+  if (!active || !payload?.length) return null
+  const row = payload[0]?.payload
+  if (!row) return null
+
+  return (
+    <div
+      className="pointer-events-auto z-50 rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm shadow-lg"
+      style={{ pointerEvents: 'auto' }}
+      onWheel={(e) => e.stopPropagation()}
+    >
+      <p className="mb-1.5 flex items-center gap-1.5 font-semibold capitalize text-slate-800">
+        <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+        {label}
+      </p>
+      <ul className="space-y-1">
+        <li className="flex items-center justify-between gap-6">
+          <span className="text-slate-600">Meta da área</span>
+          <span className="font-semibold tabular-nums text-slate-900">{formatCurrency(row.meta)}</span>
+        </li>
+        <li className="flex items-center justify-between gap-6">
+          <span className="text-slate-600">Previsto</span>
+          <span className="font-semibold tabular-nums text-slate-900">{formatCurrency(row.previsto)}</span>
+        </li>
+        <li className="flex items-center justify-between gap-6">
+          <span className="text-slate-600">Recebido</span>
+          <span className="font-semibold tabular-nums text-slate-900">
+            {row.recebido == null ? '—' : formatCurrency(row.recebido)}
+          </span>
+        </li>
+        <li className="flex items-center justify-between gap-6 border-t border-slate-100 pt-1.5">
+          <span className="font-medium text-slate-600">Inadimplência</span>
+          <span
+            className={cn(
+              'font-semibold tabular-nums',
+              row.inadimplencia == null ? 'text-slate-400' : 'text-red-600',
+            )}
+          >
+            {row.inadimplencia == null ? 'não congelado' : formatCurrency(row.inadimplencia)}
+          </span>
+        </li>
+      </ul>
+    </div>
+  )
+}
+
 function AreaGapBarLabel(props: LabelProps & { fill?: string }) {
   const { x, y, width, height, value, fill } = props
   const num = typeof value === 'number' ? value : Number(value)
@@ -302,71 +532,115 @@ function AreaGapTooltip({
   )
 }
 
+/**
+ * Ancora o rótulo pra dentro do gráfico nas pontas (1º e último ponto) — evita que o texto
+ * "vaze" pra fora da área do gráfico e fique sobreposto ao eixo Y ou cortado no eixo direito.
+ */
+function edgeAwareAnchor(
+  index: number | undefined,
+  total: number | undefined,
+): 'start' | 'middle' | 'end' {
+  if (index == null || total == null || total <= 1) return 'middle'
+  if (index <= 0) return 'start'
+  if (index >= total - 1) return 'end'
+  return 'middle'
+}
+
+/** Texto do rótulo com um fundo claro por trás — garante legibilidade mesmo se algo cruzar por baixo. */
+function ChartLabelWithBackdrop({
+  text,
+  secondaryText,
+  x,
+  y,
+  color,
+  textAnchor,
+  dominantBaseline,
+}: {
+  text: string
+  secondaryText?: string
+  x: number
+  y: number
+  color: string
+  textAnchor: 'start' | 'middle' | 'end'
+  dominantBaseline: 'auto' | 'hanging' | 'middle'
+}) {
+  const charWidth = 6.4
+  const boxWidth = Math.max(text.length, secondaryText?.length ?? 0) * charWidth + 8
+  const boxHeight = secondaryText ? 29 : 15
+  const boxX =
+    textAnchor === 'start' ? x - 3 : textAnchor === 'end' ? x - boxWidth + 3 : x - boxWidth / 2
+  const boxY =
+    dominantBaseline === 'hanging'
+      ? y - 2
+      : dominantBaseline === 'middle'
+        ? y - boxHeight / 2
+        : y - 12
+
+  return (
+    <g pointerEvents="none">
+      <rect x={boxX} y={boxY} width={boxWidth} height={boxHeight} rx={3} fill="#fff" fillOpacity={0.88} />
+      <text
+        x={x}
+        y={y}
+        fill={color}
+        textAnchor={textAnchor}
+        dominantBaseline={dominantBaseline}
+        fontSize={RECEITA_CHART_LABEL.linePoint}
+        fontWeight={600}
+      >
+        <tspan x={x}>{text}</tspan>
+        {secondaryText && <tspan x={x} dy={12}>{secondaryText}</tspan>}
+      </text>
+    </g>
+  )
+}
+
 function ComparativoDotLabel({
   color,
   percentMode,
   position = 'right',
+  total,
 }: {
   color: string
   percentMode: boolean
   position?: 'right' | 'above' | 'below'
+  total?: number
 }) {
-  return function Label(props: LabelProps) {
-    const { x, y, value } = props
+  return function Label(props: LabelProps & { index?: number }) {
+    const { x, y, value, index } = props
     if (value == null || x == null || y == null) return null
     const num = typeof value === 'number' ? value : Number(value)
     if (!Number.isFinite(num)) return null
 
-    const text = percentMode ? formatPercentLabel(num) : formatColunaLabel(num)
+    const text = percentMode ? formatPercentLabel(num) : formatCurrency(num)
     if (!text) return null
 
     const cx = Number(x)
     const cy = Number(y)
+    const anchor = edgeAwareAnchor(index, total)
 
     if (position === 'above') {
       return (
-        <text
-          x={cx}
-          y={cy - 10}
-          fill={color}
-          textAnchor="middle"
-          dominantBaseline="auto"
-          fontSize={RECEITA_CHART_LABEL.linePoint}
-          fontWeight={600}
-        >
-          {text}
-        </text>
+        <ChartLabelWithBackdrop text={text} x={cx} y={cy - 10} color={color} textAnchor={anchor} dominantBaseline="auto" />
       )
     }
 
     if (position === 'below') {
       return (
-        <text
-          x={cx}
-          y={cy + 14}
-          fill={color}
-          textAnchor="middle"
-          dominantBaseline="hanging"
-          fontSize={RECEITA_CHART_LABEL.linePoint}
-          fontWeight={600}
-        >
-          {text}
-        </text>
+        <ChartLabelWithBackdrop text={text} x={cx} y={cy + 14} color={color} textAnchor={anchor} dominantBaseline="hanging" />
       )
     }
 
+    const rightAnchor = anchor === 'end' ? 'end' : 'start'
     return (
-      <text
-        x={cx + 8}
+      <ChartLabelWithBackdrop
+        text={text}
+        x={rightAnchor === 'end' ? cx - 8 : cx + 8}
         y={cy}
-        fill={color}
-        textAnchor="start"
+        color={color}
+        textAnchor={rightAnchor}
         dominantBaseline="middle"
-        fontSize={RECEITA_CHART_LABEL.linePoint}
-        fontWeight={600}
-      >
-        {text}
-      </text>
+      />
     )
   }
 }
@@ -506,8 +780,14 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
   const [tabelaAberta, setTabelaAberta] = useState(false)
   const [percentMode, setPercentMode] = useState(false)
   const [porAreaMode, setPorAreaMode] = useState(false)
-  const [areaMesSelecionado, setAreaMesSelecionado] = useState<number | null>(null)
+  const [areaMesSelecionado, setAreaMesSelecionado] = useState<number | null>(() => {
+    const hoje = new Date()
+    if (ano !== hoje.getFullYear()) return null
+    const mesAtual = hoje.getMonth() + 1
+    return rows.some((r) => r.mes === mesAtual) ? mesAtual : null
+  })
   const [visible, setVisible] = useState<Set<SeriesKey>>(() => new Set(DEFAULT_VISIBLE))
+  const [areaLinhaSelecionada, setAreaLinhaSelecionada] = useState<string | null>(null)
   const chartExportRef = useRef<HTMLDivElement>(null)
   const meses = useMemo(() => rows.map((r) => r.mes), [rows])
 
@@ -521,10 +801,33 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     enabled: porAreaMode && meses.length > 0,
   })
 
+  const {
+    data: previstoDeptRows,
+    isLoading: previstoDeptLoading,
+    error: previstoDeptError,
+  } = useQuery({
+    queryKey: ['receita', 'previsto-departamento', ano],
+    queryFn: () => receitaService.fetchPrevistoPorDepartamento(ano),
+    enabled: porAreaMode && areaLinhaSelecionada != null,
+  })
+
+  const {
+    data: inadDeptRows,
+    isLoading: inadDeptLoading,
+    error: inadDeptError,
+  } = useQuery({
+    queryKey: ['receita-inadimplencia', 'departamento-mensal-congelado', ano],
+    queryFn: () => receitaInadimplenciaService.fetchDepartamentosMensalCongelado(ano),
+    enabled: porAreaMode && areaLinhaSelecionada != null,
+  })
+
   const togglePercentMode = () => {
     setPercentMode((v) => {
       const next = !v
-      if (next) setPorAreaMode(false)
+      if (next) {
+        setPorAreaMode(false)
+        setAreaLinhaSelecionada(null)
+      }
       return next
     })
   }
@@ -533,8 +836,15 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     setPorAreaMode((v) => {
       const next = !v
       if (next) setPercentMode(false)
+      setAreaLinhaSelecionada(null)
       return next
     })
+  }
+
+  const selectAreaLinha = (key: string) => {
+    setPercentMode(false)
+    setPorAreaMode(true)
+    setAreaLinhaSelecionada((prev) => (prev === key ? null : key))
   }
 
   const toggleSeries = (key: SeriesKey) => {
@@ -579,6 +889,23 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     () => buildAreaGapData(rows, rowsComDados, deptRows ?? [], areaMesSelecionado),
     [rows, rowsComDados, deptRows, areaMesSelecionado],
   )
+
+  const areaLinhaAtual = useMemo(
+    () => AREA_META_SLICES.find((a) => a.key === areaLinhaSelecionada) ?? null,
+    [areaLinhaSelecionada],
+  )
+
+  const areaLinhaData = useMemo(() => {
+    if (!areaLinhaSelecionada) return []
+    return buildAreaLinhaData(
+      rows,
+      deptRows ?? [],
+      previstoDeptRows ?? [],
+      inadDeptRows ?? [],
+      areaLinhaSelecionada,
+      ano,
+    )
+  }, [rows, deptRows, previstoDeptRows, inadDeptRows, areaLinhaSelecionada, ano])
 
   const areaGapMetaTotal = useMemo(
     () => areaGapData.reduce((s, a) => s + a.meta, 0),
@@ -633,29 +960,13 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
             <div>
               <h2 className="text-sm font-semibold text-slate-900">
                 {porAreaMode
-                  ? 'Meta vs. recebido por área'
+                  ? areaLinhaAtual
+                    ? `Meta · Previsto · Recebido · Inadimplência — ${areaLinhaAtual.label}`
+                    : 'Meta vs. recebido por área'
                   : percentMode
                     ? 'Comparativo mensal (% da meta)'
                     : 'Comparativo mensal'}
               </h2>
-              <p className="text-xs text-slate-500">
-                {porAreaMode ? (
-                  <>
-                    Meta (rateada pela % de cada área) contra o recebido real · veja o gap ({ano})
-                  </>
-                ) : percentMode ? (
-                  <>Séries em % da meta de cada mês · linha tracejada = 100% ({ano})</>
-                ) : (
-                  <>
-                    <span className={RECEITA_COLORS.meta.textStrong}>Meta</span>
-                    {' · '}
-                    <span className={RECEITA_COLORS.projetadoBaseAbril.text}>Proj. base abril</span>
-                    {' · '}
-                    <span className={RECEITA_COLORS.projetadoReal.text}>Proj. real</span>
-                    {' · áreas = recebido e previsto ('}{ano})
-                  </>
-                )}
-              </p>
             </div>
           </div>
           <ChartCopyButton containerRef={chartExportRef} />
@@ -693,7 +1004,34 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
           </button>
         </div>
 
-        {porAreaMode && (
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+          {AREA_META_SLICES.map((area) => {
+            const ativo = areaLinhaSelecionada === area.key
+            return (
+              <button
+                key={area.key}
+                type="button"
+                onClick={() => selectAreaLinha(area.key)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+                  ativo
+                    ? 'border-transparent text-white shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                )}
+                style={ativo ? { backgroundColor: area.color } : undefined}
+                aria-pressed={ativo}
+              >
+                <span
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: ativo ? '#fff' : area.color }}
+                />
+                {area.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {porAreaMode && areaLinhaSelecionada == null && (
           <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
             <span className="text-[11px] font-medium text-slate-500">Período:</span>
             <button
@@ -728,6 +1066,144 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
 
         <div ref={chartExportRef} className="flex flex-col">
           {porAreaMode ? (
+          areaLinhaSelecionada != null ? (
+          deptLoading || previstoDeptLoading || inadDeptLoading ? (
+            <div className="flex h-[300px] items-center justify-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Carregando dados da área…
+            </div>
+          ) : deptError || previstoDeptError || inadDeptError ? (
+            <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Erro ao carregar dados da área selecionada.
+            </p>
+          ) : (
+          <>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setAreaLinhaSelecionada(null)}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+            >
+              ← Todas as áreas
+            </button>
+            <span className="text-[11px] text-slate-500">
+              {formatPercentMeta(areaLinhaAtual?.pct ?? 0)} da meta total · {ano}
+            </span>
+          </div>
+          <div data-chart-plot className="h-[300px] min-h-[300px] w-full min-w-0">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
+            <ComposedChart data={areaLinhaData} margin={{ left: 4, right: 12, top: 16, bottom: 4 }}>
+              <defs>
+                <linearGradient id="areaLinhaPrevistoGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={RECEITA_COLORS.previsto.hex} stopOpacity={0.2} />
+                  <stop offset="95%" stopColor={RECEITA_COLORS.previsto.hex} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="areaLinhaRecebidoGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={RECEITA_COLORS.recebido.hex} stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={RECEITA_COLORS.recebido.hex} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+
+              <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
+
+              <XAxis
+                dataKey="mesLabel"
+                tick={{ fontSize: 12, fill: RECEITA_CHART_AXIS.tick }}
+                axisLine={false}
+                tickLine={false}
+                dy={4}
+              />
+              <YAxis
+                tickFormatter={formatYAxis}
+                tick={{ fontSize: 11, fill: RECEITA_CHART_AXIS.tick }}
+                axisLine={false}
+                tickLine={false}
+                width={60}
+                domain={[0, 'auto']}
+              />
+
+              <Tooltip
+                wrapperStyle={{ pointerEvents: 'auto', zIndex: 60 }}
+                allowEscapeViewBox={{ x: true, y: true }}
+                content={<AreaLinhaTooltip color={areaLinhaAtual?.color ?? '#64748b'} />}
+                cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
+              />
+
+              {AREA_LINHA_SERIES.filter((s) => s.type === 'area').map((s) => (
+                <Area
+                  key={s.key}
+                  type="monotone"
+                  dataKey={s.key}
+                  stroke={s.color}
+                  strokeWidth={2.5}
+                  fill={`url(#${'gradientId' in s ? s.gradientId : ''})`}
+                  dot={({ cx, cy, value }) => {
+                    if (value == null || cx == null || cy == null) return null
+                    return <circle cx={cx} cy={cy} r={3} fill={s.color} />
+                  }}
+                  activeDot={{ r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                  connectNulls={false}
+                >
+                  {(s.key === 'previsto' || s.key === 'recebido') && (
+                    <LabelList
+                      dataKey={s.key}
+                      content={AreaLinhaChangeLabel({
+                        color: s.color,
+                        data: areaLinhaData,
+                        dataKey: s.key,
+                        position: s.key === 'recebido' ? 'right' : 'above',
+                        offset: s.key === 'previsto' ? 16 : 10,
+                      })}
+                    />
+                  )}
+                </Area>
+              ))}
+
+              {AREA_LINHA_SERIES.filter((s) => s.type === 'line').map((s) => (
+                <Line
+                  key={s.key}
+                  type="monotone"
+                  dataKey={s.key}
+                  stroke={s.color}
+                  strokeWidth={2}
+                  strokeDasharray={s.strokeDasharray}
+                  dot={s.key === 'inadimplencia' ? { r: 3, fill: s.color, strokeWidth: 0 } : false}
+                  activeDot={{ r: 4, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                  connectNulls={false}
+                >
+                  {(s.key === 'meta' || s.key === 'inadimplencia') && (
+                    <LabelList
+                      dataKey={s.key}
+                      content={AreaLinhaChangeLabel({
+                        color: s.color,
+                        data: areaLinhaData,
+                        dataKey: s.key,
+                        position: 'above',
+                        offset: s.key === 'inadimplencia' ? 22 : 6,
+                        pctOfKey: s.key === 'inadimplencia' ? 'previsto' : undefined,
+                      })}
+                    />
+                  )}
+                </Line>
+              ))}
+            </ComposedChart>
+          </ResponsiveContainer>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-3 px-1">
+            {AREA_LINHA_SERIES.map((s) => (
+              <span key={s.key} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
+                <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                {s.legend}
+              </span>
+            ))}
+          </div>
+          <p className="mt-2 text-center text-[11px] text-slate-400">
+            Inadimplência exibida apenas para meses já congelados na aba Inadimplência.
+          </p>
+          </>
+          )
+          ) : (
           deptLoading ? (
             <div className="flex h-[300px] items-center justify-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -775,8 +1251,8 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                 ))}
                 <LabelList dataKey="recebido" content={(p) => <AreaGapBarLabel {...p} />} />
               </Bar>
-              <Bar dataKey="meta" name="Meta da área" fill="#cbd5e1" maxBarSize={56}>
-                <LabelList dataKey="meta" content={(p) => <AreaGapBarLabel {...p} fill="#64748b" />} />
+              <Bar dataKey="meta" name="Meta da área" fill="#14532d" maxBarSize={56}>
+                <LabelList dataKey="meta" content={(p) => <AreaGapBarLabel {...p} fill="#14532d" />} />
               </Bar>
             </ComposedChart>
           </ResponsiveContainer>
@@ -790,7 +1266,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   <th className="px-3 py-2 text-center">% meta</th>
                   <th className="px-3 py-2 text-right">Recebido</th>
                   <th className="px-3 py-2 text-right">Meta</th>
-                  <th className="px-3 py-2 text-right">Gap</th>
+                  <th className="px-3 py-2 text-center">Gap</th>
                   <th className="px-3 py-2 text-center">Atingido</th>
                 </tr>
               </thead>
@@ -824,7 +1300,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                     </td>
                     <td
                       className={cn(
-                        'px-3 py-2.5 text-right tabular-nums font-semibold',
+                        'px-3 py-2.5 text-center tabular-nums font-semibold',
                         a.gap >= 0 ? 'text-emerald-700' : 'text-red-600',
                       )}
                     >
@@ -848,7 +1324,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   </td>
                   <td
                     className={cn(
-                      'px-3 py-2.5 text-right tabular-nums',
+                      'px-3 py-2.5 text-center tabular-nums',
                       areaGapRecebidoTotal - areaGapMetaTotal >= 0
                         ? 'text-emerald-700'
                         : 'text-red-600',
@@ -887,6 +1363,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
             </p>
           )}
           </>
+          )
           )
           ) : (
           <div data-chart-plot className="h-[300px] min-h-[300px] w-full min-w-0">
@@ -953,6 +1430,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                         color: s.color,
                         percentMode,
                         position: percentMode ? 'right' : 'above',
+                        total: chartData.length,
                       })}
                     />
                   )}
