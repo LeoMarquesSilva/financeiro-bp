@@ -124,10 +124,50 @@ export function ReceitaMetasConfig({ metas, onSave, isSaving, onSaved }: Props) 
                           meses: checked
                             ? f.meses.filter((m) => m !== mes)
                             : [...f.meses, mes].sort((a, b) => a - b),
+                          meses_meta: checked
+                            ? (f.meses_meta ?? f.meses).filter((m) => m !== mes)
+                            : f.meses_meta,
                         }))
                       }}
                     />
                     {label}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <Label className="mb-1 block">Meses com meta</Label>
+            <p className="mb-2 text-xs text-slate-500">
+              Somente estes meses entram em meta, gap e atingimento. Os demais continuam visíveis
+              com realizado e previsto, sem meta.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {form.meses.map((mes) => {
+                const checked = (form.meses_meta ?? form.meses).includes(mes)
+                return (
+                  <label
+                    key={mes}
+                    className="flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-sm has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      className="rounded border-slate-300"
+                      onChange={() => {
+                        setForm((f) => {
+                          const mesesMeta = f.meses_meta ?? f.meses
+                          return {
+                            ...f,
+                            meses_meta: checked
+                              ? mesesMeta.filter((m) => m !== mes)
+                              : [...mesesMeta, mes].sort((a, b) => a - b),
+                          }
+                        })
+                      }}
+                    />
+                    {MESES_ABREV[mes - 1]}
                   </label>
                 )
               })}

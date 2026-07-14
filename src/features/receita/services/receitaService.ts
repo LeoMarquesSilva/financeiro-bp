@@ -45,6 +45,7 @@ export const receitaService = {
   async buildDashboard(metas: ReceitaMetasConfig): Promise<ReceitaDashboardData> {
     const totais = await this.fetchTotaisMensais(metas.ano)
     const mesesOrdenados = [...metas.meses].sort((a, b) => a - b)
+    const mesesComMeta = new Set(metas.meses_meta ?? metas.meses)
 
     const rowsBase: ReceitaMesRow[] = mesesOrdenados.map((mes) => {
       const t = totais.get(mes)
@@ -52,7 +53,7 @@ export const receitaService = {
       return {
         mes,
         mesLabel: mesAbrev(mes),
-        meta: metas.meta,
+        meta: mesesComMeta.has(mes) ? metas.meta : 0,
         projetadoBaseAbril: metas.projetado_base_abril,
         projetadoReal: metas.projetado_real[key] ?? 0,
         recebido: t?.recebido ?? 0,

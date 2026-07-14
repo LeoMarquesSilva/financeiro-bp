@@ -102,11 +102,11 @@ const DEFAULT_VISIBLE = new Set(
 
 type ChartPoint = {
   mesLabel: string
-  meta: number
-  projetadoBaseAbril: number
-  projetadoReal: number
+  meta: number | null
+  projetadoBaseAbril: number | null
+  projetadoReal: number | null
   recebido: number | null
-  previsto: number
+  previsto: number | null
 }
 
 function formatYAxis(value: number): string {
@@ -124,23 +124,23 @@ function formatYAxisPercent(value: number): string {
 
 function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
   return data.map((p) => {
-    const meta = p.meta
+    const meta = p.meta ?? 0
     if (meta <= 0) {
       return {
         ...p,
-        meta: 0,
-        projetadoBaseAbril: 0,
-        projetadoReal: 0,
-        previsto: 0,
-        recebido: p.recebido != null ? 0 : null,
+        meta: null,
+        projetadoBaseAbril: null,
+        projetadoReal: null,
+        previsto: null,
+        recebido: null,
       }
     }
     return {
       mesLabel: p.mesLabel,
       meta: 100,
-      projetadoBaseAbril: (p.projetadoBaseAbril / meta) * 100,
-      projetadoReal: (p.projetadoReal / meta) * 100,
-      previsto: (p.previsto / meta) * 100,
+      projetadoBaseAbril: ((p.projetadoBaseAbril ?? 0) / meta) * 100,
+      projetadoReal: ((p.projetadoReal ?? 0) / meta) * 100,
+      previsto: ((p.previsto ?? 0) / meta) * 100,
       recebido: p.recebido != null ? (p.recebido / meta) * 100 : null,
     }
   })
@@ -187,7 +187,9 @@ function buildAreaGapData(
   deptRows: ReceitaRecebidoDepartamentoRow[],
   mes: number | null,
 ): AreaGapRow[] {
-  const escopo = mes == null ? rowsComDados : rows.filter((r) => r.mes === mes)
+  const escopo = (mes == null ? rowsComDados : rows.filter((r) => r.mes === mes)).filter(
+    (r) => r.meta > 0,
+  )
   const metaTotalEscopo = escopo.reduce((s, r) => s + r.meta, 0)
   const mesesEscopo = new Set(escopo.map((r) => r.mes))
 
@@ -223,7 +225,7 @@ function formatGap(value: number): string {
 type AreaLinhaPoint = {
   mes: number
   mesLabel: string
-  meta: number
+  meta: number | null
   previsto: number
   recebido: number | null
   inadimplencia: number | null
@@ -297,30 +299,28 @@ function buildAreaLinhaData(
   return rows.map((r) => ({
     mes: r.mes,
     mesLabel: r.mesLabel,
-    meta: (r.meta * pct) / 100,
+    meta: r.meta > 0 ? (r.meta * pct) / 100 : null,
     previsto: previstoPorMes.get(r.mes) ?? 0,
     recebido: valorRecebidoGrafico(recebidoPorMes.get(r.mes) ?? 0, ano, r.mes),
     inadimplencia: inadimplenciaPorMes.get(r.mes) ?? null,
   }))
 }
 
-/**
- * Rótulo do ponto que só aparece quando o valor muda em relação ao mês anterior —
- * evita poluir o gráfico repetindo o mesmo número em várias séries "planas" (ex.: Meta).
- */
+/** Rótulo do ponto da série de uma área. */
 function AreaLinhaChangeLabel({
   color,
   data,
-  dataKey,
   position = 'above',
   offset = 10,
+  stagger = 0,
   pctOfKey,
 }: {
   color: string
   data: AreaLinhaPoint[]
-  dataKey: keyof AreaLinhaPoint
   position?: 'above' | 'below' | 'right'
   offset?: number
+  /** Alterna a altura entre meses consecutivos para impedir colisão de rótulos completos. */
+  stagger?: number
   /** Se informado, exibe na segunda linha o percentual do valor sobre este campo no mesmo mês. */
   pctOfKey?: keyof AreaLinhaPoint
 }) {
@@ -329,12 +329,6 @@ function AreaLinhaChangeLabel({
     if (value == null || x == null || y == null || index == null) return null
     const num = typeof value === 'number' ? value : Number(value)
     if (!Number.isFinite(num)) return null
-
-    const prevRaw = index > 0 ? data[index - 1]?.[dataKey] : undefined
-    const prevNum = typeof prevRaw === 'number' ? prevRaw : null
-    if (index > 0 && prevNum != null && Math.round(prevNum * 100) === Math.round(num * 100)) {
-      return null
-    }
 
     const text = formatCurrency(num)
     let secondaryText: string | undefined
@@ -348,6 +342,7 @@ function AreaLinhaChangeLabel({
     const cx = Number(x)
     const cy = Number(y)
     const anchor = edgeAwareAnchor(index, data.length)
+    const adjustedOffset = offset + (index % 2 === 0 ? 0 : stagger)
 
     if (position === 'below') {
       return (
@@ -355,7 +350,7 @@ function AreaLinhaChangeLabel({
           text={text}
           secondaryText={secondaryText}
           x={cx}
-          y={cy + offset}
+          y={cy + adjustedOffset}
           color={color}
           textAnchor={anchor}
           dominantBaseline="hanging"
@@ -370,7 +365,7 @@ function AreaLinhaChangeLabel({
           text={text}
           secondaryText={secondaryText}
           x={rightAnchor === 'end' ? cx - 8 : cx + 8}
-          y={cy}
+          y={cy + (index % 2 === 0 ? -stagger / 2 : stagger / 2)}
           color={color}
           textAnchor={rightAnchor}
           dominantBaseline="middle"
@@ -383,7 +378,7 @@ function AreaLinhaChangeLabel({
         text={text}
         secondaryText={secondaryText}
         x={cx}
-        y={cy - offset}
+        y={cy - adjustedOffset}
         color={color}
         textAnchor={anchor}
         dominantBaseline="auto"
@@ -420,7 +415,9 @@ function AreaLinhaTooltip({
       <ul className="space-y-1">
         <li className="flex items-center justify-between gap-6">
           <span className="text-slate-600">Meta da área</span>
-          <span className="font-semibold tabular-nums text-slate-900">{formatCurrency(row.meta)}</span>
+          <span className="font-semibold tabular-nums text-slate-900">
+            {row.meta == null ? '—' : formatCurrency(row.meta)}
+          </span>
         </li>
         <li className="flex items-center justify-between gap-6">
           <span className="text-slate-600">Previsto</span>
@@ -864,7 +861,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     () =>
       rows.map((r) => ({
         mesLabel: r.mesLabel,
-        meta: r.meta,
+        meta: r.meta > 0 ? r.meta : null,
         projetadoBaseAbril: r.projetadoBaseAbril,
         projetadoReal: r.projetadoReal,
         recebido: valorRecebidoGrafico(r.recebido, ano, r.mes),
@@ -1150,9 +1147,9 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                       content={AreaLinhaChangeLabel({
                         color: s.color,
                         data: areaLinhaData,
-                        dataKey: s.key,
                         position: s.key === 'recebido' ? 'right' : 'above',
                         offset: s.key === 'previsto' ? 16 : 10,
+                        stagger: 18,
                       })}
                     />
                   )}
@@ -1177,9 +1174,9 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                       content={AreaLinhaChangeLabel({
                         color: s.color,
                         data: areaLinhaData,
-                        dataKey: s.key,
                         position: 'above',
                         offset: s.key === 'inadimplencia' ? 22 : 6,
+                        stagger: 18,
                         pctOfKey: s.key === 'inadimplencia' ? 'previsto' : undefined,
                       })}
                     />

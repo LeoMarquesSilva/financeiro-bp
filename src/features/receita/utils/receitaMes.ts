@@ -41,10 +41,13 @@ export function aplicarMetaComRateioDeGap<T extends MetaRow>(
     if (isMesFuturo(ano, r.mes, ref)) break
 
     const metaMes = metaAjustada.get(r.mes) ?? r.meta
+    if (metaMes <= 0) continue
     const faltou = metaMes - r.recebido
     if (faltou <= 0) continue
 
-    const mesesRestantes = ordenados.slice(i + 1)
+    const mesesRestantes = ordenados.filter(
+      (futuro) => futuro.mes > r.mes && (metaAjustada.get(futuro.mes) ?? futuro.meta) > 0,
+    )
     if (mesesRestantes.length === 0) continue
 
     const parcela = faltou / mesesRestantes.length

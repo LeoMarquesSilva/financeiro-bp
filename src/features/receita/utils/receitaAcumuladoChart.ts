@@ -19,12 +19,15 @@ export function buildAcumuladoChartData(
 
   return rows.map((r) => {
     const futuro = isMesFuturo(ano, r.mes, ref)
+    const possuiMeta = r.meta > 0
 
-    if (!futuro) {
+    if (!futuro && possuiMeta) {
       recebidoAcumulado += r.recebido
     }
-    previstoAcumulado += r.previsto
-    metaAcumulada += r.meta
+    if (possuiMeta) {
+      previstoAcumulado += r.previsto
+      metaAcumulada += r.meta
+    }
 
     return {
       mes: r.mes,
@@ -84,10 +87,13 @@ export function buildAcumuladoAreaPercentData(
 
   return rows.map((r) => {
     const futuro = isMesFuturo(ano, r.mes, ref)
-    metaAcumulada += r.meta
-    previstoAcumulado += r.previsto
+    const possuiMeta = r.meta > 0
+    if (possuiMeta) {
+      metaAcumulada += r.meta
+      previstoAcumulado += r.previsto
+    }
 
-    if (!futuro) {
+    if (!futuro && possuiMeta) {
       for (const d of deptByMes.get(r.mes) ?? []) {
         const dataKey = departamentoDataKey(d.departamento)
         if (!acumPorDataKey.has(dataKey)) continue

@@ -7,6 +7,7 @@ export const KEY_RECEITA_METAS = 'receita_metas'
 const DEFAULT_METAS: ReceitaMetasConfig = {
   ano: 2026,
   meses: [5, 6, 7, 8, 9, 10, 11, 12],
+  meses_meta: [6, 7, 8, 9, 10, 11, 12],
   meta: 1428571.43,
   projetado_base_abril: 1173008.66,
   projetado_real: {
@@ -28,6 +29,8 @@ function isReceitaMetasConfig(v: unknown): v is ReceitaMetasConfig {
     typeof o.ano === 'number' &&
     Array.isArray(o.meses) &&
     o.meses.every((m) => typeof m === 'number') &&
+    (o.meses_meta == null ||
+      (Array.isArray(o.meses_meta) && o.meses_meta.every((m) => typeof m === 'number'))) &&
     typeof o.meta === 'number' &&
     typeof o.projetado_base_abril === 'number' &&
     o.projetado_real != null &&
@@ -44,6 +47,9 @@ function normalizeMetas(raw: ReceitaMetasConfig): ReceitaMetasConfig {
   return {
     ano: raw.ano,
     meses: [...raw.meses].sort((a, b) => a - b),
+    meses_meta: [...(raw.meses_meta ?? raw.meses)]
+      .filter((mes) => raw.meses.includes(mes))
+      .sort((a, b) => a - b),
     meta: Number(raw.meta) || 0,
     projetado_base_abril: Number(raw.projetado_base_abril) || 0,
     projetado_real,

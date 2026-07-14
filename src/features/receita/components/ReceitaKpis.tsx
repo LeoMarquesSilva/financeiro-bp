@@ -148,11 +148,13 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
   const rowsComDados = rows.filter((r) => !isMesFuturo(ano, r.mes))
   const totalRecebido = rowsComDados.reduce((s, r) => s + r.recebido, 0)
   const totalPrevisto = rows.reduce((s, r) => s + r.previsto, 0)
-  const metaAcumulada = rowsComDados.reduce((s, r) => s + r.meta, 0)
-  const pctMeta = metaAcumulada > 0 ? (totalRecebido / metaAcumulada) * 100 : 0
+  const rowsComMeta = rowsComDados.filter((r) => r.meta > 0)
+  const recebidoNoPeriodoComMeta = rowsComMeta.reduce((s, r) => s + r.recebido, 0)
+  const metaAcumulada = rowsComMeta.reduce((s, r) => s + r.meta, 0)
+  const pctMeta = metaAcumulada > 0 ? (recebidoNoPeriodoComMeta / metaAcumulada) * 100 : 0
   const totalEncargos = rowsComDados.reduce((s, r) => s + r.encargos, 0)
 
-  const metaMensal = rows[0]?.meta ?? 0
+  const metaMensal = rows.find((r) => r.meta > 0)?.meta ?? 0
 
   const mesesComEncargos = rowsComDados.filter((r) => r.encargos > 0).map((r) => r.mes)
   const encargosPeriodo = periodoAnoLabel(mesesComEncargos, ano)
@@ -228,7 +230,11 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           icon={TrendingUp}
           label="Atingimento da meta"
           value={formatPercent(pctMeta)}
-          hint={totalRecebido >= metaAcumulada ? 'Meta atingida no período' : 'Recebido ÷ meta acumulada'}
+          hint={
+            recebidoNoPeriodoComMeta >= metaAcumulada
+              ? 'Meta atingida no período'
+              : 'Recebido ÷ meta acumulada'
+          }
           iconColor={pctIcon}
           valueColor={pctColor}
         />

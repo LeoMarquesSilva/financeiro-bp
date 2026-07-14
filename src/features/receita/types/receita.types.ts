@@ -5,6 +5,11 @@ export type ReceitaMetasConfig = {
   ano: number
   /** Meses exibidos no gráfico (1–12). */
   meses: number[]
+  /**
+   * Meses que possuem meta definida. Quando ausente, todos os `meses` têm meta
+   * (compatibilidade com as configurações anteriores).
+   */
+  meses_meta?: number[]
   meta: number
   projetado_base_abril: number
   /** Chave = número do mês (string "5" … "12"). */
