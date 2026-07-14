@@ -1190,7 +1190,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
           </ResponsiveContainer>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-3 px-1">
+          <div data-chart-legend className="mt-3 flex flex-wrap items-center justify-center gap-3 px-1">
             {AREA_LINHA_SERIES.map((s) => (
               <span key={s.key} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
                 <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
