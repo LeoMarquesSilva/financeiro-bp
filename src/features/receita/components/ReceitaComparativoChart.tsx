@@ -33,14 +33,22 @@ import type { ReceitaInadimplenciaDepartamentoMensalRow } from '../types/receita
 import {
   RECEITA_CHART_AXIS,
   RECEITA_CHART_LABEL,
+  RECEITA_CHART_LAYOUT,
   RECEITA_COLORS,
   RECEITA_DEPARTAMENTO_CORES,
   RECEITA_DEPARTAMENTO_LABELS,
   RECEITA_META_CONTRIBUICAO_AREA,
 } from '../constants'
+import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
+import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
 import { ReceitaRecebidoDetalheSheet } from './ReceitaRecebidoDetalheSheet'
 import { ReceitaSemAreaDetalheSheet } from './ReceitaSemAreaDetalheSheet'
 import { isMesFuturo, valorRecebidoGrafico } from '../utils/receitaMes'
+import {
+  edgeAwareAnchor,
+  labelYForPosition,
+  resolveLabelVerticalPosition,
+} from '../utils/chartLabelPlacement'
 import {
   departamentoNormKey,
   formatPercentLabel,
@@ -343,20 +351,7 @@ function AreaLinhaChangeLabel({
     const cy = Number(y)
     const anchor = edgeAwareAnchor(index, data.length)
     const adjustedOffset = offset + (index % 2 === 0 ? 0 : stagger)
-
-    if (position === 'below') {
-      return (
-        <ChartLabelWithBackdrop
-          text={text}
-          secondaryText={secondaryText}
-          x={cx}
-          y={cy + adjustedOffset}
-          color={color}
-          textAnchor={anchor}
-          dominantBaseline="hanging"
-        />
-      )
-    }
+    const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
     if (position === 'right') {
       const rightAnchor = anchor === 'end' ? 'end' : 'start'
@@ -373,15 +368,23 @@ function AreaLinhaChangeLabel({
       )
     }
 
+    const vertical = resolveLabelVerticalPosition(
+      cy,
+      adjustedOffset,
+      secondaryText,
+      position === 'below' ? 'below' : 'above',
+    )
+    const labelY = labelYForPosition(cy, adjustedOffset, vertical)
+
     return (
       <ChartLabelWithBackdrop
         text={text}
         secondaryText={secondaryText}
-        x={cx}
-        y={cy - adjustedOffset}
+        x={labelX}
+        y={labelY}
         color={color}
         textAnchor={anchor}
-        dominantBaseline="auto"
+        dominantBaseline={vertical === 'above' ? 'auto' : 'hanging'}
       />
     )
   }
@@ -530,20 +533,8 @@ function AreaGapTooltip({
 }
 
 /**
- * Ancora o rótulo pra dentro do gráfico nas pontas (1º e último ponto) — evita que o texto
- * "vaze" pra fora da área do gráfico e fique sobreposto ao eixo Y ou cortado no eixo direito.
+ * Texto do rótulo com um fundo claro por trás — garante legibilidade mesmo se algo cruzar por baixo.
  */
-function edgeAwareAnchor(
-  index: number | undefined,
-  total: number | undefined,
-): 'start' | 'middle' | 'end' {
-  if (index == null || total == null || total <= 1) return 'middle'
-  if (index <= 0) return 'start'
-  if (index >= total - 1) return 'end'
-  return 'middle'
-}
-
-/** Texto do rótulo com um fundo claro por trás — garante legibilidade mesmo se algo cruzar por baixo. */
 function ChartLabelWithBackdrop({
   text,
   secondaryText,
@@ -566,12 +557,13 @@ function ChartLabelWithBackdrop({
   const boxHeight = secondaryText ? 29 : 15
   const boxX =
     textAnchor === 'start' ? x - 3 : textAnchor === 'end' ? x - boxWidth + 3 : x - boxWidth / 2
-  const boxY =
+  let boxY =
     dominantBaseline === 'hanging'
       ? y - 2
       : dominantBaseline === 'middle'
         ? y - boxHeight / 2
         : y - 12
+  boxY = Math.max(RECEITA_CHART_LAYOUT.labelMinY, boxY)
 
   return (
     <g pointerEvents="none">
@@ -617,8 +609,17 @@ function ComparativoDotLabel({
     const anchor = edgeAwareAnchor(index, total)
 
     if (position === 'above') {
+      const vertical = resolveLabelVerticalPosition(cy, 10, undefined, 'above')
+      const labelY = labelYForPosition(cy, 10, vertical)
       return (
-        <ChartLabelWithBackdrop text={text} x={cx} y={cy - 10} color={color} textAnchor={anchor} dominantBaseline="auto" />
+        <ChartLabelWithBackdrop
+          text={text}
+          x={cx}
+          y={labelY}
+          color={color}
+          textAnchor={anchor}
+          dominantBaseline={vertical === 'above' ? 'auto' : 'hanging'}
+        />
       )
     }
 
@@ -773,6 +774,12 @@ type Props = {
 
 export function ReceitaComparativoChart({ rows, ano }: Props) {
   const [detalheMes, setDetalheMes] = useState<ReceitaMesRow | null>(null)
+  const [areaMesDetalhe, setAreaMesDetalhe] = useState<{
+    mes: number
+    mesLabel: string
+    total: number
+    serie: 'recebido' | 'previsto'
+  } | null>(null)
   const [semAreaAberto, setSemAreaAberto] = useState(false)
   const [tabelaAberta, setTabelaAberta] = useState(false)
   const [percentMode, setPercentMode] = useState(false)
@@ -904,6 +911,17 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     )
   }, [rows, deptRows, previstoDeptRows, inadDeptRows, areaLinhaSelecionada, ano])
 
+  const abrirAreaMesDetalhe = (point: AreaLinhaPoint, serie: 'recebido' | 'previsto') => {
+    const total = serie === 'recebido' ? point.recebido : point.previsto
+    if (total == null || total <= 0) return
+    setAreaMesDetalhe({
+      mes: point.mes,
+      mesLabel: point.mesLabel,
+      total,
+      serie,
+    })
+  }
+
   const areaGapMetaTotal = useMemo(
     () => areaGapData.reduce((s, a) => s + a.meta, 0),
     [areaGapData],
@@ -916,12 +934,13 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
   const totais = useMemo(
     () => ({
       meta: rowsComDados.reduce((s, r) => s + r.meta, 0),
+      metaBase: rows.filter((r) => r.metaBase > 0).reduce((s, r) => s + r.metaBase, 0),
       projetadoBaseAbril: rowsComDados.reduce((s, r) => s + r.projetadoBaseAbril, 0),
       projetadoReal: rowsComDados.reduce((s, r) => s + r.projetadoReal, 0),
       recebido: rowsComDados.reduce((s, r) => s + r.recebido, 0),
       previsto: rows.reduce((s, r) => s + r.previsto, 0),
     }),
-    [rowsComDados],
+    [rows, rowsComDados],
   )
 
   const pctTotal = pctMeta(totais.recebido, totais.meta)
@@ -1089,7 +1108,10 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
           </div>
           <div data-chart-plot className="h-[300px] min-h-[300px] w-full min-w-0">
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
-            <ComposedChart data={areaLinhaData} margin={{ left: 4, right: 12, top: 16, bottom: 4 }}>
+            <ComposedChart
+              data={areaLinhaData}
+              margin={RECEITA_CHART_LAYOUT.marginWithPointLabels}
+            >
               <defs>
                 <linearGradient id="areaLinhaPrevistoGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={RECEITA_COLORS.previsto.hex} stopOpacity={0.2} />
@@ -1117,6 +1139,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                 tickLine={false}
                 width={60}
                 domain={[0, 'auto']}
+                padding={{ top: RECEITA_CHART_LAYOUT.yAxisPaddingTopWithLabels }}
               />
 
               <Tooltip
@@ -1126,26 +1149,83 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                 cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
               />
 
-              {AREA_LINHA_SERIES.filter((s) => s.type === 'area').map((s) => (
+              {AREA_LINHA_SERIES.filter((s) => s.type === 'area').map((s) => {
+                const seriesColor = s.color
+                const serie =
+                  s.key === 'recebido' || s.key === 'previsto' ? s.key : null
+                return (
                 <Area
                   key={s.key}
                   type="monotone"
                   dataKey={s.key}
-                  stroke={s.color}
+                  stroke={seriesColor}
                   strokeWidth={2.5}
                   fill={`url(#${'gradientId' in s ? s.gradientId : ''})`}
-                  dot={({ cx, cy, value }) => {
+                  dot={({ cx, cy, value, payload }) => {
                     if (value == null || cx == null || cy == null) return null
-                    return <circle cx={cx} cy={cy} r={3} fill={s.color} />
+                    if (!serie) {
+                      return <circle cx={cx} cy={cy} r={3} fill={seriesColor} />
+                    }
+                    const point = payload as AreaLinhaPoint
+                    const label =
+                      serie === 'recebido'
+                        ? `Ver recebido por grupo — ${point.mesLabel}`
+                        : `Ver previsto por grupo — ${point.mesLabel}`
+                    return (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={3}
+                        fill={seriesColor}
+                        className="cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={label}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          abrirAreaMesDetalhe(point, serie)
+                        }}
+                      />
+                    )
                   }}
-                  activeDot={{ r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                  activeDot={
+                    serie
+                      ? (props) => {
+                          const { cx, cy, payload } = props
+                          if (cx == null || cy == null) return null
+                          const point = payload as AreaLinhaPoint
+                          const label =
+                            serie === 'recebido'
+                              ? `Ver recebido por grupo — ${point.mesLabel}`
+                              : `Ver previsto por grupo — ${point.mesLabel}`
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={5}
+                              fill={seriesColor}
+                              stroke="#fff"
+                              strokeWidth={2}
+                              className="cursor-pointer"
+                              role="button"
+                              tabIndex={0}
+                              aria-label={label}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                abrirAreaMesDetalhe(point, serie)
+                              }}
+                            />
+                          )
+                        }
+                      : { r: 5, fill: seriesColor, stroke: '#fff', strokeWidth: 2 }
+                  }
                   connectNulls={false}
                 >
                   {(s.key === 'previsto' || s.key === 'recebido') && (
                     <LabelList
                       dataKey={s.key}
                       content={AreaLinhaChangeLabel({
-                        color: s.color,
+                        color: seriesColor,
                         data: areaLinhaData,
                         position: s.key === 'recebido' ? 'right' : 'above',
                         offset: s.key === 'previsto' ? 16 : 10,
@@ -1154,7 +1234,8 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                     />
                   )}
                 </Area>
-              ))}
+                )
+              })}
 
               {AREA_LINHA_SERIES.filter((s) => s.type === 'line').map((s) => (
                 <Line
@@ -1367,7 +1448,11 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
             <ComposedChart
               data={chartData}
-              margin={{ left: 4, right: percentMode ? 48 : 12, top: percentMode ? 8 : 16, bottom: 4 }}
+              margin={
+                percentMode
+                  ? RECEITA_CHART_LAYOUT.marginDefault
+                  : RECEITA_CHART_LAYOUT.marginWithPointLabels
+              }
             >
               <defs>
                 <linearGradient id="receitaRecebidoGradient" x1="0" y1="0" x2="0" y2="1">
@@ -1396,6 +1481,9 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                 tickLine={false}
                 width={percentMode ? 48 : 60}
                 domain={[0, 'auto']}
+                padding={
+                  percentMode ? undefined : { top: RECEITA_CHART_LAYOUT.yAxisPaddingTopWithLabels }
+                }
               />
 
               <Tooltip
@@ -1672,6 +1760,36 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
           mes={detalheMes.mes}
           mesLabel={detalheMes.mesLabel}
           totalRecebido={detalheMes.recebido}
+        />
+      )}
+
+      {areaMesDetalhe?.serie === 'recebido' && areaLinhaSelecionada && (
+        <ReceitaAreaRecebidoGrupoSheet
+          open={!!areaMesDetalhe}
+          onOpenChange={(open) => {
+            if (!open) setAreaMesDetalhe(null)
+          }}
+          ano={ano}
+          mes={areaMesDetalhe.mes}
+          mesLabel={areaMesDetalhe.mesLabel}
+          areaKey={areaLinhaSelecionada}
+          areaLabel={RECEITA_DEPARTAMENTO_LABELS[areaLinhaSelecionada] ?? areaLinhaSelecionada}
+          totalRecebido={areaMesDetalhe.total}
+        />
+      )}
+
+      {areaMesDetalhe?.serie === 'previsto' && areaLinhaSelecionada && (
+        <ReceitaAreaPrevistoGrupoSheet
+          open={!!areaMesDetalhe}
+          onOpenChange={(open) => {
+            if (!open) setAreaMesDetalhe(null)
+          }}
+          ano={ano}
+          mes={areaMesDetalhe.mes}
+          mesLabel={areaMesDetalhe.mesLabel}
+          areaKey={areaLinhaSelecionada}
+          areaLabel={RECEITA_DEPARTAMENTO_LABELS[areaLinhaSelecionada] ?? areaLinhaSelecionada}
+          totalPrevisto={areaMesDetalhe.total}
         />
       )}
 

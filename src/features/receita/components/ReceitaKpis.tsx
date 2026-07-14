@@ -150,11 +150,14 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
   const totalPrevisto = rows.reduce((s, r) => s + r.previsto, 0)
   const rowsComMeta = rowsComDados.filter((r) => r.meta > 0)
   const recebidoNoPeriodoComMeta = rowsComMeta.reduce((s, r) => s + r.recebido, 0)
-  const metaAcumulada = rowsComMeta.reduce((s, r) => s + r.meta, 0)
-  const pctMeta = metaAcumulada > 0 ? (recebidoNoPeriodoComMeta / metaAcumulada) * 100 : 0
+  const metaAcumuladaPeriodo = rowsComMeta.reduce((s, r) => s + r.meta, 0)
+  const metaAnual = rows.filter((r) => r.metaBase > 0).reduce((s, r) => s + r.metaBase, 0)
+  const pctMeta =
+    metaAcumuladaPeriodo > 0 ? (recebidoNoPeriodoComMeta / metaAcumuladaPeriodo) * 100 : 0
   const totalEncargos = rowsComDados.reduce((s, r) => s + r.encargos, 0)
 
-  const metaMensal = rows.find((r) => r.meta > 0)?.meta ?? 0
+  const ultimoMesComMeta = [...rowsComDados].reverse().find((r) => r.meta > 0)
+  const metaMensal = ultimoMesComMeta?.meta ?? rows.find((r) => r.meta > 0)?.meta ?? 0
 
   const mesesComEncargos = rowsComDados.filter((r) => r.encargos > 0).map((r) => r.mes)
   const encargosPeriodo = periodoAnoLabel(mesesComEncargos, ano)
@@ -220,9 +223,9 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
         <KPIItem
           icon={Target}
           label="Meta acumulada"
-          value={formatCurrencyCompact(metaAcumulada)}
-          valueTitle={formatCurrency(metaAcumulada)}
-          hint={metaMensal > 0 ? `${formatCurrencyCompact(metaMensal)}/mês` : undefined}
+          value={formatCurrencyCompact(metaAnual)}
+          valueTitle={formatCurrency(metaAnual)}
+          hint={metaMensal > 0 ? `${formatCurrencyCompact(metaMensal)}/mês (ajustada)` : undefined}
           iconColor={RECEITA_COLORS.meta.bgIcon}
           valueColor={RECEITA_COLORS.meta.textStrong}
         />
@@ -231,9 +234,9 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           label="Atingimento da meta"
           value={formatPercent(pctMeta)}
           hint={
-            recebidoNoPeriodoComMeta >= metaAcumulada
+            recebidoNoPeriodoComMeta >= metaAcumuladaPeriodo
               ? 'Meta atingida no período'
-              : 'Recebido ÷ meta acumulada'
+              : 'Recebido ÷ meta do período (com rateio)'
           }
           iconColor={pctIcon}
           valueColor={pctColor}

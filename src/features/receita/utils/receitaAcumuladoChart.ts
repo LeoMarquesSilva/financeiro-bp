@@ -5,7 +5,46 @@ import type {
   ReceitaRecebidoDepartamentoRow,
 } from '../types/receita.types'
 import { departamentoDataKey } from './receitaColunasChart'
-import { isMesFuturo } from './receitaMes'
+import { isMesFechado, isMesFuturo } from './receitaMes'
+
+/**
+ * Meta acumulada com trajetória ajustada pelo gap — fecha em R$ 10 mi no último mês.
+ *
+ * - Meses **fechados**: rampa original (soma de metaBase).
+ * - Mês **corrente e futuros**: recebido já realizado nos fechados + metas mensais ajustadas
+ *   dos meses restantes (1,4 mi + gap rateado).
+ *
+ * Não soma metaBase + meta ajustada no mesmo mês (isso inflava a linha para ~10,2 mi).
+ */
+export function metaAcumuladaPorMes(
+  ano: number,
+  rows: ReceitaMesRow[],
+  ref = new Date(),
+): Map<number, number> {
+  const ordenados = [...rows].sort((a, b) => a.mes - b.mes)
+  const out = new Map<number, number>()
+
+  let metaBaseCum = 0
+  let recebidoFechado = 0
+  let metaRestanteAcum = 0
+
+  for (const r of ordenados) {
+    if (r.metaBase <= 0) continue
+
+    metaBaseCum += r.metaBase
+
+    if (isMesFechado(ano, r.mes, ref)) {
+      recebidoFechado += r.recebido
+      metaRestanteAcum = 0
+      out.set(r.mes, metaBaseCum)
+    } else {
+      metaRestanteAcum += r.meta
+      out.set(r.mes, recebidoFechado + metaRestanteAcum)
+    }
+  }
+
+  return out
+}
 
 /** Série acumulada mês a mês (soma dos meses exibidos no dashboard). */
 export function buildAcumuladoChartData(
@@ -13,20 +52,19 @@ export function buildAcumuladoChartData(
   rows: ReceitaMesRow[],
   ref = new Date(),
 ): ReceitaAcumuladoChartPoint[] {
+  const metaPorMes = metaAcumuladaPorMes(ano, rows, ref)
   let recebidoAcumulado = 0
   let previstoAcumulado = 0
-  let metaAcumulada = 0
 
   return rows.map((r) => {
     const futuro = isMesFuturo(ano, r.mes, ref)
-    const possuiMeta = r.meta > 0
+    const possuiMeta = r.metaBase > 0
 
     if (!futuro && possuiMeta) {
       recebidoAcumulado += r.recebido
     }
     if (possuiMeta) {
       previstoAcumulado += r.previsto
-      metaAcumulada += r.meta
     }
 
     return {
@@ -34,7 +72,7 @@ export function buildAcumuladoChartData(
       mesLabel: r.mesLabel,
       recebidoAcumulado: futuro ? null : recebidoAcumulado,
       previstoAcumulado,
-      metaAcumulada,
+      metaAcumulada: possuiMeta ? (metaPorMes.get(r.mes) ?? 0) : 0,
     }
   })
 }
@@ -82,14 +120,15 @@ export function buildAcumuladoAreaPercentData(
     acumPorDataKey.set(slice.dataKey, 0)
   }
 
-  let metaAcumulada = 0
+  const metaPorMes = metaAcumuladaPorMes(ano, rows, ref)
   let previstoAcumulado = 0
 
   return rows.map((r) => {
     const futuro = isMesFuturo(ano, r.mes, ref)
-    const possuiMeta = r.meta > 0
+    const possuiMeta = r.metaBase > 0
+    const metaAcumulada = possuiMeta ? (metaPorMes.get(r.mes) ?? 0) : 0
+
     if (possuiMeta) {
-      metaAcumulada += r.meta
       previstoAcumulado += r.previsto
     }
 

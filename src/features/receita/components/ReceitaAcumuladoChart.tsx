@@ -399,7 +399,7 @@ export function ReceitaAcumuladoChart({
                 ? `Cada área mostra sua contribuição em % da meta acumulada · ${ano}`
                 : percentMode
                   ? `Recebido e previsto em % da meta acumulada · ideal para apresentação (${ano})`
-                  : `Recebido acumulado só até o mês atual · previsto e meta em todos os meses (${ano})`}
+                  : `Recebido acumulado só até o mês atual · meta acumulada ajustada pelo gap, fecha em R$ 10 mi (${ano})`}
             </p>
           </div>
         </div>

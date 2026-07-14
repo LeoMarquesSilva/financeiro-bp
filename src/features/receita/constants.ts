@@ -112,7 +112,7 @@ export const RECEITA_COLORS = {
  * Garante cores distintas — sem hash (evita colisões, ex.: vários em cinza).
  */
 export const RECEITA_DEPARTAMENTO_CORES: Record<string, string> = {
-  insolvencia: '#6d28d9',
+  insolvencia: '#7f1d1d',
   civel: '#dc2626',
   civel_insolvencia: '#9333ea',
   contratos: '#7c2d12',
@@ -203,6 +203,34 @@ export const RECEITA_CHART_LABEL = {
   minBarHeight: 14,
   minStackHeight: 20,
 } as const
+
+/**
+ * Layout de gráficos com rótulos em pontos/linhas.
+ * Rótulos nunca podem ser cortados no topo — use margem + padding do eixo Y + fallback abaixo.
+ */
+export const RECEITA_CHART_LAYOUT = {
+  plotHeightPx: 300,
+  marginWithPointLabels: { left: 4, right: 12, top: 28, bottom: 4 },
+  marginDefault: { left: 4, right: 12, top: 16, bottom: 4 },
+  /** Espaço reservado ao eixo X dentro da área do gráfico (ticks + rótulos). */
+  xAxisReservedPx: 36,
+  /** Espaço extra no topo do domínio Y para caber rótulos acima do ponto mais alto. */
+  yAxisPaddingTopWithLabels: 56,
+  labelMinY: 4,
+  labelMinBottom: 8,
+} as const
+
+/** Altura útil do plot para posicionar rótulos (coordenadas cy do Recharts). */
+export function receitaChartInnerPlotHeight(
+  margin: { top: number; bottom: number } = RECEITA_CHART_LAYOUT.marginWithPointLabels,
+): number {
+  return (
+    RECEITA_CHART_LAYOUT.plotHeightPx -
+    margin.top -
+    margin.bottom -
+    RECEITA_CHART_LAYOUT.xAxisReservedPx
+  )
+}
 
 /** Cores de eixo e rótulos — preto para legibilidade em fundo branco (PPT). */
 export const RECEITA_CHART_AXIS = {

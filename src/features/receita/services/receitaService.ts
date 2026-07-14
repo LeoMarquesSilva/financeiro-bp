@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabaseClient'
 import { collectPaginatedRows } from '@/lib/supabasePaginate'
 import { mesAbrev } from '../constants'
-import { aplicarMetaComRateioDeGap } from '../utils/receitaMes'
+import { aplicarMetaRebalanceada } from '../utils/receitaMes'
 import type {
   ReceitaDashboardData,
   ReceitaMetasConfig,
@@ -46,14 +46,18 @@ export const receitaService = {
     const totais = await this.fetchTotaisMensais(metas.ano)
     const mesesOrdenados = [...metas.meses].sort((a, b) => a - b)
     const mesesComMeta = new Set(metas.meses_meta ?? metas.meses)
+    const metaMensalBase = metas.meta
+    const metaAnual = metaMensalBase * mesesComMeta.size
 
     const rowsBase: ReceitaMesRow[] = mesesOrdenados.map((mes) => {
       const t = totais.get(mes)
       const key = String(mes)
+      const possuiMeta = mesesComMeta.has(mes)
       return {
         mes,
         mesLabel: mesAbrev(mes),
-        meta: mesesComMeta.has(mes) ? metas.meta : 0,
+        meta: possuiMeta ? metaMensalBase : 0,
+        metaBase: possuiMeta ? metaMensalBase : 0,
         projetadoBaseAbril: metas.projetado_base_abril,
         projetadoReal: metas.projetado_real[key] ?? 0,
         recebido: t?.recebido ?? 0,
@@ -62,9 +66,7 @@ export const receitaService = {
       }
     })
 
-    // Gap de meses fechados que não bateram a meta é rateado (partes iguais) entre os meses
-    // restantes do ano, reforçando a meta deles em cascata (ver aplicarMetaComRateioDeGap).
-    const rows = aplicarMetaComRateioDeGap(rowsBase, metas.ano)
+    const rows = aplicarMetaRebalanceada(rowsBase, metaAnual, metas.ano)
 
     return { ano: metas.ano, rows }
   },
@@ -142,6 +144,36 @@ export const receitaService = {
         .order('id', { ascending: true })
         .range(from, to),
     )
+  },
+
+  /** Itens recebidos no mês filtrados por área (chave normalizada do departamento). */
+  async fetchRecebidoItensPorArea(
+    ano: number,
+    mes: number,
+    areaKey: string,
+  ): Promise<ReceitaRecebidoItemRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_recebido_itens_area' as never,
+      { p_ano: ano, p_mes: mes, p_area_key: areaKey } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ci_item: Number(row.ci_item) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      cliente: row.cliente != null ? String(row.cliente) : null,
+      descricao: row.descricao != null ? String(row.descricao) : null,
+      nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
+      data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
+      valor_recebido: Number(row.valor_recebido ?? row.valor_pago_item) || 0,
+      valor_encargos: Number(row.valor_encargos) || 0,
+      valor_pago_item: Number(row.valor_pago_item) || 0,
+      valor_fluxo_item:
+        row.valor_fluxo_item != null && row.valor_fluxo_item !== ''
+          ? Number(row.valor_fluxo_item)
+          : null,
+      plano_contas: String(row.plano_contas ?? ''),
+      situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+    }))
   },
 
   async fetchRecebidoItens(
@@ -254,6 +286,36 @@ export const receitaService = {
         total: Number(row.total) || 0,
       }),
     )
+  },
+
+  /** Itens previstos no mês filtrados por área (chave normalizada do departamento). */
+  async fetchPrevistoItensPorArea(
+    ano: number,
+    mes: number,
+    areaKey: string,
+    incluirInativos = true,
+  ): Promise<ReceitaPrevistoItemRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_previsto_itens_area' as never,
+      {
+        p_ano: ano,
+        p_mes: mes,
+        p_area_key: areaKey,
+        p_incluir_inativos: incluirInativos,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ci_item: Number(row.ci_item) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      cliente: row.cliente != null ? String(row.cliente) : null,
+      descricao: row.descricao != null ? String(row.descricao) : null,
+      nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
+      data_vencimento: row.data_vencimento != null ? String(row.data_vencimento) : null,
+      valor_item: Number(row.valor_item) || 0,
+      plano_contas: String(row.plano_contas ?? ''),
+      situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+    }))
   },
 
   async fetchPrevistoItens(

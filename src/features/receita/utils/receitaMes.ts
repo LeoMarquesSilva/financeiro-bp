@@ -7,6 +7,15 @@ export function isMesFuturo(ano: number, mes: number, ref = new Date()): boolean
   return mes > m
 }
 
+/** Mês já encerrado (anterior ao mês corrente no calendário). */
+export function isMesFechado(ano: number, mes: number, ref = new Date()): boolean {
+  const y = ref.getFullYear()
+  const m = ref.getMonth() + 1
+  if (ano < y) return true
+  if (ano > y) return false
+  return mes < m
+}
+
 /** Recebido: null em mês futuro (ainda não houve pagamento); zero mantém zero em mês passado/atual. */
 export function valorRecebidoGrafico(
   valor: number,
@@ -17,44 +26,70 @@ export function valorRecebidoGrafico(
   return isMesFuturo(ano, mes, ref) ? null : valor
 }
 
-type MetaRow = { mes: number; meta: number; recebido: number }
+type MetaRow = { mes: number; meta: number; metaBase?: number; recebido: number }
 
 /**
- * Rateia em cascata o gap (meta − recebido) de meses já fechados que não bateram a meta,
- * somando o valor faltante — dividido em partes iguais — à meta dos meses restantes do ano.
+ * Rebalanceia a meta dos meses restantes quando um mês **fechado** não atinge a meta.
  *
- * Ex.: meta mensal R$1,42mi; junho recebeu R$1,185mi (faltou ~R$236mil) → esse valor é somado
- * (dividido igualmente) à meta de jul-dez. Se julho, já com a meta reforçada, também não bater,
- * o novo gap é rateado entre ago-dez, e assim por diante até dezembro. Excedente (mês que superou
- * a meta) não é descontado dos meses futuros — só o que faltou é repassado.
+ * Fórmula: cada mês futuro = metaBase + (gap do mês fechado) ÷ meses restantes.
+ * Ex.: junho meta R$ 1,4 mi não atingida → julho = R$ 1,4 mi + faltou(jun) ÷ 6.
+ *
+ * - Meses fechados mantêm a meta que vigorou naquele mês.
+ * - Gaps de vários meses fechados se acumulam nos meses futuros.
+ * - Excedente (mês acima da meta) não reduz metas futuras.
+ * - A meta **mensal** ajustada sobe (1,4 mi + gap rateado); a meta **acumulada** no gráfico
+ *   usa recebido fechado + metas restantes e fecha em R$ 10 mi.
+ *
+ * Use `meta` (ajustada) para atingimento mensal e comparativo.
+ * Use `metaBase` (fixa) para o teto anual em KPIs.
  */
-export function aplicarMetaComRateioDeGap<T extends MetaRow>(
+export function aplicarMetaRebalanceada<T extends MetaRow>(
   rows: T[],
+  _metaAnual: number,
   ano: number,
   ref = new Date(),
 ): T[] {
   const ordenados = [...rows].sort((a, b) => a.mes - b.mes)
-  const metaAjustada = new Map<number, number>(ordenados.map((r) => [r.mes, r.meta]))
+  const comMeta = ordenados.filter((r) => r.meta > 0)
+  if (comMeta.length === 0) return rows
 
-  for (let i = 0; i < ordenados.length; i++) {
-    const r = ordenados[i]
-    if (isMesFuturo(ano, r.mes, ref)) break
+  const metaEfetiva = new Map<number, number>(
+    comMeta.map((r) => [r.mes, r.metaBase ?? r.meta]),
+  )
 
-    const metaMes = metaAjustada.get(r.mes) ?? r.meta
+  for (const r of comMeta) {
+    if (!isMesFechado(ano, r.mes, ref)) break
+
+    const metaMes = metaEfetiva.get(r.mes) ?? r.meta
     if (metaMes <= 0) continue
+
     const faltou = metaMes - r.recebido
     if (faltou <= 0) continue
 
-    const mesesRestantes = ordenados.filter(
-      (futuro) => futuro.mes > r.mes && (metaAjustada.get(futuro.mes) ?? futuro.meta) > 0,
-    )
-    if (mesesRestantes.length === 0) continue
+    const futuros = comMeta.filter((f) => f.mes > r.mes)
+    if (futuros.length === 0) continue
 
-    const parcela = faltou / mesesRestantes.length
-    for (const futuro of mesesRestantes) {
-      metaAjustada.set(futuro.mes, (metaAjustada.get(futuro.mes) ?? futuro.meta) + parcela)
+    const parcela = faltou / futuros.length
+    for (const f of futuros) {
+      metaEfetiva.set(f.mes, (metaEfetiva.get(f.mes) ?? 0) + parcela)
     }
   }
 
-  return rows.map((r) => ({ ...r, meta: metaAjustada.get(r.mes) ?? r.meta }))
+  return rows.map((r) => ({
+    ...r,
+    metaBase: r.metaBase ?? (r.meta > 0 ? r.meta : 0),
+    meta: r.meta > 0 ? (metaEfetiva.get(r.mes) ?? r.meta) : 0,
+  }))
+}
+
+/**
+ * @deprecated Alias legado — use {@link aplicarMetaRebalanceada}.
+ */
+export function aplicarMetaComRateioDeGap<T extends MetaRow>(
+  rows: T[],
+  metaAnual: number,
+  ano: number,
+  ref = new Date(),
+): T[] {
+  return aplicarMetaRebalanceada(rows, metaAnual, ano, ref)
 }

@@ -19,7 +19,10 @@ export type ReceitaMetasConfig = {
 export type ReceitaMesRow = {
   mes: number
   mesLabel: string
+  /** Meta mensal ajustada (com rateio de gap dos meses fechados). */
   meta: number
+  /** Meta mensal original (ex.: R$ 10 mi ÷ 7). Soma = teto anual fixo em KPIs. */
+  metaBase: number
   projetadoBaseAbril: number
   projetadoReal: number
   recebido: number

@@ -1,0 +1,79 @@
+---
+description: Rótulos de pontos nos gráficos Receita não podem ser cortados pelo topo ou laterais
+alwaysApply: true
+---
+
+# Rótulos em gráficos Receita (Recharts)
+
+Rótulos de valor nos pontos (LabelList, dots, linhas de meta) **nunca** podem ser
+cortados ("comidos") pelo limite do SVG. O texto deve permanecer **inteiro e legível**
+dentro da área visível do gráfico.
+
+## Regras obrigatórias
+
+1. **Margem e padding do eixo Y** — gráficos com rótulos acima dos pontos devem usar
+   `RECEITA_CHART_LAYOUT.marginWithPointLabels` e
+   `padding={{ top: RECEITA_CHART_LAYOUT.yAxisPaddingTopWithLabels }}` no `YAxis`.
+
+2. **Posicionamento inteligente** — use `resolveLabelVerticalPosition` e
+   `labelYForPosition` de `@/features/receita/utils/chartLabelPlacement` para
+   preferir acima, mas **inverter para abaixo** quando não couber no topo.
+
+3. **Ancoragem nas bordas** — use `edgeAwareAnchor` para o 1º e último ponto, evitando
+   que o texto ultrapasse o eixo Y ou a borda direita.
+
+4. **Backdrop com clamp** — `ChartLabelWithBackdrop` (ou equivalente) deve limitar
+   `boxY` com `RECEITA_CHART_LAYOUT.labelMinY`.
+
+5. **Altura do plot** — cálculos de `cy` usam a área útil interna via
+   `receitaChartInnerPlotHeight()`, não a altura total do container (`300px`).
+
+## Exemplo (ComposedChart com rótulos)
+
+```tsx
+import {
+  RECEITA_CHART_LAYOUT,
+} from '@/features/receita/constants'
+import {
+  edgeAwareAnchor,
+  labelYForPosition,
+  resolveLabelVerticalPosition,
+} from '@/features/receita/utils/chartLabelPlacement'
+
+<ComposedChart
+  data={data}
+  margin={RECEITA_CHART_LAYOUT.marginWithPointLabels}
+>
+  <YAxis
+    domain={[0, 'auto']}
+    padding={{ top: RECEITA_CHART_LAYOUT.yAxisPaddingTopWithLabels }}
+  />
+  <LabelList
+    content={({ x, y, value, index }) => {
+      const cy = Number(y)
+      const vertical = resolveLabelVerticalPosition(cy, 10, undefined, 'above')
+      const labelY = labelYForPosition(cy, 10, vertical)
+      // renderizar rótulo com dominantBaseline conforme vertical
+    }}
+  />
+</ComposedChart>
+```
+
+## O que evitar
+
+```tsx
+// ❌ BAD — rótulo fixo acima sem checar espaço nem padding no eixo Y
+<text y={cy - 10}>...</text>
+
+// ❌ BAD — margem mínima em gráfico com LabelList acima dos pontos
+margin={{ top: 16 }}
+
+// ✅ GOOD — layout + utilitário + padding no YAxis
+```
+
+## Escopo
+
+Aplica-se a todos os gráficos do módulo **Receita** que exibem valores nos pontos
+(comparativo consolidado, série por área, acumulado, etc.). Ao criar ou alterar um
+gráfico com rótulos, reutilize as constantes e utilitários existentes em vez de
+posicionar `y` manualmente.
