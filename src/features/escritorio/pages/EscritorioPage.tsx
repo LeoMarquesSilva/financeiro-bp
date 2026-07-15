@@ -9,9 +9,17 @@ import { useInadimplenciaGruposIndex } from '../hooks/useInadimplenciaGruposInde
 import {
   getInadimplenciaStatusForGrupo,
   countInadimplenciaFromResumo,
+  countComiteFromResumo,
   type FiltroInadimplencia,
+  type FiltroComite,
   type InadimplenciaGrupoStatus,
 } from '../services/inadimplenciaGruposIndex'
+import {
+  countAtrasoInadimplenciaFromResumo,
+  defaultDataReferenciaEscritorio,
+  type FiltroAtrasoInadimplencia,
+} from '../services/escritorioAtrasoIndex'
+import { useEscritorioAtrasoIndex } from '../hooks/useEscritorioAtrasoIndex'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -24,7 +32,7 @@ import {
   type MetricaFinanceiraEscritorio,
 } from '../constants/financeiroTotais'
 import { parseCurrencyBr } from '@/shared/utils/format'
-import { Search, Building2, Loader2, RefreshCw, Filter, ArrowUpDown, AlertTriangle, CircleDollarSign, Banknote, CalendarClock, ChevronLeft, ChevronRight, Scale, CheckCircle2 } from 'lucide-react'
+import { Search, Building2, Loader2, RefreshCw, Filter, ArrowUpDown, AlertTriangle, CircleDollarSign, Banknote, CalendarClock, ChevronLeft, ChevronRight, Scale, CheckCircle2, Users, UserX, CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 import type { ClienteEscritorioRow } from '@/lib/database.types'
@@ -56,17 +64,29 @@ export function EscritorioPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [filtroFinanceiro, setFiltroFinanceiro] = useState<FiltroFinanceiro>('todos')
   const [filtroInadimplencia, setFiltroInadimplencia] = useState<FiltroInadimplencia>('todos')
+  const [filtroComite, setFiltroComite] = useState<FiltroComite>('todos')
+  const [filtroAtrasoInadimplencia, setFiltroAtrasoInadimplencia] = useState<FiltroAtrasoInadimplencia>('todos')
+  const [dataReferencia, setDataReferencia] = useState(defaultDataReferenciaEscritorio)
   const [minValorStr, setMinValorStr] = useState('')
   const [ordenacao, setOrdenacao] = useState<OrdenacaoEscritorio>('nome')
   const [selectedContext, setSelectedContext] = useState<SheetContext | null>(null)
 
   const minValor = useMemo(() => (minValorStr.trim() ? parseCurrencyBr(minValorStr) : 0), [minValorStr])
   const filtros = useMemo(
-    () => ({ busca: debouncedBusca, filtroFinanceiro, filtroInadimplencia, minValor, ordenacao }),
-    [debouncedBusca, filtroFinanceiro, filtroInadimplencia, minValor, ordenacao],
+    () => ({
+      busca: debouncedBusca,
+      filtroFinanceiro,
+      filtroInadimplencia,
+      filtroComite,
+      filtroAtrasoInadimplencia,
+      minValor,
+      ordenacao,
+    }),
+    [debouncedBusca, filtroFinanceiro, filtroInadimplencia, filtroComite, filtroAtrasoInadimplencia, minValor, ordenacao],
   )
 
   const { index: inadimplenciaIndex } = useInadimplenciaGruposIndex()
+  const { index: atrasoIndex, fetching: fetchingAtraso } = useEscritorioAtrasoIndex(dataReferencia)
 
   const {
     grupos: filtrado,
@@ -81,12 +101,22 @@ export function EscritorioPage() {
     loadingEmpresas,
     error,
     refetch,
-  } = useGruposEscritorioPaginado(filtros, GRUPOS_POR_PAGINA, inadimplenciaIndex)
+  } = useGruposEscritorioPaginado(filtros, GRUPOS_POR_PAGINA, inadimplenciaIndex, atrasoIndex)
 
   const inadimplenciaCounts = useMemo(() => {
     if (!inadimplenciaIndex || resumoAll.length === 0) return { inadimplentes: 0, resolvidos: 0 }
     return countInadimplenciaFromResumo(resumoAll, inadimplenciaIndex)
   }, [resumoAll, inadimplenciaIndex])
+
+  const comiteCounts = useMemo(() => {
+    if (!inadimplenciaIndex || resumoAll.length === 0) return { comite: 0, foraComite: 0 }
+    return countComiteFromResumo(resumoAll, inadimplenciaIndex)
+  }, [resumoAll, inadimplenciaIndex])
+
+  const atrasoCounts = useMemo(() => {
+    if (!atrasoIndex || resumoAll.length === 0) return { emAtraso: 0, inadimplentes: 0 }
+    return countAtrasoInadimplenciaFromResumo(resumoAll, atrasoIndex)
+  }, [resumoAll, atrasoIndex])
 
   const openGrupoSheet = (grupo: GrupoEscritorio, empresa: ClienteEscritorioRow, escopoGrupoInicial: boolean) => {
     const inadimplencia = inadimplenciaIndex
@@ -111,7 +141,7 @@ export function EscritorioPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedBusca, filtroFinanceiro, filtroInadimplencia, minValor, ordenacao])
+  }, [debouncedBusca, filtroFinanceiro, filtroInadimplencia, filtroComite, filtroAtrasoInadimplencia, dataReferencia, minValor, ordenacao])
 
   const handleOpenMetrica = (metrica: MetricaFinanceiraEscritorio) => {
     const config = METRICAS_FINANCEIRAS.find((m) => m.id === metrica)
@@ -175,6 +205,20 @@ export function EscritorioPage() {
 
       {/* Filtros: situação (com contagem) + valor mínimo + ordenação */}
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3">
+        <div className="flex w-full flex-wrap items-center gap-2 border-b border-slate-200 pb-3 sm:w-auto sm:border-b-0 sm:pb-0">
+          <CalendarDays className="h-4 w-4 shrink-0 text-slate-500" />
+          <Label htmlFor="data-referencia-escritorio" className="whitespace-nowrap text-sm font-medium text-slate-600">
+            Data de referência:
+          </Label>
+          <Input
+            id="data-referencia-escritorio"
+            type="date"
+            value={dataReferencia}
+            onChange={(e) => setDataReferencia(e.target.value)}
+            className="h-8 w-40 bg-white"
+          />
+          {fetchingAtraso && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+        </div>
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-slate-500" />
           <span className="text-sm font-medium text-slate-600">Situação:</span>
@@ -203,8 +247,62 @@ export function EscritorioPage() {
           ))}
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-200 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 sm:w-auto">
+          <Users className="h-4 w-4 shrink-0 text-slate-500" />
+          <span className="text-sm font-medium text-slate-600">Comitê:</span>
+          {(
+            [
+              { value: 'todos' as const, label: 'Todos', icon: undefined, count: resumoAll.length },
+              { value: 'comite' as const, label: 'No Comitê', icon: Users, count: comiteCounts.comite },
+              { value: 'fora_comite' as const, label: 'Fora do Comitê', icon: UserX, count: comiteCounts.foraComite },
+            ]
+          ).map(({ value, label, icon: Icon, count }) => (
+            <Button
+              key={value}
+              type="button"
+              variant={filtroComite === value ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroComite(value)}
+              className={cn(
+                'shrink-0',
+                filtroComite === value && 'ring-1 ring-slate-400',
+                value === 'comite' && filtroComite === value && 'bg-amber-700 hover:bg-amber-800',
+              )}
+            >
+              {Icon != null && <Icon className="mr-1 h-3.5 w-3.5" />}
+              {`${label} (${count})`}
+            </Button>
+          ))}
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-200 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 sm:w-auto">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-slate-500" />
+          <span className="text-sm font-medium text-slate-600">Atraso:</span>
+          {(
+            [
+              { value: 'todos' as const, label: 'Todos', icon: undefined, count: resumoAll.length },
+              { value: 'em_atraso' as const, label: 'Em atraso (<3 meses)', icon: AlertTriangle, count: atrasoCounts.emAtraso },
+              { value: 'inadimplentes' as const, label: 'Inadimplentes (≥3 meses)', icon: Scale, count: atrasoCounts.inadimplentes },
+            ]
+          ).map(({ value, label, icon: Icon, count }) => (
+            <Button
+              key={value}
+              type="button"
+              variant={filtroAtrasoInadimplencia === value ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroAtrasoInadimplencia(value)}
+              className={cn(
+                'shrink-0',
+                filtroAtrasoInadimplencia === value && 'ring-1 ring-slate-400',
+                value === 'inadimplentes' && filtroAtrasoInadimplencia === value && 'bg-red-700 hover:bg-red-800',
+              )}
+            >
+              {Icon != null && <Icon className="mr-1 h-3.5 w-3.5" />}
+              {`${label} (${count})`}
+            </Button>
+          ))}
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-200 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 sm:w-auto">
           <Scale className="h-4 w-4 shrink-0 text-slate-500" />
-          <span className="text-sm font-medium text-slate-600">Inadimplência:</span>
+          <span className="text-sm font-medium text-slate-600">Cadastro comitê:</span>
           {(
             [
               { value: 'todos' as const, label: 'Todos', icon: undefined, count: resumoAll.length },

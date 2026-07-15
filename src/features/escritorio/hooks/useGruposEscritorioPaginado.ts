@@ -22,9 +22,13 @@ import {
 
 } from '../services/escritorioService'
 
-import type { FiltroInadimplencia, InadimplenciaGruposIndex } from '../services/inadimplenciaGruposIndex'
+import type { FiltroInadimplencia, FiltroComite, InadimplenciaGruposIndex } from '../services/inadimplenciaGruposIndex'
 
-import { resumoMatchesInadimplencia } from '../services/inadimplenciaGruposIndex'
+import { resumoMatchesInadimplencia, resumoMatchesComite } from '../services/inadimplenciaGruposIndex'
+
+import type { FiltroAtrasoInadimplencia, EscritorioAtrasoIndex } from '../services/escritorioAtrasoIndex'
+
+import { resumoMatchesAtrasoInadimplencia } from '../services/escritorioAtrasoIndex'
 
 
 
@@ -41,6 +45,10 @@ export interface FiltrosEscritorio {
   filtroFinanceiro: FiltroFinanceiro
 
   filtroInadimplencia: FiltroInadimplencia
+
+  filtroComite: FiltroComite
+
+  filtroAtrasoInadimplencia: FiltroAtrasoInadimplencia
 
   minValor: number
 
@@ -156,6 +164,8 @@ export function useGruposEscritorioPaginado(
 
   inadimplenciaIndex: InadimplenciaGruposIndex | null = null,
 
+  atrasoIndex: EscritorioAtrasoIndex | null = null,
+
 ) {
 
   const [page, setPage] = useState(1)
@@ -220,6 +230,26 @@ export function useGruposEscritorioPaginado(
 
     }
 
+    if (inadimplenciaIndex && filtros.filtroComite !== 'todos') {
+
+      list = list.filter((r: GrupoResumoRow) =>
+
+        resumoMatchesComite(r, inadimplenciaIndex, filtros.filtroComite)
+
+      )
+
+    }
+
+    if (atrasoIndex && filtros.filtroAtrasoInadimplencia !== 'todos') {
+
+      list = list.filter((r: GrupoResumoRow) =>
+
+        resumoMatchesAtrasoInadimplencia(r, atrasoIndex, filtros.filtroAtrasoInadimplencia)
+
+      )
+
+    }
+
     return ordenaResumo(list, filtros.ordenacao)
 
   }, [
@@ -232,11 +262,17 @@ export function useGruposEscritorioPaginado(
 
     filtros.filtroInadimplencia,
 
+    filtros.filtroComite,
+
+    filtros.filtroAtrasoInadimplencia,
+
     filtros.minValor,
 
     filtros.ordenacao,
 
     inadimplenciaIndex,
+
+    atrasoIndex,
 
   ])
 

@@ -8,6 +8,9 @@ import type { GrupoResumoRow } from './escritorioService'
 
 export type FiltroInadimplencia = 'todos' | 'inadimplentes' | 'resolvidos'
 
+/** Filtro por participação no comitê de inadimplência. */
+export type FiltroComite = 'todos' | 'comite' | 'fora_comite'
+
 export interface InadimplenciaGrupoRef {
   id: string
   status_classe: InadimplenciaClasse
@@ -137,6 +140,33 @@ export async function fetchInadimplenciaGruposIndex(): Promise<InadimplenciaGrup
 export function grupoDisplayNorm(grupoCliente: string): string {
   const display = grupoCliente === '' ? GRUPO_SEM_NOME : grupoCliente
   return normalizarNomeGrupo(display)
+}
+
+export function resumoMatchesComite(
+  r: GrupoResumoRow,
+  index: InadimplenciaGruposIndex,
+  filtro: FiltroComite,
+): boolean {
+  if (filtro === 'todos') return true
+  const norm = grupoDisplayNorm(r.grupo_cliente)
+  const noComite = index.gruposAtivosNorm.has(norm)
+  if (filtro === 'comite') return noComite
+  if (filtro === 'fora_comite') return !noComite
+  return true
+}
+
+export function countComiteFromResumo(
+  resumo: GrupoResumoRow[],
+  index: InadimplenciaGruposIndex,
+): { comite: number; foraComite: number } {
+  let comite = 0
+  let foraComite = 0
+  for (const r of resumo) {
+    const norm = grupoDisplayNorm(r.grupo_cliente)
+    if (index.gruposAtivosNorm.has(norm)) comite++
+    else foraComite++
+  }
+  return { comite, foraComite }
 }
 
 export function resumoMatchesInadimplencia(
