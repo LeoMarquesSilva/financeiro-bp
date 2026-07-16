@@ -1533,7 +1533,19 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   dot={false}
                   activeDot={{ r: 4, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
                   connectNulls
-                />
+                >
+                  {!percentMode && s.key === 'meta' && (
+                    <LabelList
+                      dataKey={s.key}
+                      content={ComparativoDotLabel({
+                        color: s.color,
+                        percentMode: false,
+                        position: 'above',
+                        total: chartData.length,
+                      })}
+                    />
+                  )}
+                </Line>
               ))}
             </ComposedChart>
           </ResponsiveContainer>

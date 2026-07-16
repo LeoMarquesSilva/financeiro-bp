@@ -27,7 +27,7 @@ import type { MouseHandlerDataParam } from 'recharts/types/synchronisation/types
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { receitaService } from '../services/receitaService'
-import { RECEITA_CHART_LABEL, RECEITA_CHART_AXIS, RECEITA_COLUNAS_METRICAS, RECEITA_COLORS } from '../constants'
+import { RECEITA_CHART_LABEL, RECEITA_CHART_AXIS, RECEITA_CHART_LAYOUT, RECEITA_COLUNAS_METRICAS, RECEITA_COLORS } from '../constants'
 import type {
   ReceitaColunasChartPoint,
   ReceitaDepartamentoCoresConfig,
@@ -46,6 +46,11 @@ import {
 } from '../utils/receitaColunasChart'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import { copyElementImageToClipboard } from '@/shared/utils/copyChartImage'
+import {
+  edgeAwareAnchor,
+  labelYForPosition,
+  resolveLabelVerticalPosition,
+} from '../utils/chartLabelPlacement'
 
 type MetricKey = (typeof RECEITA_COLUNAS_METRICAS)[number]['key']
 
@@ -174,6 +179,55 @@ function ConsolidadoBarLabel(
       {percentMetaMode ? formatPercentLabel(num) : formatColunaLabel(num)}
     </text>
   )
+}
+
+function ColunasLinePointLabel({
+  color,
+  percentMetaMode,
+  total,
+}: {
+  color: string
+  percentMetaMode: boolean
+  total: number
+}) {
+  return function Label(props: LabelProps & { index?: number }) {
+    const { x, y, value, index } = props
+    if (value == null || x == null || y == null) return null
+    const num = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(num) || num <= 0) return null
+
+    const text = percentMetaMode ? formatPercentLabel(num) : formatColunaLabel(num)
+    if (!text) return null
+
+    const cx = Number(x)
+    const cy = Number(y)
+    const anchor = edgeAwareAnchor(index, total)
+    const vertical = resolveLabelVerticalPosition(cy, 10, undefined, 'above')
+    const labelY = labelYForPosition(cy, 10, vertical)
+    const charWidth = 6.4
+    const boxWidth = text.length * charWidth + 8
+    const boxHeight = 15
+    const boxX =
+      anchor === 'start' ? cx - 3 : anchor === 'end' ? cx - boxWidth + 3 : cx - boxWidth / 2
+    const boxY = Math.max(RECEITA_CHART_LAYOUT.labelMinY, labelY - 12)
+
+    return (
+      <g pointerEvents="none">
+        <rect x={boxX} y={boxY} width={boxWidth} height={boxHeight} rx={3} fill="#fff" fillOpacity={0.88} />
+        <text
+          x={cx}
+          y={labelY}
+          fill={color}
+          textAnchor={anchor}
+          dominantBaseline={vertical === 'above' ? 'auto' : 'hanging'}
+          fontSize={RECEITA_CHART_LABEL.linePoint}
+          fontWeight={600}
+        >
+          {text}
+        </text>
+      </g>
+    )
+  }
 }
 
 function selectMesAtIndex(
@@ -1076,7 +1130,7 @@ export function ReceitaComparativoColunasChart({
                 margin={{
                   left: 4,
                   right: showStackBreakdown ? 68 : 12,
-                  top: 32,
+                  top: percentMetaMode ? 32 : RECEITA_CHART_LAYOUT.marginWithPointLabels.top,
                   bottom: 4,
                 }}
                 barCategoryGap="18%"
@@ -1107,6 +1161,9 @@ export function ReceitaComparativoColunasChart({
                   tickLine={false}
                   width={percentMetaMode ? 48 : 60}
                   domain={[0, 'auto']}
+                  padding={
+                    percentMetaMode ? undefined : { top: RECEITA_CHART_LAYOUT.yAxisPaddingTopWithLabels }
+                  }
                 />
                 <Tooltip
                   shared
@@ -1180,7 +1237,18 @@ export function ReceitaComparativoColunasChart({
                       dot={false}
                       activeDot={{ r: 4, fill: m.color, stroke: '#fff', strokeWidth: 2 }}
                       connectNulls
-                    />
+                    >
+                      {!percentMetaMode && m.key === 'meta' && (
+                        <LabelList
+                          dataKey={m.key}
+                          content={ColunasLinePointLabel({
+                            color: m.color,
+                            percentMetaMode: false,
+                            total: chartData.length,
+                          })}
+                        />
+                      )}
+                    </Line>
                   ),
                 )}
               </ComposedChart>
