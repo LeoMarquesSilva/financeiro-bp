@@ -28,7 +28,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
-import type { ReceitaMesRow, ReceitaRecebidoDepartamentoRow } from '../types/receita.types'
+import type {
+  ReceitaDepartamentoCoresConfig,
+  ReceitaMesRow,
+  ReceitaRecebidoDepartamentoRow,
+} from '../types/receita.types'
 import type { ReceitaInadimplenciaDepartamentoMensalRow } from '../types/receitaInadimplencia.types'
 import {
   RECEITA_CHART_AXIS,
@@ -36,8 +40,6 @@ import {
   RECEITA_CHART_LAYOUT,
   RECEITA_COLORS,
   RECEITA_DEPARTAMENTO_CORES,
-  RECEITA_DEPARTAMENTO_LABELS,
-  RECEITA_META_CONTRIBUICAO_AREA,
 } from '../constants'
 import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
 import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
@@ -58,6 +60,11 @@ import {
 import { receitaService } from '../services/receitaService'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
+import {
+  buildReceitaMetaAreaSlices,
+  findMetaAreaSlice,
+  type ReceitaMetaAreaSlice,
+} from '../utils/departamentoAreaCores'
 
 const SERIES = [
   {
@@ -167,12 +174,6 @@ function pctMeta(recebido: number, meta: number): number | null {
   return (recebido / meta) * 100
 }
 
-const AREA_META_SLICES = RECEITA_META_CONTRIBUICAO_AREA.map((a) => ({
-  ...a,
-  label: RECEITA_DEPARTAMENTO_LABELS[a.key] ?? a.key,
-  color: RECEITA_DEPARTAMENTO_CORES[a.key] ?? '#64748b',
-}))
-
 type AreaGapRow = {
   key: string
   label: string
@@ -194,6 +195,7 @@ function buildAreaGapData(
   rowsComDados: ReceitaMesRow[],
   deptRows: ReceitaRecebidoDepartamentoRow[],
   mes: number | null,
+  metaAreaSlices: ReceitaMetaAreaSlice[],
 ): AreaGapRow[] {
   const escopo = (mes == null ? rowsComDados : rows.filter((r) => r.mes === mes)).filter(
     (r) => r.meta > 0,
@@ -208,7 +210,7 @@ function buildAreaGapData(
     recebidoPorArea.set(key, (recebidoPorArea.get(key) ?? 0) + d.total)
   }
 
-  return AREA_META_SLICES.map((area) => {
+  return metaAreaSlices.map((area) => {
     const meta = (metaTotalEscopo * area.pct) / 100
     const recebido = recebidoPorArea.get(area.key) ?? 0
     const gap = recebido - meta
@@ -281,10 +283,10 @@ function buildAreaLinhaData(
   deptRowsPrevisto: ReceitaRecebidoDepartamentoRow[],
   inadRows: ReceitaInadimplenciaDepartamentoMensalRow[],
   areaKey: string,
+  areaPct: number,
   ano: number,
 ): AreaLinhaPoint[] {
-  const areaSlice = AREA_META_SLICES.find((a) => a.key === areaKey)
-  const pct = areaSlice?.pct ?? 0
+  const pct = areaPct
 
   const recebidoPorMes = new Map<number, number>()
   for (const d of deptRowsRecebido) {
@@ -811,9 +813,14 @@ function ReceitaChartLegend({
 type Props = {
   rows: ReceitaMesRow[]
   ano: number
+  departamentoCores?: ReceitaDepartamentoCoresConfig
 }
 
-export function ReceitaComparativoChart({ rows, ano }: Props) {
+export function ReceitaComparativoChart({
+  rows,
+  ano,
+  departamentoCores = RECEITA_DEPARTAMENTO_CORES,
+}: Props) {
   const [detalheMes, setDetalheMes] = useState<ReceitaMesRow | null>(null)
   const [areaMesDetalhe, setAreaMesDetalhe] = useState<{
     mes: number
@@ -930,27 +937,51 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
     [rows, ano],
   )
 
+  const metaAreaSlices = useMemo(
+    () => buildReceitaMetaAreaSlices(departamentoCores),
+    [departamentoCores],
+  )
+
   const areaGapData = useMemo(
-    () => buildAreaGapData(rows, rowsComDados, deptRows ?? [], areaMesSelecionado),
-    [rows, rowsComDados, deptRows, areaMesSelecionado],
+    () =>
+      buildAreaGapData(
+        rows,
+        rowsComDados,
+        deptRows ?? [],
+        areaMesSelecionado,
+        metaAreaSlices,
+      ),
+    [rows, rowsComDados, deptRows, areaMesSelecionado, metaAreaSlices],
   )
 
   const areaLinhaAtual = useMemo(
-    () => AREA_META_SLICES.find((a) => a.key === areaLinhaSelecionada) ?? null,
-    [areaLinhaSelecionada],
+    () =>
+      areaLinhaSelecionada
+        ? findMetaAreaSlice(metaAreaSlices, areaLinhaSelecionada)
+        : null,
+    [metaAreaSlices, areaLinhaSelecionada],
   )
 
   const areaLinhaData = useMemo(() => {
-    if (!areaLinhaSelecionada) return []
+    if (!areaLinhaSelecionada || !areaLinhaAtual) return []
     return buildAreaLinhaData(
       rows,
       deptRows ?? [],
       previstoDeptRows ?? [],
       inadDeptRows ?? [],
       areaLinhaSelecionada,
+      areaLinhaAtual.pct,
       ano,
     )
-  }, [rows, deptRows, previstoDeptRows, inadDeptRows, areaLinhaSelecionada, ano])
+  }, [
+    rows,
+    deptRows,
+    previstoDeptRows,
+    inadDeptRows,
+    areaLinhaSelecionada,
+    areaLinhaAtual,
+    ano,
+  ])
 
   const abrirAreaMesDetalhe = (point: AreaLinhaPoint, serie: 'recebido' | 'previsto') => {
     const total = serie === 'recebido' ? point.recebido : point.previsto
@@ -1062,7 +1093,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
         </div>
 
         <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
-          {AREA_META_SLICES.map((area) => {
+          {metaAreaSlices.map((area) => {
             const ativo = areaLinhaSelecionada === area.key
             return (
               <button
@@ -1836,7 +1867,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
           mes={areaMesDetalhe.mes}
           mesLabel={areaMesDetalhe.mesLabel}
           areaKey={areaLinhaSelecionada}
-          areaLabel={RECEITA_DEPARTAMENTO_LABELS[areaLinhaSelecionada] ?? areaLinhaSelecionada}
+          areaLabel={areaLinhaAtual?.label ?? areaLinhaSelecionada}
           totalRecebido={areaMesDetalhe.total}
         />
       )}
@@ -1851,7 +1882,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
           mes={areaMesDetalhe.mes}
           mesLabel={areaMesDetalhe.mesLabel}
           areaKey={areaLinhaSelecionada}
-          areaLabel={RECEITA_DEPARTAMENTO_LABELS[areaLinhaSelecionada] ?? areaLinhaSelecionada}
+          areaLabel={areaLinhaAtual?.label ?? areaLinhaSelecionada}
           totalPrevisto={areaMesDetalhe.total}
         />
       )}

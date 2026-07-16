@@ -123,7 +123,11 @@ export function ReceitaPage() {
 
       {data && !dashLoading && (
         <>
-          <ReceitaComparativoChart rows={data.rows} ano={data.ano} />
+          <ReceitaComparativoChart
+            rows={data.rows}
+            ano={data.ano}
+            departamentoCores={coresParaGrafico}
+          />
           <ReceitaComparativoColunasChart
             rows={data.rows}
             ano={data.ano}

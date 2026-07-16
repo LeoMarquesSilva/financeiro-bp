@@ -405,7 +405,21 @@ function applyExportLayoutFixes(root: HTMLElement): void {
 
   root.querySelectorAll<HTMLElement>('span, p').forEach((el) => {
     if (el.closest('[data-legend-item-value]')) return
+    if (el.closest('[data-legend-export] table')) return
     el.style.setProperty('flex-shrink', '0', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('[data-legend-export] table td').forEach((cell) => {
+    cell.style.setProperty('background', 'transparent', 'important')
+    cell.style.setProperty('border-radius', '0', 'important')
+    cell.style.setProperty('padding-left', '0', 'important')
+    cell.style.setProperty('padding-right', '8px', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('[data-legend-export] .inline-flex').forEach((el) => {
+    el.style.setProperty('display', 'inline-flex', 'important')
+    el.style.setProperty('align-items', 'flex-start', 'important')
+    el.style.setProperty('gap', '8px', 'important')
   })
 }
 
@@ -519,6 +533,455 @@ async function copyPngBlobToClipboard(blob: Blob): Promise<void> {
   }
 
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+}
+
+const DETALHE_COL_WIDTH = 420
+/** Largura da coluna única — ~960px no PNG (scale 2), cabe no slide 16:9. */
+const DETALHE_COL_WIDTH_SLIDE = 540
+const DETALHE_COL_GAP = 20
+const DETALHE_SLIDE_BODY_MAX_HEIGHT = 380
+const DETALHE_MAX_COLUMNS = 4
+const DETALHE_VALUE_COL_MIN = 148
+const DETALHE_PAD_H = 16
+const DETALHE_PAD_V = 10
+const DETALHE_PAD_BOTTOM = 6
+/** Área transparente no topo — reserva título + subtítulo do slide no PPT (~148px lógicos). */
+const DETALHE_SLIDE_TITLE_OFFSET = 148
+const DETALHE_SWATCH = 8
+const DETALHE_ROW_GAP = 8
+const DETALHE_HEADER_GAP = 5
+const DETALHE_SECTION_GAP = 12
+const DETALHE_FONT = 'system-ui, -apple-system, Segoe UI, sans-serif'
+const DETALHE_VALUE_LINE_HEIGHT = 14
+const DETALHE_NAME_LINE_HEIGHT = 15
+const DETALHE_SUBTITLE_LINE_HEIGHT = 12
+
+/** Cores alinhadas ao painel Detalhe do mês (slate/sky). */
+export const LEGEND_DETALHE_EXPORT_COLORS = {
+  title: '#0f172a',
+  area: '#075985',
+  label: '#475569',
+  muted: '#64748b',
+  value: '#0f172a',
+  accent: '#0369a1',
+  rowName: '#334155',
+} as const
+
+export type LegendDetalheExportSegment = {
+  text: string
+  color?: string
+  font?: string
+}
+
+export type LegendDetalheExportLine = {
+  text?: string
+  font?: string
+  color?: string
+  segments?: LegendDetalheExportSegment[]
+}
+
+export type LegendDetalheExportValueLine = {
+  text: string
+  color?: string
+  font?: string
+}
+
+export type LegendDetalheExportRow = {
+  name: string
+  nameColor?: string
+  color: string
+  valueLines: Array<string | LegendDetalheExportValueLine>
+  /** Texto auxiliar abaixo do nome (ex.: grupos unificados). */
+  subtitle?: string
+  subtitleColor?: string
+}
+
+export type LegendDetalheExportData = {
+  headerLines: LegendDetalheExportLine[]
+  rows: LegendDetalheExportRow[]
+  emptyMessage?: string
+  /** Uma coluna larga — ideal para poucos planos no detalhe da área. */
+  preferSingleColumn?: boolean
+}
+
+function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return ['']
+
+  const lines: string[] = []
+  let current = words[0]
+
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i]
+    const test = `${current} ${word}`
+    if (ctx.measureText(test).width > maxWidth) {
+      lines.push(current)
+      current = word
+    } else {
+      current = test
+    }
+  }
+
+  lines.push(current)
+  return lines
+}
+
+function drawCanvasTextLines(
+  ctx: CanvasRenderingContext2D,
+  lines: string[],
+  x: number,
+  y: number,
+  lineHeight: number,
+  align: CanvasTextAlign = 'left',
+): number {
+  ctx.textAlign = align
+  ctx.textBaseline = 'top'
+  lines.forEach((line, index) => {
+    ctx.fillText(line, x, y + index * lineHeight)
+  })
+  return lines.length * lineHeight
+}
+
+function createMeasureCanvasContext(): CanvasRenderingContext2D {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = 1
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas não suportado neste navegador')
+  return ctx
+}
+
+function detalheNameMaxWidth(colWidth: number): number {
+  return Math.max(120, colWidth - DETALHE_SWATCH - 10 - 8 - DETALHE_VALUE_COL_MIN)
+}
+
+function normalizeValueLines(
+  lines: Array<string | LegendDetalheExportValueLine>,
+): LegendDetalheExportValueLine[] {
+  return lines.map((line, index) => {
+    if (typeof line !== 'string') return line
+    return {
+      text: line,
+      color: index === 0 ? LEGEND_DETALHE_EXPORT_COLORS.value : LEGEND_DETALHE_EXPORT_COLORS.accent,
+      font:
+        index === 0
+          ? `600 12px ${DETALHE_FONT}`
+          : `400 11px ${DETALHE_FONT}`,
+    }
+  })
+}
+
+function drawExportHeaderLine(
+  ctx: CanvasRenderingContext2D,
+  line: LegendDetalheExportLine,
+  x: number,
+  y: number,
+  lineHeight: number,
+): number {
+  if (line.segments?.length) {
+    let cursorX = x
+    for (const segment of line.segments) {
+      ctx.font = segment.font ?? line.font ?? `400 12px ${DETALHE_FONT}`
+      ctx.fillStyle = segment.color ?? line.color ?? LEGEND_DETALHE_EXPORT_COLORS.title
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      ctx.fillText(segment.text, cursorX, y)
+      cursorX += ctx.measureText(segment.text).width
+    }
+    return lineHeight
+  }
+
+  const text = line.text ?? ''
+  ctx.font = line.font ?? `400 12px ${DETALHE_FONT}`
+  ctx.fillStyle = line.color ?? LEGEND_DETALHE_EXPORT_COLORS.title
+  return drawCanvasTextLines(ctx, [text], x, y, lineHeight)
+}
+
+function measureDetalheRowHeight(
+  ctx: CanvasRenderingContext2D,
+  row: LegendDetalheExportRow,
+  colWidth: number,
+): number {
+  const nameMaxWidth = detalheNameMaxWidth(colWidth)
+
+  ctx.font = `400 12px ${DETALHE_FONT}`
+  const nameLines = wrapCanvasText(ctx, row.name, nameMaxWidth)
+  let nameHeight = nameLines.length * DETALHE_NAME_LINE_HEIGHT
+
+  if (row.subtitle) {
+    ctx.font = `400 10px ${DETALHE_FONT}`
+    const subtitleLines = wrapCanvasText(ctx, row.subtitle, nameMaxWidth)
+    nameHeight += 2 + subtitleLines.length * DETALHE_SUBTITLE_LINE_HEIGHT
+  }
+
+  const valueHeight =
+    row.valueLines.length === 0
+      ? 0
+      : DETALHE_VALUE_LINE_HEIGHT +
+        Math.max(0, row.valueLines.length - 1) * DETALHE_VALUE_LINE_HEIGHT
+
+  return Math.max(valueHeight, nameHeight, DETALHE_SWATCH) + DETALHE_ROW_GAP
+}
+
+function detalheContentStartY(): number {
+  return DETALHE_SLIDE_TITLE_OFFSET + DETALHE_PAD_V
+}
+
+function measureDetalheHeaderHeight(
+  ctx: CanvasRenderingContext2D,
+  data: LegendDetalheExportData,
+): number {
+  let y = detalheContentStartY()
+
+  for (const line of data.headerLines) {
+    ctx.font = line.font ?? `400 12px ${DETALHE_FONT}`
+    y += DETALHE_HEADER_GAP + 16
+  }
+
+  if ((data.rows.length > 0 || data.emptyMessage) && data.headerLines.length > 0) {
+    y += DETALHE_SECTION_GAP - DETALHE_HEADER_GAP
+  } else if (data.rows.length > 0 || data.emptyMessage) {
+    y += DETALHE_SECTION_GAP
+  }
+
+  return y
+}
+
+type DetalheColumnChunk = {
+  rowIndices: number[]
+  height: number
+}
+
+type DetalheExportLayout = {
+  colCount: number
+  colWidth: number
+  totalWidth: number
+  totalHeight: number
+  headerHeight: number
+  bodyHeight: number
+  rowHeights: number[]
+  columns: DetalheColumnChunk[]
+}
+
+function resolveDetalheColWidth(data: LegendDetalheExportData, colCount: number): number {
+  if (data.preferSingleColumn && colCount === 1) return DETALHE_COL_WIDTH_SLIDE
+  return DETALHE_COL_WIDTH
+}
+
+function buildDetalheColumnChunks(
+  rowHeights: number[],
+  colCount: number,
+): DetalheColumnChunk[] {
+  const columns: DetalheColumnChunk[] = Array.from({ length: colCount }, () => ({
+    rowIndices: [],
+    height: 0,
+  }))
+
+  if (rowHeights.length === 0) return columns
+
+  const perCol = Math.ceil(rowHeights.length / colCount)
+  for (let col = 0; col < colCount; col++) {
+    const start = col * perCol
+    const end = Math.min(start + perCol, rowHeights.length)
+    for (let i = start; i < end; i++) {
+      columns[col].rowIndices.push(i)
+      columns[col].height += rowHeights[i]
+    }
+  }
+
+  return columns
+}
+
+function buildDetalheExportLayout(
+  ctx: CanvasRenderingContext2D,
+  data: LegendDetalheExportData,
+  colCount: number,
+): DetalheExportLayout {
+  const colWidth = resolveDetalheColWidth(data, colCount)
+  const headerHeight = measureDetalheHeaderHeight(ctx, data)
+  const rowHeights = data.rows.map((row) => measureDetalheRowHeight(ctx, row, colWidth))
+  const columns = buildDetalheColumnChunks(rowHeights, colCount)
+  const rawBodyHeight = data.emptyMessage
+    ? 18
+    : Math.max(...columns.map((column) => column.height), 0)
+  const bodyHeight =
+    rawBodyHeight > 0 && !data.emptyMessage ? Math.max(0, rawBodyHeight - DETALHE_ROW_GAP) : rawBodyHeight
+  const totalWidth =
+    colCount * colWidth + Math.max(0, colCount - 1) * DETALHE_COL_GAP + DETALHE_PAD_H * 2
+  const totalHeight = headerHeight + bodyHeight + DETALHE_PAD_BOTTOM
+
+  return {
+    colCount,
+    colWidth,
+    totalWidth,
+    totalHeight,
+    headerHeight,
+    bodyHeight,
+    rowHeights,
+    columns,
+  }
+}
+
+function resolveMaxColumns(data: LegendDetalheExportData): number {
+  if (data.preferSingleColumn) return 1
+  const rowCount = data.rows.length
+  if (rowCount <= 6) return 1
+  if (rowCount <= 14) return 2
+  return DETALHE_MAX_COLUMNS
+}
+
+function resolveDetalheExportLayout(
+  ctx: CanvasRenderingContext2D,
+  data: LegendDetalheExportData,
+): DetalheExportLayout {
+  if (data.emptyMessage || data.rows.length === 0) {
+    return buildDetalheExportLayout(ctx, data, 1)
+  }
+
+  const maxColumns = resolveMaxColumns(data)
+  const single = buildDetalheExportLayout(ctx, data, 1)
+  if (maxColumns === 1 || single.bodyHeight <= DETALHE_SLIDE_BODY_MAX_HEIGHT) {
+    return single
+  }
+
+  for (let colCount = 2; colCount <= maxColumns; colCount++) {
+    const layout = buildDetalheExportLayout(ctx, data, colCount)
+    if (layout.bodyHeight <= DETALHE_SLIDE_BODY_MAX_HEIGHT) {
+      return layout
+    }
+  }
+
+  return buildDetalheExportLayout(ctx, data, maxColumns)
+}
+
+function drawDetalheExportRow(
+  ctx: CanvasRenderingContext2D,
+  row: LegendDetalheExportRow,
+  colX: number,
+  rowTop: number,
+  colWidth: number,
+): void {
+  const nameMaxWidth = detalheNameMaxWidth(colWidth)
+  const nameX = colX + DETALHE_SWATCH + 10
+  const valueX = colX + colWidth - 4
+
+  ctx.beginPath()
+  ctx.fillStyle = row.color
+  ctx.arc(
+    colX + DETALHE_SWATCH / 2,
+    rowTop + DETALHE_SWATCH / 2 + 1,
+    DETALHE_SWATCH / 2,
+    0,
+    Math.PI * 2,
+  )
+  ctx.fill()
+
+  ctx.font = `400 12px ${DETALHE_FONT}`
+  ctx.fillStyle = row.nameColor ?? LEGEND_DETALHE_EXPORT_COLORS.rowName
+  ctx.textAlign = 'left'
+  const nameLines = wrapCanvasText(ctx, row.name, nameMaxWidth)
+  drawCanvasTextLines(ctx, nameLines, nameX, rowTop, DETALHE_NAME_LINE_HEIGHT)
+
+  let nameBlockHeight = nameLines.length * DETALHE_NAME_LINE_HEIGHT
+  if (row.subtitle) {
+    ctx.font = `400 10px ${DETALHE_FONT}`
+    ctx.fillStyle = row.subtitleColor ?? LEGEND_DETALHE_EXPORT_COLORS.muted
+    const subtitleLines = wrapCanvasText(ctx, row.subtitle, nameMaxWidth)
+    drawCanvasTextLines(
+      ctx,
+      subtitleLines,
+      nameX,
+      rowTop + nameBlockHeight + 2,
+      DETALHE_SUBTITLE_LINE_HEIGHT,
+    )
+    nameBlockHeight += 2 + subtitleLines.length * DETALHE_SUBTITLE_LINE_HEIGHT
+  }
+
+  const valueLines = normalizeValueLines(row.valueLines)
+  valueLines.forEach((line, index) => {
+    ctx.font = line.font ?? (index === 0 ? `600 12px ${DETALHE_FONT}` : `400 11px ${DETALHE_FONT}`)
+    ctx.fillStyle =
+      line.color ??
+      (index === 0 ? LEGEND_DETALHE_EXPORT_COLORS.value : LEGEND_DETALHE_EXPORT_COLORS.accent)
+    drawCanvasTextLines(
+      ctx,
+      [line.text],
+      valueX,
+      rowTop + index * DETALHE_VALUE_LINE_HEIGHT,
+      DETALHE_VALUE_LINE_HEIGHT,
+      'right',
+    )
+  })
+
+  ctx.textAlign = 'left'
+}
+
+function measureLegendDetalheLayout(
+  ctx: CanvasRenderingContext2D,
+  data: LegendDetalheExportData,
+): DetalheExportLayout {
+  return resolveDetalheExportLayout(ctx, data)
+}
+
+function legendDetalheToPngBlob(data: LegendDetalheExportData, scale = DEFAULT_SCALE): Promise<Blob> {
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return Promise.reject(new Error('Canvas não suportado neste navegador'))
+
+  const measureCtx = createMeasureCanvasContext()
+  const layout = measureLegendDetalheLayout(measureCtx, data)
+  const { totalWidth: width, totalHeight: height } = layout
+
+  canvas.width = width * scale
+  canvas.height = height * scale
+  ctx.scale(scale, scale)
+  ctx.clearRect(0, 0, width, height)
+  ctx.textBaseline = 'top'
+  ctx.textAlign = 'left'
+
+  let y = detalheContentStartY()
+
+  for (const line of data.headerLines) {
+    y += DETALHE_HEADER_GAP
+    y += drawExportHeaderLine(ctx, line, DETALHE_PAD_H, y, 16)
+  }
+
+  if (data.rows.length > 0 || data.emptyMessage) {
+    y += DETALHE_SECTION_GAP - DETALHE_HEADER_GAP
+  }
+
+  const bodyTop = y
+
+  if (data.emptyMessage) {
+    ctx.font = `400 12px ${DETALHE_FONT}`
+    ctx.fillStyle = '#64748b'
+    drawCanvasTextLines(ctx, [data.emptyMessage], DETALHE_PAD_H, bodyTop, 16)
+  } else {
+    layout.columns.forEach((column, colIndex) => {
+      const colX = DETALHE_PAD_H + colIndex * (layout.colWidth + DETALHE_COL_GAP)
+      let rowY = bodyTop
+
+      for (const rowIndex of column.rowIndices) {
+        drawDetalheExportRow(ctx, data.rows[rowIndex], colX, rowY, layout.colWidth)
+        rowY += layout.rowHeights[rowIndex]
+      }
+    })
+  }
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Falha ao gerar imagem PNG'))),
+      'image/png',
+    )
+  })
+}
+
+export async function copyLegendDetalheToClipboard(
+  data: LegendDetalheExportData,
+  scale = DEFAULT_SCALE,
+): Promise<void> {
+  const blob = await legendDetalheToPngBlob(data, scale)
+  await copyPngBlobToClipboard(blob)
 }
 
 export async function copyElementImageToClipboard(

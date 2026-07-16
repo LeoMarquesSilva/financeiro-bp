@@ -27,7 +27,7 @@ import type { MouseHandlerDataParam } from 'recharts/types/synchronisation/types
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { receitaService } from '../services/receitaService'
-import { RECEITA_CHART_LABEL, RECEITA_CHART_AXIS, RECEITA_CHART_LAYOUT, RECEITA_COLUNAS_METRICAS, RECEITA_COLORS, RECEITA_DEPARTAMENTO_CORES, RECEITA_DEPARTAMENTO_LABELS, RECEITA_META_CONTRIBUICAO_AREA, RECEITA_AREA_FALLBACK_PALETTE, RECEITA_PLANO_PALETTE } from '../constants'
+import { RECEITA_CHART_LABEL, RECEITA_CHART_AXIS, RECEITA_CHART_LAYOUT, RECEITA_COLUNAS_METRICAS, RECEITA_COLORS, RECEITA_DEPARTAMENTO_CORES, RECEITA_DEPARTAMENTO_LABELS, RECEITA_AREA_FALLBACK_PALETTE, RECEITA_PLANO_PALETTE } from '../constants'
 import type {
   ReceitaColunasChartPoint,
   ReceitaDepartamentoCoresConfig,
@@ -55,24 +55,28 @@ import {
   valorRecebidoItem,
 } from '../utils/recebidoGrupos'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
-import { copyElementImageToClipboard } from '@/shared/utils/copyChartImage'
+import {
+  copyElementImageToClipboard,
+  copyLegendDetalheToClipboard,
+  LEGEND_DETALHE_EXPORT_COLORS,
+  type LegendDetalheExportData,
+} from '@/shared/utils/copyChartImage'
 import {
   edgeAwareAnchor,
   labelYForPosition,
   resolveLabelVerticalPosition,
 } from '../utils/chartLabelPlacement'
+import {
+  buildReceitaMetaAreaSlices,
+  findMetaAreaSlice,
+  resolveDepartamentoAreaColor,
+} from '../utils/departamentoAreaCores'
 
 type MetricKey = (typeof RECEITA_COLUNAS_METRICAS)[number]['key']
 
 type StackMode = 'area' | 'plano_percent'
 
 type DetalheBreakdown = 'plano' | 'grupo'
-
-const AREA_META_SLICES = RECEITA_META_CONTRIBUICAO_AREA.map((a) => ({
-  ...a,
-  label: RECEITA_DEPARTAMENTO_LABELS[a.key] ?? a.key,
-  color: RECEITA_DEPARTAMENTO_CORES[a.key] ?? '#64748b',
-}))
 
 type Props = {
   rows: ReceitaMesRow[]
@@ -185,12 +189,14 @@ function ColunasLinePointLabel({
   color,
   percentMetaMode,
   total,
-  chartData,
+  offset = 22,
+  stagger = 0,
 }: {
   color: string
   percentMetaMode: boolean
   total: number
-  chartData: ReceitaColunasChartPoint[]
+  offset?: number
+  stagger?: number
 }) {
   return function Label(props: LabelProps & { index?: number }) {
     const { x, y, value, index } = props
@@ -198,25 +204,16 @@ function ColunasLinePointLabel({
     const num = typeof value === 'number' ? value : Number(value)
     if (!Number.isFinite(num) || num <= 0) return null
 
-    if (index != null && total > 1) {
-      const isFirst = index === 0
-      const isLast = index === total - 1
-      if (!isFirst && !isLast) {
-        const prev = Number(chartData[index - 1]?.meta) || 0
-        if (Math.abs(num - prev) < 0.01) return null
-      }
-    }
-
-    const labelMode = resolveColunasBarLabelMode(!!percentMetaMode, false)
-    const text = formatColunasBarValueLabel(num, labelMode)
+    const text = formatColunasBarValueLabel(
+      num,
+      resolveColunasBarLabelMode(percentMetaMode, false),
+    )
     if (!text) return null
 
     const cx = Number(x)
     const cy = Number(y)
     const anchor = edgeAwareAnchor(index, total)
-    const offset = 22
-    const stagger = 14
-    const adjustedOffset = offset + (index != null && index % 2 === 1 ? stagger : 0)
+    const adjustedOffset = offset + (index != null && stagger > 0 && index % 2 === 1 ? stagger : 0)
     const vertical = resolveLabelVerticalPosition(cy, adjustedOffset, undefined, 'above')
     const labelY = labelYForPosition(cy, adjustedOffset, vertical)
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
@@ -244,6 +241,14 @@ function ColunasLinePointLabel({
       </g>
     )
   }
+}
+
+/** Séries de linha que sempre exibem rótulo de valor em modo R$ (meta e previsto). */
+const COLUNAS_LINE_LABEL_SERIES: Partial<
+  Record<MetricKey, { offset: number; stagger: number }>
+> = {
+  meta: { offset: 22, stagger: 0 },
+  previsto: { offset: 16, stagger: 14 },
 }
 
 function selectMesAtIndex(
@@ -501,25 +506,243 @@ function MonthTick(
   )
 }
 
+function formatMesDetalheItemExportValueLines(
+  item: MesDetalheItem,
+  planoShareMode: boolean,
+  percentMetaMode: boolean,
+): string[] {
+  const lines: string[] = []
+
+  if (percentMetaMode) {
+    if (isLikelyAbsoluteCurrency(item.valor)) {
+      lines.push(formatCurrency(item.valor))
+      if (item.pctMeta != null) lines.push(`${formatPercentMeta(item.pctMeta)} da meta`)
+    } else {
+      lines.push(`${formatPercentLabel(item.valor)} da meta`)
+    }
+    return lines
+  }
+
+  if (planoShareMode && item.pctShare != null) {
+    lines.push(formatPercentLabel(item.pctShare))
+    lines.push(formatCurrency(item.valor))
+    if (item.pctMeta != null) lines.push(`${formatPercentMeta(item.pctMeta)} da meta`)
+    return lines
+  }
+
+  lines.push(formatCurrency(item.valor))
+  if (item.pctMeta != null) lines.push(`${formatPercentMeta(item.pctMeta)} da meta`)
+  return lines
+}
+
+const GRUPO_COPY_TOP_N = 10
+const GRUPO_COPY_OUTROS_COLOR = '#64748b'
+
+type MesDetalheExportItem = MesDetalheItem & { exportSubtitle?: string }
+
+function grupoItemCurrencyValor(
+  item: MesDetalheItem,
+  metaMes: number,
+  percentMetaMode: boolean,
+): number {
+  if (percentMetaMode && metaMes > 0 && !isLikelyAbsoluteCurrency(item.valor)) {
+    return (item.valor / 100) * metaMes
+  }
+  return item.valor
+}
+
+function aggregateGrupoItemsForCopyExport(
+  items: MesDetalheItem[],
+  metaMes: number,
+  percentMetaMode: boolean,
+): MesDetalheExportItem[] {
+  const sorted = [...items].sort((a, b) => b.valor - a.valor)
+  if (sorted.length <= GRUPO_COPY_TOP_N) return sorted
+
+  const top = sorted.slice(0, GRUPO_COPY_TOP_N)
+  const rest = sorted.slice(GRUPO_COPY_TOP_N)
+  const restTotal = rest.reduce(
+    (sum, item) => sum + grupoItemCurrencyValor(item, metaMes, percentMetaMode),
+    0,
+  )
+
+  const outros: MesDetalheExportItem = {
+    key: '__demais_grupos__',
+    name: 'Demais grupos',
+    color: GRUPO_COPY_OUTROS_COLOR,
+    valor:
+      percentMetaMode && metaMes > 0
+        ? (restTotal / metaMes) * 100
+        : restTotal,
+    pctShare: null,
+    pctMeta:
+      percentMetaMode
+        ? restTotal
+        : metaMes > 0
+          ? (restTotal / metaMes) * 100
+          : null,
+    exportSubtitle: `(${rest.map((item) => item.name).join(', ')})`,
+  }
+
+  return [...top, outros]
+}
+
+function buildColunasDetalheExportData({
+  mesLabel,
+  areaLabel,
+  recebidoMes,
+  metaMes,
+  pctAtingido,
+  percentMetaMode,
+  detalheBreakdown,
+  items,
+  detalheLoading,
+  planoShareMode,
+}: {
+  mesLabel: string
+  areaLabel?: string | null
+  recebidoMes: number
+  metaMes: number
+  pctAtingido: number | null
+  percentMetaMode: boolean
+  detalheBreakdown?: DetalheBreakdown | null
+  items: MesDetalheItem[]
+  detalheLoading?: boolean
+  planoShareMode: boolean
+}): LegendDetalheExportData {
+  const C = LEGEND_DETALHE_EXPORT_COLORS
+  const titleFont = '600 14px system-ui, -apple-system, sans-serif'
+  const bodyFont = '400 12px system-ui, -apple-system, sans-serif'
+  const smallFont = '400 11px system-ui, -apple-system, sans-serif'
+
+  const headerLines: LegendDetalheExportData['headerLines'] = [
+    areaLabel
+      ? {
+          segments: [
+            { text: mesLabel, color: C.title, font: titleFont },
+            { text: ` · ${areaLabel}`, color: C.area, font: '500 14px system-ui, -apple-system, sans-serif' },
+          ],
+        }
+      : { text: mesLabel, color: C.title, font: titleFont },
+  ]
+
+  if (recebidoMes > 0) {
+    headerLines.push({
+      segments: [
+        { text: 'Recebido ', color: C.label, font: bodyFont },
+        {
+          text: formatRecebidoMesDisplay(recebidoMes, percentMetaMode),
+          color: C.value,
+          font: '600 12px system-ui, -apple-system, sans-serif',
+        },
+      ],
+    })
+  }
+
+  if (detalheBreakdown) {
+    headerLines.push({
+      text:
+        detalheBreakdown === 'grupo'
+          ? 'Detalhe por grupo de empresas'
+          : 'Detalhe por plano de contas',
+      font: smallFont,
+      color: C.muted,
+    })
+  }
+
+  if (!percentMetaMode && metaMes > 0) {
+    headerLines.push({
+      text: `Meta ${formatCurrency(metaMes)}`,
+      font: bodyFont,
+      color: C.label,
+    })
+    if (pctAtingido != null && recebidoMes > 0) {
+      headerLines.push({
+        text: `${formatPercentMeta(pctAtingido)} atingido`,
+        font: '600 12px system-ui, -apple-system, sans-serif',
+        color: C.area,
+      })
+    }
+  }
+
+  const exportItems: MesDetalheExportItem[] =
+    detalheBreakdown === 'grupo'
+      ? aggregateGrupoItemsForCopyExport(items, metaMes, percentMetaMode)
+      : items
+
+  const mapValueLines = (lines: string[]) =>
+    lines.map((text, index) => ({
+      text,
+      color: index === 0 ? C.value : C.accent,
+      font:
+        index === 0
+          ? '600 12px system-ui, -apple-system, sans-serif'
+          : smallFont,
+    }))
+
+  return {
+    headerLines,
+    rows: exportItems.map((item) => ({
+      name: item.name,
+      nameColor: C.rowName,
+      color: item.color,
+      subtitle: item.exportSubtitle,
+      subtitleColor: C.muted,
+      valueLines: mapValueLines(
+        formatMesDetalheItemExportValueLines(
+          item,
+          planoShareMode && !detalheBreakdown,
+          percentMetaMode,
+        ),
+      ),
+    })),
+    emptyMessage: detalheLoading
+      ? 'Carregando detalhe…'
+      : items.length === 0
+        ? 'Sem recebido neste mês.'
+        : undefined,
+    preferSingleColumn: !!detalheBreakdown,
+  }
+}
+
+function findAreaSliceForKey(
+  slices: { dataKey: string; departamento: string; color: string }[],
+  areaKey: string,
+): (typeof slices)[number] | null {
+  const byKey = slices.find((s) => departamentoNormKey(s.departamento) === areaKey)
+  if (byKey) return byKey
+
+  const label = RECEITA_DEPARTAMENTO_LABELS[areaKey]
+  if (!label) return null
+  const labelKey = departamentoNormKey(label)
+  return slices.find((s) => departamentoNormKey(s.departamento) === labelKey) ?? null
+}
+
 function ColunasLegendaCopyButton({
+  getExportData,
   exportRef,
   className,
 }: {
-  exportRef: RefObject<HTMLElement | null>
+  getExportData?: () => LegendDetalheExportData | null
+  exportRef?: RefObject<HTMLElement | null>
   className?: string
 }) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle')
 
   const handleCopy = async () => {
-    const element = exportRef.current
-    if (!element) {
-      toast.error('Legenda não disponível para cópia')
-      return
-    }
-
     setStatus('loading')
     try {
-      await copyElementImageToClipboard(element)
+      const exportData = getExportData?.()
+      if (exportData) {
+        await copyLegendDetalheToClipboard(exportData)
+      } else {
+        const element = exportRef?.current
+        if (!element) {
+          toast.error('Legenda não disponível para cópia')
+          return
+        }
+        await copyElementImageToClipboard(element)
+      }
       setStatus('done')
       toast.success('Legenda copiada — cole no PowerPoint com Ctrl+V')
       window.setTimeout(() => setStatus('idle'), 2000)
@@ -591,11 +814,7 @@ function ColunasTooltipContent({
     : []
   const items: MesDetalheItem[] =
     areaSelecionada && detalheBreakdown ? (detalheItems ?? []) : itemsDefault
-  const recebidoMes = areaSelecionada
-    ? Number(point.recebidoTotal) || 0
-    : porArea
-      ? Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
-      : Number(point.recebidoTotal) || 0
+  const recebidoMes = resolveRecebidoMes(point, stackSlices).recebidoMes
   const semArea = porArea && !areaSelecionada ? resolveRecebidoMes(areaPoint, stackSlices).semArea : 0
   const metaMes = Number(point.meta) || 0
   const pctAtingido = percentMetaMode
@@ -606,7 +825,34 @@ function ColunasTooltipContent({
   const metricEntries = RECEITA_COLUNAS_METRICAS.filter((m) => visibleMetrics.has(m.key))
     .map((m) => ({ ...m, valor: Number(point[m.key]) || 0 }))
     .filter((m) => m.valor > 0)
-  const exportRef = useRef<HTMLDivElement>(null)
+  const exportData = useMemo(
+    () =>
+      buildColunasDetalheExportData({
+        mesLabel: mesLabel ?? point.mesLabel,
+        areaLabel,
+        recebidoMes,
+        metaMes,
+        pctAtingido,
+        percentMetaMode,
+        detalheBreakdown,
+        items,
+        detalheLoading,
+        planoShareMode,
+      }),
+    [
+      mesLabel,
+      point.mesLabel,
+      areaLabel,
+      recebidoMes,
+      metaMes,
+      pctAtingido,
+      percentMetaMode,
+      detalheBreakdown,
+      items,
+      detalheLoading,
+      planoShareMode,
+    ],
+  )
 
   return (
     <div
@@ -617,11 +863,7 @@ function ColunasTooltipContent({
           : 'pointer-events-none border-slate-200/80',
       )}
     >
-      <div
-        ref={exportRef}
-        data-legend-export
-        className="px-3 py-2.5"
-      >
+      <div data-legend-export className="px-3 py-2.5">
         <div className="mb-1.5 flex items-start justify-between gap-2">
           <div>
             <p className="font-semibold capitalize text-slate-800">{mesLabel ?? point.mesLabel}</p>
@@ -748,7 +990,7 @@ function ColunasTooltipContent({
           data-chart-export-ignore
           className="flex items-center justify-end gap-0.5 border-t border-slate-100 px-2 py-1"
         >
-          <ColunasLegendaCopyButton exportRef={exportRef} />
+          <ColunasLegendaCopyButton getExportData={() => exportData} />
           {onUnpin && (
             <Button
               type="button"
@@ -812,10 +1054,7 @@ function ColunasMesDetalhePanel({
     : []
   const items: MesDetalheItem[] =
     areaSelecionada && detalheBreakdown ? (detalheItems ?? []) : itemsDefault
-  const recebidoMes =
-    areaSelecionada
-      ? Number(point.recebidoTotal) || 0
-      : Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
+  const recebidoMes = resolveRecebidoMes(point, stackSlices).recebidoMes
   const semArea = !areaSelecionada ? resolveRecebidoMes(areaPoint, stackSlices).semArea : 0
   const metaMes = Number(point.meta) || 0
   const pctAtingido = percentMetaMode
@@ -823,7 +1062,33 @@ function ColunasMesDetalhePanel({
       ? recebidoMes
       : null
     : pctDaMeta(recebidoMes, metaMes)
-  const exportRef = useRef<HTMLDivElement>(null)
+  const exportData = useMemo(
+    () =>
+      buildColunasDetalheExportData({
+        mesLabel: point.mesLabel,
+        areaLabel,
+        recebidoMes,
+        metaMes,
+        pctAtingido,
+        percentMetaMode,
+        detalheBreakdown,
+        items,
+        detalheLoading,
+        planoShareMode,
+      }),
+    [
+      point.mesLabel,
+      areaLabel,
+      recebidoMes,
+      metaMes,
+      pctAtingido,
+      percentMetaMode,
+      detalheBreakdown,
+      items,
+      detalheLoading,
+      planoShareMode,
+    ],
+  )
 
   return (
     <div className="mt-4 rounded-xl border border-sky-200/80 bg-sky-50/40 p-3 sm:p-4">
@@ -832,7 +1097,10 @@ function ColunasMesDetalhePanel({
           Detalhe do mês
         </p>
         <div className="flex shrink-0 items-center gap-1">
-          <ColunasLegendaCopyButton exportRef={exportRef} className="text-sky-700 hover:text-sky-900" />
+          <ColunasLegendaCopyButton
+            getExportData={() => exportData}
+            className="text-sky-700 hover:text-sky-900"
+          />
           <Button type="button" variant="ghost" size="sm" className="h-8 gap-1" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
             Fechar
@@ -840,133 +1108,133 @@ function ColunasMesDetalhePanel({
         </div>
       </div>
 
-      <div ref={exportRef} data-legend-export>
-        <p className="text-sm font-semibold capitalize text-slate-900">
-          {point.mesLabel}
-          {areaLabel && (
-            <span className="ml-2 text-xs font-medium normal-case text-sky-800">· {areaLabel}</span>
-          )}
+      <div data-legend-export className="space-y-2">
+        <div className="space-y-1">
+          <p className="m-0 text-sm font-semibold capitalize text-slate-900">
+            {point.mesLabel}
+            {areaLabel && (
+              <span className="font-medium normal-case text-sky-800"> · {areaLabel}</span>
+            )}
+          </p>
           {recebidoMes > 0 && (
-            <span className="ml-2 font-normal text-slate-600">
-              recebido{' '}
-              {formatRecebidoMesDisplay(recebidoMes, percentMetaMode)}
-            </span>
+            <p className="m-0 text-sm text-slate-600">
+              Recebido{' '}
+              <span className="font-semibold tabular-nums text-slate-900">
+                {formatRecebidoMesDisplay(recebidoMes, percentMetaMode)}
+              </span>
+            </p>
           )}
-        </p>
-        {detalheBreakdown && (
-          <p className="mt-0.5 text-[11px] text-slate-500">
-            {detalheBreakdown === 'grupo' ? 'Detalhe por grupo de empresas' : 'Detalhe por plano de contas'}
-          </p>
-        )}
-        {!percentMetaMode && metaMes > 0 && (
-          <div className="mt-0.5 space-y-0.5 text-xs text-slate-600">
-            <p>Meta {formatCurrency(metaMes)}</p>
-            {pctAtingido != null && recebidoMes > 0 && (
-              <p className="font-medium text-sky-800">
-                {formatPercentMeta(pctAtingido)} atingido
-              </p>
-            )}
-          </div>
-        )}
-        {!percentMetaMode && semArea > 1 && !areaSelecionada && (
-          <p className="mt-0.5 text-[11px] text-amber-800">
-            Há {formatCurrency(semArea)} recebido sem departamento fora do rateio por área.
-          </p>
-        )}
-
-      {detalheLoading && (
-        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Carregando detalhe…
+          {detalheBreakdown && (
+            <p className="m-0 text-[11px] text-slate-500">
+              {detalheBreakdown === 'grupo' ? 'Detalhe por grupo de empresas' : 'Detalhe por plano de contas'}
+            </p>
+          )}
+          {!percentMetaMode && metaMes > 0 && (
+            <div className="space-y-0.5 text-xs text-slate-600">
+              <p className="m-0">Meta {formatCurrency(metaMes)}</p>
+              {pctAtingido != null && recebidoMes > 0 && (
+                <p className="m-0 font-medium text-sky-800">
+                  {formatPercentMeta(pctAtingido)} atingido
+                </p>
+              )}
+            </div>
+          )}
+          {!percentMetaMode && semArea > 1 && !areaSelecionada && (
+            <p className="m-0 text-[11px] text-amber-800">
+              Há {formatCurrency(semArea)} recebido sem departamento fora do rateio por área.
+            </p>
+          )}
         </div>
-      )}
 
-      <div className="mb-3 flex flex-wrap gap-1.5" data-chart-export-ignore>
-        {chartData.map((d) => (
-          <button
-            key={d.mes}
-            type="button"
-            onClick={() => onSelectMes(d.mes)}
-            className={cn(
-              'rounded-full border px-2.5 py-0.5 text-[11px] font-medium capitalize transition-colors',
-              d.mes === selectedMes
-                ? 'border-sky-300 bg-white text-sky-900 shadow-sm'
-                : 'border-transparent bg-white/60 text-slate-600 hover:bg-white',
-            )}
+        <div className="mb-3 flex flex-wrap gap-1.5" data-chart-export-ignore>
+          {chartData.map((d) => (
+            <button
+              key={d.mes}
+              type="button"
+              onClick={() => onSelectMes(d.mes)}
+              className={cn(
+                'rounded-full border px-2.5 py-0.5 text-[11px] font-medium capitalize transition-colors',
+                d.mes === selectedMes
+                  ? 'border-sky-300 bg-white text-sky-900 shadow-sm'
+                  : 'border-transparent bg-white/60 text-slate-600 hover:bg-white',
+              )}
+            >
+              {d.mesLabel}
+            </button>
+          ))}
+        </div>
+
+        {RECEITA_COLUNAS_METRICAS.filter((m) => visibleMetrics.has(m.key)).length > 0 && (
+          <ul
+            className="mb-3 flex flex-wrap gap-x-4 gap-y-1 border-b border-sky-100 pb-3 text-sm"
+            data-chart-export-ignore
           >
-            {d.mesLabel}
-          </button>
-        ))}
-      </div>
+            {RECEITA_COLUNAS_METRICAS.filter((m) => visibleMetrics.has(m.key)).map((m) => {
+              const v = Number(point[m.key]) || 0
+              if (!v) return null
+              return (
+                <li key={m.key} className="flex items-center gap-1.5 text-slate-700">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: m.color }}
+                  />
+                  <span>{m.legend}:</span>
+                  <span className="font-semibold tabular-nums">
+                    {percentMetaMode ? formatPercentLabel(v) : formatCurrency(v)}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
-      {RECEITA_COLUNAS_METRICAS.filter((m) => visibleMetrics.has(m.key)).length > 0 && (
-        <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1 border-b border-sky-100 pb-3 text-sm">
-          {RECEITA_COLUNAS_METRICAS.filter((m) => visibleMetrics.has(m.key)).map((m) => {
-            const v = Number(point[m.key]) || 0
-            if (!v) return null
-            return (
-              <li key={m.key} className="flex items-center gap-1.5 text-slate-700">
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: m.color }}
-                />
-                <span>{m.legend}:</span>
-                <span className="font-semibold tabular-nums">
-                  {percentMetaMode ? formatPercentLabel(v) : formatCurrency(v)}
-                </span>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      <table className="w-full border-collapse pr-1 text-sm">
-        <tbody>
-          {detalheLoading ? (
-            <tr>
-              <td colSpan={2} className="py-2 text-slate-500">
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Carregando detalhe…
-                </span>
-              </td>
-            </tr>
-          ) : items.length === 0 ? (
-            <tr>
-              <td colSpan={2} className="py-1 text-slate-500">
-                {detalheBreakdown
-                  ? 'Nenhum item neste recorte.'
-                  : 'Sem recebido neste mês.'}
-              </td>
-            </tr>
-          ) : (
-            items.map((item) => (
-              <tr key={item.key} className="align-top">
-                <td className="rounded-l-lg bg-white/80 px-2.5 py-2 text-slate-700">
-                  <span className="inline-flex items-start gap-2">
-                    <span
-                      className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="min-w-0 whitespace-normal">{item.name}</span>
+        <table className="w-full border-collapse pr-1 text-sm">
+          <tbody>
+            {detalheLoading ? (
+              <tr>
+                <td colSpan={2} className="py-2 text-slate-500">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando detalhe…
                   </span>
                 </td>
-                <td
-                  data-legend-item-value
-                  className="rounded-r-lg bg-white/80 px-2.5 py-2 text-right align-top tabular-nums text-slate-900"
-                >
-                  <MesDetalheItemValor
-                    item={item}
-                    planoShareMode={planoShareMode || detalheBreakdown === 'plano'}
-                    percentMetaMode={percentMetaMode}
-                    subClassName="text-xs"
-                  />
+              </tr>
+            ) : items.length === 0 ? (
+              <tr>
+                <td colSpan={2} className="py-1 text-slate-500">
+                  {detalheBreakdown
+                    ? 'Nenhum item neste recorte.'
+                    : 'Sem recebido neste mês.'}
                 </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : (
+              items.map((item) => (
+                <tr key={item.key} className="align-top">
+                  <td className="rounded-l-lg bg-white/80 px-2.5 py-2 text-slate-700">
+                    <span className="inline-flex items-start gap-2">
+                      <span
+                        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="min-w-0 whitespace-normal">{item.name}</span>
+                    </span>
+                  </td>
+                  <td
+                    data-legend-item-value
+                    className="rounded-r-lg bg-white/80 px-2.5 py-2 text-right align-top tabular-nums text-slate-900"
+                  >
+                    <MesDetalheItemValor
+                      item={item}
+                      planoShareMode={planoShareMode || detalheBreakdown === 'plano'}
+                      percentMetaMode={percentMetaMode}
+                      subClassName="text-xs"
+                    />
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -996,6 +1264,11 @@ export function ReceitaComparativoColunasChart({
   const chartExportRef = useRef<HTMLDivElement>(null)
   const meses = useMemo(() => rows.map((r) => r.mes), [rows])
 
+  const metaAreaSlices = useMemo(
+    () => buildReceitaMetaAreaSlices(departamentoCores),
+    [departamentoCores],
+  )
+
   useEffect(() => {
     setSelectedMes(null)
     setHoveredIndex(null)
@@ -1009,10 +1282,6 @@ export function ReceitaComparativoColunasChart({
       setDetalheBreakdown(null)
     }
   }, [showRecebidoStack, porArea, planoMode])
-
-  useEffect(() => {
-    setDetalheBreakdown(null)
-  }, [areaSelecionada])
 
   useEffect(() => {
     if (!percentMetaMode) {
@@ -1051,8 +1320,8 @@ export function ReceitaComparativoColunasChart({
   const showAreaDrilldown = showRecebidoStack && porArea && !planoMode && !percentMetaMode
 
   const areaMetaPct = useMemo(
-    () => AREA_META_SLICES.find((a) => a.key === areaSelecionada)?.pct ?? null,
-    [areaSelecionada],
+    () => findMetaAreaSlice(metaAreaSlices, areaSelecionada ?? '')?.pct ?? null,
+    [metaAreaSlices, areaSelecionada],
   )
 
   const { data: previstoDeptRows, isLoading: previstoDeptLoading } = useQuery({
@@ -1086,10 +1355,13 @@ export function ReceitaComparativoColunasChart({
 
   const singleAreaSlice = useMemo(() => {
     if (!areaSelecionada) return null
-    return (
-      areaSlices.find((s) => departamentoNormKey(s.departamento) === areaSelecionada) ?? null
-    )
-  }, [areaSelecionada, areaSlices])
+    const slice = findAreaSliceForKey(areaSlices, areaSelecionada)
+    if (!slice) return null
+    return {
+      ...slice,
+      color: resolveDepartamentoAreaColor(areaSelecionada, departamentoCores),
+    }
+  }, [areaSelecionada, areaSlices, departamentoCores])
 
   const baseRawChartData = useMemo(() => {
     if (planoMode) {
@@ -1166,8 +1438,8 @@ export function ReceitaComparativoColunasChart({
   const legendPoint = legendPinned ? selectedPoint : hoveredPoint
 
   const areaLabelAtual = useMemo(
-    () => AREA_META_SLICES.find((a) => a.key === areaSelecionada)?.label ?? null,
-    [areaSelecionada],
+    () => findMetaAreaSlice(metaAreaSlices, areaSelecionada ?? '')?.label ?? null,
+    [metaAreaSlices, areaSelecionada],
   )
 
   const detalheItems = useMemo(() => {
@@ -1185,7 +1457,13 @@ export function ReceitaComparativoColunasChart({
   }, [itensMesDetalheData, detalheBreakdown, selectedPoint, clienteGrupoMap, percentMetaMode])
 
   const selectArea = (key: string) => {
-    setAreaSelecionada((prev) => (prev === key ? null : key))
+    if (areaSelecionada === key) {
+      setAreaSelecionada(null)
+      setDetalheBreakdown(null)
+      return
+    }
+    setAreaSelecionada(key)
+    setDetalheBreakdown('plano')
   }
 
   const renderColunasTooltip = () => null
@@ -1344,8 +1622,9 @@ export function ReceitaComparativoColunasChart({
           {showAreaDrilldown && (
             <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
               <span className="text-[11px] font-medium text-slate-500">Área:</span>
-              {AREA_META_SLICES.map((area) => {
+              {metaAreaSlices.map((area) => {
                 const ativo = areaSelecionada === area.key
+                const chipColor = area.color
                 return (
                   <button
                     key={area.key}
@@ -1357,12 +1636,12 @@ export function ReceitaComparativoColunasChart({
                         ? 'border-transparent text-white shadow-sm'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
                     )}
-                    style={ativo ? { backgroundColor: area.color } : undefined}
+                    style={ativo ? { backgroundColor: chipColor } : undefined}
                     aria-pressed={ativo}
                   >
                     <span
                       className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: ativo ? '#fff' : area.color }}
+                      style={{ backgroundColor: ativo ? '#fff' : chipColor }}
                     />
                     {area.label}
                   </button>
@@ -1569,21 +1848,22 @@ export function ReceitaComparativoColunasChart({
                       strokeWidth={2}
                       strokeDasharray={m.strokeDasharray}
                       dot={
-                        m.key === 'meta'
+                        !percentMetaMode && COLUNAS_LINE_LABEL_SERIES[m.key]
                           ? { r: 3, fill: m.color, stroke: '#fff', strokeWidth: 1.5 }
                           : false
                       }
                       activeDot={{ r: 4, fill: m.color, stroke: '#fff', strokeWidth: 2 }}
                       connectNulls
                     >
-                      {!percentMetaMode && m.key === 'meta' && (
+                      {!percentMetaMode && COLUNAS_LINE_LABEL_SERIES[m.key] && (
                         <LabelList
                           dataKey={m.key}
                           content={ColunasLinePointLabel({
                             color: m.color,
                             percentMetaMode: false,
                             total: chartData.length,
-                            chartData,
+                            offset: COLUNAS_LINE_LABEL_SERIES[m.key]!.offset,
+                            stagger: COLUNAS_LINE_LABEL_SERIES[m.key]!.stagger,
                           })}
                         />
                       )}

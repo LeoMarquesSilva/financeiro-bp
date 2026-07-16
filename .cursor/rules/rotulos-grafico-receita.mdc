@@ -74,6 +74,21 @@ margin={{ top: 16 }}
 ## Escopo
 
 Aplica-se a todos os gráficos do módulo **Receita** que exibem valores nos pontos
-(comparativo consolidado, série por área, acumulado, etc.). Ao criar ou alterar um
+(comparativo consolidado, série por área, acumulado, colunas, etc.). Ao criar ou alterar um
 gráfico com rótulos, reutilize as constantes e utilitários existentes em vez de
 posicionar `y` manualmente.
+
+## Séries Meta e Previsto (gráfico de colunas)
+
+No `ReceitaComparativoColunasChart`, as linhas **Meta** e **Previsto** devem **sempre**
+exibir rótulo de valor em cada mês com dado &gt; 0 quando o gráfico estiver em modo **R$**
+(`!percentMetaMode`):
+
+- Usar `LabelList` + `ColunasLinePointLabel` (ou equivalente) em **ambas** as séries.
+- **Não** omitir rótulos intermediários por deduplicação de meta flat — o usuário precisa
+  ver o valor em qualquer mês clicado (ex.: Jun).
+- Meta: offset ~22px acima do ponto; Previsto: offset ~16px com stagger alternado (~14px)
+  para reduzir encavalamento com a meta.
+- Bolinha (`dot`) visível nas duas séries em modo R$.
+- Margem/padding do eixo Y conforme regras acima (`marginWithPointLabels` +
+  `yAxisPaddingTopWithLabels`).

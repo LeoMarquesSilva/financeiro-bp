@@ -1,0 +1,84 @@
+---
+description: Cores padronizadas das 5 áreas meta no módulo Receita (gráficos, chips, export)
+alwaysApply: true
+---
+
+# Cores das áreas meta — Receita
+
+As **5 áreas de contribuição à meta** devem usar **sempre a mesma cor** em todos os
+gráficos, chips de seleção, legendas, barras empilhadas e exportações (Copiar / PowerPoint).
+
+## Áreas e cores padrão
+
+Definidas em `RECEITA_DEPARTAMENTO_CORES` (`src/features/receita/constants.ts`):
+
+| Área | Chave | Cor |
+|------|-------|-----|
+| Insolvência | `insolvencia` | `#7f1d1d` |
+| Trabalhista | `trabalhista` | `#db2777` |
+| Cível | `civel` | `#dc2626` |
+| Contratos | `contratos` | `#7c2d12` |
+| Recuperação de Crédito | `recuperacao_de_credito` | `#0891b2` |
+
+A lista de chaves vem de `RECEITA_META_CONTRIBUICAO_AREA`.
+
+## Como resolver cor
+
+Use o utilitário compartilhado — **não** duplique mapas locais (`AREA_META_SLICES`, etc.):
+
+```typescript
+import {
+  buildReceitaMetaAreaSlices,
+  findMetaAreaSlice,
+  resolveDepartamentoAreaColor,
+} from '@/features/receita/utils/departamentoAreaCores'
+```
+
+- **`resolveDepartamentoAreaColor(areaKey, departamentoCores)`** — cor de uma área (chip, barra única).
+- **`buildReceitaMetaAreaSlices(departamentoCores)`** — array completo com `key`, `pct`, `label`, `color`.
+- **`findMetaAreaSlice(slices, areaKey)`** — slice da área selecionada.
+
+## Prop `departamentoCores`
+
+Todo gráfico ou painel Receita que exibe as 5 áreas meta deve receber
+`departamentoCores` (config Supabase via `useReceitaDepartamentoCores`):
+
+```tsx
+// ReceitaPage.tsx
+const coresParaGrafico = departamentoCores ?? RECEITA_DEPARTAMENTO_CORES
+
+<ReceitaComparativoChart departamentoCores={coresParaGrafico} ... />
+<ReceitaComparativoColunasChart departamentoCores={coresParaGrafico} ... />
+<ReceitaAcumuladoChart departamentoCores={coresParaGrafico} ... />
+```
+
+Dentro do componente:
+
+```tsx
+const metaAreaSlices = useMemo(
+  () => buildReceitaMetaAreaSlices(departamentoCores ?? RECEITA_DEPARTAMENTO_CORES),
+  [departamentoCores],
+)
+```
+
+## O que evitar
+
+```tsx
+// ❌ BAD — mapa estático no módulo, ignora config do usuário
+const AREA_META_SLICES = RECEITA_META_CONTRIBUICAO_AREA.map((a) => ({
+  color: RECEITA_DEPARTAMENTO_CORES[a.key],
+}))
+
+// ❌ BAD — palette fallback para as 5 áreas meta
+RECEITA_AREA_FALLBACK_PALETTE[i]
+
+// ✅ GOOD — util compartilhado + prop departamentoCores
+const chipColor = resolveDepartamentoAreaColor(area.key, departamentoCores)
+```
+
+`RECEITA_AREA_FALLBACK_PALETTE` é **somente** para departamentos/planos **fora** das 5 áreas meta.
+
+## Escopo
+
+Comparativo, colunas, acumulado, chips “Ver por área”, barras empilhadas por área,
+export `copyLegendDetalheToClipboard` e qualquer novo gráfico/slide do módulo Receita.
