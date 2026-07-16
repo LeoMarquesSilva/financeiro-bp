@@ -37,18 +37,15 @@ import type {
 import {
   buildAreaSlices,
   buildColunasChartData,
-  buildColunasChartDataFromAreaItens,
   buildColunasChartDataPorPlano,
-  buildGrupoSlicesFromItens,
+  applyAreaScopeToColunasData,
   buildPlanoSlices,
-  buildPlanoSlicesFromItens,
   departamentoNormKey,
   formatColunasBarValueLabel,
   formatPercentLabel,
   formatPercentMeta,
   isLikelyAbsoluteCurrency,
   resolveColunasBarLabelMode,
-  segmentLabelTextColor,
   toColunasPercentData,
 } from '../utils/receitaColunasChart'
 import { labelPlanoContas } from '../utils/planoContasLabel'
@@ -96,6 +93,18 @@ function formatYAxisPercent(value: number): string {
   return formatPercent(value)
 }
 
+function barInsideFontSize(label: string, barWidth: number, barHeight: number): number | null {
+  const minHeight = RECEITA_CHART_LABEL.minBarHeight
+  if (barHeight < minHeight) return null
+
+  const maxFont = RECEITA_CHART_LABEL.barInside
+  const charWidthAtMax = maxFont * 0.58
+  if (label.length * charWidthAtMax <= barWidth - 4) return maxFont
+
+  const fitted = Math.floor((barWidth - 4) / (label.length * 0.58))
+  return fitted >= 8 ? fitted : maxFont
+}
+
 function StackSegmentLabel(
   props: LabelProps & {
     stackTotal?: number
@@ -104,8 +113,7 @@ function StackSegmentLabel(
     segmentColor?: string
   },
 ) {
-  const { x, y, width, height, value, stackTotal, planoShareLabels, percentMetaMode, segmentColor } =
-    props
+  const { x, y, width, height, value, stackTotal, planoShareLabels, percentMetaMode } = props
   const num = typeof value === 'number' ? value : Number(value)
   const total = stackTotal ?? 0
   if (!num || x == null || y == null || width == null || height == null) return null
@@ -119,20 +127,14 @@ function StackSegmentLabel(
 
   const cx = Number(x) + w / 2
   const segmentCy = Number(y) + h / 2
-  const barRight = Number(x) + w
-  const stroke =
-    segmentColor ?? (typeof props.fill === 'string' ? props.fill : RECEITA_CHART_AXIS.label)
-  const MIN_INSIDE_HEIGHT = 22
-  const fontSize = RECEITA_CHART_LABEL.barInside
-  const charWidth = fontSize * 0.58
-  const textFitsInside = h >= MIN_INSIDE_HEIGHT && label.length * charWidth <= w - 6
+  const fontSize = barInsideFontSize(label, w, h)
 
-  if (textFitsInside) {
+  if (fontSize != null) {
     return (
       <text
         x={cx}
         y={segmentCy}
-        fill={segmentLabelTextColor(stroke)}
+        fill="#fff"
         textAnchor="middle"
         dominantBaseline="middle"
         fontSize={fontSize}
@@ -144,31 +146,7 @@ function StackSegmentLabel(
     )
   }
 
-  const labelX = barRight + 10
-
-  return (
-    <g pointerEvents="none">
-      <line
-        x1={barRight}
-        y1={segmentCy}
-        x2={labelX - 3}
-        y2={segmentCy}
-        stroke={stroke}
-        strokeWidth={1.25}
-      />
-      <text
-        x={labelX}
-        y={segmentCy}
-        fill={stroke}
-        textAnchor="start"
-        dominantBaseline="middle"
-        fontSize={9}
-        fontWeight={600}
-      >
-        {label}
-      </text>
-    </g>
-  )
+  return null
 }
 
 function ConsolidadoBarLabel(
@@ -178,17 +156,22 @@ function ConsolidadoBarLabel(
   const num = typeof value === 'number' ? value : Number(value)
   if (!num || x == null || y == null || width == null || height == null) return null
 
+  const w = Number(width)
   const h = Number(height)
-  const fontSize = h >= 20 ? RECEITA_CHART_LABEL.barTop : h >= 12 ? 10 : 9
   const labelMode = resolveColunasBarLabelMode(!!percentMetaMode, false)
   const label = formatColunasBarValueLabel(num, labelMode)
+  if (!label) return null
+
+  const fontSize = barInsideFontSize(label, w, h)
+  if (fontSize == null) return null
 
   return (
     <text
-      x={Number(x) + Number(width) / 2}
-      y={h >= 12 ? Number(y) - 6 : Number(y) - 2}
-      fill="#475569"
+      x={Number(x) + w / 2}
+      y={Number(y) + h / 2}
+      fill="#fff"
       textAnchor="middle"
+      dominantBaseline="middle"
       fontSize={fontSize}
       fontWeight={600}
       pointerEvents="none"
@@ -399,16 +382,6 @@ function buildGrupoDetalheItemsFromItens(
     .filter((i) => i.valor > 0)
 }
 
-function recebidoAreaNoMes(
-  point: ReceitaColunasChartPoint,
-  stackSlices: { dataKey: string; departamento: string }[],
-  areaKey: string,
-): number {
-  const slice = stackSlices.find((s) => departamentoNormKey(s.departamento) === areaKey)
-  if (!slice) return 0
-  return Number(point[slice.dataKey]) || 0
-}
-
 function MesDetalheItemValor({
   item,
   planoShareMode,
@@ -616,33 +589,14 @@ function ColunasTooltipContent({
   const itemsDefault = porArea && !areaSelecionada
     ? buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
     : []
-  const itemsFromPoint =
-    areaSelecionada && detalheBreakdown
-      ? buildMesDetalheItems(
-          areaPoint,
-          stackSlices,
-          planoShareMode || detalheBreakdown === 'plano',
-          percentMetaMode,
-        )
-      : []
-  const detalheItemsSafe = detalheItems ?? []
   const items: MesDetalheItem[] =
-    areaSelecionada && detalheBreakdown
-      ? detalheItemsSafe.length > 0
-        ? detalheItemsSafe
-        : itemsFromPoint
-      : itemsDefault
-  const recebidoArea =
-    areaSelecionada != null && !detalheBreakdown
-      ? recebidoAreaNoMes(point, stackSlices, areaSelecionada)
-      : 0
-  const recebidoMes =
-    areaSelecionada && !detalheBreakdown
-      ? recebidoArea
-      : porArea
-        ? Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
-        : Number(point.recebidoTotal) || 0
-  const semArea = porArea ? resolveRecebidoMes(areaPoint, stackSlices).semArea : 0
+    areaSelecionada && detalheBreakdown ? (detalheItems ?? []) : itemsDefault
+  const recebidoMes = areaSelecionada
+    ? Number(point.recebidoTotal) || 0
+    : porArea
+      ? Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
+      : Number(point.recebidoTotal) || 0
+  const semArea = porArea && !areaSelecionada ? resolveRecebidoMes(areaPoint, stackSlices).semArea : 0
   const metaMes = Number(point.meta) || 0
   const pctAtingido = percentMetaMode
     ? recebidoMes > 0
@@ -856,31 +810,13 @@ function ColunasMesDetalhePanel({
   const itemsDefault = !areaSelecionada
     ? buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
     : []
-  const itemsFromPoint =
-    areaSelecionada && detalheBreakdown
-      ? buildMesDetalheItems(
-          areaPoint,
-          stackSlices,
-          planoShareMode || detalheBreakdown === 'plano',
-          percentMetaMode,
-        )
-      : []
-  const detalheItemsSafe = detalheItems ?? []
   const items: MesDetalheItem[] =
-    areaSelecionada && detalheBreakdown
-      ? detalheItemsSafe.length > 0
-        ? detalheItemsSafe
-        : itemsFromPoint
-      : itemsDefault
-  const recebidoArea =
-    areaSelecionada != null && !detalheBreakdown
-      ? recebidoAreaNoMes(point, stackSlices, areaSelecionada)
-      : 0
+    areaSelecionada && detalheBreakdown ? (detalheItems ?? []) : itemsDefault
   const recebidoMes =
-    areaSelecionada && !detalheBreakdown
-      ? recebidoArea
+    areaSelecionada
+      ? Number(point.recebidoTotal) || 0
       : Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
-  const semArea = resolveRecebidoMes(areaPoint, stackSlices).semArea
+  const semArea = !areaSelecionada ? resolveRecebidoMes(areaPoint, stackSlices).semArea : 0
   const metaMes = Number(point.meta) || 0
   const pctAtingido = percentMetaMode
     ? recebidoMes > 0
@@ -986,10 +922,21 @@ function ColunasMesDetalhePanel({
 
       <table className="w-full border-collapse pr-1 text-sm">
         <tbody>
-          {items.length === 0 ? (
+          {detalheLoading ? (
+            <tr>
+              <td colSpan={2} className="py-2 text-slate-500">
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando detalhe…
+                </span>
+              </td>
+            </tr>
+          ) : items.length === 0 ? (
             <tr>
               <td colSpan={2} className="py-1 text-slate-500">
-                Sem recebido neste mês.
+                {detalheBreakdown
+                  ? 'Nenhum item neste recorte.'
+                  : 'Sem recebido neste mês.'}
               </td>
             </tr>
           ) : (
@@ -1103,18 +1050,26 @@ export function ReceitaComparativoColunasChart({
 
   const showAreaDrilldown = showRecebidoStack && porArea && !planoMode && !percentMetaMode
 
-  const { data: itensAreaByMes, isLoading: loadingItensAreaAno } = useQuery({
-    queryKey: ['receita', 'colunas-area-itens-ano', ano, areaSelecionada],
-    queryFn: async () => {
-      const pairs = await Promise.all(
-        meses.map(
-          async (mes) =>
-            [mes, await receitaService.fetchRecebidoItensPorArea(ano, mes, areaSelecionada!)] as const,
-        ),
-      )
-      return new Map(pairs)
-    },
-    enabled: showAreaDrilldown && !!areaSelecionada && detalheBreakdown != null,
+  const areaMetaPct = useMemo(
+    () => AREA_META_SLICES.find((a) => a.key === areaSelecionada)?.pct ?? null,
+    [areaSelecionada],
+  )
+
+  const { data: previstoDeptRows, isLoading: previstoDeptLoading } = useQuery({
+    queryKey: ['receita', 'previsto-departamento', ano],
+    queryFn: () => receitaService.fetchPrevistoPorDepartamento(ano),
+    enabled: showAreaDrilldown && !!areaSelecionada,
+  })
+
+  const { data: itensMesDetalheData, isLoading: loadingItensMes } = useQuery({
+    queryKey: ['receita', 'colunas-area-itens', ano, selectedMes, areaSelecionada],
+    queryFn: () =>
+      receitaService.fetchRecebidoItensPorArea(ano, selectedMes!, areaSelecionada!),
+    enabled:
+      showAreaDrilldown &&
+      !!areaSelecionada &&
+      detalheBreakdown != null &&
+      selectedMes != null,
   })
 
   const { data: empresasNomeGrupo } = useQuery({
@@ -1129,60 +1084,32 @@ export function ReceitaComparativoColunasChart({
     [empresasNomeGrupo],
   )
 
-  const drilldownSlices = useMemo(() => {
-    if (!itensAreaByMes || !detalheBreakdown) return []
-    const allItens = meses.flatMap((mes) => itensAreaByMes.get(mes) ?? [])
-    if (detalheBreakdown === 'grupo') {
-      return buildGrupoSlicesFromItens(allItens, clienteGrupoMap)
-    }
-    return buildPlanoSlicesFromItens(allItens)
-  }, [itensAreaByMes, detalheBreakdown, meses, clienteGrupoMap])
-
-  const drilldownRawChartData = useMemo(() => {
-    if (!itensAreaByMes || !detalheBreakdown || drilldownSlices.length === 0) return null
-    return buildColunasChartDataFromAreaItens(
-      ano,
-      rows,
-      itensAreaByMes,
-      drilldownSlices,
-      detalheBreakdown,
-      clienteGrupoMap,
-    )
-  }, [itensAreaByMes, detalheBreakdown, drilldownSlices, ano, rows, clienteGrupoMap])
-
   const singleAreaSlice = useMemo(() => {
-    if (!areaSelecionada || detalheBreakdown) return null
+    if (!areaSelecionada) return null
     return (
       areaSlices.find((s) => departamentoNormKey(s.departamento) === areaSelecionada) ?? null
     )
-  }, [areaSelecionada, detalheBreakdown, areaSlices])
+  }, [areaSelecionada, areaSlices])
 
-  const areaDrilldownActive =
-    showAreaDrilldown && !!areaSelecionada && detalheBreakdown != null && !!drilldownRawChartData
-
-  const rawChartData = useMemo(() => {
-    if (areaDrilldownActive && drilldownRawChartData) return drilldownRawChartData
+  const baseRawChartData = useMemo(() => {
     if (planoMode) {
       return buildColunasChartDataPorPlano(ano, rows, planoRows ?? [], planoSlices)
     }
     return buildColunasChartData(ano, rows, deptRows ?? [], areaSlices)
-  }, [
-    areaDrilldownActive,
-    drilldownRawChartData,
-    ano,
-    planoMode,
-    rows,
-    planoRows,
-    planoSlices,
-    deptRows,
-    areaSlices,
-  ])
+  }, [ano, planoMode, rows, planoRows, planoSlices, deptRows, areaSlices])
 
-  const effectiveStackSlices = areaDrilldownActive
-    ? drilldownSlices
-    : singleAreaSlice
-      ? [singleAreaSlice]
-      : stackSlices
+  const rawChartData = useMemo(() => {
+    if (!areaSelecionada || areaMetaPct == null) return baseRawChartData
+    return applyAreaScopeToColunasData(
+      baseRawChartData,
+      rows,
+      areaSelecionada,
+      areaMetaPct,
+      previstoDeptRows ?? [],
+    )
+  }, [baseRawChartData, areaSelecionada, areaMetaPct, rows, previstoDeptRows])
+
+  const effectiveStackSlices = singleAreaSlice ? [singleAreaSlice] : stackSlices
 
   const chartData = useMemo(() => {
     if (!percentMetaMode) return rawChartData
@@ -1198,7 +1125,7 @@ export function ReceitaComparativoColunasChart({
 
   const isLoading =
     (planoMode ? planoLoading : deptLoading) ||
-    (areaDrilldownActive && loadingItensAreaAno)
+    (!!areaSelecionada && showAreaDrilldown && previstoDeptLoading)
   const error = planoMode ? planoError : deptError
 
   const selectedPoint = useMemo(
@@ -1237,26 +1164,25 @@ export function ReceitaComparativoColunasChart({
   const hoveredPoint = hoveredIndex != null ? chartData[hoveredIndex] : null
   const legendPinned = selectedMes != null && selectedPoint != null
   const legendPoint = legendPinned ? selectedPoint : hoveredPoint
-  const mesDetalhe = legendPoint?.mes ?? selectedMes ?? null
 
   const areaLabelAtual = useMemo(
     () => AREA_META_SLICES.find((a) => a.key === areaSelecionada)?.label ?? null,
     [areaSelecionada],
   )
 
-  const itensMesDetalhe = useMemo(() => {
-    if (mesDetalhe == null || !itensAreaByMes) return []
-    return itensAreaByMes.get(mesDetalhe) ?? []
-  }, [mesDetalhe, itensAreaByMes])
-
   const detalheItems = useMemo(() => {
-    if (!itensMesDetalhe.length || !detalheBreakdown || !legendPoint) return []
-    const metaMes = Number(legendPoint.meta) || 0
+    if (!itensMesDetalheData?.length || !detalheBreakdown || !selectedPoint) return []
+    const metaMes = Number(selectedPoint.meta) || 0
     if (detalheBreakdown === 'grupo') {
-      return buildGrupoDetalheItemsFromItens(itensMesDetalhe, clienteGrupoMap, metaMes, percentMetaMode)
+      return buildGrupoDetalheItemsFromItens(
+        itensMesDetalheData,
+        clienteGrupoMap,
+        metaMes,
+        percentMetaMode,
+      )
     }
-    return buildPlanoDetalheItemsFromItens(itensMesDetalhe, metaMes, percentMetaMode)
-  }, [itensMesDetalhe, detalheBreakdown, legendPoint, clienteGrupoMap, percentMetaMode])
+    return buildPlanoDetalheItemsFromItens(itensMesDetalheData, metaMes, percentMetaMode)
+  }, [itensMesDetalheData, detalheBreakdown, selectedPoint, clienteGrupoMap, percentMetaMode])
 
   const selectArea = (key: string) => {
     setAreaSelecionada((prev) => (prev === key ? null : key))
@@ -1295,11 +1221,9 @@ export function ReceitaComparativoColunasChart({
                 : planoMode
                   ? 'Recebido por plano de contas'
                   : porArea
-                    ? areaDrilldownActive && areaLabelAtual
-                      ? `${areaLabelAtual} · por ${detalheBreakdown === 'grupo' ? 'grupo' : 'plano'}`
-                      : singleAreaSlice && areaLabelAtual
-                        ? areaLabelAtual
-                        : 'Recebido por área'
+                    ? areaLabelAtual
+                      ? areaLabelAtual
+                      : 'Recebido por área'
                     : 'Recebido consolidado'}
             </h2>
             <p className="text-xs text-slate-500">
@@ -1310,8 +1234,8 @@ export function ReceitaComparativoColunasChart({
                 : planoMode
                   ? `Colunas por plano (R$ no eixo, % no rótulo) · clique no mês para detalhar · ${ano}`
                   : porArea
-                    ? areaDrilldownActive
-                      ? `Recebido da área por ${detalheBreakdown === 'grupo' ? 'grupo de clientes' : 'plano de contas'} · ${ano}`
+                    ? areaLabelAtual
+                      ? `Recebido da área · meta e previsto da área · ${ano}`
                       : `Colunas por departamento · clique no mês para detalhar · ${ano}`
                     : `Recebido total por mês · clique no mês para detalhar por área · ${ano}`}
             </p>
@@ -1506,36 +1430,32 @@ export function ReceitaComparativoColunasChart({
             className="relative h-[360px] min-h-[360px] w-full min-w-0 overflow-visible"
             onMouseLeave={handleChartMouseLeave}
           >
-            {legendPoint && (
+            {legendPoint && !legendPinned && (
               <div
-                className={cn(
-                  'absolute left-1/2 top-3 z-[70] w-max max-w-[min(32rem,calc(100%-1rem))] -translate-x-1/2',
-                  legendPinned && 'pointer-events-auto',
-                )}
+                className="absolute left-1/2 top-3 z-[70] w-max max-w-[min(32rem,calc(100%-1rem))] -translate-x-1/2"
               >
                 <ColunasTooltipContent
                   point={legendPoint}
-                  breakdownPoint={legendPinned ? breakdownSelectedPoint ?? legendPoint : undefined}
+                  breakdownPoint={undefined}
                   stackSlices={effectiveStackSlices}
                   planoShareMode={planoMode}
                   percentMetaMode={percentMetaMode}
                   porArea={porArea}
                   visibleMetrics={chartVisibleMetrics}
-                  pinned={legendPinned}
-                  onUnpin={legendPinned ? () => setSelectedMes(null) : undefined}
+                  pinned={false}
                   areaSelecionada={showAreaDrilldown ? areaSelecionada : null}
                   areaLabel={areaLabelAtual}
-                  detalheBreakdown={showAreaDrilldown ? detalheBreakdown : null}
-                  detalheItems={detalheItems}
-                  detalheLoading={loadingItensAreaAno}
+                  detalheBreakdown={null}
+                  detalheItems={undefined}
+                  detalheLoading={false}
                 />
               </div>
             )}
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={360}>
               <ComposedChart
                 key={
-                  areaDrilldownActive
-                    ? `receita-colunas-drill-${areaSelecionada}-${detalheBreakdown}`
+                  areaSelecionada
+                    ? `receita-colunas-area-${areaSelecionada}`
                     : planoMode
                       ? `receita-colunas-plano-${porArea ? 'stack' : 'cons'}`
                       : `receita-colunas-area-${porArea ? 'stack' : 'cons'}`
@@ -1709,7 +1629,7 @@ export function ReceitaComparativoColunasChart({
               })}
               </div>
 
-          {showStackBreakdown && effectiveStackSlices.length > 0 && (
+          {showStackBreakdown && effectiveStackSlices.length > 0 && !areaSelecionada && (
             <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 px-1">
               {effectiveStackSlices.map((a) => (
                 <span
@@ -1745,7 +1665,7 @@ export function ReceitaComparativoColunasChart({
               areaLabel={areaLabelAtual}
               detalheBreakdown={showAreaDrilldown ? detalheBreakdown : null}
               detalheItems={detalheItems}
-              detalheLoading={loadingItensAreaAno}
+              detalheLoading={loadingItensMes}
             />
           )}
         </>

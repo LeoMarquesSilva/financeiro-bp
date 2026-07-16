@@ -322,6 +322,33 @@ export function buildColunasChartDataPorPlano(
   })
 }
 
+/** Meta rateada e previsto por departamento quando uma área está selecionada. */
+export function applyAreaScopeToColunasData(
+  points: ReceitaColunasChartPoint[],
+  rows: ReceitaMesRow[],
+  areaKey: string,
+  areaMetaPct: number,
+  previstoDeptRows: ReceitaRecebidoDepartamentoRow[],
+): ReceitaColunasChartPoint[] {
+  const previstoPorMes = new Map<number, number>()
+  for (const d of previstoDeptRows) {
+    if (departamentoNormKey(d.departamento) !== areaKey) continue
+    previstoPorMes.set(d.mes, (previstoPorMes.get(d.mes) ?? 0) + d.total)
+  }
+
+  const rowByMes = new Map(rows.map((r) => [r.mes, r]))
+
+  return points.map((p) => {
+    const row = rowByMes.get(p.mes)
+    const metaArea = row && row.meta > 0 ? (row.meta * areaMetaPct) / 100 : p.meta
+    return {
+      ...p,
+      meta: metaArea,
+      previsto: previstoPorMes.get(p.mes) ?? 0,
+    }
+  })
+}
+
 export function grupoDataKey(grupo: string): string {
   return `grp_${departamentoNormKey(grupo)}`
 }
