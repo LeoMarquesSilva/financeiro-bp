@@ -594,6 +594,8 @@ export type LegendDetalheExportRow = {
   /** Texto auxiliar abaixo do nome (ex.: grupos unificados). */
   subtitle?: string
   subtitleColor?: string
+  /** Subtitle ocupa toda a largura da linha (abaixo do nome e dos valores). */
+  subtitleFullWidth?: boolean
 }
 
 export type LegendDetalheExportData = {
@@ -655,6 +657,18 @@ function detalheNameMaxWidth(colWidth: number): number {
   return Math.max(120, colWidth - DETALHE_SWATCH - 10 - 8 - DETALHE_VALUE_COL_MIN)
 }
 
+function detalheSubtitleMaxWidth(colWidth: number, fullWidth: boolean): number {
+  if (fullWidth) {
+    return Math.max(120, colWidth - DETALHE_SWATCH - 10 - 4)
+  }
+  return detalheNameMaxWidth(colWidth)
+}
+
+function detalheValueBlockHeight(valueLineCount: number): number {
+  if (valueLineCount === 0) return 0
+  return DETALHE_VALUE_LINE_HEIGHT + Math.max(0, valueLineCount - 1) * DETALHE_VALUE_LINE_HEIGHT
+}
+
 function normalizeValueLines(
   lines: Array<string | LegendDetalheExportValueLine>,
 ): LegendDetalheExportValueLine[] {
@@ -706,21 +720,25 @@ function measureDetalheRowHeight(
 
   ctx.font = `400 12px ${DETALHE_FONT}`
   const nameLines = wrapCanvasText(ctx, row.name, nameMaxWidth)
-  let nameHeight = nameLines.length * DETALHE_NAME_LINE_HEIGHT
+  const nameHeight = nameLines.length * DETALHE_NAME_LINE_HEIGHT
+  const valueHeight = detalheValueBlockHeight(row.valueLines.length)
+
+  let totalHeight = Math.max(valueHeight, nameHeight, DETALHE_SWATCH)
 
   if (row.subtitle) {
     ctx.font = `400 10px ${DETALHE_FONT}`
-    const subtitleLines = wrapCanvasText(ctx, row.subtitle, nameMaxWidth)
-    nameHeight += 2 + subtitleLines.length * DETALHE_SUBTITLE_LINE_HEIGHT
+    const subtitleMaxWidth = detalheSubtitleMaxWidth(colWidth, !!row.subtitleFullWidth)
+    const subtitleLines = wrapCanvasText(ctx, row.subtitle, subtitleMaxWidth)
+    const subtitleHeight = 2 + subtitleLines.length * DETALHE_SUBTITLE_LINE_HEIGHT
+
+    if (row.subtitleFullWidth) {
+      totalHeight += subtitleHeight
+    } else {
+      totalHeight = Math.max(valueHeight, nameHeight + subtitleHeight, DETALHE_SWATCH)
+    }
   }
 
-  const valueHeight =
-    row.valueLines.length === 0
-      ? 0
-      : DETALHE_VALUE_LINE_HEIGHT +
-        Math.max(0, row.valueLines.length - 1) * DETALHE_VALUE_LINE_HEIGHT
-
-  return Math.max(valueHeight, nameHeight, DETALHE_SWATCH) + DETALHE_ROW_GAP
+  return totalHeight + DETALHE_ROW_GAP
 }
 
 function detalheContentStartY(): number {
@@ -882,20 +900,7 @@ function drawDetalheExportRow(
   const nameLines = wrapCanvasText(ctx, row.name, nameMaxWidth)
   drawCanvasTextLines(ctx, nameLines, nameX, rowTop, DETALHE_NAME_LINE_HEIGHT)
 
-  let nameBlockHeight = nameLines.length * DETALHE_NAME_LINE_HEIGHT
-  if (row.subtitle) {
-    ctx.font = `400 10px ${DETALHE_FONT}`
-    ctx.fillStyle = row.subtitleColor ?? LEGEND_DETALHE_EXPORT_COLORS.muted
-    const subtitleLines = wrapCanvasText(ctx, row.subtitle, nameMaxWidth)
-    drawCanvasTextLines(
-      ctx,
-      subtitleLines,
-      nameX,
-      rowTop + nameBlockHeight + 2,
-      DETALHE_SUBTITLE_LINE_HEIGHT,
-    )
-    nameBlockHeight += 2 + subtitleLines.length * DETALHE_SUBTITLE_LINE_HEIGHT
-  }
+  const nameBlockHeight = nameLines.length * DETALHE_NAME_LINE_HEIGHT
 
   const valueLines = normalizeValueLines(row.valueLines)
   valueLines.forEach((line, index) => {
@@ -912,6 +917,26 @@ function drawDetalheExportRow(
       'right',
     )
   })
+
+  const valueBlockHeight = detalheValueBlockHeight(valueLines.length)
+  const firstBandHeight = Math.max(nameBlockHeight, valueBlockHeight, DETALHE_SWATCH)
+
+  if (row.subtitle) {
+    ctx.font = `400 10px ${DETALHE_FONT}`
+    ctx.fillStyle = row.subtitleColor ?? LEGEND_DETALHE_EXPORT_COLORS.muted
+    const subtitleMaxWidth = detalheSubtitleMaxWidth(colWidth, !!row.subtitleFullWidth)
+    const subtitleLines = wrapCanvasText(ctx, row.subtitle, subtitleMaxWidth)
+    const subtitleY = row.subtitleFullWidth
+      ? rowTop + firstBandHeight + 2
+      : rowTop + nameBlockHeight + 2
+    drawCanvasTextLines(
+      ctx,
+      subtitleLines,
+      nameX,
+      subtitleY,
+      DETALHE_SUBTITLE_LINE_HEIGHT,
+    )
+  }
 
   ctx.textAlign = 'left'
 }
