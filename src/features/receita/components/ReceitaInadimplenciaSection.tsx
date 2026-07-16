@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, BarChart3, ChevronRight, ClipboardList, DollarSign, Loader2, Percent, Target } from 'lucide-react'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type {
   ReceitaInadimplenciaDashboard,
   ReceitaInadimplenciaEvolucaoMes,
+  ReceitaInadimplenciaGrupoDepartamentoPeriodo,
   ReceitaInadimplenciaGrupoMes,
   ReceitaInadimplenciaTopCliente,
   ReceitaInadimplenciaGrupoPeriodo,
 } from '../types/receitaInadimplencia.types'
-import { MESES_NOME, mesAbrev, mesMaxDisponivelInadimplencia, mesNome } from '../constants'
+import { MESES_NOME, mesAbrev, mesMaxDisponivelInadimplencia, mesNome, RECEITA_DEPARTAMENTO_LABELS, RECEITA_META_CONTRIBUICAO_AREA } from '../constants'
 import { useReceitaInadimplencia } from '../hooks/useReceitaInadimplencia'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
+import { receitaService } from '../services/receitaService'
 import { ReceitaInadimplenciaGrupoSheet } from './ReceitaInadimplenciaGrupoSheet'
 import { ReceitaInadimplenciaClientesSheet } from './ReceitaInadimplenciaClientesSheet'
+import { ReceitaInadimplenciaAreaGruposSheet } from './ReceitaInadimplenciaAreaGruposSheet'
 import { ReceitaInadimplenciaMesValorButton } from './ReceitaInadimplenciaMesValorButton'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import {
@@ -22,8 +26,10 @@ import {
   calcularIncluidosEfetivosPeriodo,
   normalizarEvolucaoCalculada,
   previstoMesEvolucao,
+  valorExibicaoEvolucao,
   type SelecaoGruposPorMes,
 } from '../utils/receitaInadimplenciaCalc'
+import { aplicarFiltroAreaInadimplencia } from '../utils/receitaInadimplenciaAreaFilter'
 
 const NAVY = '#1a2744'
 const GOLD = '#c9a227'
@@ -90,6 +96,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   const [gruposIncluidos, setGruposIncluidos] = useState<Set<string> | null>(null)
   const [gruposPorMes, setGruposPorMes] = useState<Record<number, ReceitaInadimplenciaGrupoMes[]>>({})
   const [selecaoPorMes, setSelecaoPorMes] = useState<SelecaoGruposPorMes>({})
+  const [areaSelecionada, setAreaSelecionada] = useState<string>('')
+  const [areaGruposSheetOpen, setAreaGruposSheetOpen] = useState(false)
+  const [areaGruposSheetMes, setAreaGruposSheetMes] = useState<number | null>(null)
 
   useEffect(() => {
     const max = mesMaxDisponivelInadimplencia(ano)
@@ -100,6 +109,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
     setGruposIncluidos(null)
     setGruposPorMes({})
     setSelecaoPorMes({})
+    setAreaSelecionada('')
   }, [ano])
 
   useEffect(() => {
@@ -107,7 +117,14 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
     setGruposIncluidos(null)
     setGruposPorMes({})
     setSelecaoPorMes({})
+    setMesDetalhe(null)
   }, [mesInicio, mesFim])
+
+  useEffect(() => {
+    setMesDetalhe(null)
+    setAreaGruposSheetOpen(false)
+    setAreaGruposSheetMes(null)
+  }, [areaSelecionada])
 
   const { data, isLoading, isFetching, error, refetch } = useReceitaInadimplencia(
     ano,
@@ -183,7 +200,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
     )
   }, [data, gruposPeriodo, gruposPorMes, selecaoPorMes, gruposIncluidos])
 
-  const dashboard = useMemo(() => {
+  const dashboardConsolidado = useMemo(() => {
     if (!data || data.mes_fim <= 0) return null
     const comGrupos = aplicarSelecaoGrupos(data, gruposPorMes, selecaoPorMes)
     const comCalculo = normalizarEvolucaoCalculada(comGrupos)
@@ -193,6 +210,98 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
     }
     return comPeriodo
   }, [data, gruposPorMes, selecaoPorMes, gruposPeriodo, incluidosEfetivos])
+
+  const mesesPeriodo = useMemo(() => {
+    if (mesFim < mesInicio) return []
+    return Array.from({ length: mesFim - mesInicio + 1 }, (_, i) => mesInicio + i)
+  }, [mesInicio, mesFim])
+
+  const areaKey = areaSelecionada || null
+
+  const { data: deptPorMes, isLoading: deptAreaLoading, isError: deptAreaError, error: deptAreaErrorObj } = useQuery({
+    queryKey: ['receita', 'inadimplencia', 'dept-area', ano, mesInicio, mesFim, areaKey],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        mesesPeriodo.map(async (mes) => {
+          const rows = await receitaInadimplenciaService.fetchDepartamentosMes(ano, mes)
+          return [mes, rows] as const
+        }),
+      )
+      return Object.fromEntries(entries)
+    },
+    enabled: areaKey != null && mesesPeriodo.length > 0,
+  })
+
+  const { data: previstoDept, isLoading: previstoAreaLoading, isError: previstoAreaError, error: previstoAreaErrorObj } = useQuery({
+    queryKey: ['receita', 'previsto-departamento', ano, 'inadimplencia-area'],
+    queryFn: () => receitaService.fetchPrevistoPorDepartamento(ano),
+    enabled: areaKey != null,
+  })
+
+  const { data: gruposDeptPorMes, isLoading: gruposDeptLoading, isError: gruposDeptError } = useQuery({
+    queryKey: ['receita', 'inadimplencia', 'grupos-dept-area', ano, mesInicio, mesFim, areaKey],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        mesesPeriodo.map(async (mes) => {
+          const rows = await receitaInadimplenciaService.fetchGruposDepartamentoMes(ano, mes, true)
+          return [mes, rows] as const
+        }),
+      )
+      return Object.fromEntries(entries) as Record<number, ReceitaInadimplenciaGrupoDepartamentoPeriodo[]>
+    },
+    enabled: areaKey != null && mesesPeriodo.length > 0,
+  })
+
+  const { data: gruposAreaPorMes, isLoading: gruposAreaLoading } = useQuery({
+    queryKey: ['receita', 'inadimplencia', 'grupos-area', ano, mesInicio, mesFim, areaKey],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        mesesPeriodo.map(async (mes) => {
+          const rows = await receitaInadimplenciaService.fetchGruposMes(ano, mes, true)
+          return [mes, rows] as const
+        }),
+      )
+      return Object.fromEntries(entries) as Record<number, ReceitaInadimplenciaGrupoMes[]>
+    },
+    enabled: areaKey != null && mesesPeriodo.length > 0,
+  })
+
+  const areaFilterPending =
+    areaKey != null && (deptAreaLoading || previstoAreaLoading)
+
+  const areaFilterError =
+    areaKey != null
+      ? deptAreaError
+        ? deptAreaErrorObj
+        : previstoAreaError
+          ? previstoAreaErrorObj
+          : null
+      : null
+
+  const dashboard = useMemo(() => {
+    if (!dashboardConsolidado) return null
+    if (!areaKey) return dashboardConsolidado
+    if (!deptPorMes || !previstoDept) return null
+    return aplicarFiltroAreaInadimplencia(
+      dashboardConsolidado,
+      areaKey,
+      deptPorMes,
+      previstoDept,
+      gruposDeptPorMes ?? {},
+      gruposAreaPorMes ?? {},
+      mesesPeriodo,
+    )
+  }, [dashboardConsolidado, areaKey, deptPorMes, previstoDept, gruposDeptPorMes, gruposAreaPorMes, mesesPeriodo])
+
+  const abrirDetalheAreaPeriodo = () => {
+    setAreaGruposSheetMes(null)
+    setAreaGruposSheetOpen(true)
+  }
+
+  const abrirDetalheAreaMes = (mes: number) => {
+    setAreaGruposSheetMes(mes)
+    setAreaGruposSheetOpen(true)
+  }
 
   const handleAplicarGrupos = (
     mes: number,
@@ -232,7 +341,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
 
   if (isLoading && !data) return <LoadingSkeleton />
 
-  if (error) {
+  if (error && !data) {
     return (
       <section className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4 text-sm text-amber-900">
         <p className="font-medium">Inadimplência indisponível</p>
@@ -241,10 +350,146 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
     )
   }
 
+  if (!data || data.mes_fim <= 0) return null
+
+  const areaLabel = areaKey ? RECEITA_DEPARTAMENTO_LABELS[areaKey] : null
+  const periodoBase = {
+    ano: data.ano,
+    mes_inicio: mesInicio,
+    mes_fim: mesFim,
+  } as ReceitaInadimplenciaDashboard
+  const periodoRefPreview = areaLabel
+    ? `${periodoReferenciaLabel(periodoBase)} · ${areaLabel}`
+    : periodoReferenciaLabel(periodoBase)
+
+  if (areaFilterPending) {
+    return (
+      <section className="space-y-5">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight" style={{ color: NAVY }}>
+              Inadimplência | {data.ano}
+            </h2>
+            <p className="mt-1 text-sm font-medium" style={{ color: NAVY }}>
+              Período de referência | {periodoRefPreview}
+              <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin text-slate-400" />
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="inadimplencia-area" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Área
+              </label>
+              <select
+                id="inadimplencia-area"
+                value={areaSelecionada}
+                onChange={(e) => setAreaSelecionada(e.target.value)}
+                className={cn(SELECT_CLASS, 'min-w-[168px]')}
+              >
+                <option value="">Todas as áreas</option>
+                {RECEITA_META_CONTRIBUICAO_AREA.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {RECEITA_DEPARTAMENTO_LABELS[a.key] ?? a.key}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="inadimplencia-mes-inicio-pending" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Mês inicial
+              </label>
+              <select
+                id="inadimplencia-mes-inicio-pending"
+                value={mesInicio}
+                onChange={(e) => handleMesInicio(Number(e.target.value))}
+                className={cn(SELECT_CLASS, 'min-w-[132px]')}
+              >
+                {mesesDisponiveis.map((m) => (
+                  <option key={m} value={m} disabled={m > mesFim}>
+                    {MESES_NOME[m - 1]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="inadimplencia-mes-fim-pending" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Mês final
+              </label>
+              <select
+                id="inadimplencia-mes-fim-pending"
+                value={mesFim}
+                onChange={(e) => setMesFim(Number(e.target.value))}
+                className={cn(SELECT_CLASS, 'min-w-[132px]')}
+              >
+                {mesesDisponiveis.filter((m) => m >= mesInicio).map((m) => (
+                  <option key={m} value={m}>
+                    {MESES_NOME[m - 1]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </header>
+        <LoadingSkeleton />
+      </section>
+    )
+  }
+
+  if (areaFilterError) {
+    return (
+      <section className="space-y-4">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight" style={{ color: NAVY }}>
+              Inadimplência | {data.ano}
+            </h2>
+            <p className="mt-1 text-sm font-medium" style={{ color: NAVY }}>
+              Período de referência | {periodoRefPreview}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="inadimplencia-area-err" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Área
+              </label>
+              <select
+                id="inadimplencia-area-err"
+                value={areaSelecionada}
+                onChange={(e) => setAreaSelecionada(e.target.value)}
+                className={cn(SELECT_CLASS, 'min-w-[168px]')}
+              >
+                <option value="">Todas as áreas</option>
+                {RECEITA_META_CONTRIBUICAO_AREA.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {RECEITA_DEPARTAMENTO_LABELS[a.key] ?? a.key}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </header>
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+          <p className="font-medium">Não foi possível filtrar por área</p>
+          <p className="mt-1">{areaFilterError.message}</p>
+          <button
+            type="button"
+            onClick={() => setAreaSelecionada('')}
+            className="mt-3 text-sm font-medium text-amber-900 underline underline-offset-2"
+          >
+            Voltar para todas as áreas
+          </button>
+        </div>
+      </section>
+    )
+  }
+
   if (!dashboard) return null
 
   const periodoCurto = periodoCurtoLabel(dashboard)
-  const periodoRef = periodoReferenciaLabel(dashboard)
+  const periodoRef = areaLabel
+    ? `${periodoReferenciaLabel(dashboard)} · ${areaLabel}`
+    : periodoReferenciaLabel(dashboard)
+  const filtroAreaAtivo = areaKey != null
   const primeiroMes = dashboard.evolucao[0]
   const ultimoMes = dashboard.evolucao[dashboard.evolucao.length - 1]
   const mesDetalheRow = mesDetalhe != null ? dashboard.evolucao.find((m) => m.mes === mesDetalhe) : null
@@ -263,11 +508,31 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
           </h2>
           <p className="mt-1 text-sm font-medium" style={{ color: NAVY }}>
             Período de referência | {periodoRef}
-            {isFetching && <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin text-slate-400" />}
+            {(isFetching || areaFilterPending) && (
+              <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin text-slate-400" />
+            )}
           </p>
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="inadimplencia-area" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Área
+            </label>
+            <select
+              id="inadimplencia-area"
+              value={areaSelecionada}
+              onChange={(e) => setAreaSelecionada(e.target.value)}
+              className={cn(SELECT_CLASS, 'min-w-[168px]')}
+            >
+              <option value="">Todas as áreas</option>
+              {RECEITA_META_CONTRIBUICAO_AREA.map((a) => (
+                <option key={a.key} value={a.key}>
+                  {RECEITA_DEPARTAMENTO_LABELS[a.key] ?? a.key}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="inadimplencia-mes-inicio" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Mês inicial
@@ -308,7 +573,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
       <div className="grid gap-4 sm:grid-cols-2">
         <button
           type="button"
-          onClick={() => setClientesSheetOpen(true)}
+          onClick={() => (filtroAreaAtivo ? abrirDetalheAreaPeriodo() : setClientesSheetOpen(true))}
           className={cn(
             'flex w-full items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 text-left shadow-sm transition-colors sm:gap-4 sm:px-5',
             'cursor-pointer hover:border-slate-300 hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2',
@@ -337,8 +602,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               {formatCurrency(dashboard.valor_total_periodo)}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-              Soma da inadimplência mensal no período (mesma regra da evolução) — clique para ver
-              empresas e títulos
+              {filtroAreaAtivo
+                ? 'Inadimplência alocada à área — clique para ver grupos alocados'
+                : 'Soma da inadimplência mensal no período (mesma regra da evolução) — clique para ver empresas e títulos'}
               {dashboard.clientes_ajustado && (
                 <span className="block text-amber-700/90">Total ajustado pela seleção de grupos</span>
               )}
@@ -370,7 +636,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               {formatPercent(dashboard.pct_periodo)}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-              Saldo proporcional do período ÷ previsto acumulado — inclui clientes inativos (regra planilha VIOS)
+              {filtroAreaAtivo
+                ? 'Saldo da área no período ÷ previsto acumulado da área'
+                : 'Saldo proporcional do período ÷ previsto acumulado — inclui clientes inativos (regra planilha VIOS)'}
             </p>
           </div>
         </div>
@@ -404,7 +672,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
           </div>
 
           <p className="px-5 pb-2 text-[11px] text-slate-500">
-            Somente clientes ativos
+            {filtroAreaAtivo
+              ? 'Parcela do grupo alocada à área (mesma base dos KPIs — inclui inativos)'
+              : 'Somente clientes ativos'}
           </p>
 
           <div className="overflow-x-auto px-4 pb-2">
@@ -416,7 +686,20 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {dashboard.top5.length === 0 ? (
+                {filtroAreaAtivo && (gruposDeptLoading || gruposAreaLoading) ? (
+                  <tr>
+                    <td colSpan={2} className="py-6 text-center text-slate-500">
+                      <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
+                      Carregando ranking por área…
+                    </td>
+                  </tr>
+                ) : filtroAreaAtivo && gruposDeptError ? (
+                  <tr>
+                    <td colSpan={2} className="py-6 text-center text-amber-800">
+                      Não foi possível carregar o ranking por área.
+                    </td>
+                  </tr>
+                ) : dashboard.top5.length === 0 ? (
                   <tr>
                     <td colSpan={2} className="py-6 text-center text-slate-500">
                       Nenhum inadimplente no período
@@ -487,17 +770,27 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                   <td className="py-2.5 pl-1 pr-2 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
                     Valor (R$)
                   </td>
-                  {dashboard.evolucao.map((m: ReceitaInadimplenciaEvolucaoMes) => (
+                  {dashboard.evolucao.map((m: ReceitaInadimplenciaEvolucaoMes) => {
+                    const exibicao = valorExibicaoEvolucao(m)
+                    return (
                     <td key={`v-${m.mes}`} className="px-1 py-1.5 text-center sm:px-2">
                       <ReceitaInadimplenciaMesValorButton
                         ano={dashboard.ano}
                         mes={m.mes}
-                        valor={m.valor}
+                        valor={exibicao.valor}
                         ajustado={m.ajustado}
-                        onClick={() => setMesDetalhe(m.mes)}
+                        onClick={() =>
+                          filtroAreaAtivo ? abrirDetalheAreaMes(m.mes) : setMesDetalhe(m.mes)
+                        }
+                        title={
+                          filtroAreaAtivo
+                            ? 'Ver grupos alocados à área neste mês'
+                            : undefined
+                        }
                       />
                     </td>
-                  ))}
+                    )
+                  })}
                 </tr>
                 <tr>
                   <td className="py-2.5 pl-1 pr-2 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
@@ -505,21 +798,22 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                   </td>
                   {dashboard.evolucao.map((m: ReceitaInadimplenciaEvolucaoMes) => (
                     <td key={`p-${m.mes}`} className="px-2 py-2.5 text-center font-bold tabular-nums" style={{ color: GOLD }}>
-                      {formatPercent(m.pct)}
+                      {formatPercent(valorExibicaoEvolucao(m).pct)}
                     </td>
                   ))}
                 </tr>
               </tbody>
             </table>
             <p className="mt-2 text-center text-[11px] text-slate-500">
-              Valores faturados no mês (vencimento) em inadimplência — inclui clientes inativos — clique no valor para
-              selecionar grupos
-              {dashboard.evolucao.some((m: ReceitaInadimplenciaEvolucaoMes) => !m.congelado) && (
+              {filtroAreaAtivo
+                ? 'Valores alocados por departamento (VIOS) — clique no valor para ver grupos da área'
+                : 'Valores faturados no mês (vencimento) em inadimplência — inclui clientes inativos — clique no valor para selecionar grupos'}
+              {!filtroAreaAtivo && dashboard.evolucao.some((m: ReceitaInadimplenciaEvolucaoMes) => !m.congelado) && (
                 <span className="block text-amber-700/90">
                   * Mês ainda não congelado — valor calculado com dados atuais do VIOS
                 </span>
               )}
-              {dashboard.evolucao.some((m) => m.ajustado) && (
+              {dashboard.evolucao.some((m) => m.ajustado) && !filtroAreaAtivo && (
                 <span className="block text-amber-800/90">
                   Valores destacados foram ajustados pela seleção manual de grupos
                 </span>
@@ -567,14 +861,40 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
             <p className="mt-1 text-sm font-medium leading-snug text-slate-800">
               Os 5 maiores inadimplentes representam do total da inadimplência do período{' '}
               <span className="text-lg font-bold" style={{ color: GOLD }}>
-                {formatPercent(dashboard.top5_pct)}
+                {filtroAreaAtivo && (gruposDeptLoading || gruposAreaLoading) ? (
+                  <Loader2 className="inline h-4 w-4 animate-spin" />
+                ) : (
+                  formatPercent(dashboard.top5_pct)
+                )}
               </span>
             </p>
           </div>
         </div>
       </div>
 
-      {mesDetalhe != null && mesDetalheRow && mesDetalheBase && (
+      {filtroAreaAtivo && areaKey && deptPorMes && (
+        <ReceitaInadimplenciaAreaGruposSheet
+          open={areaGruposSheetOpen}
+          onOpenChange={setAreaGruposSheetOpen}
+          areaKey={areaKey}
+          areaLabel={areaLabel ?? areaKey}
+          ano={dashboard.ano}
+          mesInicio={dashboard.mes_inicio}
+          mesFim={dashboard.mes_fim}
+          mesDetalhe={areaGruposSheetMes}
+          periodoLabel={periodoCurto}
+          valorTotal={
+            areaGruposSheetMes != null
+              ? (dashboard.evolucao.find((m) => m.mes === areaGruposSheetMes)?.valor ?? 0)
+              : dashboard.valor_total_periodo
+          }
+          gruposDeptPorMes={gruposDeptPorMes ?? {}}
+          gruposPorMes={gruposAreaPorMes ?? {}}
+          loading={gruposDeptLoading || gruposAreaLoading}
+        />
+      )}
+
+      {mesDetalhe != null && mesDetalheRow && mesDetalheBase && !filtroAreaAtivo && (
         <ReceitaInadimplenciaGrupoSheet
           open={mesDetalhe != null}
           onOpenChange={(open) => {

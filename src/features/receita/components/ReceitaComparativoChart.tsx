@@ -107,6 +107,14 @@ const SERIES = [
     type: 'area' as const,
     defaultOn: true,
   },
+  {
+    key: 'inadimplencia',
+    legend: 'Inadimplência',
+    color: RECEITA_COLORS.inadimplencia.hex,
+    type: 'line' as const,
+    strokeDasharray: '3 3',
+    defaultOn: true,
+  },
 ] as const
 
 type SeriesKey = (typeof SERIES)[number]['key']
@@ -122,6 +130,7 @@ type ChartPoint = {
   projetadoReal: number | null
   recebido: number | null
   previsto: number | null
+  inadimplencia: number | null
 }
 
 function formatYAxis(value: number): string {
@@ -148,6 +157,7 @@ function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
         projetadoReal: null,
         previsto: null,
         recebido: null,
+        inadimplencia: null,
       }
     }
     return {
@@ -157,6 +167,7 @@ function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
       projetadoReal: ((p.projetadoReal ?? 0) / meta) * 100,
       previsto: ((p.previsto ?? 0) / meta) * 100,
       recebido: p.recebido != null ? (p.recebido / meta) * 100 : null,
+      inadimplencia: p.inadimplencia != null ? (p.inadimplencia / meta) * 100 : null,
     }
   })
 }
@@ -167,6 +178,7 @@ const SERIES_PERCENT_LEGEND: Partial<Record<SeriesKey, string>> = {
   previsto: 'Previsto (% meta)',
   projetadoBaseAbril: 'Proj. base abril (% meta)',
   projetadoReal: 'Proj. real (% meta)',
+  inadimplencia: 'Inadimplência (% meta)',
 }
 
 function pctMeta(recebido: number, meta: number): number | null {
@@ -873,6 +885,21 @@ export function ReceitaComparativoChart({
     enabled: porAreaMode && areaLinhaSelecionada != null,
   })
 
+  const { data: inadEvolucao } = useQuery({
+    queryKey: ['receita-inadimplencia', 'comparativo-evolucao', ano],
+    queryFn: () =>
+      receitaInadimplenciaService.fetchDashboard({ ano, mesInicio: 1, mesFim: 12 }),
+    enabled: !porAreaMode,
+  })
+
+  const inadimplenciaPorMes = useMemo(() => {
+    const map = new Map<number, number>()
+    for (const m of inadEvolucao?.evolucao ?? []) {
+      if (m.valor > 0) map.set(m.mes, m.valor)
+    }
+    return map
+  }, [inadEvolucao])
+
   const togglePercentMode = () => {
     setPercentMode((v) => {
       const next = !v
@@ -914,15 +941,20 @@ export function ReceitaComparativoChart({
 
   const rawChartData: ChartPoint[] = useMemo(
     () =>
-      rows.map((r) => ({
-        mesLabel: r.mesLabel,
-        meta: r.meta > 0 ? r.meta : null,
-        projetadoBaseAbril: r.projetadoBaseAbril,
-        projetadoReal: r.projetadoReal,
-        recebido: valorRecebidoGrafico(r.recebido, ano, r.mes),
-        previsto: r.previsto,
-      })),
-    [rows, ano],
+      rows.map((r) => {
+        const inadRaw = inadimplenciaPorMes.get(r.mes)
+        return {
+          mesLabel: r.mesLabel,
+          meta: r.meta > 0 ? r.meta : null,
+          projetadoBaseAbril: r.projetadoBaseAbril,
+          projetadoReal: r.projetadoReal,
+          recebido: valorRecebidoGrafico(r.recebido, ano, r.mes),
+          previsto: r.previsto,
+          inadimplencia:
+            isMesFuturo(ano, r.mes) || inadRaw == null || inadRaw <= 0 ? null : inadRaw,
+        }
+      }),
+    [rows, ano, inadimplenciaPorMes],
   )
 
   const chartData = useMemo(
@@ -1605,12 +1637,12 @@ export function ReceitaComparativoChart({
                   strokeWidth={2}
                   strokeDasharray={'strokeDasharray' in s ? s.strokeDasharray : undefined}
                   dot={
-                    s.key === 'meta'
+                    s.key === 'meta' || s.key === 'inadimplencia'
                       ? { r: 3, fill: s.color, stroke: '#fff', strokeWidth: 1.5 }
                       : false
                   }
                   activeDot={{ r: 4, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
-                  connectNulls
+                  connectNulls={s.key !== 'inadimplencia'}
                 >
                   {!percentMode && s.key === 'meta' && (
                     <LabelList
@@ -1627,6 +1659,19 @@ export function ReceitaComparativoChart({
                       })}
                     />
                   )}
+                  {!percentMode && s.key === 'inadimplencia' && (
+                    <LabelList
+                      dataKey={s.key}
+                      content={ComparativoDotLabel({
+                        color: s.color,
+                        percentMode: false,
+                        position: 'above',
+                        total: chartData.length,
+                        offset: 22,
+                        stagger: 18,
+                      })}
+                    />
+                  )}
                 </Line>
               ))}
             </ComposedChart>
@@ -1635,13 +1680,21 @@ export function ReceitaComparativoChart({
           )}
 
           {!porAreaMode && (
-            <div data-chart-legend className="mt-3">
-              <ReceitaChartLegend
-                visible={visibleSeries}
-                percentMode={percentMode}
-                onToggle={toggleSeries}
-              />
-            </div>
+            <>
+              <div data-chart-legend className="mt-3">
+                <ReceitaChartLegend
+                  visible={visibleSeries}
+                  percentMode={percentMode}
+                  onToggle={toggleSeries}
+                />
+              </div>
+              {visibleSeries.has('inadimplencia') && !percentMode && (
+                <p className="mt-2 text-center text-[11px] text-slate-400">
+                  Inadimplência consolidada — meses congelados usam o snapshot do fechamento;
+                  mês corrente é calculado ao vivo (regra VIOS).
+                </p>
+              )}
+            </>
           )}
         </div>
       </section>

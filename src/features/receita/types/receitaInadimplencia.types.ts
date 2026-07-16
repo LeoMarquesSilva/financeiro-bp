@@ -24,12 +24,20 @@ export type ReceitaInadimplenciaClienteTituloPeriodo = {
   descricao: string | null
   plano_contas: string | null
   situacao_titulo: string | null
+  departamento: string | null
   data_vencimento: string | null
   data_pagamento: string | null
   valor_item: number
   valor_pago_item: number
   inadimplencia: number
   qtd_itens: number
+}
+
+export type ReceitaInadimplenciaClienteDepartamentoPeriodo = {
+  cliente: string
+  grupo_cliente: string
+  departamento: string
+  inadimplencia: number
 }
 
 export type ReceitaInadimplenciaDepartamentoMes = {
@@ -51,6 +59,12 @@ export type ReceitaInadimplenciaFechamentoMes = {
   congelado_em?: string
 }
 
+export type ReceitaInadimplenciaGrupoDepartamentoPeriodo = {
+  grupo_cliente: string
+  departamento: string
+  inadimplencia: number
+}
+
 export type ReceitaInadimplenciaGrupoMes = {
   grupo_cliente: string
   faturado: number
@@ -67,9 +81,13 @@ export type ReceitaInadimplenciaEvolucaoMes = {
   valor: number
   /** Valor calculado ao vivo — usado no acumulado do período. */
   valor_calculado?: number
+  /** Snapshot oficial do fechamento mensal (quando congelado). */
+  valor_congelado?: number
   /** Previsto mensal (denominador do % — alinhado ao gráfico comparativo de receita). */
   previsto?: number
   pct: number
+  /** % oficial do fechamento mensal (quando congelado). */
+  pct_congelado?: number
   congelado: boolean
   /** Data/hora em que o mês foi congelado (ISO). */
   congelado_em?: string

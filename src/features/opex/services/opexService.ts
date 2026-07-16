@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 import { MESES_CURTOS } from '../constants'
-import type { OpexDashboard, OpexMesGrupoRow, OpexPlanoRow, OpexTituloRow } from '../types/opex.types'
+import type { OpexDashboard, OpexDepartamentoRow, OpexMesGrupoRow, OpexPlanoRow, OpexTituloRow } from '../types/opex.types'
 import type { OpexTituloVinculado } from '../types/opexMetas.types'
 
 function mapTituloVinculado(row: Record<string, unknown>): OpexTituloVinculado {
@@ -134,6 +134,27 @@ export const opexService = {
       data_pagamento: row.data_pagamento ? String(row.data_pagamento) : null,
       valor_previsto: Number(row.valor_previsto) || 0,
       valor_realizado: Number(row.valor_realizado) || 0,
+    }))
+  },
+
+  async fetchDepartamentos(
+    ano: number,
+    meses?: number[] | null,
+    somenteFixas = false,
+  ): Promise<OpexDepartamentoRow[]> {
+    const { data, error } = await supabase.rpc(
+      'opex_departamentos' as never,
+      {
+        p_ano: ano,
+        p_meses: rpcMeses(meses),
+        p_somente_fixas: somenteFixas,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      departamento: String(row.departamento ?? 'Sem departamento'),
+      realizado: Number(row.realizado) || 0,
+      previsto: Number(row.previsto) || 0,
     }))
   },
 

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 import type {
+  ReceitaInadimplenciaClienteDepartamentoPeriodo,
   ReceitaInadimplenciaClientePeriodo,
   ReceitaInadimplenciaClienteTituloPeriodo,
   ReceitaInadimplenciaDashboard,
@@ -8,6 +9,7 @@ import type {
   ReceitaInadimplenciaFechamentoMes,
   ReceitaInadimplenciaGrupoMes,
   ReceitaInadimplenciaGrupoPeriodo,
+  ReceitaInadimplenciaGrupoDepartamentoPeriodo,
 } from '../types/receitaInadimplencia.types'
 
 export type ReceitaInadimplenciaFiltro = {
@@ -37,8 +39,10 @@ function parseDashboard(raw: unknown): ReceitaInadimplenciaDashboard {
       mes_label: String(e.mes_label ?? ''),
       valor: Number(e.valor) || 0,
       valor_calculado: e.valor_calculado != null ? Number(e.valor_calculado) : undefined,
+      valor_congelado: e.valor_congelado != null ? Number(e.valor_congelado) : undefined,
       previsto: e.previsto != null ? Number(e.previsto) : undefined,
       pct: Number(e.pct) || 0,
+      pct_congelado: e.pct_congelado != null ? Number(e.pct_congelado) : undefined,
       congelado: Boolean(e.congelado),
       congelado_em: e.congelado_em != null ? String(e.congelado_em) : undefined,
     })),
@@ -180,6 +184,61 @@ export const receitaInadimplenciaService = {
     }))
   },
 
+  /** Inadimplência por grupo × departamento em um mês (alocação VIOS). */
+  async fetchGruposDepartamentoMes(
+    ano: number,
+    mes: number,
+    incluirInativos = false,
+  ): Promise<ReceitaInadimplenciaGrupoDepartamentoPeriodo[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_grupo_departamento_periodo' as never,
+      {
+        p_ano: ano,
+        p_mes_inicio: mes,
+        p_mes_fim: mes,
+        p_incluir_inativos: incluirInativos,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      grupo_cliente: String(row.grupo_cliente ?? 'Sem grupo'),
+      departamento: String(row.departamento ?? 'Sem departamento'),
+      inadimplencia: Number(row.inadimplencia) || 0,
+    }))
+  },
+
+  /** Inadimplência por grupo × departamento no período (alocação VIOS). Top 5 por área. */
+  async fetchGruposDepartamentoPeriodo(
+    ano: number,
+    mesInicio: number,
+    mesFim: number,
+    incluirInativos = false,
+  ): Promise<ReceitaInadimplenciaGrupoDepartamentoPeriodo[]> {
+    if (mesFim < mesInicio) return []
+
+    const meses = Array.from({ length: mesFim - mesInicio + 1 }, (_, i) => mesInicio + i)
+    const porMes = await Promise.all(
+      meses.map((mes) => this.fetchGruposDepartamentoMes(ano, mes, incluirInativos)),
+    )
+
+    const agregado = new Map<string, ReceitaInadimplenciaGrupoDepartamentoPeriodo>()
+    for (const rows of porMes) {
+      for (const row of rows) {
+        const key = `${row.grupo_cliente}\0${row.departamento}`
+        const prev = agregado.get(key)
+        if (prev) {
+          prev.inadimplencia = Math.round((prev.inadimplencia + row.inadimplencia) * 100) / 100
+        } else {
+          agregado.set(key, { ...row })
+        }
+      }
+    }
+
+    return [...agregado.values()].sort(
+      (a, b) => b.inadimplencia - a.inadimplencia || a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR'),
+    )
+  },
+
   async fetchClienteDetalhePeriodo(
     ano: number,
     mesInicio: number,
@@ -205,6 +264,7 @@ export const receitaInadimplenciaService = {
       descricao: row.descricao != null ? String(row.descricao) : null,
       plano_contas: row.plano_contas != null ? String(row.plano_contas) : null,
       situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+      departamento: row.departamento != null ? String(row.departamento) : null,
       data_vencimento: row.data_vencimento != null ? String(row.data_vencimento) : null,
       data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
       valor_item: Number(row.valor_item) || 0,
@@ -212,6 +272,56 @@ export const receitaInadimplenciaService = {
       inadimplencia: Number(row.inadimplencia) || 0,
       qtd_itens: Number(row.qtd_itens) || 1,
     }))
+  },
+
+  async fetchClientesDepartamentoPeriodo(
+    ano: number,
+    mesInicio: number,
+    mesFim: number,
+    incluirInativos = true,
+  ): Promise<ReceitaInadimplenciaClienteDepartamentoPeriodo[]> {
+    if (mesFim < mesInicio) return []
+
+    const meses = Array.from({ length: mesFim - mesInicio + 1 }, (_, i) => mesInicio + i)
+    const porMes = await Promise.all(
+      meses.map(async (mes) => {
+        const { data, error } = await supabase.rpc(
+          'receita_inadimplencia_cliente_departamento_periodo' as never,
+          {
+            p_ano: ano,
+            p_mes_inicio: mes,
+            p_mes_fim: mes,
+            p_incluir_inativos: incluirInativos,
+          } as never,
+        )
+        if (error) throw error
+        return (data ?? []) as Array<Record<string, unknown>>
+      }),
+    )
+
+    const agregado = new Map<string, ReceitaInadimplenciaClienteDepartamentoPeriodo>()
+    for (const rows of porMes) {
+      for (const row of rows) {
+        const cliente = String(row.cliente ?? 'Sem cliente')
+        const grupo_cliente = String(row.grupo_cliente ?? 'Sem grupo')
+        const departamento = String(row.departamento ?? 'Sem departamento')
+        const key = `${cliente}\0${grupo_cliente}\0${departamento}`
+        const inad = Number(row.inadimplencia) || 0
+        const prev = agregado.get(key)
+        if (prev) {
+          prev.inadimplencia = Math.round((prev.inadimplencia + inad) * 100) / 100
+        } else {
+          agregado.set(key, { cliente, grupo_cliente, departamento, inadimplencia: inad })
+        }
+      }
+    }
+
+    return [...agregado.values()].sort(
+      (a, b) =>
+        b.inadimplencia - a.inadimplencia ||
+        a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR') ||
+        a.cliente.localeCompare(b.cliente, 'pt-BR'),
+    )
   },
 
   async fetchGruposMes(

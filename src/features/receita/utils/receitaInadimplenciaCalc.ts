@@ -47,6 +47,23 @@ export function valorEfetivoMes(m: ReceitaInadimplenciaEvolucaoMes): { valor: nu
   return { valor, pct: calcularPctInadimplencia(valor, previsto) }
 }
 
+/**
+ * Valor/% exibidos na tabela de evolução — meses congelados usam o snapshot oficial
+ * (mesmo número do sheet de grupos / fechamento), salvo ajuste manual de grupos.
+ */
+export function valorExibicaoEvolucao(m: ReceitaInadimplenciaEvolucaoMes): { valor: number; pct: number } {
+  if (m.ajustado) return { valor: m.valor, pct: m.pct }
+  if (m.congelado) {
+    const valor = m.valor_congelado ?? m.valor
+    const pct =
+      m.pct_congelado != null && m.pct_congelado > 0
+        ? m.pct_congelado
+        : calcularPctInadimplencia(valor, previstoMesEvolucao(m))
+    return { valor, pct }
+  }
+  return valorEfetivoMes(m)
+}
+
 /** Substitui snapshots congelados pelos valores calculados ao vivo (exceto meses com seleção manual). */
 export function normalizarEvolucaoCalculada(
   dashboard: ReceitaInadimplenciaDashboard,

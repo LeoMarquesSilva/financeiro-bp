@@ -1,3 +1,9 @@
+export type OpexDepartamentoRow = {
+  departamento: string
+  realizado: number
+  previsto: number
+}
+
 export type OpexKpis = {
   realizado_ytd: number
   previsto_ytd: number

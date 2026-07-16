@@ -6,6 +6,7 @@ import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { opexService } from '../services/opexService'
 import { OPEX_COLORS } from '../constants'
 import { formatPeriodoOpex, mesesFiltroKey, temFiltroMeses } from '../utils/opexPeriodo'
+import { OpexDepartamentosChart } from './OpexDepartamentosChart'
 import { OpexPlanoTitulos } from './OpexPlanoTitulos'
 import type { OpexGrupoRow, OpexPlanoRow } from '../types/opex.types'
 
@@ -163,6 +164,8 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro }: Props) {
           Só despesas fixas
         </button>
       </div>
+
+      <OpexDepartamentosChart ano={ano} mesesFiltro={mesesFiltro} somenteFixas={soFixas} />
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-0 text-sm md:min-w-[720px]">

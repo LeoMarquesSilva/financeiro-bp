@@ -18,10 +18,20 @@ type Props = {
   mes: number
   valor: number
   ajustado?: boolean
+  disabled?: boolean
+  title?: string
   onClick: () => void
 }
 
-export function ReceitaInadimplenciaMesValorButton({ ano, mes, valor, ajustado, onClick }: Props) {
+export function ReceitaInadimplenciaMesValorButton({
+  ano,
+  mes,
+  valor,
+  ajustado,
+  disabled,
+  title,
+  onClick,
+}: Props) {
   const [areas, setAreas] = useState<ReceitaInadimplenciaDepartamentoMes[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -56,13 +66,23 @@ export function ReceitaInadimplenciaMesValorButton({ ano, mes, valor, ajustado, 
         <button
           type="button"
           onClick={onClick}
-          onMouseEnter={carregarAreas}
-          onFocus={carregarAreas}
-          title="Ver e ajustar grupos inadimplentes"
+          disabled={disabled}
+          onMouseEnter={disabled ? undefined : carregarAreas}
+          onFocus={disabled ? undefined : carregarAreas}
+          title={
+            title ??
+            (disabled
+              ? 'Seleção de grupos disponível na visão consolidada'
+              : 'Ver e ajustar grupos inadimplentes')
+          }
           className={cn(
             'w-full min-w-[4.5rem] rounded-lg px-1.5 py-1.5 text-sm font-semibold tabular-nums transition-colors sm:px-2',
-            'hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-1',
-            ajustado ? 'text-amber-800 ring-1 ring-amber-200/80 bg-amber-50/60' : 'text-slate-900',
+            disabled
+              ? 'cursor-default text-slate-700'
+              : 'hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-1',
+            !disabled && ajustado ? 'text-amber-800 ring-1 ring-amber-200/80 bg-amber-50/60' : '',
+            !disabled && !ajustado ? 'text-slate-900' : '',
+            disabled && ajustado ? 'text-amber-900/80' : '',
           )}
         >
           {formatCurrency(valor)}
