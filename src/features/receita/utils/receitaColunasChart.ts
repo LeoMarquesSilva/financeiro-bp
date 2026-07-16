@@ -5,14 +5,19 @@ import {
 } from '../constants'
 import { isMesFuturo, valorRecebidoGrafico } from './receitaMes'
 import { labelPlanoContas } from './planoContasLabel'
-import { formatPercent } from '@/shared/utils/format'
+import { formatCurrencyCompact, formatPercent } from '@/shared/utils/format'
 import type {
   ReceitaAreaChartSlice,
   ReceitaColunasChartPoint,
   ReceitaMesRow,
   ReceitaRecebidoDepartamentoRow,
+  ReceitaRecebidoItemRow,
   ReceitaRecebidoPlanoMensalRow,
 } from '../types/receita.types'
+import {
+  agruparRecebidoPorGrupo,
+  valorRecebidoItem,
+} from './recebidoGrupos'
 
 export function departamentoNormKey(departamento: string): string {
   return (
@@ -112,6 +117,55 @@ export function formatColunaLabel(value: number): string {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 }
 
+export type ColunasBarLabelMode = 'currency' | 'percentMeta' | 'planoShare'
+
+/** Valores absolutos em reais (ex.: 1.207.251) não devem receber sufixo %. */
+export function isLikelyAbsoluteCurrency(value: number): boolean {
+  return Number.isFinite(value) && Math.abs(value) >= 1000
+}
+
+export function resolveColunasBarLabelMode(
+  percentMetaMode: boolean,
+  planoShareLabels: boolean,
+): ColunasBarLabelMode {
+  if (percentMetaMode) return 'percentMeta'
+  if (planoShareLabels) return 'planoShare'
+  return 'currency'
+}
+
+export function formatColunasBarValueLabel(
+  value: number,
+  mode: ColunasBarLabelMode,
+  options?: { stackTotal?: number },
+): string {
+  if (!value || !Number.isFinite(value)) return ''
+  if (mode === 'planoShare') {
+    const total = options?.stackTotal ?? 0
+    if (!total) return ''
+    return formatPercentLabel((value / total) * 100)
+  }
+  if (mode === 'percentMeta') {
+    if (isLikelyAbsoluteCurrency(value)) return formatCurrencyCompact(value)
+    return formatPercentLabel(value)
+  }
+  return formatCurrencyCompact(value)
+}
+
+function parseHexColor(hex: string): { r: number; g: number; b: number } | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return null
+  const n = parseInt(m[1], 16)
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+}
+
+/** Cor de texto legível sobre o preenchimento do segmento empilhado. */
+export function segmentLabelTextColor(segmentColor: string): string {
+  const rgb = parseHexColor(segmentColor)
+  if (!rgb) return '#0f172a'
+  const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255
+  return luminance > 0.62 ? '#0f172a' : '#ffffff'
+}
+
 export function buildAreaSlices(
   deptRows: ReceitaRecebidoDepartamentoRow[],
   meses: number[],
@@ -203,7 +257,7 @@ export function toColunasPercentData(
   stackSlices: ReceitaAreaChartSlice[],
 ): ReceitaColunasChartPoint[] {
   return data.map((p) => {
-    const meta = p.meta
+    const meta = Number(p.meta) || 0
     if (meta <= 0) return { ...p }
 
     const point: ReceitaColunasChartPoint = {
@@ -263,6 +317,92 @@ export function buildColunasChartDataPorPlano(
         point[key] = p.total
       }
     }
+
+    return point
+  })
+}
+
+export function grupoDataKey(grupo: string): string {
+  return `grp_${departamentoNormKey(grupo)}`
+}
+
+export function buildGrupoSlicesFromItens(
+  itens: ReceitaRecebidoItemRow[],
+  clienteGrupoMap: Map<string, string>,
+): ReceitaAreaChartSlice[] {
+  const grupos = agruparRecebidoPorGrupo(itens, clienteGrupoMap)
+  return grupos.map((g, i) => ({
+    departamento: g.grupo,
+    dataKey: grupoDataKey(g.grupo),
+    color: RECEITA_AREA_FALLBACK_PALETTE[i % RECEITA_AREA_FALLBACK_PALETTE.length],
+  }))
+}
+
+export function buildPlanoSlicesFromItens(itens: ReceitaRecebidoItemRow[]): ReceitaAreaChartSlice[] {
+  const totals = new Map<string, number>()
+  for (const item of itens) {
+    const plano = item.plano_contas?.trim() || 'Sem plano'
+    totals.set(plano, (totals.get(plano) ?? 0) + valorRecebidoItem(item))
+  }
+
+  const usedColors = new Set<string>()
+
+  return [...totals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([plano]) => ({
+      departamento: labelPlanoContas(plano),
+      dataKey: planoDataKey(plano),
+      color: planoColor(plano, usedColors),
+    }))
+}
+
+export function buildColunasChartDataFromAreaItens(
+  ano: number,
+  rows: ReceitaMesRow[],
+  itensByMes: Map<number, ReceitaRecebidoItemRow[]>,
+  slices: ReceitaAreaChartSlice[],
+  breakdown: 'grupo' | 'plano',
+  clienteGrupoMap: Map<string, string>,
+): ReceitaColunasChartPoint[] {
+  return rows.map((r) => {
+    const futuro = isMesFuturo(ano, r.mes)
+    const itens = itensByMes.get(r.mes) ?? []
+    const point: ReceitaColunasChartPoint = {
+      mes: r.mes,
+      mesLabel: r.mesLabel,
+      meta: r.meta,
+      projetadoBaseAbril: r.projetadoBaseAbril,
+      projetadoReal: r.projetadoReal,
+      previsto: r.previsto,
+      recebidoTotal: null,
+    }
+
+    for (const slice of slices) {
+      point[slice.dataKey] = futuro ? null : 0
+    }
+
+    if (!futuro && itens.length > 0) {
+      if (breakdown === 'grupo') {
+        for (const g of agruparRecebidoPorGrupo(itens, clienteGrupoMap)) {
+          point[grupoDataKey(g.grupo)] = g.total
+        }
+      } else {
+        const byPlano = new Map<string, number>()
+        for (const item of itens) {
+          const plano = item.plano_contas?.trim() || 'Sem plano'
+          byPlano.set(plano, (byPlano.get(plano) ?? 0) + valorRecebidoItem(item))
+        }
+        for (const [plano, total] of byPlano) {
+          point[planoDataKey(plano)] = total
+        }
+      }
+    }
+
+    const recebidoTotal = slices.reduce(
+      (sum, slice) => sum + (Number(point[slice.dataKey]) || 0),
+      0,
+    )
+    point.recebidoTotal = recebidoTotal > 0 ? recebidoTotal : null
 
     return point
   })

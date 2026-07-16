@@ -8,7 +8,7 @@ import {
   type SetStateAction,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, Check, Copy, Layers, Loader2, Percent, X } from 'lucide-react'
+import { BarChart3, Check, Copy, Layers, Loader2, Percent, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,23 +27,36 @@ import type { MouseHandlerDataParam } from 'recharts/types/synchronisation/types
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { receitaService } from '../services/receitaService'
-import { RECEITA_CHART_LABEL, RECEITA_CHART_AXIS, RECEITA_CHART_LAYOUT, RECEITA_COLUNAS_METRICAS, RECEITA_COLORS } from '../constants'
+import { RECEITA_CHART_LABEL, RECEITA_CHART_AXIS, RECEITA_CHART_LAYOUT, RECEITA_COLUNAS_METRICAS, RECEITA_COLORS, RECEITA_DEPARTAMENTO_CORES, RECEITA_DEPARTAMENTO_LABELS, RECEITA_META_CONTRIBUICAO_AREA, RECEITA_AREA_FALLBACK_PALETTE, RECEITA_PLANO_PALETTE } from '../constants'
 import type {
   ReceitaColunasChartPoint,
   ReceitaDepartamentoCoresConfig,
   ReceitaMesRow,
+  ReceitaRecebidoItemRow,
 } from '../types/receita.types'
-import { RECEITA_DEPARTAMENTO_CORES } from '../constants'
 import {
   buildAreaSlices,
   buildColunasChartData,
+  buildColunasChartDataFromAreaItens,
   buildColunasChartDataPorPlano,
+  buildGrupoSlicesFromItens,
   buildPlanoSlices,
-  formatColunaLabel,
+  buildPlanoSlicesFromItens,
+  departamentoNormKey,
+  formatColunasBarValueLabel,
   formatPercentLabel,
   formatPercentMeta,
+  isLikelyAbsoluteCurrency,
+  resolveColunasBarLabelMode,
+  segmentLabelTextColor,
   toColunasPercentData,
 } from '../utils/receitaColunasChart'
+import { labelPlanoContas } from '../utils/planoContasLabel'
+import {
+  agruparRecebidoPorGrupo,
+  buildClienteGrupoMap,
+  valorRecebidoItem,
+} from '../utils/recebidoGrupos'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import { copyElementImageToClipboard } from '@/shared/utils/copyChartImage'
 import {
@@ -55,6 +68,14 @@ import {
 type MetricKey = (typeof RECEITA_COLUNAS_METRICAS)[number]['key']
 
 type StackMode = 'area' | 'plano_percent'
+
+type DetalheBreakdown = 'plano' | 'grupo'
+
+const AREA_META_SLICES = RECEITA_META_CONTRIBUICAO_AREA.map((a) => ({
+  ...a,
+  label: RECEITA_DEPARTAMENTO_LABELS[a.key] ?? a.key,
+  color: RECEITA_DEPARTAMENTO_CORES[a.key] ?? '#64748b',
+}))
 
 type Props = {
   rows: ReceitaMesRow[]
@@ -91,17 +112,8 @@ function StackSegmentLabel(
 
   const w = Number(width)
   const h = Number(height)
-
-  let label: string
-  if (percentMetaMode) {
-    label = formatPercentLabel(num)
-  } else if (planoShareLabels) {
-    if (!total) return null
-    label = formatPercentLabel((num / total) * 100)
-  } else {
-    if (!total) return null
-    label = formatColunaLabel(num)
-  }
+  const labelMode = resolveColunasBarLabelMode(!!percentMetaMode, !!planoShareLabels)
+  const label = formatColunasBarValueLabel(num, labelMode, { stackTotal: total })
 
   if (!label) return null
 
@@ -111,16 +123,19 @@ function StackSegmentLabel(
   const stroke =
     segmentColor ?? (typeof props.fill === 'string' ? props.fill : RECEITA_CHART_AXIS.label)
   const MIN_INSIDE_HEIGHT = 22
+  const fontSize = RECEITA_CHART_LABEL.barInside
+  const charWidth = fontSize * 0.58
+  const textFitsInside = h >= MIN_INSIDE_HEIGHT && label.length * charWidth <= w - 6
 
-  if (h >= MIN_INSIDE_HEIGHT) {
+  if (textFitsInside) {
     return (
       <text
         x={cx}
         y={segmentCy}
-        fill="#fff"
+        fill={segmentLabelTextColor(stroke)}
         textAnchor="middle"
         dominantBaseline="middle"
-        fontSize={RECEITA_CHART_LABEL.barInside}
+        fontSize={fontSize}
         fontWeight={600}
         pointerEvents="none"
       >
@@ -165,6 +180,8 @@ function ConsolidadoBarLabel(
 
   const h = Number(height)
   const fontSize = h >= 20 ? RECEITA_CHART_LABEL.barTop : h >= 12 ? 10 : 9
+  const labelMode = resolveColunasBarLabelMode(!!percentMetaMode, false)
+  const label = formatColunasBarValueLabel(num, labelMode)
 
   return (
     <text
@@ -176,7 +193,7 @@ function ConsolidadoBarLabel(
       fontWeight={600}
       pointerEvents="none"
     >
-      {percentMetaMode ? formatPercentLabel(num) : formatColunaLabel(num)}
+      {label}
     </text>
   )
 }
@@ -185,10 +202,12 @@ function ColunasLinePointLabel({
   color,
   percentMetaMode,
   total,
+  chartData,
 }: {
   color: string
   percentMetaMode: boolean
   total: number
+  chartData: ReceitaColunasChartPoint[]
 }) {
   return function Label(props: LabelProps & { index?: number }) {
     const { x, y, value, index } = props
@@ -196,26 +215,40 @@ function ColunasLinePointLabel({
     const num = typeof value === 'number' ? value : Number(value)
     if (!Number.isFinite(num) || num <= 0) return null
 
-    const text = percentMetaMode ? formatPercentLabel(num) : formatColunaLabel(num)
+    if (index != null && total > 1) {
+      const isFirst = index === 0
+      const isLast = index === total - 1
+      if (!isFirst && !isLast) {
+        const prev = Number(chartData[index - 1]?.meta) || 0
+        if (Math.abs(num - prev) < 0.01) return null
+      }
+    }
+
+    const labelMode = resolveColunasBarLabelMode(!!percentMetaMode, false)
+    const text = formatColunasBarValueLabel(num, labelMode)
     if (!text) return null
 
     const cx = Number(x)
     const cy = Number(y)
     const anchor = edgeAwareAnchor(index, total)
-    const vertical = resolveLabelVerticalPosition(cy, 10, undefined, 'above')
-    const labelY = labelYForPosition(cy, 10, vertical)
+    const offset = 22
+    const stagger = 14
+    const adjustedOffset = offset + (index != null && index % 2 === 1 ? stagger : 0)
+    const vertical = resolveLabelVerticalPosition(cy, adjustedOffset, undefined, 'above')
+    const labelY = labelYForPosition(cy, adjustedOffset, vertical)
+    const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
     const charWidth = 6.4
     const boxWidth = text.length * charWidth + 8
     const boxHeight = 15
     const boxX =
-      anchor === 'start' ? cx - 3 : anchor === 'end' ? cx - boxWidth + 3 : cx - boxWidth / 2
+      anchor === 'start' ? labelX - 3 : anchor === 'end' ? labelX - boxWidth + 3 : labelX - boxWidth / 2
     const boxY = Math.max(RECEITA_CHART_LAYOUT.labelMinY, labelY - 12)
 
     return (
       <g pointerEvents="none">
         <rect x={boxX} y={boxY} width={boxWidth} height={boxHeight} rx={3} fill="#fff" fillOpacity={0.88} />
         <text
-          x={cx}
+          x={labelX}
           y={labelY}
           fill={color}
           textAnchor={anchor}
@@ -313,6 +346,69 @@ function buildMesDetalheItems(
     .sort((a, b) => b.valor - a.valor)
 }
 
+function buildPlanoDetalheItemsFromItens(
+  itens: ReceitaRecebidoItemRow[],
+  metaMes: number,
+  percentMetaMode: boolean,
+): MesDetalheItem[] {
+  const byPlano = new Map<string, number>()
+  for (const item of itens) {
+    const plano = item.plano_contas?.trim() || 'Sem plano'
+    byPlano.set(plano, (byPlano.get(plano) ?? 0) + valorRecebidoItem(item))
+  }
+  const totalArea = [...byPlano.values()].reduce((s, v) => s + v, 0)
+
+  return [...byPlano.entries()]
+    .map(([plano, valor], i) => ({
+      key: plano,
+      name: labelPlanoContas(plano),
+      color: RECEITA_PLANO_PALETTE[i % RECEITA_PLANO_PALETTE.length],
+      valor: percentMetaMode && metaMes > 0 ? (valor / metaMes) * 100 : valor,
+      pctShare: !percentMetaMode && totalArea > 0 ? (valor / totalArea) * 100 : null,
+      pctMeta:
+        percentMetaMode
+          ? valor
+          : metaMes > 0
+            ? (valor / metaMes) * 100
+            : null,
+    }))
+    .filter((i) => i.valor > 0)
+    .sort((a, b) => b.valor - a.valor)
+}
+
+function buildGrupoDetalheItemsFromItens(
+  itens: ReceitaRecebidoItemRow[],
+  clienteGrupoMap: Map<string, string>,
+  metaMes: number,
+  percentMetaMode: boolean,
+): MesDetalheItem[] {
+  return agruparRecebidoPorGrupo(itens, clienteGrupoMap)
+    .map((g, i) => ({
+      key: g.grupo,
+      name: g.grupo,
+      color: RECEITA_AREA_FALLBACK_PALETTE[i % RECEITA_AREA_FALLBACK_PALETTE.length],
+      valor: percentMetaMode && metaMes > 0 ? (g.total / metaMes) * 100 : g.total,
+      pctShare: null,
+      pctMeta:
+        percentMetaMode
+          ? g.total
+          : metaMes > 0
+            ? (g.total / metaMes) * 100
+            : null,
+    }))
+    .filter((i) => i.valor > 0)
+}
+
+function recebidoAreaNoMes(
+  point: ReceitaColunasChartPoint,
+  stackSlices: { dataKey: string; departamento: string }[],
+  areaKey: string,
+): number {
+  const slice = stackSlices.find((s) => departamentoNormKey(s.departamento) === areaKey)
+  if (!slice) return 0
+  return Number(point[slice.dataKey]) || 0
+}
+
 function MesDetalheItemValor({
   item,
   planoShareMode,
@@ -325,6 +421,18 @@ function MesDetalheItemValor({
   subClassName?: string
 }) {
   if (percentMetaMode) {
+    if (isLikelyAbsoluteCurrency(item.valor)) {
+      return (
+        <>
+          <p className="m-0 font-semibold leading-5">{formatCurrency(item.valor)}</p>
+          {item.pctMeta != null && (
+            <p className={cn('m-0 mt-0.5 font-normal leading-4 text-sky-700', subClassName)}>
+              {formatPercentMeta(item.pctMeta)} da meta
+            </p>
+          )}
+        </>
+      )
+    }
     return (
       <>
         <p className="m-0 font-semibold leading-5">{formatPercentLabel(item.valor)}</p>
@@ -359,6 +467,14 @@ function MesDetalheItemValor({
       )}
     </>
   )
+}
+
+function formatRecebidoMesDisplay(recebidoMes: number, percentMetaMode: boolean): string {
+  if (percentMetaMode) {
+    if (isLikelyAbsoluteCurrency(recebidoMes)) return formatCurrency(recebidoMes)
+    return `${formatPercentLabel(recebidoMes)} da meta`
+  }
+  return formatCurrency(recebidoMes)
 }
 
 function resolveChartHoverIndex(
@@ -474,6 +590,11 @@ function ColunasTooltipContent({
   visibleMetrics,
   pinned = false,
   onUnpin,
+  areaSelecionada,
+  areaLabel,
+  detalheBreakdown,
+  detalheItems,
+  detalheLoading,
 }: {
   point: ReceitaColunasChartPoint
   breakdownPoint?: ReceitaColunasChartPoint
@@ -485,14 +606,42 @@ function ColunasTooltipContent({
   visibleMetrics: Set<MetricKey>
   pinned?: boolean
   onUnpin?: () => void
+  areaSelecionada?: string | null
+  areaLabel?: string | null
+  detalheBreakdown?: DetalheBreakdown | null
+  detalheItems?: MesDetalheItem[]
+  detalheLoading?: boolean
 }) {
   const areaPoint = breakdownPoint ?? point
-  const items = porArea
+  const itemsDefault = porArea && !areaSelecionada
     ? buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
     : []
-  const recebidoMes = porArea
-    ? Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
-    : Number(point.recebidoTotal) || 0
+  const itemsFromPoint =
+    areaSelecionada && detalheBreakdown
+      ? buildMesDetalheItems(
+          areaPoint,
+          stackSlices,
+          planoShareMode || detalheBreakdown === 'plano',
+          percentMetaMode,
+        )
+      : []
+  const detalheItemsSafe = detalheItems ?? []
+  const items: MesDetalheItem[] =
+    areaSelecionada && detalheBreakdown
+      ? detalheItemsSafe.length > 0
+        ? detalheItemsSafe
+        : itemsFromPoint
+      : itemsDefault
+  const recebidoArea =
+    areaSelecionada != null && !detalheBreakdown
+      ? recebidoAreaNoMes(point, stackSlices, areaSelecionada)
+      : 0
+  const recebidoMes =
+    areaSelecionada && !detalheBreakdown
+      ? recebidoArea
+      : porArea
+        ? Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
+        : Number(point.recebidoTotal) || 0
   const semArea = porArea ? resolveRecebidoMes(areaPoint, stackSlices).semArea : 0
   const metaMes = Number(point.meta) || 0
   const pctAtingido = percentMetaMode
@@ -520,7 +669,17 @@ function ColunasTooltipContent({
         className="px-3 py-2.5"
       >
         <div className="mb-1.5 flex items-start justify-between gap-2">
-          <p className="font-semibold capitalize text-slate-800">{mesLabel ?? point.mesLabel}</p>
+          <div>
+            <p className="font-semibold capitalize text-slate-800">{mesLabel ?? point.mesLabel}</p>
+            {areaLabel && (
+              <p className="mt-0.5 text-xs font-medium text-sky-800">{areaLabel}</p>
+            )}
+            {detalheBreakdown && (
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                {detalheBreakdown === 'grupo' ? 'Por grupo de empresas' : 'Por plano de contas'}
+              </p>
+            )}
+          </div>
         </div>
 
       {!percentMetaMode && metaMes > 0 && (
@@ -541,18 +700,29 @@ function ColunasTooltipContent({
 
       {recebidoMes > 0 && (
         <p className="mb-3 mt-0 text-xs leading-4 text-slate-500">
-          Total recebido:{' '}
+          {areaSelecionada ? 'Recebido da área' : 'Total recebido'}:{' '}
           <span className="font-semibold tabular-nums text-slate-800">
-            {percentMetaMode
-              ? `${formatPercentLabel(recebidoMes)} da meta`
-              : formatCurrency(recebidoMes)}
+            {formatRecebidoMesDisplay(recebidoMes, percentMetaMode)}
           </span>
-          {!percentMetaMode && semArea > 1 && (
+          {!percentMetaMode && semArea > 1 && !areaSelecionada && (
             <span className="mt-1 block text-[10px] leading-4 text-amber-700">
               + {formatCurrency(semArea)} recebido sem departamento (não entra no rateio)
             </span>
           )}
         </p>
+      )}
+
+      {areaSelecionada && !detalheBreakdown && (
+        <p className="mb-2 text-xs text-sky-700">
+          Selecione <strong>Por plano</strong> ou <strong>Por grupo</strong> para detalhar esta área.
+        </p>
+      )}
+
+      {detalheLoading && (
+        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Carregando detalhe…
+        </div>
       )}
 
       {items.length > 0 ? (
@@ -575,7 +745,7 @@ function ColunasTooltipContent({
                 >
                   <MesDetalheItemValor
                     item={item}
-                    planoShareMode={planoShareMode}
+                    planoShareMode={planoShareMode || detalheBreakdown === 'plano'}
                     percentMetaMode={percentMetaMode}
                   />
                 </td>
@@ -583,12 +753,14 @@ function ColunasTooltipContent({
             ))}
           </tbody>
         </table>
-      ) : recebidoMes <= 0 ? (
+      ) : recebidoMes <= 0 && !detalheLoading ? (
         <p className="mb-2 text-xs text-slate-500">Sem recebido neste mês.</p>
-      ) : !porArea ? (
+      ) : !porArea && !areaSelecionada ? (
         <p className="mb-2 text-[10px] text-slate-400">
           Clique no mês para ver o detalhe por {planoShareMode ? 'plano' : 'área'}.
         </p>
+      ) : areaSelecionada && detalheBreakdown && !detalheLoading && items.length === 0 ? (
+        <p className="mb-2 text-xs text-slate-500">Nenhum item neste recorte.</p>
       ) : null}
 
       {metricEntries.length > 0 && (
@@ -658,6 +830,11 @@ function ColunasMesDetalhePanel({
   selectedMes,
   onSelectMes,
   onClose,
+  areaSelecionada,
+  areaLabel,
+  detalheBreakdown,
+  detalheItems,
+  detalheLoading,
 }: {
   point: ReceitaColunasChartPoint
   breakdownPoint?: ReceitaColunasChartPoint
@@ -669,10 +846,40 @@ function ColunasMesDetalhePanel({
   selectedMes: number
   onSelectMes: (mes: number) => void
   onClose: () => void
+  areaSelecionada?: string | null
+  areaLabel?: string | null
+  detalheBreakdown?: DetalheBreakdown | null
+  detalheItems?: MesDetalheItem[]
+  detalheLoading?: boolean
 }) {
   const areaPoint = breakdownPoint ?? point
-  const items = buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
-  const recebidoMes = Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
+  const itemsDefault = !areaSelecionada
+    ? buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
+    : []
+  const itemsFromPoint =
+    areaSelecionada && detalheBreakdown
+      ? buildMesDetalheItems(
+          areaPoint,
+          stackSlices,
+          planoShareMode || detalheBreakdown === 'plano',
+          percentMetaMode,
+        )
+      : []
+  const detalheItemsSafe = detalheItems ?? []
+  const items: MesDetalheItem[] =
+    areaSelecionada && detalheBreakdown
+      ? detalheItemsSafe.length > 0
+        ? detalheItemsSafe
+        : itemsFromPoint
+      : itemsDefault
+  const recebidoArea =
+    areaSelecionada != null && !detalheBreakdown
+      ? recebidoAreaNoMes(point, stackSlices, areaSelecionada)
+      : 0
+  const recebidoMes =
+    areaSelecionada && !detalheBreakdown
+      ? recebidoArea
+      : Number(point.recebidoTotal) || resolveRecebidoMes(point, stackSlices).recebidoMes
   const semArea = resolveRecebidoMes(areaPoint, stackSlices).semArea
   const metaMes = Number(point.meta) || 0
   const pctAtingido = percentMetaMode
@@ -700,15 +907,21 @@ function ColunasMesDetalhePanel({
       <div ref={exportRef} data-legend-export>
         <p className="text-sm font-semibold capitalize text-slate-900">
           {point.mesLabel}
+          {areaLabel && (
+            <span className="ml-2 text-xs font-medium normal-case text-sky-800">· {areaLabel}</span>
+          )}
           {recebidoMes > 0 && (
             <span className="ml-2 font-normal text-slate-600">
               recebido{' '}
-              {percentMetaMode
-                ? `${formatPercentLabel(recebidoMes)} da meta`
-                : formatCurrency(recebidoMes)}
+              {formatRecebidoMesDisplay(recebidoMes, percentMetaMode)}
             </span>
           )}
         </p>
+        {detalheBreakdown && (
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            {detalheBreakdown === 'grupo' ? 'Detalhe por grupo de empresas' : 'Detalhe por plano de contas'}
+          </p>
+        )}
         {!percentMetaMode && metaMes > 0 && (
           <div className="mt-0.5 space-y-0.5 text-xs text-slate-600">
             <p>Meta {formatCurrency(metaMes)}</p>
@@ -719,11 +932,18 @@ function ColunasMesDetalhePanel({
             )}
           </div>
         )}
-        {!percentMetaMode && semArea > 1 && (
+        {!percentMetaMode && semArea > 1 && !areaSelecionada && (
           <p className="mt-0.5 text-[11px] text-amber-800">
             Há {formatCurrency(semArea)} recebido sem departamento fora do rateio por área.
           </p>
         )}
+
+      {detalheLoading && (
+        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Carregando detalhe…
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap gap-1.5" data-chart-export-ignore>
         {chartData.map((d) => (
@@ -790,7 +1010,7 @@ function ColunasMesDetalhePanel({
                 >
                   <MesDetalheItemValor
                     item={item}
-                    planoShareMode={planoShareMode}
+                    planoShareMode={planoShareMode || detalheBreakdown === 'plano'}
                     percentMetaMode={percentMetaMode}
                     subClassName="text-xs"
                   />
@@ -814,6 +1034,8 @@ export function ReceitaComparativoColunasChart({
   const [percentMetaMode, setPercentMetaMode] = useState(false)
   const [porArea, setPorArea] = useState(true)
   const [showRecebidoStack, setShowRecebidoStack] = useState(true)
+  const [areaSelecionada, setAreaSelecionada] = useState<string | null>(null)
+  const [detalheBreakdown, setDetalheBreakdown] = useState<DetalheBreakdown | null>(null)
   const [visibleMetrics, setVisibleMetrics] = useState<Set<MetricKey>>(
     () =>
       new Set(
@@ -830,7 +1052,20 @@ export function ReceitaComparativoColunasChart({
   useEffect(() => {
     setSelectedMes(null)
     setHoveredIndex(null)
+    setAreaSelecionada(null)
+    setDetalheBreakdown(null)
   }, [stackMode, percentMetaMode, porArea, ano])
+
+  useEffect(() => {
+    if (!showRecebidoStack || !porArea || planoMode) {
+      setAreaSelecionada(null)
+      setDetalheBreakdown(null)
+    }
+  }, [showRecebidoStack, porArea, planoMode])
+
+  useEffect(() => {
+    setDetalheBreakdown(null)
+  }, [areaSelecionada])
 
   useEffect(() => {
     if (!percentMetaMode) {
@@ -866,17 +1101,93 @@ export function ReceitaComparativoColunasChart({
 
   const stackSlices = planoMode ? planoSlices : areaSlices
 
+  const showAreaDrilldown = showRecebidoStack && porArea && !planoMode && !percentMetaMode
+
+  const { data: itensAreaByMes, isLoading: loadingItensAreaAno } = useQuery({
+    queryKey: ['receita', 'colunas-area-itens-ano', ano, areaSelecionada],
+    queryFn: async () => {
+      const pairs = await Promise.all(
+        meses.map(
+          async (mes) =>
+            [mes, await receitaService.fetchRecebidoItensPorArea(ano, mes, areaSelecionada!)] as const,
+        ),
+      )
+      return new Map(pairs)
+    },
+    enabled: showAreaDrilldown && !!areaSelecionada && detalheBreakdown != null,
+  })
+
+  const { data: empresasNomeGrupo } = useQuery({
+    queryKey: ['receita', 'empresas-nome-grupo'],
+    queryFn: () => receitaService.fetchEmpresasNomeGrupo(),
+    enabled: showAreaDrilldown && detalheBreakdown === 'grupo' && !!areaSelecionada,
+    staleTime: 30 * 60 * 1000,
+  })
+
+  const clienteGrupoMap = useMemo(
+    () => buildClienteGrupoMap(empresasNomeGrupo ?? []),
+    [empresasNomeGrupo],
+  )
+
+  const drilldownSlices = useMemo(() => {
+    if (!itensAreaByMes || !detalheBreakdown) return []
+    const allItens = meses.flatMap((mes) => itensAreaByMes.get(mes) ?? [])
+    if (detalheBreakdown === 'grupo') {
+      return buildGrupoSlicesFromItens(allItens, clienteGrupoMap)
+    }
+    return buildPlanoSlicesFromItens(allItens)
+  }, [itensAreaByMes, detalheBreakdown, meses, clienteGrupoMap])
+
+  const drilldownRawChartData = useMemo(() => {
+    if (!itensAreaByMes || !detalheBreakdown || drilldownSlices.length === 0) return null
+    return buildColunasChartDataFromAreaItens(
+      ano,
+      rows,
+      itensAreaByMes,
+      drilldownSlices,
+      detalheBreakdown,
+      clienteGrupoMap,
+    )
+  }, [itensAreaByMes, detalheBreakdown, drilldownSlices, ano, rows, clienteGrupoMap])
+
+  const singleAreaSlice = useMemo(() => {
+    if (!areaSelecionada || detalheBreakdown) return null
+    return (
+      areaSlices.find((s) => departamentoNormKey(s.departamento) === areaSelecionada) ?? null
+    )
+  }, [areaSelecionada, detalheBreakdown, areaSlices])
+
+  const areaDrilldownActive =
+    showAreaDrilldown && !!areaSelecionada && detalheBreakdown != null && !!drilldownRawChartData
+
   const rawChartData = useMemo(() => {
+    if (areaDrilldownActive && drilldownRawChartData) return drilldownRawChartData
     if (planoMode) {
       return buildColunasChartDataPorPlano(ano, rows, planoRows ?? [], planoSlices)
     }
     return buildColunasChartData(ano, rows, deptRows ?? [], areaSlices)
-  }, [ano, planoMode, rows, planoRows, planoSlices, deptRows, areaSlices])
+  }, [
+    areaDrilldownActive,
+    drilldownRawChartData,
+    ano,
+    planoMode,
+    rows,
+    planoRows,
+    planoSlices,
+    deptRows,
+    areaSlices,
+  ])
+
+  const effectiveStackSlices = areaDrilldownActive
+    ? drilldownSlices
+    : singleAreaSlice
+      ? [singleAreaSlice]
+      : stackSlices
 
   const chartData = useMemo(() => {
     if (!percentMetaMode) return rawChartData
-    return toColunasPercentData(rawChartData, stackSlices)
-  }, [percentMetaMode, rawChartData, stackSlices])
+    return toColunasPercentData(rawChartData, effectiveStackSlices)
+  }, [percentMetaMode, rawChartData, effectiveStackSlices])
 
   const chartVisibleMetrics = useMemo(() => {
     if (!percentMetaMode) return visibleMetrics
@@ -885,7 +1196,9 @@ export function ReceitaComparativoColunasChart({
     return next
   }, [percentMetaMode, visibleMetrics])
 
-  const isLoading = planoMode ? planoLoading : deptLoading
+  const isLoading =
+    (planoMode ? planoLoading : deptLoading) ||
+    (areaDrilldownActive && loadingItensAreaAno)
   const error = planoMode ? planoError : deptError
 
   const selectedPoint = useMemo(
@@ -897,8 +1210,8 @@ export function ReceitaComparativoColunasChart({
     const raw = rawChartData.find((d) => d.mes === selectedMes)
     if (!raw) return null
     if (!percentMetaMode) return raw
-    return toColunasPercentData([raw], stackSlices)[0]
-  }, [rawChartData, selectedMes, percentMetaMode, stackSlices])
+    return toColunasPercentData([raw], effectiveStackSlices)[0]
+  }, [rawChartData, selectedMes, percentMetaMode, effectiveStackSlices])
 
   const handleSelectMes = (mes: number) => {
     setSelectedMes((prev) => (prev === mes ? null : mes))
@@ -924,6 +1237,30 @@ export function ReceitaComparativoColunasChart({
   const hoveredPoint = hoveredIndex != null ? chartData[hoveredIndex] : null
   const legendPinned = selectedMes != null && selectedPoint != null
   const legendPoint = legendPinned ? selectedPoint : hoveredPoint
+  const mesDetalhe = legendPoint?.mes ?? selectedMes ?? null
+
+  const areaLabelAtual = useMemo(
+    () => AREA_META_SLICES.find((a) => a.key === areaSelecionada)?.label ?? null,
+    [areaSelecionada],
+  )
+
+  const itensMesDetalhe = useMemo(() => {
+    if (mesDetalhe == null || !itensAreaByMes) return []
+    return itensAreaByMes.get(mesDetalhe) ?? []
+  }, [mesDetalhe, itensAreaByMes])
+
+  const detalheItems = useMemo(() => {
+    if (!itensMesDetalhe.length || !detalheBreakdown || !legendPoint) return []
+    const metaMes = Number(legendPoint.meta) || 0
+    if (detalheBreakdown === 'grupo') {
+      return buildGrupoDetalheItemsFromItens(itensMesDetalhe, clienteGrupoMap, metaMes, percentMetaMode)
+    }
+    return buildPlanoDetalheItemsFromItens(itensMesDetalhe, metaMes, percentMetaMode)
+  }, [itensMesDetalhe, detalheBreakdown, legendPoint, clienteGrupoMap, percentMetaMode])
+
+  const selectArea = (key: string) => {
+    setAreaSelecionada((prev) => (prev === key ? null : key))
+  }
 
   const renderColunasTooltip = () => null
 
@@ -958,7 +1295,11 @@ export function ReceitaComparativoColunasChart({
                 : planoMode
                   ? 'Recebido por plano de contas'
                   : porArea
-                    ? 'Recebido por área'
+                    ? areaDrilldownActive && areaLabelAtual
+                      ? `${areaLabelAtual} · por ${detalheBreakdown === 'grupo' ? 'grupo' : 'plano'}`
+                      : singleAreaSlice && areaLabelAtual
+                        ? areaLabelAtual
+                        : 'Recebido por área'
                     : 'Recebido consolidado'}
             </h2>
             <p className="text-xs text-slate-500">
@@ -969,7 +1310,9 @@ export function ReceitaComparativoColunasChart({
                 : planoMode
                   ? `Colunas por plano (R$ no eixo, % no rótulo) · clique no mês para detalhar · ${ano}`
                   : porArea
-                    ? `Colunas por departamento · clique no mês para detalhar · ${ano}`
+                    ? areaDrilldownActive
+                      ? `Recebido da área por ${detalheBreakdown === 'grupo' ? 'grupo de clientes' : 'plano de contas'} · ${ano}`
+                      : `Colunas por departamento · clique no mês para detalhar · ${ano}`
                     : `Recebido total por mês · clique no mês para detalhar por área · ${ano}`}
             </p>
           </div>
@@ -1074,6 +1417,70 @@ export function ReceitaComparativoColunasChart({
             </button>
           </div>
 
+          {showAreaDrilldown && (
+            <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+              <span className="text-[11px] font-medium text-slate-500">Área:</span>
+              {AREA_META_SLICES.map((area) => {
+                const ativo = areaSelecionada === area.key
+                return (
+                  <button
+                    key={area.key}
+                    type="button"
+                    onClick={() => selectArea(area.key)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+                      ativo
+                        ? 'border-transparent text-white shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                    )}
+                    style={ativo ? { backgroundColor: area.color } : undefined}
+                    aria-pressed={ativo}
+                  >
+                    <span
+                      className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: ativo ? '#fff' : area.color }}
+                    />
+                    {area.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {showAreaDrilldown && areaSelecionada && (
+            <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+              <span className="text-[11px] font-medium text-slate-500">Detalhar área:</span>
+              <button
+                type="button"
+                onClick={() => setDetalheBreakdown((m) => (m === 'plano' ? null : 'plano'))}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+                  detalheBreakdown === 'plano'
+                    ? 'border-violet-200 bg-violet-50 text-violet-800 shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                )}
+                aria-pressed={detalheBreakdown === 'plano'}
+              >
+                <Layers className="h-3 w-3 shrink-0" aria-hidden />
+                Por plano
+              </button>
+              <button
+                type="button"
+                onClick={() => setDetalheBreakdown((m) => (m === 'grupo' ? null : 'grupo'))}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+                  detalheBreakdown === 'grupo'
+                    ? 'border-sky-200 bg-sky-50 text-sky-800 shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                )}
+                aria-pressed={detalheBreakdown === 'grupo'}
+              >
+                <Users className="h-3 w-3 shrink-0" aria-hidden />
+                Por grupo
+              </button>
+            </div>
+          )}
+
           <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
             <span className="text-[11px] font-medium text-slate-500">Detalhe do mês:</span>
             {chartData.map((d) => (
@@ -1096,7 +1503,7 @@ export function ReceitaComparativoColunasChart({
           <div ref={chartExportRef} className="flex flex-col">
           <div
             data-chart-plot
-            className="relative h-[360px] min-h-[360px] w-full min-w-0"
+            className="relative h-[360px] min-h-[360px] w-full min-w-0 overflow-visible"
             onMouseLeave={handleChartMouseLeave}
           >
             {legendPoint && (
@@ -1109,27 +1516,34 @@ export function ReceitaComparativoColunasChart({
                 <ColunasTooltipContent
                   point={legendPoint}
                   breakdownPoint={legendPinned ? breakdownSelectedPoint ?? legendPoint : undefined}
-                  stackSlices={stackSlices}
+                  stackSlices={effectiveStackSlices}
                   planoShareMode={planoMode}
                   percentMetaMode={percentMetaMode}
                   porArea={porArea}
                   visibleMetrics={chartVisibleMetrics}
                   pinned={legendPinned}
                   onUnpin={legendPinned ? () => setSelectedMes(null) : undefined}
+                  areaSelecionada={showAreaDrilldown ? areaSelecionada : null}
+                  areaLabel={areaLabelAtual}
+                  detalheBreakdown={showAreaDrilldown ? detalheBreakdown : null}
+                  detalheItems={detalheItems}
+                  detalheLoading={loadingItensAreaAno}
                 />
               </div>
             )}
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={360}>
               <ComposedChart
                 key={
-                  planoMode
-                    ? `receita-colunas-plano-${porArea ? 'stack' : 'cons'}`
-                    : `receita-colunas-area-${porArea ? 'stack' : 'cons'}`
+                  areaDrilldownActive
+                    ? `receita-colunas-drill-${areaSelecionada}-${detalheBreakdown}`
+                    : planoMode
+                      ? `receita-colunas-plano-${porArea ? 'stack' : 'cons'}`
+                      : `receita-colunas-area-${porArea ? 'stack' : 'cons'}`
                 }
                 data={chartData}
                 margin={{
                   left: 4,
-                  right: showStackBreakdown ? 68 : 12,
+                  right: showStackBreakdown ? 68 : 28,
                   top: percentMetaMode ? 32 : RECEITA_CHART_LAYOUT.marginWithPointLabels.top,
                   bottom: 4,
                 }}
@@ -1173,7 +1587,7 @@ export function ReceitaComparativoColunasChart({
                   content={renderColunasTooltip}
                 />
                 {showStackBreakdown &&
-                  stackSlices.map((seg, segIndex) => (
+                  effectiveStackSlices.map((seg, segIndex) => (
                     <Bar
                       key={seg.dataKey}
                       dataKey={seg.dataKey}
@@ -1184,7 +1598,7 @@ export function ReceitaComparativoColunasChart({
                       cursor="pointer"
                       onClick={handleBarClick}
                       style={
-                        segIndex === stackSlices.length - 1
+                        segIndex === effectiveStackSlices.length - 1
                           ? { cursor: 'pointer' }
                           : undefined
                       }
@@ -1234,7 +1648,11 @@ export function ReceitaComparativoColunasChart({
                       stroke={m.color}
                       strokeWidth={2}
                       strokeDasharray={m.strokeDasharray}
-                      dot={false}
+                      dot={
+                        m.key === 'meta'
+                          ? { r: 3, fill: m.color, stroke: '#fff', strokeWidth: 1.5 }
+                          : false
+                      }
                       activeDot={{ r: 4, fill: m.color, stroke: '#fff', strokeWidth: 2 }}
                       connectNulls
                     >
@@ -1245,6 +1663,7 @@ export function ReceitaComparativoColunasChart({
                             color: m.color,
                             percentMetaMode: false,
                             total: chartData.length,
+                            chartData,
                           })}
                         />
                       )}
@@ -1290,9 +1709,9 @@ export function ReceitaComparativoColunasChart({
               })}
               </div>
 
-          {showStackBreakdown && stackSlices.length > 0 && (
+          {showStackBreakdown && effectiveStackSlices.length > 0 && (
             <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 px-1">
-              {stackSlices.map((a) => (
+              {effectiveStackSlices.map((a) => (
                 <span
                   key={a.dataKey}
                   className="inline-flex max-w-[200px] items-center gap-1 text-[10px] text-slate-500"
@@ -1314,7 +1733,7 @@ export function ReceitaComparativoColunasChart({
             <ColunasMesDetalhePanel
               point={selectedPoint}
               breakdownPoint={breakdownSelectedPoint ?? selectedPoint}
-              stackSlices={stackSlices}
+              stackSlices={effectiveStackSlices}
               planoShareMode={planoMode}
               percentMetaMode={percentMetaMode}
               visibleMetrics={chartVisibleMetrics}
@@ -1322,6 +1741,11 @@ export function ReceitaComparativoColunasChart({
               selectedMes={selectedMes}
               onSelectMes={handleSelectMes}
               onClose={() => setSelectedMes(null)}
+              areaSelecionada={showAreaDrilldown ? areaSelecionada : null}
+              areaLabel={areaLabelAtual}
+              detalheBreakdown={showAreaDrilldown ? detalheBreakdown : null}
+              detalheItems={detalheItems}
+              detalheLoading={loadingItensAreaAno}
             />
           )}
         </>

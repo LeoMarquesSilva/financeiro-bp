@@ -322,6 +322,8 @@ function AreaLinhaChangeLabel({
   offset = 10,
   stagger = 0,
   pctOfKey,
+  dedupeFlat = false,
+  valueKey,
 }: {
   color: string
   data: AreaLinhaPoint[]
@@ -331,12 +333,24 @@ function AreaLinhaChangeLabel({
   stagger?: number
   /** Se informado, exibe na segunda linha o percentual do valor sobre este campo no mesmo mês. */
   pctOfKey?: keyof AreaLinhaPoint
+  dedupeFlat?: boolean
+  valueKey?: keyof AreaLinhaPoint
 }) {
   return function Label(props: LabelProps & { index?: number }) {
     const { x, y, value, index } = props
     if (value == null || x == null || y == null || index == null) return null
     const num = typeof value === 'number' ? value : Number(value)
     if (!Number.isFinite(num)) return null
+
+    if (dedupeFlat && valueKey && data.length > 1) {
+      const isFirst = index === 0
+      const isLast = index === data.length - 1
+      if (!isFirst && !isLast) {
+        const prevRaw = data[index - 1]?.[valueKey]
+        const prevNum = typeof prevRaw === 'number' ? prevRaw : null
+        if (prevNum != null && Math.abs(num - prevNum) < 0.01) return null
+      }
+    }
 
     const text = formatCurrency(num)
     let secondaryText: string | undefined
@@ -589,11 +603,20 @@ function ComparativoDotLabel({
   percentMode,
   position = 'right',
   total,
+  offset = 10,
+  stagger = 0,
+  dedupeFlat = false,
+  getValueAt,
 }: {
   color: string
   percentMode: boolean
   position?: 'right' | 'above' | 'below'
   total?: number
+  offset?: number
+  stagger?: number
+  /** Omite rótulos intermediários quando o valor é igual ao mês anterior (meta flat). */
+  dedupeFlat?: boolean
+  getValueAt?: (index: number) => number | null | undefined
 }) {
   return function Label(props: LabelProps & { index?: number }) {
     const { x, y, value, index } = props
@@ -601,20 +624,31 @@ function ComparativoDotLabel({
     const num = typeof value === 'number' ? value : Number(value)
     if (!Number.isFinite(num)) return null
 
+    if (dedupeFlat && index != null && total != null && total > 1) {
+      const isFirst = index === 0
+      const isLast = index === total - 1
+      if (!isFirst && !isLast) {
+        const prev = getValueAt?.(index - 1)
+        if (prev != null && Math.abs(num - prev) < 0.01) return null
+      }
+    }
+
     const text = percentMode ? formatPercentLabel(num) : formatCurrency(num)
     if (!text) return null
 
     const cx = Number(x)
     const cy = Number(y)
     const anchor = edgeAwareAnchor(index, total)
+    const adjustedOffset = offset + (index != null && index % 2 === 1 ? stagger : 0)
+    const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
     if (position === 'above') {
-      const vertical = resolveLabelVerticalPosition(cy, 10, undefined, 'above')
-      const labelY = labelYForPosition(cy, 10, vertical)
+      const vertical = resolveLabelVerticalPosition(cy, adjustedOffset, undefined, 'above')
+      const labelY = labelYForPosition(cy, adjustedOffset, vertical)
       return (
         <ChartLabelWithBackdrop
           text={text}
-          x={cx}
+          x={labelX}
           y={labelY}
           color={color}
           textAnchor={anchor}
@@ -625,7 +659,14 @@ function ComparativoDotLabel({
 
     if (position === 'below') {
       return (
-        <ChartLabelWithBackdrop text={text} x={cx} y={cy + 14} color={color} textAnchor={anchor} dominantBaseline="hanging" />
+        <ChartLabelWithBackdrop
+          text={text}
+          x={labelX}
+          y={cy + adjustedOffset}
+          color={color}
+          textAnchor={anchor}
+          dominantBaseline="hanging"
+        />
       )
     }
 
@@ -1245,7 +1286,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   stroke={s.color}
                   strokeWidth={2}
                   strokeDasharray={s.strokeDasharray}
-                  dot={s.key === 'inadimplencia' ? { r: 3, fill: s.color, strokeWidth: 0 } : false}
+                  dot={{ r: 3, fill: s.color, stroke: '#fff', strokeWidth: 1.5 }}
                   activeDot={{ r: 4, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
                   connectNulls={false}
                 >
@@ -1256,9 +1297,11 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                         color: s.color,
                         data: areaLinhaData,
                         position: 'above',
-                        offset: s.key === 'inadimplencia' ? 22 : 6,
-                        stagger: 18,
+                        offset: s.key === 'inadimplencia' ? 22 : 20,
+                        stagger: s.key === 'inadimplencia' ? 18 : 14,
                         pctOfKey: s.key === 'inadimplencia' ? 'previsto' : undefined,
+                        dedupeFlat: s.key === 'meta',
+                        valueKey: s.key === 'meta' ? 'meta' : undefined,
                       })}
                     />
                   )}
@@ -1451,7 +1494,7 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
               margin={
                 percentMode
                   ? RECEITA_CHART_LAYOUT.marginDefault
-                  : RECEITA_CHART_LAYOUT.marginWithPointLabels
+                  : { ...RECEITA_CHART_LAYOUT.marginWithPointLabels, right: 28 }
               }
             >
               <defs>
@@ -1530,7 +1573,11 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                   stroke={s.color}
                   strokeWidth={2}
                   strokeDasharray={'strokeDasharray' in s ? s.strokeDasharray : undefined}
-                  dot={false}
+                  dot={
+                    s.key === 'meta'
+                      ? { r: 3, fill: s.color, stroke: '#fff', strokeWidth: 1.5 }
+                      : false
+                  }
                   activeDot={{ r: 4, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
                   connectNulls
                 >
@@ -1542,6 +1589,10 @@ export function ReceitaComparativoChart({ rows, ano }: Props) {
                         percentMode: false,
                         position: 'above',
                         total: chartData.length,
+                        offset: 22,
+                        stagger: 14,
+                        dedupeFlat: true,
+                        getValueAt: (i) => chartData[i]?.meta ?? null,
                       })}
                     />
                   )}
