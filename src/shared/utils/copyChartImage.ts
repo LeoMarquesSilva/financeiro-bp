@@ -334,8 +334,23 @@ function isColorSwatch(el: HTMLElement): boolean {
   return bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)'
 }
 
-function applyExportHtmlColors(root: HTMLElement): void {
+type HtmlExportOptions = {
+  preserveBackground?: boolean
+}
+
+function resolveHtmlExportOptions(
+  source: HTMLElement,
+  options?: HtmlExportOptions,
+): Required<HtmlExportOptions> {
+  return {
+    preserveBackground:
+      options?.preserveBackground ?? source.hasAttribute('data-chart-export-preserve-bg'),
+  }
+}
+
+function applyExportHtmlColors(root: HTMLElement, preserveRootBackground = false): void {
   root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    if (preserveRootBackground && el === root) return
     if (isColorSwatch(el)) return
     const bg = window.getComputedStyle(el).backgroundColor
     if (bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
@@ -431,12 +446,42 @@ function applyExportLayoutFixes(root: HTMLElement): void {
   })
 }
 
+function applyPreserveBackgroundExportLayout(root: HTMLElement): void {
+  root.style.setProperty('height', 'fit-content', 'important')
+  root.style.setProperty('min-height', '0', 'important')
+  root.style.setProperty('max-height', 'none', 'important')
+  root.style.setProperty('width', 'fit-content', 'important')
+  root.style.setProperty('min-width', '0', 'important')
+  root.style.setProperty('max-width', 'none', 'important')
+  root.style.setProperty('align-self', 'auto', 'important')
+  root.style.setProperty('flex', 'none', 'important')
+  root.style.setProperty('align-items', 'flex-start', 'important')
+
+  root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    el.style.setProperty('height', 'auto', 'important')
+    el.style.setProperty('min-height', '0', 'important')
+    el.style.setProperty('max-height', 'none', 'important')
+    el.style.setProperty('align-self', 'auto', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('.flex-1, .min-w-0').forEach((el) => {
+    el.style.setProperty('flex', '0 1 auto', 'important')
+    el.style.setProperty('width', 'auto', 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('[data-chart-export-trim="copy-padding"]').forEach((el) => {
+    el.style.setProperty('padding-right', '1.25rem', 'important')
+  })
+}
+
 function measurePreparedElement(prepared: HTMLElement): { width: number; height: number } {
   prepared.style.position = 'absolute'
   prepared.style.left = '-9999px'
   prepared.style.top = '0'
   prepared.style.visibility = 'hidden'
   prepared.style.height = 'auto'
+  prepared.style.minHeight = '0'
+  prepared.style.maxHeight = 'none'
   prepared.style.width = 'max-content'
   prepared.style.maxWidth = 'none'
   prepared.style.boxSizing = 'border-box'
@@ -449,18 +494,36 @@ function measurePreparedElement(prepared: HTMLElement): { width: number; height:
   return { width, height }
 }
 
-function prepareHtmlExportElement(source: HTMLElement): HTMLElement {
+function prepareHtmlExportElement(source: HTMLElement, options?: HtmlExportOptions): HTMLElement {
+  const { preserveBackground } = resolveHtmlExportOptions(source, options)
   const clone = source.cloneNode(true) as HTMLElement
   clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
   inlineNodeStyles(source, clone)
 
-  clone.style.setProperty('background', 'transparent', 'important')
-  clone.style.setProperty('box-shadow', 'none', 'important')
-  clone.style.setProperty('border', 'none', 'important')
+  if (preserveBackground) {
+    const sourceStyle = window.getComputedStyle(source)
+    const bg =
+      source.style.backgroundColor ||
+      sourceStyle.backgroundColor ||
+      sourceStyle.background
+    if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+      clone.style.setProperty('background', bg, 'important')
+    }
+    clone.style.setProperty('border', sourceStyle.border, 'important')
+    clone.style.setProperty('border-radius', sourceStyle.borderRadius, 'important')
+    clone.style.setProperty('box-shadow', 'none', 'important')
+  } else {
+    clone.style.setProperty('background', 'transparent', 'important')
+    clone.style.setProperty('box-shadow', 'none', 'important')
+    clone.style.setProperty('border', 'none', 'important')
+  }
   clone.style.setProperty('outline', 'none', 'important')
 
-  applyExportHtmlColors(clone)
+  applyExportHtmlColors(clone, preserveBackground)
   applyExportLayoutFixes(clone)
+  if (preserveBackground) {
+    applyPreserveBackgroundExportLayout(clone)
+  }
 
   clone.querySelectorAll<HTMLElement>('p').forEach((el) => {
     el.style.setProperty('display', 'block', 'important')
@@ -480,8 +543,12 @@ function prepareHtmlExportElement(source: HTMLElement): HTMLElement {
   return clone
 }
 
-async function htmlElementToPngBlob(element: HTMLElement, scale = DEFAULT_SCALE): Promise<Blob> {
-  const prepared = prepareHtmlExportElement(element)
+async function htmlElementToPngBlob(
+  element: HTMLElement,
+  scale = DEFAULT_SCALE,
+  options?: HtmlExportOptions,
+): Promise<Blob> {
+  const prepared = prepareHtmlExportElement(element, options)
   const { width, height } = measurePreparedElement(prepared)
 
   if (width === 0 || height === 0) {
@@ -1017,11 +1084,14 @@ export async function copyLegendDetalheToClipboard(
   await copyPngBlobToClipboard(blob)
 }
 
+export type ElementImageExportOptions = HtmlExportOptions
+
 export async function copyElementImageToClipboard(
   element: HTMLElement,
   scale = DEFAULT_SCALE,
+  options?: ElementImageExportOptions,
 ): Promise<void> {
-  const blob = await htmlElementToPngBlob(element, scale)
+  const blob = await htmlElementToPngBlob(element, scale, options)
   await copyPngBlobToClipboard(blob)
 }
 

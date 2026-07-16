@@ -101,6 +101,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   const [areaGruposSheetOpen, setAreaGruposSheetOpen] = useState(false)
   const [areaGruposSheetMes, setAreaGruposSheetMes] = useState<number | null>(null)
   const pctCardRef = useRef<HTMLDivElement>(null)
+  const acumuladaCardRef = useRef<HTMLDivElement>(null)
   const top5CardRef = useRef<HTMLDivElement>(null)
   const evolucaoCardRef = useRef<HTMLDivElement>(null)
 
@@ -575,62 +576,76 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <button
-          type="button"
-          onClick={() => (filtroAreaAtivo ? abrirDetalheAreaPeriodo() : setClientesSheetOpen(true))}
-          className={cn(
-            'flex w-full items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 text-left shadow-sm transition-colors sm:gap-4 sm:px-5',
-            'cursor-pointer hover:border-slate-300 hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2',
-          )}
+        <div
+          ref={acumuladaCardRef}
+          data-chart-export-preserve-bg
+          className="relative overflow-hidden rounded-2xl border border-slate-200/50 shadow-sm"
           style={{ backgroundColor: CREAM }}
         >
-          <IconCircle className="h-10 w-10 sm:h-11 sm:w-11">
-            <DollarSign className="h-5 w-5" strokeWidth={2.5} />
-          </IconCircle>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 sm:text-[11px]">
-              Inadimplência acumulada – {periodoCurto}
-            </p>
-            <p
-              className={cn(
-                'mt-1 text-xl font-bold tabular-nums sm:text-2xl',
-                (dashboard.clientes_ajustado || dashboard.evolucao.some((m) => m.ajustado)) &&
-                  'text-amber-800',
+          <button
+            type="button"
+            onClick={() => (filtroAreaAtivo ? abrirDetalheAreaPeriodo() : setClientesSheetOpen(true))}
+            className={cn(
+              'flex w-full items-center gap-3 px-4 py-4 text-left transition-colors sm:gap-4 sm:px-5 sm:pr-20',
+              'cursor-pointer hover:bg-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-inset',
+            )}
+            data-chart-export-trim="copy-padding"
+          >
+            <IconCircle className="h-10 w-10 sm:h-11 sm:w-11">
+              <DollarSign className="h-5 w-5" strokeWidth={2.5} />
+            </IconCircle>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 sm:text-[11px]">
+                Inadimplência acumulada – {periodoCurto}
+              </p>
+              <p
+                className={cn(
+                  'mt-1 text-xl font-bold tabular-nums sm:text-2xl',
+                  (dashboard.clientes_ajustado || dashboard.evolucao.some((m) => m.ajustado)) &&
+                    'text-amber-800',
+                )}
+                style={
+                  dashboard.clientes_ajustado || dashboard.evolucao.some((m) => m.ajustado)
+                    ? undefined
+                    : { color: GOLD }
+                }
+              >
+                {formatCurrency(dashboard.valor_total_periodo)}
+              </p>
+              {(!filtroAreaAtivo ||
+                dashboard.clientes_ajustado ||
+                (!dashboard.clientes_ajustado && dashboard.evolucao.some((m) => m.ajustado))) && (
+                <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+                  {!filtroAreaAtivo &&
+                    'Soma da inadimplência mensal no período (mesma regra da evolução) — clique para ver empresas e títulos'}
+                  {dashboard.clientes_ajustado && (
+                    <span className="block text-amber-700/90">Total ajustado pela seleção de grupos</span>
+                  )}
+                  {!dashboard.clientes_ajustado && dashboard.evolucao.some((m) => m.ajustado) && (
+                    <span className="block text-amber-700/90">
+                      Total ajustado pela seleção mensal de grupos
+                    </span>
+                  )}
+                </p>
               )}
-              style={
-                dashboard.clientes_ajustado || dashboard.evolucao.some((m) => m.ajustado)
-                  ? undefined
-                  : { color: GOLD }
-              }
-            >
-              {formatCurrency(dashboard.valor_total_periodo)}
-            </p>
-            <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-              {filtroAreaAtivo
-                ? 'Inadimplência alocada à área — clique para ver grupos alocados'
-                : 'Soma da inadimplência mensal no período (mesma regra da evolução) — clique para ver empresas e títulos'}
-              {dashboard.clientes_ajustado && (
-                <span className="block text-amber-700/90">Total ajustado pela seleção de grupos</span>
-              )}
-              {!dashboard.clientes_ajustado && dashboard.evolucao.some((m) => m.ajustado) && (
-                <span className="block text-amber-700/90">
-                  Total ajustado pela seleção mensal de grupos
-                </span>
-              )}
-            </p>
+            </div>
+            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+          </button>
+          <div className="absolute right-3 top-3 sm:right-4 sm:top-4" data-chart-export-ignore>
+            <ElementCopyButton containerRef={acumuladaCardRef} preserveBackground />
           </div>
-          <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-        </button>
+        </div>
 
         <div
           ref={pctCardRef}
+          data-chart-export-preserve-bg
           className="relative flex items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 shadow-sm sm:gap-4 sm:px-5"
           style={{ backgroundColor: CREAM }}
         >
           <IconCircle className="h-10 w-10 sm:h-11 sm:w-11">
             <Percent className="h-5 w-5" strokeWidth={2.5} />
           </IconCircle>
-          <div className="min-w-0 flex-1 pr-20">
+          <div className="min-w-0 flex-1 pr-20" data-chart-export-trim="copy-padding">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 sm:text-[11px]">
               % de inadimplência
             </p>
@@ -640,14 +655,14 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
             >
               {formatPercent(dashboard.pct_periodo)}
             </p>
-            <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-              {filtroAreaAtivo
-                ? 'Saldo da área no período ÷ previsto acumulado da área'
-                : 'Saldo proporcional do período ÷ previsto acumulado — inclui clientes inativos (regra planilha VIOS)'}
-            </p>
+            {!filtroAreaAtivo && (
+              <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+                Saldo proporcional do período ÷ previsto acumulado — inclui clientes inativos (regra planilha VIOS)
+              </p>
+            )}
           </div>
           <div className="absolute right-3 top-3 sm:right-4 sm:top-4" data-chart-export-ignore>
-            <ElementCopyButton containerRef={pctCardRef} />
+            <ElementCopyButton containerRef={pctCardRef} preserveBackground />
           </div>
         </div>
       </div>
@@ -668,6 +683,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
       <div className="grid gap-4 lg:grid-cols-2">
         <div
           ref={top5CardRef}
+          data-chart-export-preserve-bg
           className="overflow-hidden rounded-2xl border border-slate-200/50 shadow-sm"
           style={{ backgroundColor: CREAM }}
         >
@@ -681,7 +697,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               </h3>
             </div>
             <div data-chart-export-ignore>
-              <ElementCopyButton containerRef={top5CardRef} />
+              <ElementCopyButton containerRef={top5CardRef} preserveBackground />
             </div>
           </div>
 
@@ -748,6 +764,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
 
         <div
           ref={evolucaoCardRef}
+          data-chart-export-preserve-bg
           className="overflow-hidden rounded-2xl border border-slate-200/50 shadow-sm"
           style={{ backgroundColor: CREAM }}
         >
@@ -761,7 +778,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               </h3>
             </div>
             <div data-chart-export-ignore>
-              <ElementCopyButton containerRef={evolucaoCardRef} />
+              <ElementCopyButton containerRef={evolucaoCardRef} preserveBackground />
             </div>
           </div>
 
@@ -824,21 +841,21 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 </tr>
               </tbody>
             </table>
-            <p className="mt-2 text-center text-[11px] text-slate-500">
-              {filtroAreaAtivo
-                ? 'Valores alocados por departamento (VIOS) — clique no valor para ver grupos da área'
-                : 'Valores faturados no mês (vencimento) em inadimplência — inclui clientes inativos — clique no valor para selecionar grupos'}
-              {!filtroAreaAtivo && dashboard.evolucao.some((m: ReceitaInadimplenciaEvolucaoMes) => !m.congelado) && (
-                <span className="block text-amber-700/90">
-                  * Mês ainda não congelado — valor calculado com dados atuais do VIOS
-                </span>
-              )}
-              {dashboard.evolucao.some((m) => m.ajustado) && !filtroAreaAtivo && (
-                <span className="block text-amber-800/90">
-                  Valores destacados foram ajustados pela seleção manual de grupos
-                </span>
-              )}
-            </p>
+            {!filtroAreaAtivo && (
+              <p className="mt-2 text-center text-[11px] text-slate-500">
+                Valores faturados no mês (vencimento) em inadimplência — inclui clientes inativos — clique no valor para selecionar grupos
+                {dashboard.evolucao.some((m: ReceitaInadimplenciaEvolucaoMes) => !m.congelado) && (
+                  <span className="block text-amber-700/90">
+                    * Mês ainda não congelado — valor calculado com dados atuais do VIOS
+                  </span>
+                )}
+                {dashboard.evolucao.some((m) => m.ajustado) && (
+                  <span className="block text-amber-800/90">
+                    Valores destacados foram ajustados pela seleção manual de grupos
+                  </span>
+                )}
+              </p>
+            )}
           </div>
         </div>
       </div>

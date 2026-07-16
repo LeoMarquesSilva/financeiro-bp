@@ -15,9 +15,15 @@ type Props = {
   containerRef: RefObject<HTMLElement | null>
   className?: string
   label?: string
+  preserveBackground?: boolean
 }
 
-export function ElementCopyButton({ containerRef, className, label = 'Copiar' }: Props) {
+export function ElementCopyButton({
+  containerRef,
+  className,
+  label = 'Copiar',
+  preserveBackground = false,
+}: Props) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle')
 
   const handleCopy = async () => {
@@ -29,7 +35,7 @@ export function ElementCopyButton({ containerRef, className, label = 'Copiar' }:
 
     setStatus('loading')
     try {
-      await copyElementImageToClipboard(container)
+      await copyElementImageToClipboard(container, undefined, { preserveBackground })
       setStatus('done')
       toast.success('Conteúdo copiado — cole no PowerPoint com Ctrl+V')
       window.setTimeout(() => setStatus('idle'), 2000)
@@ -55,7 +61,11 @@ export function ElementCopyButton({ containerRef, className, label = 'Copiar' }:
             className={cn('h-8 shrink-0 gap-1.5 text-xs text-slate-600', className)}
             onClick={handleCopy}
             disabled={status === 'loading'}
-            aria-label="Copiar conteúdo com fundo transparente"
+            aria-label={
+              preserveBackground
+                ? 'Copiar conteúdo com fundo do card'
+                : 'Copiar conteúdo com fundo transparente'
+            }
           >
             <Icon
               className={cn('h-3.5 w-3.5', status === 'loading' && 'animate-spin')}
@@ -65,7 +75,9 @@ export function ElementCopyButton({ containerRef, className, label = 'Copiar' }:
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">
-          Copia o conteúdo com fundo transparente para colar no PowerPoint
+          {preserveBackground
+            ? 'Copia o card com a cor de fundo para colar no PowerPoint'
+            : 'Copia o conteúdo com fundo transparente para colar no PowerPoint'}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
