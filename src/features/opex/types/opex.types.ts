@@ -4,6 +4,26 @@ export type OpexDepartamentoRow = {
   previsto: number
 }
 
+export type OpexDepartamentoMesRow = {
+  mes: number
+  departamento: string
+  realizado: number
+  previsto: number
+}
+
+export type OpexDepartamentoGrupoRow = {
+  grupo_conta: string
+  fixo: boolean
+  realizado: number
+  previsto: number
+}
+
+export type OpexDepartamentoPlanoRow = {
+  plano_contas: string
+  realizado: number
+  previsto: number
+}
+
 export type OpexKpis = {
   realizado_ytd: number
   previsto_ytd: number

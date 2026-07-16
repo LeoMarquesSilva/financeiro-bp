@@ -1,6 +1,15 @@
 import { supabase } from '@/lib/supabaseClient'
 import { MESES_CURTOS } from '../constants'
-import type { OpexDashboard, OpexDepartamentoRow, OpexMesGrupoRow, OpexPlanoRow, OpexTituloRow } from '../types/opex.types'
+import type {
+  OpexDashboard,
+  OpexDepartamentoGrupoRow,
+  OpexDepartamentoMesRow,
+  OpexDepartamentoPlanoRow,
+  OpexDepartamentoRow,
+  OpexMesGrupoRow,
+  OpexPlanoRow,
+  OpexTituloRow,
+} from '../types/opex.types'
 import type { OpexTituloVinculado } from '../types/opexMetas.types'
 
 function mapTituloVinculado(row: Record<string, unknown>): OpexTituloVinculado {
@@ -155,6 +164,111 @@ export const opexService = {
       departamento: String(row.departamento ?? 'Sem departamento'),
       realizado: Number(row.realizado) || 0,
       previsto: Number(row.previsto) || 0,
+    }))
+  },
+
+  async fetchDepartamentosMensal(
+    ano: number,
+    meses?: number[] | null,
+    somenteFixas = false,
+  ): Promise<OpexDepartamentoMesRow[]> {
+    const { data, error } = await supabase.rpc(
+      'opex_departamentos_mensal' as never,
+      {
+        p_ano: ano,
+        p_meses: rpcMeses(meses),
+        p_somente_fixas: somenteFixas,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      mes: Number(row.mes) || 0,
+      departamento: String(row.departamento ?? 'Sem departamento'),
+      realizado: Number(row.realizado) || 0,
+      previsto: Number(row.previsto) || 0,
+    }))
+  },
+
+  async fetchDepartamentoGrupos(
+    ano: number,
+    departamento: string,
+    meses?: number[] | null,
+    somenteFixas = false,
+  ): Promise<OpexDepartamentoGrupoRow[]> {
+    const { data, error } = await supabase.rpc(
+      'opex_departamento_grupos' as never,
+      {
+        p_ano: ano,
+        p_departamento: departamento,
+        p_meses: rpcMeses(meses),
+        p_somente_fixas: somenteFixas,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      grupo_conta: String(row.grupo_conta ?? ''),
+      fixo: Boolean(row.fixo),
+      realizado: Number(row.realizado) || 0,
+      previsto: Number(row.previsto) || 0,
+    }))
+  },
+
+  async fetchDepartamentoPlanos(
+    ano: number,
+    departamento: string,
+    grupo: string,
+    meses?: number[] | null,
+    somenteFixas = false,
+  ): Promise<OpexDepartamentoPlanoRow[]> {
+    const { data, error } = await supabase.rpc(
+      'opex_departamento_planos' as never,
+      {
+        p_ano: ano,
+        p_departamento: departamento,
+        p_grupo: grupo,
+        p_meses: rpcMeses(meses),
+        p_somente_fixas: somenteFixas,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      plano_contas: String(row.plano_contas ?? ''),
+      realizado: Number(row.realizado) || 0,
+      previsto: Number(row.previsto) || 0,
+    }))
+  },
+
+  async fetchDepartamentoTitulos(
+    ano: number,
+    departamento: string,
+    grupo: string,
+    plano: string,
+    meses?: number[] | null,
+    somenteFixas = false,
+  ): Promise<OpexTituloRow[]> {
+    const { data, error } = await supabase.rpc(
+      'opex_departamento_titulos' as never,
+      {
+        p_ano: ano,
+        p_departamento: departamento,
+        p_grupo: grupo,
+        p_plano: plano,
+        p_meses: rpcMeses(meses),
+        p_somente_fixas: somenteFixas,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ci_item: Number(row.ci_item) || 0,
+      nro_titulo: String(row.nro_titulo ?? ''),
+      descricao: String(row.descricao ?? ''),
+      fornecedor: String(row.fornecedor ?? ''),
+      situacao_titulo: String(row.situacao_titulo ?? ''),
+      departamento: String(row.departamento ?? ''),
+      data_vencimento: row.data_vencimento ? String(row.data_vencimento) : null,
+      data_pagamento: row.data_pagamento ? String(row.data_pagamento) : null,
+      valor_previsto: Number(row.valor_previsto) || 0,
+      valor_realizado: Number(row.valor_realizado) || 0,
     }))
   },
 

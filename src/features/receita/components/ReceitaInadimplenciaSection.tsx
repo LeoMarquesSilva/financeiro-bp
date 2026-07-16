@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, BarChart3, ChevronRight, ClipboardList, DollarSign, Loader2, Percent, Target } from 'lucide-react'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
@@ -20,6 +20,7 @@ import { ReceitaInadimplenciaClientesSheet } from './ReceitaInadimplenciaCliente
 import { ReceitaInadimplenciaAreaGruposSheet } from './ReceitaInadimplenciaAreaGruposSheet'
 import { ReceitaInadimplenciaMesValorButton } from './ReceitaInadimplenciaMesValorButton'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import {
   aplicarSelecaoGruposPeriodo,
   aplicarSelecaoGrupos,
@@ -99,6 +100,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   const [areaSelecionada, setAreaSelecionada] = useState<string>('')
   const [areaGruposSheetOpen, setAreaGruposSheetOpen] = useState(false)
   const [areaGruposSheetMes, setAreaGruposSheetMes] = useState<number | null>(null)
+  const pctCardRef = useRef<HTMLDivElement>(null)
+  const top5CardRef = useRef<HTMLDivElement>(null)
+  const evolucaoCardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const max = mesMaxDisponivelInadimplencia(ano)
@@ -619,13 +623,14 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
         </button>
 
         <div
-          className="flex items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 shadow-sm sm:gap-4 sm:px-5"
+          ref={pctCardRef}
+          className="relative flex items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 shadow-sm sm:gap-4 sm:px-5"
           style={{ backgroundColor: CREAM }}
         >
           <IconCircle className="h-10 w-10 sm:h-11 sm:w-11">
             <Percent className="h-5 w-5" strokeWidth={2.5} />
           </IconCircle>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 pr-20">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 sm:text-[11px]">
               % de inadimplência
             </p>
@@ -640,6 +645,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 ? 'Saldo da área no período ÷ previsto acumulado da área'
                 : 'Saldo proporcional do período ÷ previsto acumulado — inclui clientes inativos (regra planilha VIOS)'}
             </p>
+          </div>
+          <div className="absolute right-3 top-3 sm:right-4 sm:top-4" data-chart-export-ignore>
+            <ElementCopyButton containerRef={pctCardRef} />
           </div>
         </div>
       </div>
@@ -659,16 +667,22 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div
+          ref={top5CardRef}
           className="overflow-hidden rounded-2xl border border-slate-200/50 shadow-sm"
           style={{ backgroundColor: CREAM }}
         >
-          <div className="flex items-center gap-3 px-5 py-4">
-            <IconCircle className="h-10 w-10">
-              <ClipboardList className="h-5 w-5" />
-            </IconCircle>
-            <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: NAVY }}>
-              5 maiores inadimplentes
-            </h3>
+          <div className="flex items-center justify-between gap-3 px-5 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <IconCircle className="h-10 w-10">
+                <ClipboardList className="h-5 w-5" />
+              </IconCircle>
+              <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: NAVY }}>
+                5 maiores inadimplentes
+              </h3>
+            </div>
+            <div data-chart-export-ignore>
+              <ElementCopyButton containerRef={top5CardRef} />
+            </div>
           </div>
 
           <p className="px-5 pb-2 text-[11px] text-slate-500">
@@ -733,16 +747,22 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
         </div>
 
         <div
+          ref={evolucaoCardRef}
           className="overflow-hidden rounded-2xl border border-slate-200/50 shadow-sm"
           style={{ backgroundColor: CREAM }}
         >
-          <div className="flex items-center gap-3 px-5 py-4">
-            <IconCircle className="h-10 w-10">
-              <BarChart3 className="h-5 w-5" />
-            </IconCircle>
-            <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: NAVY }}>
-              Evolução da inadimplência
-            </h3>
+          <div className="flex items-center justify-between gap-3 px-5 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <IconCircle className="h-10 w-10">
+                <BarChart3 className="h-5 w-5" />
+              </IconCircle>
+              <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: NAVY }}>
+                Evolução da inadimplência
+              </h3>
+            </div>
+            <div data-chart-export-ignore>
+              <ElementCopyButton containerRef={evolucaoCardRef} />
+            </div>
           </div>
 
           <div className="overflow-x-auto px-4 pb-4">

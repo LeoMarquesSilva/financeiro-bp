@@ -1,12 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { Fragment, useState } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Pin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { opexService } from '../services/opexService'
 import { OPEX_COLORS } from '../constants'
 import { formatPeriodoOpex, mesesFiltroKey, temFiltroMeses } from '../utils/opexPeriodo'
-import { OpexDepartamentosChart } from './OpexDepartamentosChart'
 import { OpexPlanoTitulos } from './OpexPlanoTitulos'
 import type { OpexGrupoRow, OpexPlanoRow } from '../types/opex.types'
 
@@ -14,6 +13,9 @@ type Props = {
   grupos: OpexGrupoRow[]
   ano: number
   mesesFiltro: number[]
+  soFixas: boolean
+  onSoFixasChange: (value: boolean) => void
+  chartSlot: ReactNode
 }
 
 function pct(realizado: number, previsto: number): string {
@@ -132,9 +134,8 @@ function GrupoDetalhe({
   )
 }
 
-export function OpexGruposTable({ grupos, ano, mesesFiltro }: Props) {
+export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, onSoFixasChange, chartSlot }: Props) {
   const [aberto, setAberto] = useState<string | null>(null)
-  const [soFixas, setSoFixas] = useState(false)
   const filtroAtivo = temFiltroMeses(mesesFiltro)
 
   const lista = soFixas ? grupos.filter((g) => g.fixo) : grupos
@@ -152,7 +153,7 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro }: Props) {
         </div>
         <button
           type="button"
-          onClick={() => setSoFixas((v) => !v)}
+          onClick={() => onSoFixasChange(!soFixas)}
           className={cn(
             'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
             soFixas
@@ -165,7 +166,7 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro }: Props) {
         </button>
       </div>
 
-      <OpexDepartamentosChart ano={ano} mesesFiltro={mesesFiltro} somenteFixas={soFixas} />
+      {chartSlot}
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-0 text-sm md:min-w-[720px]">

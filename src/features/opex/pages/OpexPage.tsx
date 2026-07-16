@@ -7,6 +7,7 @@ import { OpexKpis } from '../components/OpexKpis'
 import { OpexPrevistoRealizadoChart } from '../components/OpexPrevistoRealizadoChart'
 import { OpexProjecaoFixas } from '../components/OpexProjecaoFixas'
 import { OpexGruposTable } from '../components/OpexGruposTable'
+import { OpexDepartamentosChart } from '../components/OpexDepartamentosChart'
 import { OpexMetasEstrategicas } from '../components/OpexMetasEstrategicas'
 import { OpexPeriodoSelector } from '../components/OpexPeriodoSelector'
 import { formatPeriodoOpex, temFiltroMeses } from '../utils/opexPeriodo'
@@ -16,6 +17,7 @@ const ANOS = [2025, 2026, 2027]
 export function OpexPage() {
   const [ano, setAno] = useState(new Date().getFullYear())
   const [mesesFiltro, setMesesFiltro] = useState<number[]>([])
+  const [soFixas, setSoFixas] = useState(false)
   const { data, isLoading, error, refetch, isFetching } = useOpexDashboard(ano, mesesFiltro)
 
   const handleAnoChange = (y: number) => {
@@ -109,7 +111,21 @@ export function OpexPage() {
             <OpexProjecaoFixas grupos={data.grupos} kpis={data.kpis} mesAtual={data.mes_atual} />
           )}
 
-          <OpexGruposTable grupos={data.grupos} ano={data.ano} mesesFiltro={mesesFiltro} />
+          <OpexGruposTable
+            grupos={data.grupos}
+            ano={data.ano}
+            mesesFiltro={mesesFiltro}
+            soFixas={soFixas}
+            onSoFixasChange={setSoFixas}
+            chartSlot={
+              <OpexDepartamentosChart
+                ano={data.ano}
+                mesesFiltro={mesesFiltro}
+                somenteFixas={soFixas}
+                mesAtual={data.mes_atual}
+              />
+            }
+          />
         </>
       )}
 

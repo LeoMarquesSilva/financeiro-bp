@@ -343,9 +343,17 @@ function applyExportHtmlColors(root: HTMLElement): void {
     }
   })
 
-  root.querySelectorAll<HTMLElement>('p, span, li, div').forEach((el) => {
+  root.querySelectorAll<HTMLElement>('p, span, li, div, td, th, button, h1, h2, h3, h4, h5, h6').forEach((el) => {
     if (isColorSwatch(el)) return
     el.style.setProperty('color', EXPORT_TEXT_COLOR, 'important')
+  })
+
+  root.querySelectorAll<HTMLElement>('button').forEach((btn) => {
+    btn.style.setProperty('background', 'transparent', 'important')
+    btn.style.setProperty('border', 'none', 'important')
+    btn.style.setProperty('box-shadow', 'none', 'important')
+    btn.style.setProperty('padding', '0', 'important')
+    btn.style.setProperty('cursor', 'default', 'important')
   })
 }
 
