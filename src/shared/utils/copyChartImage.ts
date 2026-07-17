@@ -312,13 +312,27 @@ async function compositeToPngBlob(
   })
 }
 
+function isStyleableElement(el: Element): el is HTMLElement | SVGElement {
+  return el instanceof HTMLElement || el instanceof SVGElement
+}
+
 function inlineNodeStyles(source: Element, target: Element): void {
-  if (!(source instanceof HTMLElement) || !(target instanceof HTMLElement)) return
+  if (!isStyleableElement(source) || !isStyleableElement(target)) return
 
   const computed = window.getComputedStyle(source)
   for (let i = 0; i < computed.length; i++) {
     const prop = computed[i]
     target.style.setProperty(prop, computed.getPropertyValue(prop), computed.getPropertyPriority(prop))
+  }
+
+  if (source instanceof SVGSVGElement && target instanceof SVGSVGElement) {
+    const rect = source.getBoundingClientRect()
+    const width = Math.max(1, Math.ceil(rect.width || parseFloat(computed.width) || 0))
+    const height = Math.max(1, Math.ceil(rect.height || parseFloat(computed.height) || 0))
+    target.setAttribute('width', String(width))
+    target.setAttribute('height', String(height))
+    target.style.setProperty('width', `${width}px`, 'important')
+    target.style.setProperty('height', `${height}px`, 'important')
   }
 
   for (let i = 0; i < source.children.length; i++) {
@@ -518,6 +532,9 @@ function applyPrintFlexRowFix(root: HTMLElement, source: HTMLElement): void {
     }
 
     if (isFixedSizeIcon(sourceChild)) {
+      child.style.setProperty('display', 'inline-flex', 'important')
+      child.style.setProperty('align-items', 'center', 'important')
+      child.style.setProperty('justify-content', 'center', 'important')
       child.style.setProperty('border-radius', '9999px', 'important')
       child.style.setProperty('overflow', 'hidden', 'important')
     }
@@ -651,6 +668,13 @@ function lockIconDimensions(cell: HTMLElement, sourceCell: HTMLElement): void {
   cell.style.setProperty('overflow', 'hidden', 'important')
   cell.style.setProperty('box-sizing', 'border-box', 'important')
   cell.style.setProperty('flex-shrink', '0', 'important')
+  cell.style.setProperty('text-align', 'center', 'important')
+  cell.style.setProperty('line-height', `${size}px`, 'important')
+
+  cell.querySelectorAll<SVGSVGElement>('svg').forEach((svg) => {
+    svg.style.setProperty('display', 'inline-block', 'important')
+    svg.style.setProperty('vertical-align', 'middle', 'important')
+  })
 }
 
 function isTextBlockCell(el: HTMLElement): boolean {
