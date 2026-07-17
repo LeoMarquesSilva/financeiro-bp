@@ -446,35 +446,234 @@ function applyExportLayoutFixes(root: HTMLElement): void {
   })
 }
 
-function applyPreserveBackgroundExportLayout(root: HTMLElement): void {
-  root.style.setProperty('height', 'fit-content', 'important')
-  root.style.setProperty('min-height', '0', 'important')
-  root.style.setProperty('max-height', 'none', 'important')
-  root.style.setProperty('width', 'fit-content', 'important')
+function stripInlineHeights(root: HTMLElement): void {
+  root.style.removeProperty('height')
+  root.style.removeProperty('min-height')
+  root.style.removeProperty('max-height')
+  root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    el.style.removeProperty('height')
+    el.style.removeProperty('min-height')
+    el.style.removeProperty('max-height')
+  })
+}
+
+function shouldExpandExportWidth(source: HTMLElement): boolean {
+  if (source.hasAttribute('data-chart-export-expand-width')) return true
+  const table = source.querySelector('table')
+  if (!table) return false
+  const scrollHost = source.querySelector<HTMLElement>('.overflow-x-auto') ?? source
+  return table.scrollWidth > scrollHost.clientWidth + 4
+}
+
+function shouldFitContentExport(source: HTMLElement): boolean {
+  return source.hasAttribute('data-chart-export-fit-content')
+}
+
+function isFixedSizeIcon(el: HTMLElement): boolean {
+  const cls = el.className
+  if (typeof cls !== 'string') return false
+  return (
+    el.classList.contains('shrink-0') &&
+    (/\bh-10\b/.test(cls) || /\bh-11\b/.test(cls)) &&
+    (/\bw-10\b/.test(cls) || /\bw-11\b/.test(cls))
+  )
+}
+
+/** Remove larguras congeladas pelo inlineNodeStyles (grid w-full) — só na cópia. */
+function applyFitContentExportReset(root: HTMLElement): void {
+  const rootDisplay = window.getComputedStyle(root).display
+
+  root.style.setProperty('width', 'max-content', 'important')
   root.style.setProperty('min-width', '0', 'important')
   root.style.setProperty('max-width', 'none', 'important')
-  root.style.setProperty('align-self', 'auto', 'important')
-  root.style.setProperty('flex', 'none', 'important')
-  root.style.setProperty('align-items', 'flex-start', 'important')
+  root.style.setProperty('height', 'auto', 'important')
+  root.style.setProperty('overflow', 'visible', 'important')
+
+  if (rootDisplay === 'flex' || rootDisplay === 'inline-flex') {
+    root.style.setProperty('display', 'inline-flex', 'important')
+    root.style.setProperty('align-items', 'center', 'important')
+  } else {
+    root.style.setProperty('display', 'inline-block', 'important')
+  }
 
   root.querySelectorAll<HTMLElement>('*').forEach((el) => {
-    el.style.setProperty('height', 'auto', 'important')
-    el.style.setProperty('min-height', '0', 'important')
-    el.style.setProperty('max-height', 'none', 'important')
-    el.style.setProperty('align-self', 'auto', 'important')
+    if (isFixedSizeIcon(el)) return
+    const hasTextContent = el.querySelector('p, h1, h2, h3, h4, h5, h6') != null
+    el.style.setProperty('width', 'auto', 'important')
+    el.style.setProperty(
+      'min-width',
+      hasTextContent ? 'max-content' : '0',
+      'important',
+    )
+    el.style.setProperty('max-width', 'none', 'important')
+    el.style.setProperty('flex', hasTextContent ? '1 1 auto' : '0 0 auto', 'important')
+    el.style.setProperty('flex-grow', hasTextContent ? '1' : '0', 'important')
+    el.style.setProperty('flex-shrink', hasTextContent ? '1' : '0', 'important')
   })
 
-  root.querySelectorAll<HTMLElement>('.flex-1, .min-w-0').forEach((el) => {
-    el.style.setProperty('flex', '0 1 auto', 'important')
-    el.style.setProperty('width', 'auto', 'important')
+  root.querySelectorAll<HTMLElement>('button').forEach((btn) => {
+    btn.style.setProperty('display', 'inline-flex', 'important')
+    btn.style.setProperty('width', 'auto', 'important')
+    btn.style.setProperty('align-items', 'center', 'important')
   })
+}
+
+function applyPreserveBackgroundExportLayout(
+  root: HTMLElement,
+  source: HTMLElement,
+  expandWidth = false,
+  fitContent = false,
+): void {
+  const sourceStyle = window.getComputedStyle(source)
+  const sourceWidth = Math.ceil(source.getBoundingClientRect().width)
+
+  stripInlineHeights(root)
+
+  root.style.setProperty('position', 'static', 'important')
+  root.style.setProperty('height', 'auto', 'important')
+  root.style.setProperty('min-height', '0', 'important')
+  root.style.setProperty('max-height', 'none', 'important')
+  if (fitContent) {
+    // Largura final é definida em applyFitContentExportReset (após demais ajustes).
+  } else if (expandWidth) {
+    root.style.setProperty('width', 'max-content', 'important')
+    root.style.setProperty('min-width', `${sourceWidth}px`, 'important')
+    root.style.setProperty('max-width', 'none', 'important')
+  } else {
+    root.style.setProperty('width', `${sourceWidth}px`, 'important')
+    root.style.setProperty('min-width', '0', 'important')
+    root.style.setProperty('max-width', `${sourceWidth}px`, 'important')
+  }
+  root.style.setProperty('box-sizing', 'border-box', 'important')
+  root.style.setProperty('align-self', 'auto', 'important')
+  root.style.setProperty('flex', 'none', 'important')
+  root.style.setProperty('overflow', 'visible', 'important')
+  root.style.setProperty('display', sourceStyle.display, 'important')
+  root.style.setProperty('align-items', 'flex-start', 'important')
+  root.style.setProperty('flex-direction', sourceStyle.flexDirection, 'important')
+  root.style.setProperty('gap', sourceStyle.gap, 'important')
+  root.style.setProperty('box-shadow', sourceStyle.boxShadow, 'important')
+  root.style.setProperty('height', 'fit-content', 'important')
 
   root.querySelectorAll<HTMLElement>('[data-chart-export-trim="copy-padding"]').forEach((el) => {
     el.style.setProperty('padding-right', '1.25rem', 'important')
   })
+
+  if (root.hasAttribute('data-chart-export-trim')) {
+    root.style.setProperty('padding-right', '1.25rem', 'important')
+  }
+
+  root.querySelectorAll<HTMLElement>('table').forEach((table) => {
+    table.style.setProperty('border-collapse', 'collapse', 'important')
+    if (expandWidth) {
+      table.style.setProperty('width', 'auto', 'important')
+      table.style.setProperty('min-width', 'max-content', 'important')
+    } else {
+      table.style.setProperty('width', '100%', 'important')
+    }
+  })
+
+  if (expandWidth) {
+    root.querySelectorAll<HTMLElement>('td, th').forEach((cell) => {
+      cell.style.setProperty('white-space', 'nowrap', 'important')
+    })
+    root.querySelectorAll<HTMLElement>('button').forEach((btn) => {
+      btn.style.setProperty('white-space', 'nowrap', 'important')
+    })
+  }
+
+  if (root.classList.contains('overflow-hidden') || root.classList.contains('overflow-x-auto')) {
+    root.style.setProperty('overflow', 'visible', 'important')
+  }
+
+  root.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-hidden').forEach((el) => {
+    el.style.setProperty('overflow', 'visible', 'important')
+  })
+
+  if (fitContent) {
+    applyFitContentExportReset(root)
+  }
 }
 
-function measurePreparedElement(prepared: HTMLElement): { width: number; height: number } {
+function measureCardSnapshotElement(
+  prepared: HTMLElement,
+  fixedWidth: number,
+  expandWidth = false,
+  fitContent = false,
+): { width: number; height: number } {
+  prepared.style.position = 'absolute'
+  prepared.style.left = '-9999px'
+  prepared.style.top = '0'
+  prepared.style.visibility = 'hidden'
+  prepared.style.boxSizing = 'border-box'
+  if (fitContent) {
+    prepared.style.width = 'max-content'
+    prepared.style.minWidth = '0'
+    prepared.style.maxWidth = 'none'
+    prepared.style.overflow = 'visible'
+  } else if (expandWidth) {
+    prepared.style.width = 'max-content'
+    prepared.style.minWidth = `${fixedWidth}px`
+    prepared.style.maxWidth = 'none'
+    prepared.style.overflow = 'visible'
+  } else {
+    prepared.style.width = `${fixedWidth}px`
+    prepared.style.maxWidth = `${fixedWidth}px`
+    prepared.style.overflow = 'hidden'
+  }
+  prepared.style.height = 'fit-content'
+  prepared.style.minHeight = '0'
+  prepared.style.maxHeight = 'none'
+  prepared.style.alignItems = 'flex-start'
+
+  document.body.appendChild(prepared)
+
+  const style = window.getComputedStyle(prepared)
+  const verticalExtra =
+    (parseFloat(style.paddingTop) || 0) +
+    (parseFloat(style.paddingBottom) || 0) +
+    (parseFloat(style.borderTopWidth) || 0) +
+    (parseFloat(style.borderBottomWidth) || 0)
+
+  let contentMax = 0
+  Array.from(prepared.children).forEach((child) => {
+    if (child instanceof HTMLElement) {
+      contentMax = Math.max(contentMax, child.offsetHeight)
+    }
+  })
+
+  const scrollHeight = Math.ceil(prepared.scrollHeight)
+  const offsetHeight = Math.ceil(prepared.offsetHeight)
+  const contentHeight = contentMax > 0 ? Math.ceil(contentMax + verticalExtra) : scrollHeight
+  const height = prepared.querySelector('table')
+    ? scrollHeight
+    : Math.max(offsetHeight, scrollHeight, contentHeight)
+
+  const width = fitContent || expandWidth ? Math.ceil(prepared.scrollWidth) : fixedWidth
+
+  document.body.removeChild(prepared)
+
+  return { width: Math.max(1, width), height: Math.max(1, height) }
+}
+
+function measurePreparedElement(
+  prepared: HTMLElement,
+  options?: {
+    fixedWidth?: number
+    cardSnapshot?: boolean
+    expandWidth?: boolean
+    fitContent?: boolean
+  },
+): { width: number; height: number } {
+  if (options?.cardSnapshot && (options.fixedWidth != null || options.fitContent)) {
+    return measureCardSnapshotElement(
+      prepared,
+      options.fixedWidth ?? 0,
+      options.expandWidth,
+      options.fitContent,
+    )
+  }
+
   prepared.style.position = 'absolute'
   prepared.style.left = '-9999px'
   prepared.style.top = '0'
@@ -482,13 +681,15 @@ function measurePreparedElement(prepared: HTMLElement): { width: number; height:
   prepared.style.height = 'auto'
   prepared.style.minHeight = '0'
   prepared.style.maxHeight = 'none'
-  prepared.style.width = 'max-content'
-  prepared.style.maxWidth = 'none'
+  prepared.style.width = options?.fixedWidth ? `${options.fixedWidth}px` : 'max-content'
+  prepared.style.maxWidth = options?.fixedWidth ? `${options.fixedWidth}px` : 'none'
   prepared.style.boxSizing = 'border-box'
 
   document.body.appendChild(prepared)
-  const width = Math.ceil(prepared.scrollWidth)
-  const height = Math.ceil(prepared.scrollHeight)
+  const width = options?.fixedWidth ?? Math.ceil(prepared.scrollWidth)
+  const height = Math.ceil(
+    prepared.offsetHeight || prepared.getBoundingClientRect().height || prepared.scrollHeight,
+  )
   document.body.removeChild(prepared)
 
   return { width, height }
@@ -502,7 +703,9 @@ function prepareHtmlExportElement(source: HTMLElement, options?: HtmlExportOptio
 
   if (preserveBackground) {
     const sourceStyle = window.getComputedStyle(source)
+    const explicitBg = source.getAttribute('data-chart-export-bg')
     const bg =
+      explicitBg ||
       source.style.backgroundColor ||
       sourceStyle.backgroundColor ||
       sourceStyle.background
@@ -519,23 +722,29 @@ function prepareHtmlExportElement(source: HTMLElement, options?: HtmlExportOptio
   }
   clone.style.setProperty('outline', 'none', 'important')
 
-  applyExportHtmlColors(clone, preserveBackground)
-  applyExportLayoutFixes(clone)
   if (preserveBackground) {
-    applyPreserveBackgroundExportLayout(clone)
+    applyPreserveBackgroundExportLayout(
+      clone,
+      source,
+      shouldExpandExportWidth(source),
+      shouldFitContentExport(source),
+    )
+  } else {
+    applyExportHtmlColors(clone, preserveBackground)
+    applyExportLayoutFixes(clone)
+
+    clone.querySelectorAll<HTMLElement>('p').forEach((el) => {
+      el.style.setProperty('display', 'block', 'important')
+      el.style.setProperty('line-height', '1.45', 'important')
+      el.style.setProperty('margin', '0', 'important')
+    })
+
+    clone.querySelectorAll<HTMLElement>('[data-legend-export] > div > p + p, [data-legend-export] div.space-y-1 > p + p').forEach(
+      (el) => {
+        el.style.setProperty('margin-top', '4px', 'important')
+      },
+    )
   }
-
-  clone.querySelectorAll<HTMLElement>('p').forEach((el) => {
-    el.style.setProperty('display', 'block', 'important')
-    el.style.setProperty('line-height', '1.45', 'important')
-    el.style.setProperty('margin', '0', 'important')
-  })
-
-  clone.querySelectorAll<HTMLElement>('[data-legend-export] > div > p + p, [data-legend-export] div.space-y-1 > p + p').forEach(
-    (el) => {
-      el.style.setProperty('margin-top', '4px', 'important')
-    },
-  )
 
   clone.style.margin = '0'
   clone.style.padding = window.getComputedStyle(source).padding
@@ -548,8 +757,20 @@ async function htmlElementToPngBlob(
   scale = DEFAULT_SCALE,
   options?: HtmlExportOptions,
 ): Promise<Blob> {
+  const { preserveBackground } = resolveHtmlExportOptions(element, options)
+  const fitContent = preserveBackground && shouldFitContentExport(element)
+  const expandWidth = preserveBackground && !fitContent && shouldExpandExportWidth(element)
   const prepared = prepareHtmlExportElement(element, options)
-  const { width, height } = measurePreparedElement(prepared)
+  const fixedWidth =
+    preserveBackground && !fitContent
+      ? Math.ceil(element.getBoundingClientRect().width)
+      : undefined
+  const { width, height } = measurePreparedElement(prepared, {
+    fixedWidth,
+    cardSnapshot: preserveBackground,
+    expandWidth: expandWidth || undefined,
+    fitContent: fitContent || undefined,
+  })
 
   if (width === 0 || height === 0) {
     throw new Error('Legenda ainda não renderizada')
@@ -559,9 +780,16 @@ async function htmlElementToPngBlob(
   prepared.style.left = 'auto'
   prepared.style.visibility = 'visible'
   prepared.style.width = `${width}px`
-  const exportHeight = height + 4
+  const exportHeight = preserveBackground ? height : height + 4
 
   prepared.style.height = `${exportHeight}px`
+  if (preserveBackground) {
+    prepared.style.overflow = expandWidth || fitContent ? 'visible' : 'hidden'
+    prepared.style.alignItems = 'flex-start'
+    if (expandWidth || fitContent) {
+      prepared.style.maxWidth = 'none'
+    }
+  }
 
   const xhtmlNs = 'http://www.w3.org/1999/xhtml'
   const wrapper = document.createElement('div')
@@ -602,12 +830,77 @@ async function htmlElementToPngBlob(
   })
 }
 
-async function copyPngBlobToClipboard(blob: Blob): Promise<void> {
+const PNG_CRC_TABLE = (() => {
+  const table = new Uint32Array(256)
+  for (let n = 0; n < 256; n++) {
+    let c = n
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    }
+    table[n] = c
+  }
+  return table
+})()
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff
+  for (let i = 0; i < bytes.length; i++) {
+    crc = PNG_CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8)
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+/** Monta um chunk PNG "pHYs" (resolução física) para o DPI informado. */
+function buildPngPhysChunk(dpi: number): Uint8Array {
+  const pixelsPerMeter = Math.round(dpi / 0.0254)
+  const chunk = new Uint8Array(4 + 4 + 9 + 4)
+  const view = new DataView(chunk.buffer)
+
+  view.setUint32(0, 9) // length dos dados
+  chunk.set([0x70, 0x48, 0x59, 0x73], 4) // 'pHYs'
+  view.setUint32(8, pixelsPerMeter)
+  view.setUint32(12, pixelsPerMeter)
+  chunk[16] = 1 // unidade: metro
+
+  const crc = crc32(chunk.subarray(4, 17)) // tipo + dados
+  view.setUint32(17, crc)
+
+  return chunk
+}
+
+/** Insere o DPI no PNG (chunk pHYs, logo após o IHDR) para que apps como o
+ *  PowerPoint/Word colem a imagem no tamanho físico correto, independente
+ *  da escala usada para gerar os pixels. */
+async function embedPngDpi(blob: Blob, dpi: number): Promise<Blob> {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const IHDR_END = 8 + (4 + 4 + 13 + 4) // assinatura PNG + chunk IHDR completo
+
+  if (
+    bytes.length < IHDR_END ||
+    bytes[12] !== 0x49 ||
+    bytes[13] !== 0x48 ||
+    bytes[14] !== 0x44 ||
+    bytes[15] !== 0x52
+  ) {
+    return blob
+  }
+
+  const physChunk = buildPngPhysChunk(dpi)
+  const result = new Uint8Array(bytes.length + physChunk.length)
+  result.set(bytes.subarray(0, IHDR_END), 0)
+  result.set(physChunk, IHDR_END)
+  result.set(bytes.subarray(IHDR_END), IHDR_END + physChunk.length)
+
+  return new Blob([result], { type: 'image/png' })
+}
+
+async function copyPngBlobToClipboard(blob: Blob, dpi?: number): Promise<void> {
   if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
     throw new Error('Cópia de imagem não suportada neste navegador')
   }
 
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+  const finalBlob = dpi ? await embedPngDpi(blob, dpi) : blob
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': finalBlob })])
 }
 
 const DETALHE_COL_WIDTH = 420
@@ -1081,7 +1374,7 @@ export async function copyLegendDetalheToClipboard(
   scale = DEFAULT_SCALE,
 ): Promise<void> {
   const blob = await legendDetalheToPngBlob(data, scale)
-  await copyPngBlobToClipboard(blob)
+  await copyPngBlobToClipboard(blob, 96 * scale)
 }
 
 export type ElementImageExportOptions = HtmlExportOptions
@@ -1092,7 +1385,7 @@ export async function copyElementImageToClipboard(
   options?: ElementImageExportOptions,
 ): Promise<void> {
   const blob = await htmlElementToPngBlob(element, scale, options)
-  await copyPngBlobToClipboard(blob)
+  await copyPngBlobToClipboard(blob, 96 * scale)
 }
 
 export async function copyChartImageToClipboard(
@@ -1107,5 +1400,5 @@ export async function copyChartImageToClipboard(
   }
 
   const blob = await compositeToPngBlob(legendEl, plotEl, scale)
-  await copyPngBlobToClipboard(blob)
+  await copyPngBlobToClipboard(blob, 96 * scale)
 }

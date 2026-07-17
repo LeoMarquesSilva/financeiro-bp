@@ -28,7 +28,31 @@ export function normalizarNomeCliente(nome: string): string {
     .replace(/\s+/g, ' ')
 }
 
-/** Mapa nome normalizado → grupo exibido (a partir de escritorio_empresas_por_grupo). */
+function clienteGrupoLookupKeys(nome: string): string[] {
+  const trimmed = nome.trim()
+  if (!trimmed) return []
+  const keys = new Set<string>()
+  keys.add(normalizarNomeCliente(trimmed))
+  keys.add(trimmed.toLowerCase().replace(/\s+/g, ' '))
+  return [...keys].filter(Boolean)
+}
+
+function setClienteGrupoLookup(
+  map: Map<string, string>,
+  nome: string,
+  display: string,
+): void {
+  for (const key of clienteGrupoLookupKeys(nome)) {
+    const existing = map.get(key)
+    if (existing === undefined) {
+      map.set(key, display)
+    } else if (existing === GRUPO_SEM_NOME && display !== GRUPO_SEM_NOME) {
+      map.set(key, display)
+    }
+  }
+}
+
+/** Mapa nome normalizado → grupo exibido (view receita_grupo_por_nome_cliente). */
 export function buildClienteGrupoMap(
   empresas: Array<{ nome: string; grupo_cliente: string | null }>,
 ): Map<string, string> {
@@ -38,13 +62,7 @@ export function buildClienteGrupoMap(
     if (!nome) continue
     const raw = e.grupo_cliente?.trim() ?? ''
     const display = raw === '' ? GRUPO_SEM_NOME : raw
-    const norm = normalizarNomeCliente(nome)
-    const existing = map.get(norm)
-    if (existing === undefined) {
-      map.set(norm, display)
-    } else if (existing === GRUPO_SEM_NOME && display !== GRUPO_SEM_NOME) {
-      map.set(norm, display)
-    }
+    setClienteGrupoLookup(map, nome, display)
   }
   return map
 }
@@ -59,7 +77,11 @@ export function resolverGrupoCliente(
 ): string {
   const nome = cliente?.trim()
   if (!nome) return GRUPO_SEM_NOME
-  return clienteGrupoMap.get(normalizarNomeCliente(nome)) ?? GRUPO_SEM_NOME
+  for (const key of clienteGrupoLookupKeys(nome)) {
+    const grupo = clienteGrupoMap.get(key)
+    if (grupo) return grupo
+  }
+  return GRUPO_SEM_NOME
 }
 
 export function agruparRecebidoPorGrupo(

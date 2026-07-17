@@ -1688,12 +1688,6 @@ export function ReceitaComparativoChart({
                   onToggle={toggleSeries}
                 />
               </div>
-              {visibleSeries.has('inadimplencia') && !percentMode && (
-                <p className="mt-2 text-center text-[11px] text-slate-400">
-                  Inadimplência consolidada — meses congelados usam o snapshot do fechamento;
-                  mês corrente é calculado ao vivo (regra VIOS).
-                </p>
-              )}
             </>
           )}
         </div>
@@ -1890,12 +1884,6 @@ export function ReceitaComparativoChart({
         </div>
         )}
       </section>
-
-      <p className="text-xs leading-relaxed text-slate-500">
-        <strong>Recebido:</strong> valor pago por data de pagamento. <strong>Previsto:</strong> valor
-        por data de vencimento. Planos da cota: honorários mensais, spot, sucumbência, êxito,
-        manutenção, por hora e advocatícios.
-      </p>
 
       {detalheMes && (
         <ReceitaRecebidoDetalheSheet

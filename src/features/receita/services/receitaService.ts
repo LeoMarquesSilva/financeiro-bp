@@ -135,15 +135,20 @@ export const receitaService = {
     )
   },
 
-  /** Nome + grupo para vincular cliente do financeiro ao grupo de empresas. */
+  /** Nome normalizado + grupo canônico (prioriza Cliente ativo sobre Prospecção). */
   async fetchEmpresasNomeGrupo(): Promise<Array<{ nome: string; grupo_cliente: string | null }>> {
-    return collectPaginatedRows(async (from, to) =>
-      supabase
-        .from('escritorio_empresas_por_grupo')
-        .select('nome, grupo_cliente')
-        .order('id', { ascending: true })
-        .range(from, to),
+    const rows = await collectPaginatedRows<{ cliente_norm: string; grupo_cliente: string | null }>(
+      async (from, to) =>
+        supabase
+          .from('receita_grupo_por_nome_cliente' as never)
+          .select('cliente_norm, grupo_cliente')
+          .order('cliente_norm', { ascending: true })
+          .range(from, to),
     )
+    return rows.map((row) => ({
+      nome: row.cliente_norm,
+      grupo_cliente: row.grupo_cliente,
+    }))
   },
 
   /** Itens recebidos no mês filtrados por área (chave normalizada do departamento). */
