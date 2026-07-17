@@ -582,6 +582,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               ref={acumuladaCardRef}
               data-chart-export-preserve-bg
               data-chart-export-bg={CREAM}
+              data-chart-export-fit-content
               className="flex w-full items-center gap-3 overflow-hidden rounded-2xl border border-slate-200/50 px-4 py-4 shadow-sm sm:gap-4 sm:px-5"
               style={{ backgroundColor: CREAM }}
             >
@@ -623,7 +624,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                   </p>
                 )}
               </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden data-chart-export-ignore />
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
             </div>
             <button
               type="button"
@@ -632,7 +633,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               aria-label={`Ver detalhes inadimplência acumulada ${periodoCurto}`}
             />
           </div>
-          <div className="absolute right-3 top-3 sm:right-4 sm:top-4" data-chart-export-ignore>
+          <div className="absolute right-3 top-3 z-20 sm:right-4 sm:top-4" data-chart-export-ignore>
             <ElementCopyButton containerRef={acumuladaCardRef} preserveBackground />
           </div>
         </div>
@@ -642,6 +643,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
             ref={pctCardRef}
             data-chart-export-preserve-bg
             data-chart-export-bg={CREAM}
+            data-chart-export-fit-content
             className="flex w-full items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 shadow-sm sm:gap-4 sm:px-5"
             style={{ backgroundColor: CREAM }}
           >
@@ -665,7 +667,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               )}
             </div>
           </div>
-          <div className="absolute right-3 top-3 sm:right-4 sm:top-4" data-chart-export-ignore>
+          <div className="absolute right-3 top-3 z-20 sm:right-4 sm:top-4" data-chart-export-ignore>
             <ElementCopyButton containerRef={pctCardRef} preserveBackground />
           </div>
         </div>

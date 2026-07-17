@@ -45,7 +45,7 @@ import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
 import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
 import { ReceitaRecebidoDetalheSheet } from './ReceitaRecebidoDetalheSheet'
 import { ReceitaSemAreaDetalheSheet } from './ReceitaSemAreaDetalheSheet'
-import { isMesFuturo, valorRecebidoGrafico } from '../utils/receitaMes'
+import { isMesFuturo, valorRecebidoGrafico, inadimplenciaGraficoComparativo, isMesAtual, type ReceitaGraficoMesOptions } from '../utils/receitaMes'
 import {
   edgeAwareAnchor,
   labelYForPosition,
@@ -208,16 +208,21 @@ function buildAreaGapData(
   deptRows: ReceitaRecebidoDepartamentoRow[],
   mes: number | null,
   metaAreaSlices: ReceitaMetaAreaSlice[],
+  ano: number,
+  graficoOpts?: ReceitaGraficoMesOptions,
 ): AreaGapRow[] {
-  const escopo = (mes == null ? rowsComDados : rows.filter((r) => r.mes === mes)).filter(
-    (r) => r.meta > 0,
+  const baseEscopo = mes == null ? rowsComDados : rows.filter((r) => r.mes === mes)
+  const escopoMeta = baseEscopo.filter((r) => r.meta > 0)
+  const metaTotalEscopo = escopoMeta.reduce((s, r) => s + r.meta, 0)
+  const mesesRecebido = new Set(
+    escopoMeta
+      .filter((r) => !(graficoOpts?.omitMesAtual && isMesAtual(ano, r.mes)))
+      .map((r) => r.mes),
   )
-  const metaTotalEscopo = escopo.reduce((s, r) => s + r.meta, 0)
-  const mesesEscopo = new Set(escopo.map((r) => r.mes))
 
   const recebidoPorArea = new Map<string, number>()
   for (const d of deptRows) {
-    if (!mesesEscopo.has(d.mes)) continue
+    if (!mesesRecebido.has(d.mes)) continue
     const key = departamentoNormKey(d.departamento)
     recebidoPorArea.set(key, (recebidoPorArea.get(key) ?? 0) + d.total)
   }
@@ -297,6 +302,7 @@ function buildAreaLinhaData(
   areaKey: string,
   areaPct: number,
   ano: number,
+  graficoOpts?: ReceitaGraficoMesOptions,
 ): AreaLinhaPoint[] {
   const pct = areaPct
 
@@ -323,8 +329,11 @@ function buildAreaLinhaData(
     mesLabel: r.mesLabel,
     meta: r.meta > 0 ? (r.meta * pct) / 100 : null,
     previsto: previstoPorMes.get(r.mes) ?? 0,
-    recebido: valorRecebidoGrafico(recebidoPorMes.get(r.mes) ?? 0, ano, r.mes),
-    inadimplencia: inadimplenciaPorMes.get(r.mes) ?? null,
+    recebido: valorRecebidoGrafico(recebidoPorMes.get(r.mes) ?? 0, ano, r.mes, undefined, graficoOpts),
+    inadimplencia:
+      graficoOpts?.omitMesAtual && isMesAtual(ano, r.mes)
+        ? null
+        : inadimplenciaPorMes.get(r.mes) ?? null,
   }))
 }
 
@@ -844,6 +853,9 @@ export function ReceitaComparativoChart({
   const [tabelaAberta, setTabelaAberta] = useState(false)
   const [percentMode, setPercentMode] = useState(false)
   const [porAreaMode, setPorAreaMode] = useState(false)
+  const [resultadoMode, setResultadoMode] = useState(false)
+  const anoCorrente = new Date().getFullYear()
+  const resultadoDisponivel = ano === anoCorrente
   const [areaMesSelecionado, setAreaMesSelecionado] = useState<number | null>(() => {
     const hoje = new Date()
     if (ano !== hoje.getFullYear()) return null
@@ -900,6 +912,11 @@ export function ReceitaComparativoChart({
     return map
   }, [inadEvolucao])
 
+  const graficoOpts = useMemo<ReceitaGraficoMesOptions>(
+    () => ({ omitMesAtual: resultadoMode && resultadoDisponivel }),
+    [resultadoMode, resultadoDisponivel],
+  )
+
   const togglePercentMode = () => {
     setPercentMode((v) => {
       const next = !v
@@ -948,13 +965,12 @@ export function ReceitaComparativoChart({
           meta: r.meta > 0 ? r.meta : null,
           projetadoBaseAbril: r.projetadoBaseAbril,
           projetadoReal: r.projetadoReal,
-          recebido: valorRecebidoGrafico(r.recebido, ano, r.mes),
+          recebido: valorRecebidoGrafico(r.recebido, ano, r.mes, undefined, graficoOpts),
           previsto: r.previsto,
-          inadimplencia:
-            isMesFuturo(ano, r.mes) || inadRaw == null || inadRaw <= 0 ? null : inadRaw,
+          inadimplencia: inadimplenciaGraficoComparativo(inadRaw, ano, r.mes, undefined, graficoOpts),
         }
       }),
-    [rows, ano, inadimplenciaPorMes],
+    [rows, ano, inadimplenciaPorMes, graficoOpts],
   )
 
   const chartData = useMemo(
@@ -982,8 +998,10 @@ export function ReceitaComparativoChart({
         deptRows ?? [],
         areaMesSelecionado,
         metaAreaSlices,
+        ano,
+        graficoOpts,
       ),
-    [rows, rowsComDados, deptRows, areaMesSelecionado, metaAreaSlices],
+    [rows, rowsComDados, deptRows, areaMesSelecionado, metaAreaSlices, ano, graficoOpts],
   )
 
   const areaLinhaAtual = useMemo(
@@ -1004,6 +1022,7 @@ export function ReceitaComparativoChart({
       areaLinhaSelecionada,
       areaLinhaAtual.pct,
       ano,
+      graficoOpts,
     )
   }, [
     rows,
@@ -1013,6 +1032,7 @@ export function ReceitaComparativoChart({
     areaLinhaSelecionada,
     areaLinhaAtual,
     ano,
+    graficoOpts,
   ])
 
   const abrirAreaMesDetalhe = (point: AreaLinhaPoint, serie: 'recebido' | 'previsto') => {
@@ -1085,11 +1105,41 @@ export function ReceitaComparativoChart({
                     : 'Meta vs. recebido por área'
                   : percentMode
                     ? 'Comparativo mensal (% da meta)'
-                    : 'Comparativo mensal'}
+                    : resultadoMode && resultadoDisponivel
+                      ? 'Comparativo mensal — resultado'
+                      : 'Comparativo mensal'}
               </h2>
+              {resultadoMode && resultadoDisponivel && (
+                <p className="text-[11px] text-amber-800">
+                  Recebido e inadimplência até o mês anterior · meta e previsto inalterados
+                </p>
+              )}
             </div>
           </div>
-          <ChartCopyButton containerRef={chartExportRef} />
+          <div className="flex flex-col items-end gap-1.5">
+            <ChartCopyButton containerRef={chartExportRef} />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn(
+                'h-8 shrink-0 gap-1.5 text-xs',
+                resultadoMode && resultadoDisponivel
+                  ? 'border-amber-300 bg-amber-50 text-amber-900 shadow-sm'
+                  : 'text-slate-600',
+              )}
+              onClick={() => setResultadoMode((v) => !v)}
+              disabled={!resultadoDisponivel}
+              aria-pressed={resultadoMode && resultadoDisponivel}
+              title={
+                resultadoDisponivel
+                  ? 'Oculta recebido e inadimplência do mês corrente (não fechado)'
+                  : 'Disponível apenas no ano corrente'
+              }
+            >
+              Resultado
+            </Button>
+          </div>
         </div>
 
         <div className="mb-3 flex flex-wrap items-center justify-center gap-2">

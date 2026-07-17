@@ -16,14 +16,43 @@ export function isMesFechado(ano: number, mes: number, ref = new Date()): boolea
   return mes < m
 }
 
+/** Mês corrente no calendário (ex.: julho quando estamos em jul/2026). */
+export function isMesAtual(ano: number, mes: number, ref = new Date()): boolean {
+  const y = ref.getFullYear()
+  const m = ref.getMonth() + 1
+  return ano === y && mes === m
+}
+
+export type ReceitaGraficoMesOptions = {
+  /** Oculta recebido/inadimplência do mês corrente (modo Resultado). */
+  omitMesAtual?: boolean
+}
+
 /** Recebido: null em mês futuro (ainda não houve pagamento); zero mantém zero em mês passado/atual. */
 export function valorRecebidoGrafico(
   valor: number,
   ano: number,
   mes: number,
   ref = new Date(),
+  options?: ReceitaGraficoMesOptions,
 ): number | null {
-  return isMesFuturo(ano, mes, ref) ? null : valor
+  if (isMesFuturo(ano, mes, ref)) return null
+  if (options?.omitMesAtual && isMesAtual(ano, mes, ref)) return null
+  return valor
+}
+
+/** Inadimplência no comparativo: null se futuro, mês corrente (modo Resultado) ou sem valor congelado. */
+export function inadimplenciaGraficoComparativo(
+  valor: number | null | undefined,
+  ano: number,
+  mes: number,
+  ref = new Date(),
+  options?: ReceitaGraficoMesOptions,
+): number | null {
+  if (isMesFuturo(ano, mes, ref)) return null
+  if (options?.omitMesAtual && isMesAtual(ano, mes, ref)) return null
+  if (valor == null || valor <= 0) return null
+  return valor
 }
 
 type MetaRow = { mes: number; meta: number; metaBase?: number; recebido: number }
