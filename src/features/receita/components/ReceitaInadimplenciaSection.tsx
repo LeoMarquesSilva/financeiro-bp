@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, BarChart3, ChevronRight, ClipboardList, DollarSign, Loader2, Percent, Target } from 'lucide-react'
+import { AlertTriangle, BarChart3, Check, ChevronRight, ClipboardList, Copy, DollarSign, Loader2, Percent, Target } from 'lucide-react'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type {
@@ -20,7 +20,10 @@ import { ReceitaInadimplenciaClientesSheet } from './ReceitaInadimplenciaCliente
 import { ReceitaInadimplenciaAreaGruposSheet } from './ReceitaInadimplenciaAreaGruposSheet'
 import { ReceitaInadimplenciaMesValorButton } from './ReceitaInadimplenciaMesValorButton'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
+import { copyInadimplenciaKpiPackToClipboard } from '@/shared/utils/copyChartImage'
 import {
   aplicarSelecaoGruposPeriodo,
   aplicarSelecaoGrupos,
@@ -104,6 +107,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   const acumuladaCardRef = useRef<HTMLDivElement>(null)
   const top5CardRef = useRef<HTMLDivElement>(null)
   const evolucaoCardRef = useRef<HTMLDivElement>(null)
+  const [packCopyStatus, setPackCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
 
   useEffect(() => {
     const max = mesMaxDisponivelInadimplencia(ano)
@@ -503,6 +507,32 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
       ? data.evolucao.find((m: ReceitaInadimplenciaEvolucaoMes) => m.mes === mesDetalhe)
       : null
 
+  const handleCopiarPacoteInadimplencia = async () => {
+    const acumulada = acumuladaCardRef.current
+    const pct = pctCardRef.current
+    const top5 = top5CardRef.current
+    if (!acumulada || !pct || !top5) {
+      toast.error('Conteúdo não disponível para cópia')
+      return
+    }
+
+    setPackCopyStatus('loading')
+    try {
+      await copyInadimplenciaKpiPackToClipboard({ acumulada, pct, top5 })
+      setPackCopyStatus('done')
+      toast.success('Conteúdo copiado — cole no PowerPoint com Ctrl+V')
+      window.setTimeout(() => setPackCopyStatus('idle'), 2000)
+    } catch (error) {
+      setPackCopyStatus('idle')
+      const message =
+        error instanceof Error ? error.message : 'Não foi possível copiar o conteúdo'
+      toast.error(message)
+    }
+  }
+
+  const PackCopyIcon =
+    packCopyStatus === 'loading' ? Loader2 : packCopyStatus === 'done' ? Check : Copy
+
   return (
     <TooltipProvider delayDuration={200}>
     <section className="space-y-5">
@@ -572,6 +602,20 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               ))}
             </select>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            className={cn(SELECT_CLASS, 'h-9 gap-1.5 px-3 font-normal text-slate-700')}
+            onClick={handleCopiarPacoteInadimplencia}
+            disabled={packCopyStatus === 'loading' || isFetching || areaFilterPending}
+            aria-label="Copiar KPIs e top 5 inadimplentes para PowerPoint"
+          >
+            <PackCopyIcon
+              className={cn('h-3.5 w-3.5', packCopyStatus === 'loading' && 'animate-spin')}
+              aria-hidden
+            />
+            Copiar
+          </Button>
         </div>
       </header>
 
@@ -580,9 +624,10 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
           <div className="relative">
             <div
               ref={acumuladaCardRef}
+              data-receita-inadimplencia-export="acumulada"
               data-chart-export-preserve-bg
               data-chart-export-bg={CREAM}
-              data-chart-export-fit-content
+              data-chart-export-inline-row
               className="flex w-full items-center gap-3 overflow-hidden rounded-2xl border border-slate-200/50 px-4 py-4 shadow-sm sm:gap-4 sm:px-5"
               style={{ backgroundColor: CREAM }}
             >
@@ -591,7 +636,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               </IconCircle>
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 sm:text-[11px]">
-                  Inadimplência R$ - {periodoCurto}
+                  Resultado R$ - {periodoCurto}
                 </p>
                 <p
                   className={cn(
@@ -610,7 +655,10 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 {(!filtroAreaAtivo ||
                   dashboard.clientes_ajustado ||
                   (!dashboard.clientes_ajustado && dashboard.evolucao.some((m) => m.ajustado))) && (
-                  <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+                  <p
+                    className="mt-0.5 text-[11px] text-slate-500 sm:text-xs"
+                    data-chart-export-ignore
+                  >
                     {!filtroAreaAtivo &&
                       'Soma da inadimplência mensal no período (mesma regra da evolução) — clique para ver empresas e títulos'}
                     {dashboard.clientes_ajustado && (
@@ -624,13 +672,15 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                   </p>
                 )}
               </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+              <span className="inline-flex shrink-0 items-center text-slate-400">
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </span>
             </div>
             <button
               type="button"
               onClick={() => (filtroAreaAtivo ? abrirDetalheAreaPeriodo() : setClientesSheetOpen(true))}
               className="absolute inset-0 z-10 cursor-pointer rounded-2xl hover:bg-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-inset"
-              aria-label={`Ver detalhes inadimplência acumulada ${periodoCurto}`}
+              aria-label={`Ver detalhes resultado R$ ${periodoCurto}`}
             />
           </div>
           <div className="absolute right-3 top-3 z-20 sm:right-4 sm:top-4" data-chart-export-ignore>
@@ -641,9 +691,10 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
         <div className="relative w-full self-start">
           <div
             ref={pctCardRef}
+            data-receita-inadimplencia-export="pct"
             data-chart-export-preserve-bg
             data-chart-export-bg={CREAM}
-            data-chart-export-fit-content
+            data-chart-export-inline-row
             className="flex w-full items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 shadow-sm sm:gap-4 sm:px-5"
             style={{ backgroundColor: CREAM }}
           >
@@ -652,7 +703,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
             </IconCircle>
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 sm:text-[11px]">
-                Resultado % de inadimplência
+                Resultado % - {periodoCurto}
               </p>
               <p
                 className="mt-1 text-xl font-bold tabular-nums sm:text-2xl"
@@ -661,7 +712,10 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 {formatPercent(dashboard.pct_periodo)}
               </p>
               {!filtroAreaAtivo && (
-                <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+                <p
+                  className="mt-0.5 text-[11px] text-slate-500 sm:text-xs"
+                  data-chart-export-ignore
+                >
                   Saldo proporcional do período ÷ previsto acumulado — inclui clientes inativos (regra planilha VIOS)
                 </p>
               )}
@@ -689,6 +743,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
       <div className="grid gap-4 lg:grid-cols-2">
         <div
           ref={top5CardRef}
+          data-receita-inadimplencia-export="top5"
           data-chart-export-preserve-bg
           data-chart-export-bg={CREAM}
           className="w-full self-start overflow-hidden rounded-2xl border border-slate-200/50 shadow-sm"

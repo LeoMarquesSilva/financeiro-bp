@@ -469,6 +469,109 @@ function shouldFitContentExport(source: HTMLElement): boolean {
   return source.hasAttribute('data-chart-export-fit-content')
 }
 
+function shouldInlineRowCardExport(source: HTMLElement): boolean {
+  return source.hasAttribute('data-chart-export-inline-row')
+}
+
+function shouldPrintSnapshotExport(source: HTMLElement): boolean {
+  if (!source.hasAttribute('data-chart-export-preserve-bg')) return false
+  if (shouldExpandExportWidth(source)) return false
+  if (shouldFitContentExport(source)) return false
+  return true
+}
+
+/** foreignObject não respeita flex — inline-block com dimensões medidas na tela. */
+function applyPrintFlexRowFix(root: HTMLElement, source: HTMLElement): void {
+  const sourceStyle = window.getComputedStyle(source)
+  const gap = parseFloat(sourceStyle.gap || sourceStyle.columnGap) || 0
+  const sourceChildren = Array.from(source.children).filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && !child.hasAttribute('data-chart-export-ignore'),
+  )
+  const rootChildren = Array.from(root.children).filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && !child.hasAttribute('data-chart-export-ignore'),
+  )
+
+  root.style.setProperty('display', 'block', 'important')
+  root.style.setProperty('white-space', 'nowrap', 'important')
+  root.style.setProperty('font-size', '0', 'important')
+  root.style.setProperty('line-height', '0', 'important')
+
+  rootChildren.forEach((child, index) => {
+    const sourceChild = sourceChildren[index]
+    if (!sourceChild) return
+
+    const childStyle = window.getComputedStyle(sourceChild)
+    const childRect = sourceChild.getBoundingClientRect()
+    child.style.setProperty('display', 'inline-block', 'important')
+    child.style.setProperty('vertical-align', 'middle', 'important')
+    child.style.setProperty('white-space', 'normal', 'important')
+    child.style.setProperty('font-size', childStyle.fontSize, 'important')
+    child.style.setProperty('line-height', childStyle.lineHeight, 'important')
+    child.style.setProperty('width', `${Math.ceil(childRect.width)}px`, 'important')
+    child.style.setProperty('height', `${Math.ceil(childRect.height)}px`, 'important')
+    child.style.setProperty('box-sizing', 'border-box', 'important')
+
+    if (index > 0 && gap > 0) {
+      child.style.setProperty('margin-left', `${gap}px`, 'important')
+    }
+
+    if (isFixedSizeIcon(sourceChild)) {
+      child.style.setProperty('border-radius', '9999px', 'important')
+      child.style.setProperty('overflow', 'hidden', 'important')
+    }
+  })
+}
+
+/** Clone fiel ao que está na tela — sem redimensionar, só remove nós ignorados. */
+function preparePrintSnapshotElement(source: HTMLElement, options?: HtmlExportOptions): HTMLElement {
+  const { preserveBackground } = resolveHtmlExportOptions(source, options)
+  const clone = source.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
+  inlineNodeStyles(source, clone)
+
+  const sourceStyle = window.getComputedStyle(source)
+  const rect = source.getBoundingClientRect()
+  const width = Math.max(1, Math.ceil(rect.width))
+  const height = Math.max(1, Math.ceil(rect.height))
+
+  if (preserveBackground) {
+    const explicitBg = source.getAttribute('data-chart-export-bg')
+    const bg =
+      explicitBg ||
+      source.style.backgroundColor ||
+      sourceStyle.backgroundColor ||
+      sourceStyle.background
+    if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+      clone.style.setProperty('background', bg, 'important')
+    }
+    clone.style.setProperty('border', sourceStyle.border, 'important')
+    clone.style.setProperty('border-radius', sourceStyle.borderRadius, 'important')
+    clone.style.setProperty('box-shadow', sourceStyle.boxShadow, 'important')
+  }
+
+  clone.style.setProperty('margin', '0', 'important')
+  clone.style.setProperty('padding', sourceStyle.padding, 'important')
+  clone.style.setProperty('box-sizing', 'border-box', 'important')
+  clone.style.setProperty('width', `${width}px`, 'important')
+  clone.style.setProperty('min-width', `${width}px`, 'important')
+  clone.style.setProperty('max-width', `${width}px`, 'important')
+  clone.style.setProperty('height', `${height}px`, 'important')
+  clone.style.setProperty('min-height', `${height}px`, 'important')
+  clone.style.setProperty('max-height', `${height}px`, 'important')
+  clone.style.setProperty('overflow', 'hidden', 'important')
+  clone.style.setProperty('position', 'static', 'important')
+  clone.style.setProperty('outline', 'none', 'important')
+
+  const display = sourceStyle.display
+  if (display === 'flex' || display === 'inline-flex') {
+    applyPrintFlexRowFix(clone, source)
+  }
+
+  return clone
+}
+
 function isFixedSizeIcon(el: HTMLElement): boolean {
   const cls = el.className
   if (typeof cls !== 'string') return false
@@ -477,6 +580,143 @@ function isFixedSizeIcon(el: HTMLElement): boolean {
     (/\bh-10\b/.test(cls) || /\bh-11\b/.test(cls)) &&
     (/\bw-10\b/.test(cls) || /\bw-11\b/.test(cls))
   )
+}
+
+async function renderPreparedElementToPngBlob(
+  prepared: HTMLElement,
+  width: number,
+  height: number,
+  scale = DEFAULT_SCALE,
+): Promise<Blob> {
+  // Clona para não mover o nó original (ex.: wrapper montado em document.body).
+  const snapshot = prepared.cloneNode(true) as HTMLElement
+  snapshot.style.position = 'static'
+  snapshot.style.left = 'auto'
+  snapshot.style.visibility = 'visible'
+  snapshot.style.width = `${width}px`
+  snapshot.style.height = `${height}px`
+  snapshot.style.overflow = 'hidden'
+
+  const xhtmlNs = 'http://www.w3.org/1999/xhtml'
+  const wrapper = document.createElement('div')
+  wrapper.setAttribute('xmlns', xhtmlNs)
+  wrapper.appendChild(snapshot)
+
+  const svgNs = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(svgNs, 'svg')
+  svg.setAttribute('xmlns', svgNs)
+  svg.setAttribute('width', String(width))
+  svg.setAttribute('height', String(height))
+
+  const foreignObject = document.createElementNS(svgNs, 'foreignObject')
+  foreignObject.setAttribute('width', '100%')
+  foreignObject.setAttribute('height', '100%')
+  foreignObject.appendChild(wrapper)
+  svg.appendChild(foreignObject)
+
+  const serialized = new XMLSerializer().serializeToString(svg)
+  const img = await loadImageFromSvgString(serialized)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width * scale
+  canvas.height = height * scale
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas não suportado neste navegador')
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.scale(scale, scale)
+  ctx.drawImage(img, 0, 0, width, height)
+
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Falha ao gerar imagem PNG'))),
+      'image/png',
+    )
+  })
+}
+
+function lockIconDimensions(cell: HTMLElement, sourceCell: HTMLElement): void {
+  if (!isFixedSizeIcon(sourceCell)) return
+  const w = Math.ceil(sourceCell.getBoundingClientRect().width)
+  const h = Math.ceil(sourceCell.getBoundingClientRect().height)
+  const size = Math.max(w, h, 1)
+  cell.style.setProperty('width', `${size}px`, 'important')
+  cell.style.setProperty('min-width', `${size}px`, 'important')
+  cell.style.setProperty('max-width', `${size}px`, 'important')
+  cell.style.setProperty('height', `${size}px`, 'important')
+  cell.style.setProperty('min-height', `${size}px`, 'important')
+  cell.style.setProperty('max-height', `${size}px`, 'important')
+  cell.style.setProperty('border-radius', '9999px', 'important')
+  cell.style.setProperty('overflow', 'hidden', 'important')
+  cell.style.setProperty('box-sizing', 'border-box', 'important')
+  cell.style.setProperty('flex-shrink', '0', 'important')
+}
+
+function isTextBlockCell(el: HTMLElement): boolean {
+  return el.classList.contains('min-w-0') || el.querySelector('p') != null
+}
+
+/** Mantém o card na largura da tela; table/table-cell para foreignObject (SVG). */
+function applyInlineRowCardExport(root: HTMLElement, source: HTMLElement): void {
+  const sourceRect = source.getBoundingClientRect()
+  const width = Math.max(1, Math.ceil(sourceRect.width))
+  const sourceStyle = window.getComputedStyle(source)
+  const gap = parseFloat(sourceStyle.gap || sourceStyle.columnGap) || 12
+
+  root.style.setProperty('display', 'table', 'important')
+  root.style.setProperty('table-layout', 'fixed', 'important')
+  root.style.setProperty('border-collapse', 'separate', 'important')
+  root.style.setProperty('border-spacing', '0', 'important')
+  root.style.setProperty('width', `${width}px`, 'important')
+  root.style.setProperty('min-width', `${width}px`, 'important')
+  root.style.setProperty('max-width', `${width}px`, 'important')
+  root.style.setProperty('height', 'auto', 'important')
+  root.style.setProperty('min-height', '0', 'important')
+  root.style.setProperty('max-height', 'none', 'important')
+  root.style.setProperty('box-sizing', 'border-box', 'important')
+  root.style.setProperty('border-radius', sourceStyle.borderRadius, 'important')
+  root.style.setProperty('overflow', 'hidden', 'important')
+
+  const sourceCells = Array.from(source.children).filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && !child.hasAttribute('data-chart-export-ignore'),
+  )
+  const rootCells = Array.from(root.children).filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && !child.hasAttribute('data-chart-export-ignore'),
+  )
+
+  rootCells.forEach((cell, index) => {
+    const sourceCell = sourceCells[index]
+    if (!sourceCell) return
+
+    cell.style.setProperty('display', 'table-cell', 'important')
+    cell.style.setProperty('vertical-align', 'middle', 'important')
+    if (index > 0) {
+      cell.style.setProperty('padding-left', `${gap}px`, 'important')
+    }
+
+    if (isFixedSizeIcon(sourceCell)) {
+      lockIconDimensions(cell, sourceCell)
+      return
+    }
+
+    if (isTextBlockCell(sourceCell)) {
+      cell.style.setProperty('width', '100%', 'important')
+      cell.querySelectorAll<HTMLElement>('p').forEach((p) => {
+        if (p.hasAttribute('data-chart-export-ignore')) return
+        p.style.setProperty('display', 'block', 'important')
+      })
+      return
+    }
+
+    const trailingW = Math.max(1, Math.ceil(sourceCell.getBoundingClientRect().width))
+    cell.style.setProperty('width', `${trailingW}px`, 'important')
+    cell.style.setProperty('min-width', `${trailingW}px`, 'important')
+    cell.style.setProperty('max-width', `${trailingW}px`, 'important')
+    cell.style.setProperty('white-space', 'nowrap', 'important')
+  })
 }
 
 /** Remove larguras congeladas pelo inlineNodeStyles (grid w-full) — só na cópia. */
@@ -524,36 +764,40 @@ function applyPreserveBackgroundExportLayout(
   expandWidth = false,
   fitContent = false,
 ): void {
+  const inlineRow = shouldInlineRowCardExport(source)
   const sourceStyle = window.getComputedStyle(source)
   const sourceWidth = Math.ceil(source.getBoundingClientRect().width)
 
   stripInlineHeights(root)
 
   root.style.setProperty('position', 'static', 'important')
-  root.style.setProperty('height', 'auto', 'important')
-  root.style.setProperty('min-height', '0', 'important')
-  root.style.setProperty('max-height', 'none', 'important')
-  if (fitContent) {
-    // Largura final é definida em applyFitContentExportReset (após demais ajustes).
-  } else if (expandWidth) {
-    root.style.setProperty('width', 'max-content', 'important')
-    root.style.setProperty('min-width', `${sourceWidth}px`, 'important')
-    root.style.setProperty('max-width', 'none', 'important')
-  } else {
-    root.style.setProperty('width', `${sourceWidth}px`, 'important')
-    root.style.setProperty('min-width', '0', 'important')
-    root.style.setProperty('max-width', `${sourceWidth}px`, 'important')
-  }
   root.style.setProperty('box-sizing', 'border-box', 'important')
   root.style.setProperty('align-self', 'auto', 'important')
   root.style.setProperty('flex', 'none', 'important')
-  root.style.setProperty('overflow', 'visible', 'important')
   root.style.setProperty('display', sourceStyle.display, 'important')
-  root.style.setProperty('align-items', 'flex-start', 'important')
   root.style.setProperty('flex-direction', sourceStyle.flexDirection, 'important')
   root.style.setProperty('gap', sourceStyle.gap, 'important')
   root.style.setProperty('box-shadow', sourceStyle.boxShadow, 'important')
-  root.style.setProperty('height', 'fit-content', 'important')
+
+  if (!inlineRow) {
+    root.style.setProperty('height', 'auto', 'important')
+    root.style.setProperty('min-height', '0', 'important')
+    root.style.setProperty('max-height', 'none', 'important')
+    if (fitContent) {
+      // Largura final é definida em applyFitContentExportReset (após demais ajustes).
+    } else if (expandWidth) {
+      root.style.setProperty('width', 'max-content', 'important')
+      root.style.setProperty('min-width', `${sourceWidth}px`, 'important')
+      root.style.setProperty('max-width', 'none', 'important')
+    } else {
+      root.style.setProperty('width', `${sourceWidth}px`, 'important')
+      root.style.setProperty('min-width', '0', 'important')
+      root.style.setProperty('max-width', `${sourceWidth}px`, 'important')
+    }
+    root.style.setProperty('overflow', 'visible', 'important')
+    root.style.setProperty('align-items', 'flex-start', 'important')
+    root.style.setProperty('height', 'fit-content', 'important')
+  }
 
   root.querySelectorAll<HTMLElement>('[data-chart-export-trim="copy-padding"]').forEach((el) => {
     el.style.setProperty('padding-right', '1.25rem', 'important')
@@ -582,15 +826,18 @@ function applyPreserveBackgroundExportLayout(
     })
   }
 
-  if (root.classList.contains('overflow-hidden') || root.classList.contains('overflow-x-auto')) {
+  if (!inlineRow && root.classList.contains('overflow-hidden')) {
     root.style.setProperty('overflow', 'visible', 'important')
   }
 
   root.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-hidden').forEach((el) => {
+    if (inlineRow && el === root) return
     el.style.setProperty('overflow', 'visible', 'important')
   })
 
-  if (fitContent) {
+  if (inlineRow) {
+    applyInlineRowCardExport(root, source)
+  } else if (fitContent) {
     applyFitContentExportReset(root)
   }
 }
@@ -758,13 +1005,26 @@ async function htmlElementToPngBlob(
   options?: HtmlExportOptions,
 ): Promise<Blob> {
   const { preserveBackground } = resolveHtmlExportOptions(element, options)
-  const fitContent = preserveBackground && shouldFitContentExport(element)
-  const expandWidth = preserveBackground && !fitContent && shouldExpandExportWidth(element)
+  const printSnapshot = shouldPrintSnapshotExport(element)
+
+  if (printSnapshot) {
+    const prepared = preparePrintSnapshotElement(element, options)
+    const rect = element.getBoundingClientRect()
+    const width = Math.max(1, Math.ceil(rect.width))
+    const height = Math.max(1, Math.ceil(rect.height))
+    if (width === 0 || height === 0) {
+      throw new Error('Legenda ainda não renderizada')
+    }
+    return renderPreparedElementToPngBlob(prepared, width, height, scale)
+  }
+
+  const inlineRow = preserveBackground && shouldInlineRowCardExport(element)
+  const fitContent = preserveBackground && !inlineRow && shouldFitContentExport(element)
+  const expandWidth = preserveBackground && !fitContent && !inlineRow && shouldExpandExportWidth(element)
   const prepared = prepareHtmlExportElement(element, options)
-  const fixedWidth =
-    preserveBackground && !fitContent
-      ? Math.ceil(element.getBoundingClientRect().width)
-      : undefined
+  const fixedWidth = preserveBackground
+    ? Math.ceil(element.getBoundingClientRect().width)
+    : undefined
   const { width, height } = measurePreparedElement(prepared, {
     fixedWidth,
     cardSnapshot: preserveBackground,
@@ -776,58 +1036,20 @@ async function htmlElementToPngBlob(
     throw new Error('Legenda ainda não renderizada')
   }
 
-  prepared.style.position = 'static'
-  prepared.style.left = 'auto'
-  prepared.style.visibility = 'visible'
-  prepared.style.width = `${width}px`
   const exportHeight = preserveBackground ? height : height + 4
-
-  prepared.style.height = `${exportHeight}px`
   if (preserveBackground) {
-    prepared.style.overflow = expandWidth || fitContent ? 'visible' : 'hidden'
-    prepared.style.alignItems = 'flex-start'
-    if (expandWidth || fitContent) {
+    if (inlineRow) {
+      prepared.style.overflow = 'hidden'
+    } else {
+      prepared.style.overflow = expandWidth || fitContent ? 'visible' : 'hidden'
+      prepared.style.alignItems = 'flex-start'
+    }
+    if (expandWidth || fitContent || inlineRow) {
       prepared.style.maxWidth = 'none'
     }
   }
 
-  const xhtmlNs = 'http://www.w3.org/1999/xhtml'
-  const wrapper = document.createElement('div')
-  wrapper.setAttribute('xmlns', xhtmlNs)
-  wrapper.appendChild(prepared)
-
-  const svgNs = 'http://www.w3.org/2000/svg'
-  const svg = document.createElementNS(svgNs, 'svg')
-  svg.setAttribute('xmlns', svgNs)
-  svg.setAttribute('width', String(width))
-  svg.setAttribute('height', String(exportHeight))
-
-  const foreignObject = document.createElementNS(svgNs, 'foreignObject')
-  foreignObject.setAttribute('width', '100%')
-  foreignObject.setAttribute('height', '100%')
-  foreignObject.appendChild(wrapper)
-  svg.appendChild(foreignObject)
-
-  const serialized = new XMLSerializer().serializeToString(svg)
-  const img = await loadImageFromSvgString(serialized)
-
-  const canvas = document.createElement('canvas')
-  canvas.width = width * scale
-  canvas.height = exportHeight * scale
-
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas não suportado neste navegador')
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.scale(scale, scale)
-  ctx.drawImage(img, 0, 0, width, exportHeight)
-
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('Falha ao gerar imagem PNG'))),
-      'image/png',
-    )
-  })
+  return renderPreparedElementToPngBlob(prepared, width, exportHeight, scale)
 }
 
 const PNG_CRC_TABLE = (() => {
@@ -1379,6 +1601,14 @@ export async function copyLegendDetalheToClipboard(
 
 export type ElementImageExportOptions = HtmlExportOptions
 
+export async function elementToPngBlob(
+  element: HTMLElement,
+  scale = DEFAULT_SCALE,
+  options?: ElementImageExportOptions,
+): Promise<Blob> {
+  return htmlElementToPngBlob(element, scale, options)
+}
+
 export async function copyElementImageToClipboard(
   element: HTMLElement,
   scale = DEFAULT_SCALE,
@@ -1388,10 +1618,10 @@ export async function copyElementImageToClipboard(
   await copyPngBlobToClipboard(blob, 96 * scale)
 }
 
-export async function copyChartImageToClipboard(
+export async function chartToPngBlob(
   exportRoot: HTMLElement,
   scale = DEFAULT_SCALE,
-): Promise<void> {
+): Promise<Blob> {
   const legendEl = exportRoot.querySelector<HTMLElement>('[data-chart-legend]')
   const plotEl = exportRoot.querySelector<HTMLElement>('[data-chart-plot]')
 
@@ -1399,6 +1629,194 @@ export async function copyChartImageToClipboard(
     throw new Error('Área do gráfico não encontrada')
   }
 
-  const blob = await compositeToPngBlob(legendEl, plotEl, scale)
+  return compositeToPngBlob(legendEl, plotEl, scale)
+}
+
+export async function copyChartImageToClipboard(
+  exportRoot: HTMLElement,
+  scale = DEFAULT_SCALE,
+): Promise<void> {
+  const blob = await chartToPngBlob(exportRoot, scale)
   await copyPngBlobToClipboard(blob, 96 * scale)
+}
+
+type ImagePart = { blob: Blob; width: number; height: number }
+
+async function blobToImage(blob: Blob): Promise<HTMLImageElement> {
+  const url = URL.createObjectURL(blob)
+  const img = new Image()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('Falha ao carregar imagem'))
+      img.src = url
+    })
+    return img
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function measureBlobPart(blob: Blob): Promise<ImagePart> {
+  const img = await blobToImage(blob)
+  return { blob, width: img.naturalWidth, height: img.naturalHeight }
+}
+
+async function compositeRowParts(parts: ImagePart[], gapPx: number): Promise<ImagePart> {
+  const width = parts.reduce((sum, part, index) => sum + part.width + (index > 0 ? gapPx : 0), 0)
+  const height = Math.max(...parts.map((part) => part.height))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas não suportado neste navegador')
+
+  let x = 0
+  for (const part of parts) {
+    const img = await blobToImage(part.blob)
+    ctx.drawImage(img, x, 0, part.width, part.height)
+    x += part.width + gapPx
+  }
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (value) => (value ? resolve(value) : reject(new Error('Falha ao gerar imagem PNG'))),
+      'image/png',
+    )
+  })
+
+  return { blob, width, height }
+}
+
+async function compositeColumnParts(parts: ImagePart[], gapPx: number): Promise<ImagePart> {
+  const width = Math.max(...parts.map((part) => part.width))
+  const height = parts.reduce((sum, part, index) => sum + part.height + (index > 0 ? gapPx : 0), 0)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas não suportado neste navegador')
+
+  let y = 0
+  for (const part of parts) {
+    const img = await blobToImage(part.blob)
+    ctx.drawImage(img, 0, y, part.width, part.height)
+    y += part.height + gapPx
+  }
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (value) => (value ? resolve(value) : reject(new Error('Falha ao gerar imagem PNG'))),
+      'image/png',
+    )
+  })
+
+  return { blob, width, height }
+}
+
+export type InadimplenciaKpiPackExportElements = {
+  acumulada: HTMLElement
+  pct: HTMLElement
+  top5: HTMLElement
+}
+
+/** KPIs Resultado R$ / % + top 5 inadimplentes em um único PNG para PowerPoint. */
+export async function copyInadimplenciaKpiPackToClipboard(
+  elements: InadimplenciaKpiPackExportElements,
+  scale = DEFAULT_SCALE,
+): Promise<void> {
+  const gridGap = 16
+  const acumuladaRect = elements.acumulada.getBoundingClientRect()
+  const pctRect = elements.pct.getBoundingClientRect()
+  const top5Rect = elements.top5.getBoundingClientRect()
+
+  const rowWidth = acumuladaRect.width + gridGap + pctRect.width
+  const rowHeight = Math.max(acumuladaRect.height, pctRect.height)
+  const totalWidth = Math.max(rowWidth, top5Rect.width)
+  const totalHeight = rowHeight + gridGap + top5Rect.height
+
+  const wrapper = document.createElement('div')
+  wrapper.style.cssText = [
+    'position:fixed',
+    'left:-99999px',
+    'top:0',
+    `width:${totalWidth}px`,
+    `height:${totalHeight}px`,
+    'background:transparent',
+    'overflow:hidden',
+    'box-sizing:border-box',
+  ].join(';')
+
+  const row = document.createElement('div')
+  row.style.cssText = [
+    'display:block',
+    'white-space:nowrap',
+    'font-size:0',
+    'line-height:0',
+    `width:${rowWidth}px`,
+    `height:${rowHeight}px`,
+  ].join(';')
+
+  const acumuladaClone = preparePrintSnapshotElement(elements.acumulada, { preserveBackground: true })
+  const pctClone = preparePrintSnapshotElement(elements.pct, { preserveBackground: true })
+  acumuladaClone.style.setProperty('display', 'inline-block', 'important')
+  acumuladaClone.style.setProperty('vertical-align', 'top', 'important')
+  pctClone.style.setProperty('display', 'inline-block', 'important')
+  pctClone.style.setProperty('vertical-align', 'top', 'important')
+  pctClone.style.setProperty('margin-left', `${gridGap}px`, 'important')
+
+  row.appendChild(acumuladaClone)
+  row.appendChild(pctClone)
+
+  const top5Clone = preparePrintSnapshotElement(elements.top5, { preserveBackground: true })
+  top5Clone.style.setProperty('display', 'block', 'important')
+  top5Clone.style.setProperty('margin-top', `${gridGap}px`, 'important')
+
+  wrapper.appendChild(row)
+  wrapper.appendChild(top5Clone)
+  document.body.appendChild(wrapper)
+
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+  const width = Math.max(1, Math.ceil(totalWidth))
+  const height = Math.max(1, Math.ceil(totalHeight))
+
+  try {
+    const blob = await renderPreparedElementToPngBlob(wrapper, width, height, scale)
+    await copyPngBlobToClipboard(blob, 96 * scale)
+  } finally {
+    wrapper.remove()
+  }
+}
+
+export type InadimplenciaPackExportElements = {
+  acumulada: HTMLElement
+  pct: HTMLElement
+  top5: HTMLElement
+  chartRoot: HTMLElement
+}
+
+/** KPIs + top 5 + gráfico comparativo (somente linha inadimplência) em um único PNG. */
+export async function copyInadimplenciaPackToClipboard(
+  elements: InadimplenciaPackExportElements,
+  scale = DEFAULT_SCALE,
+): Promise<void> {
+  const preserveBg = { preserveBackground: true } as const
+  const gapPx = Math.round(16 * scale)
+  const rowGapPx = Math.round(20 * scale)
+
+  const [acumuladaPart, pctPart, top5Part, chartBlob] = await Promise.all([
+    measureBlobPart(await htmlElementToPngBlob(elements.acumulada, scale, preserveBg)),
+    measureBlobPart(await htmlElementToPngBlob(elements.pct, scale, preserveBg)),
+    measureBlobPart(await htmlElementToPngBlob(elements.top5, scale, preserveBg)),
+    chartToPngBlob(elements.chartRoot, scale),
+  ])
+
+  const kpiRow = await compositeRowParts([acumuladaPart, pctPart], gapPx)
+  const chartPart = await measureBlobPart(chartBlob)
+  const stacked = await compositeColumnParts([kpiRow, top5Part, chartPart], rowGapPx)
+
+  await copyPngBlobToClipboard(stacked.blob, 96 * scale)
 }
