@@ -211,12 +211,12 @@ export function finalizarKpiPeriodo(
   const previsto_periodo = dashboard.evolucao.reduce((s, m) => s + previstoMesEvolucao(m), 0)
   const pct_periodo =
     previsto_periodo > 0
-      ? Math.round((valor_total_periodo / previsto_periodo) * 1000) / 10
+      ? calcularPctInadimplencia(valor_total_periodo, previsto_periodo)
       : dashboard.pct_periodo
 
   const top5_pct =
     valor_total_periodo > 0
-      ? Math.round((dashboard.top5_total / valor_total_periodo) * 1000) / 10
+      ? calcularPctInadimplencia(dashboard.top5_total, valor_total_periodo)
       : dashboard.top5_pct
 
   return {

@@ -202,9 +202,7 @@ export function aplicarFiltroAreaInadimplencia(
       : top5GruposPorAreaFromMeses(gruposDeptPorMes, gruposPorMes, areaKey, meses)
   const top5_total = top5.reduce((s, g) => s + g.valor, 0)
   const top5_pct =
-    valor_total_periodo > 0
-      ? Math.round((top5_total / valor_total_periodo) * 1000) / 10
-      : 0
+    valor_total_periodo > 0 ? calcularPctInadimplencia(top5_total, valor_total_periodo) : 0
 
   return {
     ...dashboard,
