@@ -5,6 +5,14 @@ import type {
   ReceitaInadimplenciaGrupoPeriodo,
 } from '../types/receitaInadimplencia.types'
 
+/**
+ * REGRAS FIXAS — ver `.cursor/rules/receita-inadimplencia-agregacao.mdc`
+ *
+ * - Evolução: valorExibicaoEvolucao (congelado = histórico).
+ * - KPI período: finalizarKpiPeriodo → grupos_periodo (saldo líquido do intervalo).
+ * - Nunca somar evolução mensal no KPI acumulado.
+ */
+
 /** Grupos incluídos por mês (chave = número do mês). Ausente = usa valor original do servidor. */
 export type SelecaoGruposPorMes = Record<number, Set<string>>
 
@@ -178,11 +186,16 @@ export function calcularValorTotalPeriodo(
   return grupos.filter((g) => incluidos.has(g.grupo_cliente)).reduce((s, g) => s + g.valor, 0)
 }
 
-/** KPI acumulado = soma dos valores mensais da evolução (mesma regra VIOS por mês). */
-export function calcularValorTotalPeriodoFromEvolucao(
-  evolucao: ReceitaInadimplenciaEvolucaoMes[],
+/**
+ * KPI acumulado = saldo líquido do intervalo (grupos_periodo), não soma da evolução mensal.
+ * A evolução pode exibir snapshots congelados mês a mês; o card Resultado R$ reflete o período ao vivo.
+ */
+export function calcularValorTotalPeriodoFromGrupos(
+  grupos: ReceitaInadimplenciaGrupoPeriodo[],
+  incluidos: Set<string> | null,
 ): number {
-  return evolucao.reduce((s, m) => s + m.valor, 0)
+  const base = incluidos ?? gruposPeriodoPadrao(grupos)
+  return calcularValorTotalPeriodo(grupos, base)
 }
 
 export function finalizarKpiPeriodo(
@@ -190,15 +203,10 @@ export function finalizarKpiPeriodo(
   grupos: ReceitaInadimplenciaGrupoPeriodo[] | null,
   incluidos: Set<string> | null,
 ): ReceitaInadimplenciaDashboard {
-  const somaMensal = calcularValorTotalPeriodoFromEvolucao(dashboard.evolucao)
-  const usaSelecaoPeriodo =
-    Boolean(grupos?.length && incluidos) &&
-    dashboard.clientes_ajustado &&
-    !dashboard.evolucao.some((m) => m.ajustado)
-
-  const valor_total_periodo = usaSelecaoPeriodo
-    ? calcularValorTotalPeriodo(grupos!, incluidos!)
-    : somaMensal
+  const valor_total_periodo =
+    grupos?.length && grupos.length > 0
+      ? calcularValorTotalPeriodoFromGrupos(grupos, incluidos)
+      : dashboard.valor_total_periodo
 
   const previsto_periodo = dashboard.evolucao.reduce((s, m) => s + previstoMesEvolucao(m), 0)
   const pct_periodo =

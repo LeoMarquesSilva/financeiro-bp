@@ -652,22 +652,15 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 >
                   {formatCurrency(dashboard.valor_total_periodo)}
                 </p>
-                {(!filtroAreaAtivo ||
-                  dashboard.clientes_ajustado ||
-                  (!dashboard.clientes_ajustado && dashboard.evolucao.some((m) => m.ajustado))) && (
+                {(!filtroAreaAtivo || dashboard.clientes_ajustado) && (
                   <p
                     className="mt-0.5 text-[11px] text-slate-500 sm:text-xs"
                     data-chart-export-ignore
                   >
                     {!filtroAreaAtivo &&
-                      'Soma da inadimplência mensal no período (mesma regra da evolução) — clique para ver empresas e títulos'}
+                      'Saldo líquido do período (faturado − recebido, regra VIOS) — independente dos meses congelados na evolução'}
                     {dashboard.clientes_ajustado && (
                       <span className="block text-amber-700/90">Total ajustado pela seleção de grupos</span>
-                    )}
-                    {!dashboard.clientes_ajustado && dashboard.evolucao.some((m) => m.ajustado) && (
-                      <span className="block text-amber-700/90">
-                        Total ajustado pela seleção mensal de grupos
-                      </span>
                     )}
                   </p>
                 )}

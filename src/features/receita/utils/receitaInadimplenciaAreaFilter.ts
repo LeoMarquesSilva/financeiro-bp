@@ -11,6 +11,8 @@ import type { ReceitaRecebidoDepartamentoRow } from '../types/receita.types'
 import { departamentoNormKey } from './receitaColunasChart'
 import { calcularPctInadimplencia } from './receitaInadimplenciaCalc'
 
+/** Filtro por área: alocação VIOS por departamento do item — ver `.cursor/rules/receita-inadimplencia-agregacao.mdc` §5. */
+
 export function departamentoMatchesAreaKey(departamento: string, areaKey: string): boolean {
   const key = departamentoNormKey(departamento)
   if (key === areaKey) return true

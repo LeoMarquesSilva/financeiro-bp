@@ -1,0 +1,119 @@
+---
+description: REGRAS FIXAS — Inadimplência Receita (grupo, Sem grupo, KPI vs evolução, área VIOS). Não alterar sem validar casos de teste abaixo.
+alwaysApply: true
+---
+
+# Inadimplência Receita — regras fixas (jul/2026)
+
+**Status: validado em produção. Não reverter sem aprovação explícita.**
+
+Antes de alterar `grupo_mes`, `grupos_periodo`, `dashboard`, `receitaInadimplenciaCalc.ts`
+ou migrações `*inadimplencia*`, reler esta rule e rodar os casos de teste.
+
+---
+
+## 1. Chave de grupo (`receita_inadimplencia_chave_grupo`)
+
+```sql
+CASE
+  WHEN grupo_cliente IS NULL OR trim(grupo_cliente) = '' OR grupo_cliente = 'Sem grupo'
+    THEN cliente
+  ELSE grupo_cliente
+END
+```
+
+| Situação | Comportamento |
+|----------|---------------|
+| Com `grupo_cliente` | Consolidar todas as razões sociais do grupo |
+| **Sem grupo** | Cada razão social = linha própria (ex.: **Engforce**) |
+
+**Proibido:** balde único `"Sem grupo"` — pagamentos de clientes diferentes se anulam.
+
+---
+
+## 2. Saldo consolidado do grupo (ex.: **Grupo CDA**)
+
+Funções SQL: `receita_inadimplencia_grupo_mes`, `receita_inadimplencia_grupos_periodo`
+
+```
+inadimplência = max(0, Σ faturado − Σ recebido)
+```
+
+- Fonte: `receita_inadimplencia_periodo_net_clientes` + `receita_inadimplencia_chave_grupo`.
+- Compensa pagamento de uma razão social contra faturamento de outra **no mesmo grupo**
+  (troca de cadastro VIOS).
+
+**Proibido:**
+
+- `SUM(inadimplencia_cliente_mes)` por grupo sem netting de recebidos do grupo.
+- `Σ inadimplência mensal` no intervalo como proxy do saldo do período.
+
+---
+
+## 3. KPI Resultado R$ / % vs evolução mensal
+
+| UI | Função / origem | Regra |
+|----|-----------------|-------|
+| **Tabela evolução** | `valorExibicaoEvolucao` | Snapshots **congelados** mês a mês (histórico) |
+| **Card Resultado R$** | `finalizarKpiPeriodo` → `grupos_periodo` | Saldo **líquido do intervalo** (ao vivo) |
+| **Card Resultado %** | `valor_total_periodo ÷ previsto acumulado` | Mesma base do card R$ |
+| **SQL dashboard** | `receita_inadimplencia_dashboard` | `SUM(grupos_periodo)`, não `SUM(evolucao)` |
+
+**Proibido:** somar células da evolução (congeladas ou ao vivo) no KPI acumulado.
+
+Frontend (`receitaInadimplenciaCalc.ts`):
+
+- `finalizarKpiPeriodo` → sempre `calcularValorTotalPeriodoFromGrupos` quando `gruposPeriodo` carregado.
+- `valorExibicaoEvolucao` → só para exibição na tabela; **nunca** alimentar KPI acumulado.
+
+---
+
+## 4. Modal de grupos e seleção
+
+- Lista e botão **Aplicar:** `fetchGruposPeriodo` (mesma base do KPI).
+- Com grupos marcados/desmarcados: `calcularValorTotalPeriodo(grupos, incluidos)`.
+- KPI e modal devem **bater** com a mesma seleção de grupos do período.
+- Seleção mensal (sheet por mês) afeta só a **evolução** daquele mês, não substitui
+  o saldo do período no card (salvo ajuste explícito de grupos no modal de período).
+
+---
+
+## 5. Filtro por área meta (VIOS)
+
+- Alocação por **departamento do item** (`receita_inadimplencia_grupo_departamento_periodo`).
+- Frontend: `gruposAlocadosPorArea`, `aplicarFiltroAreaInadimplencia`, `departamentoMatchesAreaKey`.
+- **Proibido:** ratear total do grupo proporcionalmente entre áreas.
+
+---
+
+## 6. Migrações canônicas (referência)
+
+| Migração | O que fixa |
+|----------|------------|
+| `20260720150000_receita_inadimplencia_grupo_saldo_consolidado.sql` | Saldo líquido por grupo |
+| `20260720160000_receita_inadimplencia_sem_grupo_por_cliente.sql` | Sem grupo → razão social |
+| `20260720170000_receita_inadimplencia_kpi_saldo_periodo.sql` | Dashboard KPI = grupos_periodo |
+
+Nova migração nesse domínio: **estender ou chamar** estas funções — não reimplementar.
+
+---
+
+## 7. Casos de teste obrigatórios
+
+| Caso | Período | Esperado |
+|------|---------|----------|
+| Grupo CDA | Jan/26 | ~**R$ 26.002,34** (netting entre razões sociais) |
+| Engforce Construtora Ltda | Jun/26 | **R$ 769,54** visível em "todas as áreas" |
+| Rec. Crédito (filtro área) | Jun/26 | Engforce aparece na área |
+| KPI vs evolução | Jan–Jun/26 | KPI ≈ **R$ 1.281.841** (grupos_periodo); soma evolução congelada ≈ **R$ 1.826.182** — **devem diferir** |
+| Modal vs card | Qualquer | Mesmo total com mesma seleção de grupos |
+
+---
+
+## 8. Arquivos sensíveis
+
+- `src/features/receita/utils/receitaInadimplenciaCalc.ts`
+- `src/features/receita/utils/receitaInadimplenciaAreaFilter.ts`
+- `src/features/receita/components/ReceitaInadimplenciaSection.tsx`
+- `supabase/migrations/*inadimplencia*`
+- `.cursor/skills/gestao-financeira-escritorio-advocacia/SKILL.md` (resumo gestor)

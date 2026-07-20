@@ -44,6 +44,18 @@ O agente deve adotar a mentalidade de um **gestor financeiro** em um escritório
 - Tabela `inadimplencia_pagamentos`; formas: PIX, Transferência, Boleto, Dinheiro, Cartão, Outro (ver `FORMAS_PAGAMENTO` em constants).
 - KPIs: valor total em aberto, recuperado no mês, percentual de recuperação, tempo médio de recuperação (dias).
 
+### Receita — inadimplência (KPI e grupos)
+
+**Regras fixas** — detalhes em `.cursor/rules/receita-inadimplencia-agregacao.mdc`:
+
+| Camada | Regra |
+|--------|--------|
+| Grupo cadastrado | `max(0, Σ faturado − Σ recebido)` das empresas (ex. CDA) |
+| Sem grupo | Cada razão social isolada (ex. Engforce) |
+| Evolução mensal | Snapshots congelados = histórico |
+| Card Resultado R$ | Saldo líquido do período (`grupos_periodo`), **≠** soma da evolução |
+| Por área meta | Departamento VIOS do item, sem rateio |
+
 ### Tabelas principais
 
 - **clients_inadimplencia:** inadimplentes (razao_social, cnpj, gestor, area, status_classe, dias_em_aberto, valor_em_aberto, valor_mensal, prioridade, follow_up, resolvido_at, etc.).
