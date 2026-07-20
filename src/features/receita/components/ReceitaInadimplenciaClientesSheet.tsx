@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/AuthContext'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 import { formatCurrency } from '@/shared/utils/format'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
@@ -111,6 +112,8 @@ export function ReceitaInadimplenciaClientesSheet({
   onIncluidosChange,
   onAplicarSelecao,
 }: Props) {
+  const { role } = useAuth()
+  const canEditSelecao = role === 'admin' || role === 'financeiro'
   const [grupos, setGrupos] = useState<ReceitaInadimplenciaGrupoPeriodo[]>([])
   const [empresas, setEmpresas] = useState<ReceitaInadimplenciaClientePeriodo[]>([])
   const [loading, setLoading] = useState(false)
@@ -278,10 +281,10 @@ export function ReceitaInadimplenciaClientesSheet({
               )}
               Exportar Excel
             </Button>
-            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={selecionarTodos}>
+            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={selecionarTodos} disabled={!canEditSelecao}>
               Marcar todos
             </Button>
-            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={limparSelecao}>
+            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={limparSelecao} disabled={!canEditSelecao}>
               Desmarcar todos
             </Button>
           </div>
@@ -313,6 +316,7 @@ export function ReceitaInadimplenciaClientesSheet({
                   checked={todosFiltradosMarcados}
                   indeterminate={indeterminateHeader}
                   onCheckedChange={toggleFiltrados}
+                  disabled={!canEditSelecao}
                   aria-label="Selecionar grupos filtrados"
                 />
                 <span className="flex-1">Incluir na conta</span>
@@ -335,6 +339,7 @@ export function ReceitaInadimplenciaClientesSheet({
                         <Checkbox
                           checked={marcado}
                           onCheckedChange={() => toggleGrupo(g.grupo_cliente)}
+                          disabled={!canEditSelecao}
                           className="mt-0.5"
                           aria-label={`Incluir ${g.grupo_cliente} na conta`}
                         />
@@ -386,16 +391,22 @@ export function ReceitaInadimplenciaClientesSheet({
         </div>
 
         <SheetFooter className="border-t border-slate-200 bg-slate-50 px-4 sm:px-6">
-          <Button
-            type="button"
-            className="w-full sm:w-auto"
-            onClick={() => {
-              onAplicarSelecao(incluidosAtivos)
-              onOpenChange(false)
-            }}
-          >
-            Aplicar ({formatCurrency(totalSelecionado)})
-          </Button>
+          {canEditSelecao ? (
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                onAplicarSelecao(incluidosAtivos)
+                onOpenChange(false)
+              }}
+            >
+              Aplicar ({formatCurrency(totalSelecionado)})
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => onOpenChange(false)}>
+              Fechar
+            </Button>
+          )}
         </SheetFooter>
       </SheetContent>
     </Sheet>

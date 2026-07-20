@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/AuthContext'
 import { formatCurrency, formatDateTime, formatPercent } from '@/shared/utils/format'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
@@ -53,6 +54,9 @@ export function ReceitaInadimplenciaGrupoSheet({
   onAplicar,
   onCongelado,
 }: Props) {
+  const { role } = useAuth()
+  const canCongelar = role === 'admin'
+  const canEditSelecao = role === 'admin' || role === 'financeiro'
   const [grupos, setGrupos] = useState<ReceitaInadimplenciaGrupoMes[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -198,10 +202,12 @@ export function ReceitaInadimplenciaGrupoSheet({
               <span className="mt-1 block text-slate-600">
                 Valor congelado na evolução: {formatCurrency(fechamento.valor_total)}
                 {fechamento.pct != null && ` · ${formatPercent(fechamento.pct)}`}
-                <span className="mt-1 block text-slate-500">
-                  A seleção de grupos continua editável e afeta o KPI do período. Para alterar o
-                  valor oficial do mês, use &quot;Atualizar congelamento&quot;.
-                </span>
+                {canCongelar && (
+                  <span className="mt-1 block text-slate-500">
+                    A seleção de grupos continua editável e afeta o KPI do período. Para alterar o
+                    valor oficial do mês, use &quot;Atualizar congelamento&quot;.
+                  </span>
+                )}
               </span>
             )}
           </SheetDescription>
@@ -235,25 +241,27 @@ export function ReceitaInadimplenciaGrupoSheet({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={congelado ? 'outline' : 'default'}
-                size="sm"
-                className="h-8 gap-1.5 text-xs"
-                onClick={() => void handleCongelar()}
-                disabled={loading || congelando || !!error}
-              >
-                {congelando ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Snowflake className="h-3.5 w-3.5" />
-                )}
-                {congelado ? 'Atualizar congelamento' : 'Congelar valor'}
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={selecionarTodosInad}>
+              {canCongelar && (
+                <Button
+                  type="button"
+                  variant={congelado ? 'outline' : 'default'}
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => void handleCongelar()}
+                  disabled={loading || congelando || !!error}
+                >
+                  {congelando ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Snowflake className="h-3.5 w-3.5" />
+                  )}
+                  {congelado ? 'Atualizar congelamento' : 'Congelar valor'}
+                </Button>
+              )}
+              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={selecionarTodosInad} disabled={!canEditSelecao}>
                 Todos inadimplentes
               </Button>
-              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={limparSelecao}>
+              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={limparSelecao} disabled={!canEditSelecao}>
                 Limpar
               </Button>
             </div>
@@ -294,13 +302,15 @@ export function ReceitaInadimplenciaGrupoSheet({
                   <li key={g.grupo_cliente}>
                     <button
                       type="button"
-                      onClick={() => toggle(g.grupo_cliente)}
+                      onClick={() => canEditSelecao && toggle(g.grupo_cliente)}
+                      disabled={!canEditSelecao}
                       className={cn(
                         'flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors',
                         marcado
                           ? 'border-slate-300 bg-white shadow-sm'
                           : 'border-slate-200 bg-slate-50/50 opacity-80',
                         !temInad && 'opacity-60',
+                        !canEditSelecao && 'cursor-default',
                       )}
                     >
                       <span
@@ -343,18 +353,20 @@ export function ReceitaInadimplenciaGrupoSheet({
 
         <SheetFooter className="px-4 sm:px-6">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            {congelado ? 'Fechar' : 'Cancelar'}
+            {congelado || !canEditSelecao ? 'Fechar' : 'Cancelar'}
           </Button>
-          <Button
-            type="button"
-            onClick={() => {
-              onAplicar(mes, grupos, incluidos)
-              onOpenChange(false)
-            }}
-            disabled={loading || !!error}
-          >
-            Aplicar seleção
-          </Button>
+          {canEditSelecao && (
+            <Button
+              type="button"
+              onClick={() => {
+                onAplicar(mes, grupos, incluidos)
+                onOpenChange(false)
+              }}
+              disabled={loading || !!error}
+            >
+              Aplicar seleção
+            </Button>
+          )}
         </SheetFooter>
       </SheetContent>
     </Sheet>
