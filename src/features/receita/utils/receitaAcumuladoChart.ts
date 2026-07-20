@@ -164,3 +164,32 @@ export function buildAcumuladoAreaPercentData(
     return point
   })
 }
+
+export type AtingimentoMetaKpi = {
+  recebidoAcumulado: number
+  metaAnual: number
+  pct: number
+  mesesMetaDecorridos: number[]
+}
+
+/** KPI atingimento: recebido acumulado (Jun+) ÷ meta anual R$ 10 mi (Jun–Dez). */
+export function calcularAtingimentoMetaKpi(
+  ano: number,
+  rows: ReceitaMesRow[],
+  ref = new Date(),
+): AtingimentoMetaKpi {
+  const rowsMeta = rows.filter((r) => r.metaBase > 0)
+  const metaAnual = rowsMeta.reduce((s, r) => s + r.metaBase, 0)
+  const mesesMetaDecorridos = rowsMeta.filter((r) => !isMesFuturo(ano, r.mes, ref)).map((r) => r.mes)
+  const recebidoAcumulado = rowsMeta
+    .filter((r) => !isMesFuturo(ano, r.mes, ref))
+    .reduce((s, r) => s + r.recebido, 0)
+  const pct = metaAnual > 0 ? (recebidoAcumulado / metaAnual) * 100 : 0
+
+  return {
+    recebidoAcumulado,
+    metaAnual,
+    pct,
+    mesesMetaDecorridos,
+  }
+}

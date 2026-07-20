@@ -4,6 +4,7 @@ import { formatCurrency, formatCurrencyCompact, formatPercent } from '@/shared/u
 import { cn } from '@/lib/utils'
 import type { ReceitaMesRow } from '../types/receita.types'
 import { mesAbrev, RECEITA_COLORS } from '../constants'
+import { calcularAtingimentoMetaKpi } from '../utils/receitaAcumuladoChart'
 import { isMesFuturo } from '../utils/receitaMes'
 import { ReceitaPrevistoDetalheSheet } from './ReceitaPrevistoDetalheSheet'
 import { ReceitaRecebidoKpiDetalheSheet } from './ReceitaRecebidoKpiDetalheSheet'
@@ -148,12 +149,9 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
   const rowsComDados = rows.filter((r) => !isMesFuturo(ano, r.mes))
   const totalRecebido = rowsComDados.reduce((s, r) => s + r.recebido, 0)
   const totalPrevisto = rows.reduce((s, r) => s + r.previsto, 0)
-  const rowsComMeta = rowsComDados.filter((r) => r.meta > 0)
-  const recebidoNoPeriodoComMeta = rowsComMeta.reduce((s, r) => s + r.recebido, 0)
-  const metaAcumuladaPeriodo = rowsComMeta.reduce((s, r) => s + r.meta, 0)
-  const metaAnual = rows.filter((r) => r.metaBase > 0).reduce((s, r) => s + r.metaBase, 0)
-  const pctMeta =
-    metaAcumuladaPeriodo > 0 ? (recebidoNoPeriodoComMeta / metaAcumuladaPeriodo) * 100 : 0
+  const atingimentoMeta = calcularAtingimentoMetaKpi(ano, rows)
+  const metaAnual = atingimentoMeta.metaAnual
+  const pctMeta = atingimentoMeta.pct
   const totalEncargos = rowsComDados.reduce((s, r) => s + r.encargos, 0)
 
   const ultimoMesComMeta = [...rowsComDados].reverse().find((r) => r.meta > 0)
@@ -179,6 +177,7 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
   const previstoPeriodo = periodoAnoLabel(mesesNoResumo, ano)
   const mesesComRecebido = rowsComDados.filter((r) => r.recebido > 0).map((r) => r.mes)
   const recebidoPeriodo = periodoAnoLabel(mesesComRecebido, ano)
+  const atingimentoPeriodo = periodoAnoLabel(atingimentoMeta.mesesMetaDecorridos, ano)
 
   return (
     <section>
@@ -233,10 +232,12 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           icon={TrendingUp}
           label="Atingimento da meta"
           value={formatPercent(pctMeta)}
+          periodo={formatCurrency(atingimentoMeta.recebidoAcumulado)}
+          valueTitle={`${formatPercent(pctMeta)} · ${formatCurrency(atingimentoMeta.recebidoAcumulado)} de ${formatCurrency(metaAnual)}`}
           hint={
-            recebidoNoPeriodoComMeta >= metaAcumuladaPeriodo
-              ? 'Meta atingida no período'
-              : 'Recebido ÷ meta do período (com rateio)'
+            atingimentoPeriodo
+              ? `Recebido ${atingimentoPeriodo} ÷ meta ${formatCurrencyCompact(metaAnual)} (Jun–Dez)`
+              : `Recebido ÷ meta ${formatCurrencyCompact(metaAnual)} (Jun–Dez)`
           }
           iconColor={pctIcon}
           valueColor={pctColor}
