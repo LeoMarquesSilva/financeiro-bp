@@ -40,6 +40,7 @@ import {
   RECEITA_CHART_LAYOUT,
   RECEITA_COLORS,
   RECEITA_DEPARTAMENTO_CORES,
+  RECEITA_DEPARTAMENTO_LABELS,
 } from '../constants'
 import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
 import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
@@ -186,34 +187,36 @@ function pctMeta(recebido: number, meta: number): number | null {
   return (recebido / meta) * 100
 }
 
+const TRIBUTARIO_AREA_KEY = 'tributario'
+
 type AreaGapRow = {
   key: string
   label: string
   color: string
   pct: number
   meta: number
+  metaGlobal: number
   recebido: number
   gap: number
   pctAtingido: number | null
+  pctMetaGlobal: number | null
+  /** Área fora das 5 cotas meta (ex.: Tributário) — sem meta/gap/% na tabela. */
+  semMetaDeArea?: boolean
 }
 
-/**
- * Meta vs. recebido real por área — recebido vem do banco (por departamento);
- * meta é a meta do período × % de contribuição fixa da área. `mes` = null → acumulado
- * (soma dos meses já com dado); caso contrário, apenas o mês selecionado.
- */
-function buildAreaGapData(
+function buildRecebidoPorAreaMap(
   rows: ReceitaMesRow[],
   rowsComDados: ReceitaMesRow[],
   deptRows: ReceitaRecebidoDepartamentoRow[],
-  mes: number | null,
-  metaAreaSlices: ReceitaMetaAreaSlice[],
+  mesesSelecionados: Set<number> | null,
   ano: number,
   graficoOpts?: ReceitaGraficoMesOptions,
-): AreaGapRow[] {
-  const baseEscopo = mes == null ? rowsComDados : rows.filter((r) => r.mes === mes)
+): Map<string, number> {
+  const baseEscopo =
+    mesesSelecionados == null
+      ? rowsComDados
+      : rows.filter((r) => mesesSelecionados.has(r.mes))
   const escopoMeta = baseEscopo.filter((r) => r.meta > 0)
-  const metaTotalEscopo = escopoMeta.reduce((s, r) => s + r.meta, 0)
   const mesesRecebido = new Set(
     escopoMeta
       .filter((r) => !(graficoOpts?.omitMesAtual && isMesAtual(ano, r.mes)))
@@ -226,9 +229,42 @@ function buildAreaGapData(
     const key = departamentoNormKey(d.departamento)
     recebidoPorArea.set(key, (recebidoPorArea.get(key) ?? 0) + d.total)
   }
+  return recebidoPorArea
+}
+
+/**
+ * Meta vs. recebido real por área — recebido vem do banco (por departamento);
+ * meta é a meta do período × % de contribuição fixa da área. `mesesSelecionados` = null → acumulado;
+ * caso contrário, apenas os meses marcados.
+ */
+function buildAreaGapData(
+  rows: ReceitaMesRow[],
+  rowsComDados: ReceitaMesRow[],
+  deptRows: ReceitaRecebidoDepartamentoRow[],
+  mesesSelecionados: Set<number> | null,
+  metaAreaSlices: ReceitaMetaAreaSlice[],
+  ano: number,
+  graficoOpts?: ReceitaGraficoMesOptions,
+): AreaGapRow[] {
+  const baseEscopo =
+    mesesSelecionados == null
+      ? rowsComDados
+      : rows.filter((r) => mesesSelecionados.has(r.mes))
+  const escopoMeta = baseEscopo.filter((r) => r.meta > 0)
+  const metaTotalEscopo = escopoMeta.reduce((s, r) => s + r.meta, 0)
+  const metaAnual = rows.filter((r) => r.metaBase > 0).reduce((s, r) => s + r.metaBase, 0)
+  const recebidoPorArea = buildRecebidoPorAreaMap(
+    rows,
+    rowsComDados,
+    deptRows,
+    mesesSelecionados,
+    ano,
+    graficoOpts,
+  )
 
   return metaAreaSlices.map((area) => {
     const meta = (metaTotalEscopo * area.pct) / 100
+    const metaGlobal = (metaAnual * area.pct) / 100
     const recebido = recebidoPorArea.get(area.key) ?? 0
     const gap = recebido - meta
     return {
@@ -237,9 +273,11 @@ function buildAreaGapData(
       color: area.color,
       pct: area.pct,
       meta,
+      metaGlobal,
       recebido,
       gap,
       pctAtingido: meta > 0 ? (recebido / meta) * 100 : null,
+      pctMetaGlobal: metaGlobal > 0 ? (recebido / metaGlobal) * 100 : null,
     }
   })
 }
@@ -548,6 +586,12 @@ function AreaGapTooltip({
             {formatCurrency(row.meta)}
           </span>
         </li>
+        <li className="flex items-center justify-between gap-6">
+          <span className="text-slate-600">Meta global da área</span>
+          <span className="font-semibold tabular-nums text-slate-700">
+            {formatCurrency(row.metaGlobal)}
+          </span>
+        </li>
         <li className="flex items-center justify-between gap-6 border-t border-slate-100 pt-1.5">
           <span className="font-medium text-slate-600">Gap</span>
           <span
@@ -562,7 +606,12 @@ function AreaGapTooltip({
       </ul>
       {row.pctAtingido != null && (
         <p className="mt-1.5 text-xs font-medium text-sky-700">
-          {formatPercentMeta(row.pctAtingido)} atingido
+          {formatPercentMeta(row.pctAtingido)} atingido (período)
+        </p>
+      )}
+      {row.pctMetaGlobal != null && (
+        <p className="mt-0.5 text-xs font-medium text-violet-700">
+          {formatPercentMeta(row.pctMetaGlobal)} da meta global (R$ 10 mi)
         </p>
       )}
     </div>
@@ -705,6 +754,10 @@ function ComparativoDotLabel({
       />
     )
   }
+}
+
+function AreaGapNaCell() {
+  return <span className="text-slate-400">N/A</span>
 }
 
 function PctBadge({ pct }: { pct: number | null }) {
@@ -856,11 +909,11 @@ export function ReceitaComparativoChart({
   const [resultadoMode, setResultadoMode] = useState(false)
   const anoCorrente = new Date().getFullYear()
   const resultadoDisponivel = ano === anoCorrente
-  const [areaMesSelecionado, setAreaMesSelecionado] = useState<number | null>(() => {
+  const [areaMesesSelecionados, setAreaMesesSelecionados] = useState<Set<number> | null>(() => {
     const hoje = new Date()
     if (ano !== hoje.getFullYear()) return null
     const mesAtual = hoje.getMonth() + 1
-    return rows.some((r) => r.mes === mesAtual) ? mesAtual : null
+    return rows.some((r) => r.mes === mesAtual) ? new Set([mesAtual]) : null
   })
   const [visible, setVisible] = useState<Set<SeriesKey>>(() => new Set(DEFAULT_VISIBLE))
   const [areaLinhaSelecionada, setAreaLinhaSelecionada] = useState<string | null>(null)
@@ -937,6 +990,19 @@ export function ReceitaComparativoChart({
     })
   }
 
+  const toggleAreaMes = (mes: number) => {
+    setAreaMesesSelecionados((prev) => {
+      if (prev == null) return new Set([mes])
+      const next = new Set(prev)
+      if (next.has(mes)) {
+        next.delete(mes)
+        return next.size === 0 ? null : next
+      }
+      next.add(mes)
+      return next
+    })
+  }
+
   const selectAreaLinha = (key: string) => {
     setPercentMode(false)
     setPorAreaMode(true)
@@ -996,13 +1062,42 @@ export function ReceitaComparativoChart({
         rows,
         rowsComDados,
         deptRows ?? [],
-        areaMesSelecionado,
+        areaMesesSelecionados,
         metaAreaSlices,
         ano,
         graficoOpts,
       ),
-    [rows, rowsComDados, deptRows, areaMesSelecionado, metaAreaSlices, ano, graficoOpts],
+    [rows, rowsComDados, deptRows, areaMesesSelecionados, metaAreaSlices, ano, graficoOpts],
   )
+
+  const areaGapTributarioRecebido = useMemo(() => {
+    const recebidoPorArea = buildRecebidoPorAreaMap(
+      rows,
+      rowsComDados,
+      deptRows ?? [],
+      areaMesesSelecionados,
+      ano,
+      graficoOpts,
+    )
+    return recebidoPorArea.get(TRIBUTARIO_AREA_KEY) ?? 0
+  }, [rows, rowsComDados, deptRows, areaMesesSelecionados, ano, graficoOpts])
+
+  const areaGapTableRows = useMemo((): AreaGapRow[] => {
+    const tributarioRow: AreaGapRow = {
+      key: TRIBUTARIO_AREA_KEY,
+      label: RECEITA_DEPARTAMENTO_LABELS[TRIBUTARIO_AREA_KEY] ?? 'Tributário',
+      color: departamentoCores[TRIBUTARIO_AREA_KEY] ?? RECEITA_DEPARTAMENTO_CORES[TRIBUTARIO_AREA_KEY],
+      pct: 0,
+      meta: 0,
+      metaGlobal: 0,
+      recebido: areaGapTributarioRecebido,
+      gap: 0,
+      pctAtingido: null,
+      pctMetaGlobal: null,
+      semMetaDeArea: true,
+    }
+    return [...areaGapData, tributarioRow]
+  }, [areaGapData, areaGapTributarioRecebido, departamentoCores])
 
   const areaLinhaAtual = useMemo(
     () =>
@@ -1050,10 +1145,15 @@ export function ReceitaComparativoChart({
     () => areaGapData.reduce((s, a) => s + a.meta, 0),
     [areaGapData],
   )
+  const areaGapMetaGlobalTotal = useMemo(
+    () => areaGapData.reduce((s, a) => s + a.metaGlobal, 0),
+    [areaGapData],
+  )
   const areaGapRecebidoTotal = useMemo(
     () => areaGapData.reduce((s, a) => s + a.recebido, 0),
     [areaGapData],
   )
+  const areaGapRecebidoTotalComTributario = areaGapRecebidoTotal + areaGapTributarioRecebido
 
   const totais = useMemo(
     () => ({
@@ -1070,19 +1170,30 @@ export function ReceitaComparativoChart({
   const pctTotal = pctMeta(totais.recebido, totais.meta)
 
   const areaGapRecebidoOficial = useMemo(() => {
-    if (areaMesSelecionado == null) return totais.recebido
-    return rows.find((r) => r.mes === areaMesSelecionado)?.recebido ?? 0
-  }, [areaMesSelecionado, rows, totais.recebido])
+    if (areaMesesSelecionados == null) {
+      return rowsComDados.reduce((s, r) => s + r.recebido, 0)
+    }
+    return rows
+      .filter((r) => areaMesesSelecionados.has(r.mes))
+      .reduce((s, r) => s + r.recebido, 0)
+  }, [areaMesesSelecionados, rows, rowsComDados])
+
+  const semAreaMesUnico = useMemo(() => {
+    if (areaMesesSelecionados == null || areaMesesSelecionados.size !== 1) return null
+    return [...areaMesesSelecionados][0] ?? null
+  }, [areaMesesSelecionados])
   const areaGapRecebidoSemDepartamento = Math.max(
     0,
-    areaGapRecebidoOficial - areaGapRecebidoTotal,
+    areaGapRecebidoOficial - areaGapRecebidoTotalComTributario,
   )
 
   const semAreaPeriodoLabel = useMemo(() => {
-    if (areaMesSelecionado == null) return `Acumulado ${ano}`
-    const row = rows.find((r) => r.mes === areaMesSelecionado)
-    return row ? `${row.mesLabel} / ${ano}` : `${ano}`
-  }, [areaMesSelecionado, rows, ano])
+    if (areaMesesSelecionados == null) return `Acumulado ${ano}`
+    const meses = [...areaMesesSelecionados].sort((a, b) => a - b)
+    const labels = meses.map((m) => rows.find((r) => r.mes === m)?.mesLabel ?? String(m))
+    if (labels.length === 1) return `${labels[0]} / ${ano}`
+    return `${labels[0]}–${labels[labels.length - 1]} / ${ano}`
+  }, [areaMesesSelecionados, rows, ano])
 
   return (
     <div className="space-y-6">
@@ -1203,13 +1314,15 @@ export function ReceitaComparativoChart({
 
         {porAreaMode && areaLinhaSelecionada == null && (
           <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
-            <span className="text-[11px] font-medium text-slate-500">Período:</span>
+            <span className="text-[11px] font-medium text-slate-500">
+              Período <span className="font-normal text-slate-400">(multi-seleção)</span>:
+            </span>
             <button
               type="button"
-              onClick={() => setAreaMesSelecionado(null)}
+              onClick={() => setAreaMesesSelecionados(null)}
               className={cn(
                 'rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors',
-                areaMesSelecionado == null
+                areaMesesSelecionados == null
                   ? 'border-sky-400 bg-sky-100 text-sky-900 shadow-sm'
                   : 'border-slate-200 bg-white text-slate-600 hover:border-sky-200 hover:bg-sky-50',
               )}
@@ -1220,10 +1333,10 @@ export function ReceitaComparativoChart({
               <button
                 key={r.mes}
                 type="button"
-                onClick={() => setAreaMesSelecionado(r.mes)}
+                onClick={() => toggleAreaMes(r.mes)}
                 className={cn(
                   'rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors',
-                  areaMesSelecionado === r.mes
+                  areaMesesSelecionados?.has(r.mes)
                     ? 'border-sky-400 bg-sky-100 text-sky-900 shadow-sm'
                     : 'border-slate-200 bg-white text-slate-600 hover:border-sky-200 hover:bg-sky-50',
                 )}
@@ -1493,7 +1606,7 @@ export function ReceitaComparativoChart({
           </div>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                   <th className="py-2 pr-3">Área</th>
@@ -1502,10 +1615,16 @@ export function ReceitaComparativoChart({
                   <th className="px-3 py-2 text-right">Meta</th>
                   <th className="px-3 py-2 text-center">Gap</th>
                   <th className="px-3 py-2 text-center">Atingido</th>
+                  <th
+                    className="px-3 py-2 text-center"
+                    title="Recebido ÷ meta anual da área (cota fixa × R$ 10 mi Jun–Dez)"
+                  >
+                    % meta global
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {areaGapData.map((a, i) => (
+                {areaGapTableRows.map((a, i) => (
                   <tr
                     key={a.key}
                     className={cn(
@@ -1524,24 +1643,31 @@ export function ReceitaComparativoChart({
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-center tabular-nums text-slate-500">
-                      {formatPercentMeta(a.pct)}
+                      {a.semMetaDeArea ? <AreaGapNaCell /> : formatPercentMeta(a.pct)}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-900">
                       {formatCurrency(a.recebido)}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-700">
-                      {formatCurrency(a.meta)}
+                      {a.semMetaDeArea ? <AreaGapNaCell /> : formatCurrency(a.meta)}
                     </td>
                     <td
                       className={cn(
                         'px-3 py-2.5 text-center tabular-nums font-semibold',
-                        a.gap >= 0 ? 'text-emerald-700' : 'text-red-600',
+                        a.semMetaDeArea
+                          ? 'text-slate-400'
+                          : a.gap >= 0
+                            ? 'text-emerald-700'
+                            : 'text-red-600',
                       )}
                     >
-                      {formatGap(a.gap)}
+                      {a.semMetaDeArea ? <AreaGapNaCell /> : formatGap(a.gap)}
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      <PctBadge pct={a.pctAtingido} />
+                      {a.semMetaDeArea ? <AreaGapNaCell /> : <PctBadge pct={a.pctAtingido} />}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {a.semMetaDeArea ? <AreaGapNaCell /> : <PctBadge pct={a.pctMetaGlobal} />}
                     </td>
                   </tr>
                 ))}
@@ -1551,7 +1677,7 @@ export function ReceitaComparativoChart({
                   <td className="py-2.5 pr-3">Total</td>
                   <td className="px-3 py-2.5 text-center text-slate-400">100%</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">
-                    {formatCurrency(areaGapRecebidoTotal)}
+                    {formatCurrency(areaGapRecebidoTotalComTributario)}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums">
                     {formatCurrency(areaGapMetaTotal)}
@@ -1559,18 +1685,27 @@ export function ReceitaComparativoChart({
                   <td
                     className={cn(
                       'px-3 py-2.5 text-center tabular-nums',
-                      areaGapRecebidoTotal - areaGapMetaTotal >= 0
+                      areaGapRecebidoTotalComTributario - areaGapMetaTotal >= 0
                         ? 'text-emerald-700'
                         : 'text-red-600',
                     )}
                   >
-                    {formatGap(areaGapRecebidoTotal - areaGapMetaTotal)}
+                    {formatGap(areaGapRecebidoTotalComTributario - areaGapMetaTotal)}
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     <PctBadge
                       pct={
                         areaGapMetaTotal > 0
-                          ? (areaGapRecebidoTotal / areaGapMetaTotal) * 100
+                          ? (areaGapRecebidoTotalComTributario / areaGapMetaTotal) * 100
+                          : null
+                      }
+                    />
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <PctBadge
+                      pct={
+                        areaGapMetaGlobalTotal > 0
+                          ? (areaGapRecebidoTotalComTributario / areaGapMetaGlobalTotal) * 100
                           : null
                       }
                     />
@@ -1982,7 +2117,7 @@ export function ReceitaComparativoChart({
         open={semAreaAberto}
         onOpenChange={setSemAreaAberto}
         ano={ano}
-        mes={areaMesSelecionado}
+        mes={semAreaMesUnico}
         periodoLabel={semAreaPeriodoLabel}
         totalSemArea={areaGapRecebidoSemDepartamento}
       />
