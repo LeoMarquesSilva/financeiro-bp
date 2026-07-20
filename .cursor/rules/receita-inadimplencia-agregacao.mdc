@@ -81,7 +81,12 @@ Frontend (`receitaInadimplenciaCalc.ts`):
 ## 5. Filtro por área meta (VIOS)
 
 - Alocação por **departamento do item** (`receita_inadimplencia_grupo_departamento_periodo`).
-- Frontend: `gruposAlocadosPorArea`, `aplicarFiltroAreaInadimplencia`, `departamentoMatchesAreaKey`.
+- **Período multi-mês:** saldo líquido do cliente no intervalo, alocado por faturamento VIOS
+  (mesma base de `grupos_periodo` — pagamento em jul compensa vencimento em jun).
+- **Evolução mensal:** continua exibindo snapshot do mês (pode diferir do KPI acumulado).
+- Frontend: `gruposAlocadosPorAreaPeriodo`, `inadimplenciaAreaPeriodo`,
+  `aplicarFiltroAreaInadimplencia`, `departamentoMatchesAreaKey`.
+- **Proibido:** somar inadimplência mensal por área como KPI/top5 do período.
 - **Proibido:** ratear total do grupo proporcionalmente entre áreas.
 
 ---
@@ -93,6 +98,7 @@ Frontend (`receitaInadimplenciaCalc.ts`):
 | `20260720150000_receita_inadimplencia_grupo_saldo_consolidado.sql` | Saldo líquido por grupo |
 | `20260720160000_receita_inadimplencia_sem_grupo_por_cliente.sql` | Sem grupo → razão social |
 | `20260720170000_receita_inadimplencia_kpi_saldo_periodo.sql` | Dashboard KPI = grupos_periodo |
+| `20260720180000_receita_inadimplencia_area_periodo_liquido.sql` | Área/grupo×dept = saldo líquido período |
 
 Nova migração nesse domínio: **estender ou chamar** estas funções — não reimplementar.
 
@@ -107,6 +113,7 @@ Nova migração nesse domínio: **estender ou chamar** estas funções — não 
 | Rec. Crédito (filtro área) | Jun/26 | Engforce aparece na área |
 | KPI vs evolução | Jan–Jun/26 | KPI ≈ **R$ 1.281.841** (grupos_periodo); soma evolução congelada ≈ **R$ 1.826.182** — **devem diferir** |
 | Modal vs card | Qualquer | Mesmo total com mesma seleção de grupos |
+| Baptistella Trabalhista | Jun–Jul/26 | **R$ 0** no top5/KPI período (pagou em jul) |
 
 ---
 

@@ -247,6 +247,12 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
     enabled: areaKey != null,
   })
 
+  const { data: gruposDeptPeriodo, isLoading: gruposDeptPeriodoLoading, isError: gruposDeptPeriodoError } = useQuery({
+    queryKey: ['receita', 'inadimplencia', 'grupos-dept-periodo', ano, mesInicio, mesFim, areaKey],
+    queryFn: () => receitaInadimplenciaService.fetchGruposDepartamentoPeriodo(ano, mesInicio, mesFim, true),
+    enabled: areaKey != null && mesesPeriodo.length > 0,
+  })
+
   const { data: gruposDeptPorMes, isLoading: gruposDeptLoading, isError: gruposDeptError } = useQuery({
     queryKey: ['receita', 'inadimplencia', 'grupos-dept-area', ano, mesInicio, mesFim, areaKey],
     queryFn: async () => {
@@ -276,7 +282,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   })
 
   const areaFilterPending =
-    areaKey != null && (deptAreaLoading || previstoAreaLoading)
+    areaKey != null && (deptAreaLoading || previstoAreaLoading || gruposDeptPeriodoLoading)
 
   const areaFilterError =
     areaKey != null
@@ -284,13 +290,15 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
         ? deptAreaErrorObj
         : previstoAreaError
           ? previstoAreaErrorObj
-          : null
+          : gruposDeptPeriodoError
+            ? new Error('Erro ao carregar inadimplência por área no período.')
+            : null
       : null
 
   const dashboard = useMemo(() => {
     if (!dashboardConsolidado) return null
     if (!areaKey) return dashboardConsolidado
-    if (!deptPorMes || !previstoDept) return null
+    if (!deptPorMes || !previstoDept || !gruposDeptPeriodo) return null
     return aplicarFiltroAreaInadimplencia(
       dashboardConsolidado,
       areaKey,
@@ -299,8 +307,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
       gruposDeptPorMes ?? {},
       gruposAreaPorMes ?? {},
       mesesPeriodo,
+      gruposDeptPeriodo ?? [],
     )
-  }, [dashboardConsolidado, areaKey, deptPorMes, previstoDept, gruposDeptPorMes, gruposAreaPorMes, mesesPeriodo])
+  }, [dashboardConsolidado, areaKey, deptPorMes, previstoDept, gruposDeptPorMes, gruposAreaPorMes, mesesPeriodo, gruposDeptPeriodo])
 
   const abrirDetalheAreaPeriodo = () => {
     setAreaGruposSheetMes(null)
@@ -771,7 +780,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {filtroAreaAtivo && (gruposDeptLoading || gruposAreaLoading) ? (
+                {filtroAreaAtivo && (gruposDeptLoading || gruposDeptPeriodoLoading || gruposAreaLoading) ? (
                   <tr>
                     <td colSpan={2} className="py-6 text-center text-slate-500">
                       <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
@@ -955,7 +964,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
             <p className="mt-1 text-sm font-medium leading-snug text-slate-800">
               Os 5 maiores inadimplentes representam do total da inadimplência do período{' '}
               <span className="text-lg font-bold" style={{ color: GOLD }}>
-                {filtroAreaAtivo && (gruposDeptLoading || gruposAreaLoading) ? (
+                {filtroAreaAtivo && (gruposDeptLoading || gruposDeptPeriodoLoading || gruposAreaLoading) ? (
                   <Loader2 className="inline h-4 w-4 animate-spin" />
                 ) : (
                   formatPercent(dashboard.top5_pct)
@@ -983,8 +992,9 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               : dashboard.valor_total_periodo
           }
           gruposDeptPorMes={gruposDeptPorMes ?? {}}
+          gruposDeptPeriodo={gruposDeptPeriodo ?? []}
           gruposPorMes={gruposAreaPorMes ?? {}}
-          loading={gruposDeptLoading || gruposAreaLoading}
+          loading={gruposDeptLoading || gruposDeptPeriodoLoading || gruposAreaLoading}
         />
       )}
 

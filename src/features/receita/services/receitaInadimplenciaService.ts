@@ -207,7 +207,7 @@ export const receitaInadimplenciaService = {
     }))
   },
 
-  /** Inadimplência por grupo × departamento no período (alocação VIOS). Top 5 por área. */
+  /** Inadimplência por grupo × departamento no período (saldo líquido, 1 chamada RPC). */
   async fetchGruposDepartamentoPeriodo(
     ano: number,
     mesInicio: number,
@@ -216,27 +216,21 @@ export const receitaInadimplenciaService = {
   ): Promise<ReceitaInadimplenciaGrupoDepartamentoPeriodo[]> {
     if (mesFim < mesInicio) return []
 
-    const meses = Array.from({ length: mesFim - mesInicio + 1 }, (_, i) => mesInicio + i)
-    const porMes = await Promise.all(
-      meses.map((mes) => this.fetchGruposDepartamentoMes(ano, mes, incluirInativos)),
+    const { data, error } = await supabase.rpc(
+      'receita_inadimplencia_grupo_departamento_periodo' as never,
+      {
+        p_ano: ano,
+        p_mes_inicio: mesInicio,
+        p_mes_fim: mesFim,
+        p_incluir_inativos: incluirInativos,
+      } as never,
     )
-
-    const agregado = new Map<string, ReceitaInadimplenciaGrupoDepartamentoPeriodo>()
-    for (const rows of porMes) {
-      for (const row of rows) {
-        const key = `${row.grupo_cliente}\0${row.departamento}`
-        const prev = agregado.get(key)
-        if (prev) {
-          prev.inadimplencia = Math.round((prev.inadimplencia + row.inadimplencia) * 100) / 100
-        } else {
-          agregado.set(key, { ...row })
-        }
-      }
-    }
-
-    return [...agregado.values()].sort(
-      (a, b) => b.inadimplencia - a.inadimplencia || a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR'),
-    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      grupo_cliente: String(row.grupo_cliente ?? 'Sem grupo'),
+      departamento: String(row.departamento ?? 'Sem departamento'),
+      inadimplencia: Number(row.inadimplencia) || 0,
+    }))
   },
 
   async fetchClienteDetalhePeriodo(

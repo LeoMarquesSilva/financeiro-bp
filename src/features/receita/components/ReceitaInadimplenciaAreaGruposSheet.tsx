@@ -22,6 +22,7 @@ import type {
 import {
   departamentoMatchesAreaKey,
   gruposAlocadosPorArea,
+  gruposAlocadosPorAreaPeriodo,
 } from '../utils/receitaInadimplenciaAreaFilter'
 import { ReceitaInadimplenciaClienteTitulosDetalhe } from './ReceitaInadimplenciaClienteTitulosDetalhe'
 
@@ -37,6 +38,7 @@ type Props = {
   periodoLabel: string
   valorTotal: number
   gruposDeptPorMes: Record<number, ReceitaInadimplenciaGrupoDepartamentoPeriodo[]>
+  gruposDeptPeriodo?: ReceitaInadimplenciaGrupoDepartamentoPeriodo[]
   gruposPorMes: Record<number, ReceitaInadimplenciaGrupoMes[]>
   loading?: boolean
 }
@@ -123,6 +125,7 @@ export function ReceitaInadimplenciaAreaGruposSheet({
   periodoLabel,
   valorTotal,
   gruposDeptPorMes,
+  gruposDeptPeriodo = [],
   gruposPorMes,
   loading = false,
 }: Props) {
@@ -146,10 +149,12 @@ export function ReceitaInadimplenciaAreaGruposSheet({
   const tituloPeriodo =
     mesDetalhe != null ? `${mesNome(mesDetalhe)}/${String(ano).slice(-2)}` : periodoLabel
 
-  const grupos = useMemo(
-    () => gruposAlocadosPorArea(gruposDeptPorMes, gruposPorMes, areaKey, mesesEscopo),
-    [gruposDeptPorMes, gruposPorMes, areaKey, mesesEscopo],
-  )
+  const grupos = useMemo(() => {
+    if (mesDetalhe == null && gruposDeptPeriodo.length > 0) {
+      return gruposAlocadosPorAreaPeriodo(gruposDeptPeriodo, areaKey)
+    }
+    return gruposAlocadosPorArea(gruposDeptPorMes, gruposPorMes, areaKey, mesesEscopo)
+  }, [mesDetalhe, gruposDeptPeriodo, gruposDeptPorMes, gruposPorMes, areaKey, mesesEscopo])
 
   useEffect(() => {
     if (!open) {

@@ -30,6 +30,16 @@ export function inadimplenciaAreaMes(
     .reduce((s, d) => s + d.inadimplencia, 0)
 }
 
+/** Saldo líquido da área no intervalo (grupo×dept período, não soma mensal). */
+export function inadimplenciaAreaPeriodo(
+  gruposDeptPeriodo: ReceitaInadimplenciaGrupoDepartamentoPeriodo[],
+  areaKey: string,
+): number {
+  return gruposDeptPeriodo
+    .filter((r) => departamentoMatchesAreaKey(r.departamento, areaKey))
+    .reduce((s, r) => s + r.inadimplencia, 0)
+}
+
 export function previstoAreaMes(
   previstoRows: ReceitaRecebidoDepartamentoRow[],
   mes: number,
@@ -55,6 +65,31 @@ export type GrupoInadimplenciaAreaAlocado = {
   valor_total_grupo: number
   qtd_meses: number
   qtd_clientes: number
+}
+
+/** Grupos com inadimplência alocada à área no período (saldo líquido VIOS). */
+export function gruposAlocadosPorAreaPeriodo(
+  gruposDeptPeriodo: ReceitaInadimplenciaGrupoDepartamentoPeriodo[],
+  areaKey: string,
+): GrupoInadimplenciaAreaAlocado[] {
+  const porGrupo = new Map<string, number>()
+
+  for (const r of gruposDeptPeriodo) {
+    if (!departamentoMatchesAreaKey(r.departamento, areaKey)) continue
+    if (r.inadimplencia <= 0) continue
+    porGrupo.set(r.grupo_cliente, (porGrupo.get(r.grupo_cliente) ?? 0) + r.inadimplencia)
+  }
+
+  return [...porGrupo.entries()]
+    .map(([grupo_cliente, valor]) => ({
+      grupo_cliente,
+      valor: Math.round(valor * 100) / 100,
+      valor_total_grupo: Math.round(valor * 100) / 100,
+      qtd_meses: 0,
+      qtd_clientes: 0,
+    }))
+    .filter((g) => g.valor > 0)
+    .sort((a, b) => b.valor - a.valor || a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR'))
 }
 
 /** Grupos com inadimplência alocada à área (VIOS por departamento do grupo, não rateio global). */
@@ -106,6 +141,15 @@ export function gruposAlocadosPorArea(
     .sort((a, b) => b.valor - a.valor || a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR'))
 }
 
+export function top5GruposPorAreaPeriodo(
+  gruposDeptPeriodo: ReceitaInadimplenciaGrupoDepartamentoPeriodo[],
+  areaKey: string,
+): ReceitaInadimplenciaTopCliente[] {
+  return gruposAlocadosPorAreaPeriodo(gruposDeptPeriodo, areaKey)
+    .slice(0, 5)
+    .map((g) => ({ cliente: g.grupo_cliente, valor: g.valor }))
+}
+
 export function top5GruposPorAreaFromMeses(
   gruposDeptPorMes: Record<number, ReceitaInadimplenciaGrupoDepartamentoPeriodo[]>,
   gruposPorMes: Record<number, ReceitaInadimplenciaGrupoMes[]>,
@@ -126,6 +170,7 @@ export function aplicarFiltroAreaInadimplencia(
   gruposDeptPorMes: Record<number, ReceitaInadimplenciaGrupoDepartamentoPeriodo[]> = {},
   gruposPorMes: Record<number, ReceitaInadimplenciaGrupoMes[]> = {},
   meses: number[] = [],
+  gruposDeptPeriodo: ReceitaInadimplenciaGrupoDepartamentoPeriodo[] = [],
 ): ReceitaInadimplenciaDashboard {
   const evolucao: ReceitaInadimplenciaEvolucaoMes[] = dashboard.evolucao.map((m) => {
     const valor = inadimplenciaAreaMes(deptPorMes[m.mes] ?? [], areaKey)
@@ -144,11 +189,17 @@ export function aplicarFiltroAreaInadimplencia(
     }
   })
 
-  const valor_total_periodo = evolucao.reduce((s, m) => s + m.valor, 0)
+  const valor_total_periodo =
+    gruposDeptPeriodo.length > 0
+      ? inadimplenciaAreaPeriodo(gruposDeptPeriodo, areaKey)
+      : evolucao.reduce((s, m) => s + m.valor, 0)
   const previsto_periodo = evolucao.reduce((s, m) => s + (m.previsto ?? 0), 0)
   const pct_periodo = calcularPctInadimplencia(valor_total_periodo, previsto_periodo)
 
-  const top5 = top5GruposPorAreaFromMeses(gruposDeptPorMes, gruposPorMes, areaKey, meses)
+  const top5 =
+    gruposDeptPeriodo.length > 0
+      ? top5GruposPorAreaPeriodo(gruposDeptPeriodo, areaKey)
+      : top5GruposPorAreaFromMeses(gruposDeptPorMes, gruposPorMes, areaKey, meses)
   const top5_total = top5.reduce((s, g) => s + g.valor, 0)
   const top5_pct =
     valor_total_periodo > 0
