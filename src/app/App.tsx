@@ -93,7 +93,7 @@ function AppRoutes() {
           <Route
             path="receita"
             element={
-              <ProtectedRoute allowedRoles={['admin']}>
+              <ProtectedRoute allowedRoles={['admin', 'financeiro', 'comite']}>
                 <ReceitaPage />
               </ProtectedRoute>
             }

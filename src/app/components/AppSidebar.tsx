@@ -23,7 +23,7 @@ const navItems: NavItem[] = [
   { to: '/financeiro/inadimplencia/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'financeiro', 'comite'] },
   { to: '/financeiro/escritorio', label: 'Escritório', icon: Building2, roles: ['admin', 'financeiro'] },
   { to: '/financeiro/cobranca', label: 'Cobrança', icon: BellRing, roles: ['admin', 'financeiro'] },
-  { to: '/financeiro/receita', label: 'Receita', icon: TrendingUp, roles: ['admin'] },
+  { to: '/financeiro/receita', label: 'Receita', icon: TrendingUp, roles: ['admin', 'financeiro', 'comite'] },
   { to: '/financeiro/opex', label: 'OPEX', icon: Wallet, roles: ['admin', 'financeiro'] },
   { to: '/financeiro/gestores', label: 'Gestores', icon: Users, roles: ['admin'] },
   { to: '/financeiro/configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
