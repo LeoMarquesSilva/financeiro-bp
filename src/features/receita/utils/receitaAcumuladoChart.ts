@@ -170,19 +170,27 @@ export type AtingimentoMetaKpi = {
   metaAnual: number
   pct: number
   mesesMetaDecorridos: number[]
+  mesesSelecionados: number[]
 }
 
-/** KPI atingimento: recebido acumulado (Jun+) ÷ meta anual R$ 10 mi (Jun–Dez). */
+/** KPI atingimento: recebido dos meses selecionados (Jun+) ÷ meta anual R$ 10 mi (Jun–Dez). */
 export function calcularAtingimentoMetaKpi(
   ano: number,
   rows: ReceitaMesRow[],
   ref = new Date(),
+  mesesIncluidos?: ReadonlySet<number> | null,
 ): AtingimentoMetaKpi {
   const rowsMeta = rows.filter((r) => r.metaBase > 0)
   const metaAnual = rowsMeta.reduce((s, r) => s + r.metaBase, 0)
-  const mesesMetaDecorridos = rowsMeta.filter((r) => !isMesFuturo(ano, r.mes, ref)).map((r) => r.mes)
-  const recebidoAcumulado = rowsMeta
-    .filter((r) => !isMesFuturo(ano, r.mes, ref))
+  const rowsDecorridos = rowsMeta.filter((r) => !isMesFuturo(ano, r.mes, ref))
+  const mesesMetaDecorridos = rowsDecorridos.map((r) => r.mes)
+  const mesesSelecionados =
+    mesesIncluidos && mesesIncluidos.size > 0
+      ? mesesMetaDecorridos.filter((m) => mesesIncluidos.has(m))
+      : mesesMetaDecorridos
+
+  const recebidoAcumulado = rowsDecorridos
+    .filter((r) => mesesSelecionados.includes(r.mes))
     .reduce((s, r) => s + r.recebido, 0)
   const pct = metaAnual > 0 ? (recebidoAcumulado / metaAnual) * 100 : 0
 
@@ -191,5 +199,6 @@ export function calcularAtingimentoMetaKpi(
     metaAnual,
     pct,
     mesesMetaDecorridos,
+    mesesSelecionados,
   }
 }

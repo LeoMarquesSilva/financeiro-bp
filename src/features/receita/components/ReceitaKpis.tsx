@@ -9,6 +9,7 @@ import { isMesFuturo } from '../utils/receitaMes'
 import { ReceitaPrevistoDetalheSheet } from './ReceitaPrevistoDetalheSheet'
 import { ReceitaRecebidoKpiDetalheSheet } from './ReceitaRecebidoKpiDetalheSheet'
 import { ReceitaEncargosKpiDetalheSheet } from './ReceitaEncargosKpiDetalheSheet'
+import { ReceitaAtingimentoMetaDetalheSheet } from './ReceitaAtingimentoMetaDetalheSheet'
 
 type Props = {
   rows: ReceitaMesRow[]
@@ -135,6 +136,8 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
   const [recebidoAberto, setRecebidoAberto] = useState(false)
   const [encargosAberto, setEncargosAberto] = useState(false)
   const [previstoAberto, setPrevistoAberto] = useState(false)
+  const [atingimentoAberto, setAtingimentoAberto] = useState(false)
+  const [mesesAtingimento, setMesesAtingimento] = useState<Set<number> | null>(null)
 
   if (loading) {
     return (
@@ -149,7 +152,7 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
   const rowsComDados = rows.filter((r) => !isMesFuturo(ano, r.mes))
   const totalRecebido = rowsComDados.reduce((s, r) => s + r.recebido, 0)
   const totalPrevisto = rows.reduce((s, r) => s + r.previsto, 0)
-  const atingimentoMeta = calcularAtingimentoMetaKpi(ano, rows)
+  const atingimentoMeta = calcularAtingimentoMetaKpi(ano, rows, new Date(), mesesAtingimento)
   const metaAnual = atingimentoMeta.metaAnual
   const pctMeta = atingimentoMeta.pct
   const totalEncargos = rowsComDados.reduce((s, r) => s + r.encargos, 0)
@@ -177,7 +180,7 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
   const previstoPeriodo = periodoAnoLabel(mesesNoResumo, ano)
   const mesesComRecebido = rowsComDados.filter((r) => r.recebido > 0).map((r) => r.mes)
   const recebidoPeriodo = periodoAnoLabel(mesesComRecebido, ano)
-  const atingimentoPeriodo = periodoAnoLabel(atingimentoMeta.mesesMetaDecorridos, ano)
+  const atingimentoPeriodo = periodoAnoLabel(atingimentoMeta.mesesSelecionados, ano)
 
   return (
     <section>
@@ -236,11 +239,13 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           valueTitle={`${formatPercent(pctMeta)} · ${formatCurrency(atingimentoMeta.recebidoAcumulado)} de ${formatCurrency(metaAnual)}`}
           hint={
             atingimentoPeriodo
-              ? `Recebido ${atingimentoPeriodo} ÷ meta ${formatCurrencyCompact(metaAnual)} (Jun–Dez)`
-              : `Recebido ÷ meta ${formatCurrencyCompact(metaAnual)} (Jun–Dez)`
+              ? `Recebido ${atingimentoPeriodo} ÷ meta ${formatCurrencyCompact(metaAnual)} (Jun–Dez) · selecionar meses`
+              : `Recebido ÷ meta ${formatCurrencyCompact(metaAnual)} (Jun–Dez) · selecionar meses`
           }
           iconColor={pctIcon}
           valueColor={pctColor}
+          accent="violet"
+          onClick={() => setAtingimentoAberto(true)}
         />
       </div>
 
@@ -266,6 +271,15 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
         ano={ano}
         rows={rows}
         totalPrevisto={totalPrevisto}
+      />
+
+      <ReceitaAtingimentoMetaDetalheSheet
+        open={atingimentoAberto}
+        onOpenChange={setAtingimentoAberto}
+        ano={ano}
+        rows={rows}
+        mesesIncluidos={mesesAtingimento}
+        onAplicar={setMesesAtingimento}
       />
     </section>
   )
