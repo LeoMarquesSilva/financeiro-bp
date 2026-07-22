@@ -33,7 +33,7 @@ import type {
   ReceitaMesRow,
   ReceitaRecebidoDepartamentoRow,
 } from '../types/receita.types'
-import type { ReceitaInadimplenciaDepartamentoMensalRow } from '../types/receitaInadimplencia.types'
+import type { ReceitaInadimplenciaDepartamentoMes } from '../types/receitaInadimplencia.types'
 import {
   RECEITA_CHART_AXIS,
   RECEITA_CHART_LABEL,
@@ -47,6 +47,8 @@ import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
 import { ReceitaRecebidoDetalheSheet } from './ReceitaRecebidoDetalheSheet'
 import { ReceitaSemAreaDetalheSheet } from './ReceitaSemAreaDetalheSheet'
 import { isMesFuturo, valorRecebidoGrafico, inadimplenciaGraficoComparativo, isMesAtual, type ReceitaGraficoMesOptions } from '../utils/receitaMes'
+import { calcularPctInadimplencia, valorExibicaoEvolucao, aplicarSelecaoGrupos, type SelecaoGruposPorMes } from '../utils/receitaInadimplenciaCalc'
+import { inadimplenciaAreaMes } from '../utils/receitaInadimplenciaAreaFilter'
 import {
   edgeAwareAnchor,
   labelYForPosition,
@@ -294,6 +296,7 @@ type AreaLinhaPoint = {
   previsto: number
   recebido: number | null
   inadimplencia: number | null
+  inadimplenciaPct: number | null
 }
 
 const AREA_LINHA_SERIES = [
@@ -329,14 +332,15 @@ const AREA_LINHA_SERIES = [
 
 /**
  * Série mensal (ano todo) de uma única área: meta individual (meta do mês × % da área),
- * previsto e recebido vindos do banco por departamento, e inadimplência somente nos meses
- * já congelados (não recalcula ao vivo — usa o snapshot do fechamento mensal).
+ * previsto e recebido vindos do banco por departamento, e inadimplência nos meses congelados
+ * com alocação VIOS por departamento (mesma regra da aba Inadimplência ao filtrar por área).
  */
 function buildAreaLinhaData(
   rows: ReceitaMesRow[],
   deptRowsRecebido: ReceitaRecebidoDepartamentoRow[],
   deptRowsPrevisto: ReceitaRecebidoDepartamentoRow[],
-  inadRows: ReceitaInadimplenciaDepartamentoMensalRow[],
+  deptInadPorMes: Record<number, ReceitaInadimplenciaDepartamentoMes[]>,
+  mesesCongelados: Set<number>,
   areaKey: string,
   areaPct: number,
   ano: number,
@@ -356,23 +360,28 @@ function buildAreaLinhaData(
     previstoPorMes.set(d.mes, (previstoPorMes.get(d.mes) ?? 0) + d.total)
   }
 
-  const inadimplenciaPorMes = new Map<number, number>()
-  for (const d of inadRows) {
-    if (departamentoNormKey(d.departamento) !== areaKey) continue
-    inadimplenciaPorMes.set(d.mes, (inadimplenciaPorMes.get(d.mes) ?? 0) + d.inadimplencia)
-  }
-
-  return rows.map((r) => ({
-    mes: r.mes,
-    mesLabel: r.mesLabel,
-    meta: r.meta > 0 ? (r.meta * pct) / 100 : null,
-    previsto: previstoPorMes.get(r.mes) ?? 0,
-    recebido: valorRecebidoGrafico(recebidoPorMes.get(r.mes) ?? 0, ano, r.mes, undefined, graficoOpts),
-    inadimplencia:
-      graficoOpts?.omitMesAtual && isMesAtual(ano, r.mes)
-        ? null
-        : inadimplenciaPorMes.get(r.mes) ?? null,
-  }))
+  return rows.map((r) => {
+    const previsto = previstoPorMes.get(r.mes) ?? 0
+    const inadimplenciaRaw =
+      mesesCongelados.has(r.mes) &&
+      !(graficoOpts?.omitMesAtual && isMesAtual(ano, r.mes))
+        ? inadimplenciaAreaMes(deptInadPorMes[r.mes] ?? [], areaKey)
+        : null
+    const inadimplencia =
+      inadimplenciaRaw != null && inadimplenciaRaw > 0 ? inadimplenciaRaw : null
+    return {
+      mes: r.mes,
+      mesLabel: r.mesLabel,
+      meta: r.meta > 0 ? (r.meta * pct) / 100 : null,
+      previsto,
+      recebido: valorRecebidoGrafico(recebidoPorMes.get(r.mes) ?? 0, ano, r.mes, undefined, graficoOpts),
+      inadimplencia,
+      inadimplenciaPct:
+        inadimplencia != null && previsto > 0
+          ? calcularPctInadimplencia(inadimplencia, previsto)
+          : null,
+    }
+  })
 }
 
 /** Rótulo do ponto da série de uma área. */
@@ -383,6 +392,7 @@ function AreaLinhaChangeLabel({
   offset = 10,
   stagger = 0,
   pctOfKey,
+  secondaryPctKey,
   dedupeFlat = false,
   valueKey,
 }: {
@@ -394,6 +404,8 @@ function AreaLinhaChangeLabel({
   stagger?: number
   /** Se informado, exibe na segunda linha o percentual do valor sobre este campo no mesmo mês. */
   pctOfKey?: keyof AreaLinhaPoint
+  /** Percentual já calculado (ex.: inadimplência congelada ÷ previsto da área). */
+  secondaryPctKey?: keyof AreaLinhaPoint
   dedupeFlat?: boolean
   valueKey?: keyof AreaLinhaPoint
 }) {
@@ -415,7 +427,11 @@ function AreaLinhaChangeLabel({
 
     const text = formatCurrency(num)
     let secondaryText: string | undefined
-    if (pctOfKey) {
+    if (secondaryPctKey) {
+      const pctRaw = data[index]?.[secondaryPctKey]
+      const pctNum = typeof pctRaw === 'number' ? pctRaw : null
+      if (pctNum != null) secondaryText = formatPercent(pctNum)
+    } else if (pctOfKey) {
       const denomRaw = data[index]?.[pctOfKey]
       const denomNum = typeof denomRaw === 'number' ? denomRaw : null
       if (denomNum != null && denomNum > 0) {
@@ -518,6 +534,14 @@ function AreaLinhaTooltip({
             {row.inadimplencia == null ? 'não congelado' : formatCurrency(row.inadimplencia)}
           </span>
         </li>
+        {row.inadimplencia != null && row.inadimplenciaPct != null && (
+          <li className="flex items-center justify-between gap-6">
+            <span className="text-slate-500">% inadimplência</span>
+            <span className="font-semibold tabular-nums text-red-600">
+              {formatPercent(row.inadimplenciaPct)}
+            </span>
+          </li>
+        )}
       </ul>
     </div>
   )
@@ -679,6 +703,7 @@ function ComparativoDotLabel({
   stagger = 0,
   dedupeFlat = false,
   getValueAt,
+  getSecondaryAt,
 }: {
   color: string
   percentMode: boolean
@@ -689,6 +714,8 @@ function ComparativoDotLabel({
   /** Omite rótulos intermediários quando o valor é igual ao mês anterior (meta flat). */
   dedupeFlat?: boolean
   getValueAt?: (index: number) => number | null | undefined
+  /** Segunda linha do rótulo (ex.: % inadimplência congelada). */
+  getSecondaryAt?: (index: number) => string | undefined
 }) {
   return function Label(props: LabelProps & { index?: number }) {
     const { x, y, value, index } = props
@@ -707,6 +734,7 @@ function ComparativoDotLabel({
 
     const text = percentMode ? formatPercentLabel(num) : formatCurrency(num)
     if (!text) return null
+    const secondaryText = index != null ? getSecondaryAt?.(index) : undefined
 
     const cx = Number(x)
     const cy = Number(y)
@@ -715,11 +743,12 @@ function ComparativoDotLabel({
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
     if (position === 'above') {
-      const vertical = resolveLabelVerticalPosition(cy, adjustedOffset, undefined, 'above')
+      const vertical = resolveLabelVerticalPosition(cy, adjustedOffset, secondaryText, 'above')
       const labelY = labelYForPosition(cy, adjustedOffset, vertical)
       return (
         <ChartLabelWithBackdrop
           text={text}
+          secondaryText={secondaryText}
           x={labelX}
           y={labelY}
           color={color}
@@ -733,6 +762,7 @@ function ComparativoDotLabel({
       return (
         <ChartLabelWithBackdrop
           text={text}
+          secondaryText={secondaryText}
           x={labelX}
           y={cy + adjustedOffset}
           color={color}
@@ -746,6 +776,7 @@ function ComparativoDotLabel({
     return (
       <ChartLabelWithBackdrop
         text={text}
+        secondaryText={secondaryText}
         x={rightAnchor === 'end' ? cx - 8 : cx + 8}
         y={cy}
         color={color}
@@ -941,29 +972,78 @@ export function ReceitaComparativoChart({
   })
 
   const {
-    data: inadDeptRows,
+    data: inadDeptPorMes,
     isLoading: inadDeptLoading,
     error: inadDeptError,
   } = useQuery({
-    queryKey: ['receita-inadimplencia', 'departamento-mensal-congelado', ano],
-    queryFn: () => receitaInadimplenciaService.fetchDepartamentosMensalCongelado(ano),
-    enabled: porAreaMode && areaLinhaSelecionada != null,
+    queryKey: ['receita-inadimplencia', 'dept-mes-area-chart', ano, meses],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        meses.map(async (mes) => {
+          const rows = await receitaInadimplenciaService.fetchDepartamentosMes(ano, mes)
+          return [mes, rows] as const
+        }),
+      )
+      return Object.fromEntries(entries) as Record<number, ReceitaInadimplenciaDepartamentoMes[]>
+    },
+    enabled: porAreaMode && areaLinhaSelecionada != null && meses.length > 0,
   })
+
+  const inadEvolucaoEnabled = !porAreaMode || areaLinhaSelecionada != null
 
   const { data: inadEvolucao } = useQuery({
     queryKey: ['receita-inadimplencia', 'comparativo-evolucao', ano],
     queryFn: () =>
       receitaInadimplenciaService.fetchDashboard({ ano, mesInicio: 1, mesFim: 12 }),
+    enabled: inadEvolucaoEnabled,
+  })
+
+  const { data: inadSelecoesMes } = useQuery({
+    queryKey: ['receita-inadimplencia', 'selecoes-mes-chart', ano],
+    queryFn: () => receitaInadimplenciaService.fetchSelecoesMesPeriodo(ano, 1, 12),
     enabled: !porAreaMode,
   })
 
-  const inadimplenciaPorMes = useMemo(() => {
-    const map = new Map<number, number>()
+  const { data: inadGruposPorMes } = useQuery({
+    queryKey: ['receita-inadimplencia', 'grupos-mes-chart', ano, inadSelecoesMes],
+    queryFn: async () => {
+      const porMes: Record<number, Awaited<ReturnType<typeof receitaInadimplenciaService.fetchGruposMes>>> = {}
+      await Promise.all(
+        (inadSelecoesMes ?? []).map(async ({ mes }) => {
+          porMes[mes] = await receitaInadimplenciaService.fetchGruposMes(ano, mes)
+        }),
+      )
+      return porMes
+    },
+    enabled: !porAreaMode && (inadSelecoesMes?.length ?? 0) > 0,
+  })
+
+  const inadMesesCongelados = useMemo(() => {
+    const set = new Set<number>()
     for (const m of inadEvolucao?.evolucao ?? []) {
-      if (m.valor > 0) map.set(m.mes, m.valor)
+      if (m.congelado) set.add(m.mes)
+    }
+    return set
+  }, [inadEvolucao])
+
+  const inadimplenciaEvolucaoExibicao = useMemo(() => {
+    if (!inadEvolucao) return null
+    const selecaoPorMes: SelecaoGruposPorMes = {}
+    for (const s of inadSelecoesMes ?? []) {
+      selecaoPorMes[s.mes] = new Set(s.grupos_incluidos)
+    }
+    return aplicarSelecaoGrupos(inadEvolucao, inadGruposPorMes ?? {}, selecaoPorMes)
+  }, [inadEvolucao, inadSelecoesMes, inadGruposPorMes])
+
+  const inadimplenciaCongeladaPorMes = useMemo(() => {
+    const map = new Map<number, { valor: number; pct: number }>()
+    for (const m of inadimplenciaEvolucaoExibicao?.evolucao ?? []) {
+      if (!m.congelado) continue
+      const { valor, pct } = valorExibicaoEvolucao(m)
+      if (valor > 0) map.set(m.mes, { valor, pct })
     }
     return map
-  }, [inadEvolucao])
+  }, [inadimplenciaEvolucaoExibicao])
 
   const graficoOpts = useMemo<ReceitaGraficoMesOptions>(
     () => ({ omitMesAtual: resultadoMode && resultadoDisponivel }),
@@ -1025,7 +1105,7 @@ export function ReceitaComparativoChart({
   const rawChartData: ChartPoint[] = useMemo(
     () =>
       rows.map((r) => {
-        const inadRaw = inadimplenciaPorMes.get(r.mes)
+        const inadCongelada = inadimplenciaCongeladaPorMes.get(r.mes)
         return {
           mesLabel: r.mesLabel,
           meta: r.meta > 0 ? r.meta : null,
@@ -1033,10 +1113,16 @@ export function ReceitaComparativoChart({
           projetadoReal: r.projetadoReal,
           recebido: valorRecebidoGrafico(r.recebido, ano, r.mes, undefined, graficoOpts),
           previsto: r.previsto,
-          inadimplencia: inadimplenciaGraficoComparativo(inadRaw, ano, r.mes, undefined, graficoOpts),
+          inadimplencia: inadimplenciaGraficoComparativo(
+            inadCongelada?.valor,
+            ano,
+            r.mes,
+            undefined,
+            graficoOpts,
+          ),
         }
       }),
-    [rows, ano, inadimplenciaPorMes, graficoOpts],
+    [rows, ano, inadimplenciaCongeladaPorMes, graficoOpts],
   )
 
   const chartData = useMemo(
@@ -1113,7 +1199,8 @@ export function ReceitaComparativoChart({
       rows,
       deptRows ?? [],
       previstoDeptRows ?? [],
-      inadDeptRows ?? [],
+      inadDeptPorMes ?? {},
+      inadMesesCongelados,
       areaLinhaSelecionada,
       areaLinhaAtual.pct,
       ano,
@@ -1123,7 +1210,8 @@ export function ReceitaComparativoChart({
     rows,
     deptRows,
     previstoDeptRows,
-    inadDeptRows,
+    inadDeptPorMes,
+    inadMesesCongelados,
     areaLinhaSelecionada,
     areaLinhaAtual,
     ano,
@@ -1350,7 +1438,7 @@ export function ReceitaComparativoChart({
         <div ref={chartExportRef} className="flex flex-col">
           {porAreaMode ? (
           areaLinhaSelecionada != null ? (
-          deptLoading || previstoDeptLoading || inadDeptLoading ? (
+          deptLoading || previstoDeptLoading || inadDeptLoading || (inadEvolucaoEnabled && !inadEvolucao) ? (
             <div className="flex h-[300px] items-center justify-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-5 w-5 animate-spin" />
               Carregando dados da área…
@@ -1525,7 +1613,7 @@ export function ReceitaComparativoChart({
                         position: 'above',
                         offset: s.key === 'inadimplencia' ? 22 : 20,
                         stagger: s.key === 'inadimplencia' ? 18 : 14,
-                        pctOfKey: s.key === 'inadimplencia' ? 'previsto' : undefined,
+                        secondaryPctKey: s.key === 'inadimplencia' ? 'inadimplenciaPct' : undefined,
                         dedupeFlat: s.key === 'meta',
                         valueKey: s.key === 'meta' ? 'meta' : undefined,
                       })}
@@ -1546,7 +1634,7 @@ export function ReceitaComparativoChart({
             ))}
           </div>
           <p className="mt-2 text-center text-[11px] text-slate-400">
-            Inadimplência exibida apenas para meses já congelados na aba Inadimplência.
+            Inadimplência por área: meses congelados, alocação VIOS (igual à aba Inadimplência com filtro de área).
           </p>
           </>
           )
@@ -1854,6 +1942,12 @@ export function ReceitaComparativoChart({
                         total: chartData.length,
                         offset: 22,
                         stagger: 18,
+                        getSecondaryAt: (i) => {
+                          const mes = rows[i]?.mes
+                          if (mes == null) return undefined
+                          const pct = inadimplenciaCongeladaPorMes.get(mes)?.pct
+                          return pct != null ? formatPercent(pct) : undefined
+                        },
                       })}
                     />
                   )}
