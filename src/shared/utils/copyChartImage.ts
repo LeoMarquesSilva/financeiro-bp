@@ -1,5 +1,6 @@
 const DEFAULT_SCALE = 2
 const LEGEND_GAP = 12
+const EXPORT_TABLE_GAP = 16
 const EXPORT_TEXT_COLOR = '#000000'
 const LEGEND_FONT = '600 11px system-ui, -apple-system, sans-serif'
 const LEGEND_PAD_X = 10
@@ -1648,12 +1649,23 @@ export async function chartToPngBlob(
 ): Promise<Blob> {
   const legendEl = exportRoot.querySelector<HTMLElement>('[data-chart-legend]')
   const plotEl = exportRoot.querySelector<HTMLElement>('[data-chart-plot]')
+  const tableEl = exportRoot.querySelector<HTMLElement>('[data-chart-export-table]')
 
   if (!plotEl) {
     throw new Error('Área do gráfico não encontrada')
   }
 
-  return compositeToPngBlob(legendEl, plotEl, scale)
+  const chartBlob = await compositeToPngBlob(legendEl, plotEl, scale)
+  if (!tableEl) return chartBlob
+
+  const tableGapPx = Math.round(EXPORT_TABLE_GAP * scale)
+  const [chartPart, tablePart] = await Promise.all([
+    measureBlobPart(chartBlob),
+    measureBlobPart(await htmlElementToPngBlob(tableEl, scale)),
+  ])
+
+  const stacked = await compositeColumnParts([chartPart, tablePart], tableGapPx)
+  return stacked.blob
 }
 
 export async function copyChartImageToClipboard(

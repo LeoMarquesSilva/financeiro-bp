@@ -1693,14 +1693,18 @@ export function ReceitaComparativoChart({
           </ResponsiveContainer>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
+          <div
+            className="mt-4 overflow-x-auto"
+            data-chart-export-table
+            data-chart-export-expand-width
+          >
             <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                   <th className="py-2 pr-3">Área</th>
                   <th className="px-3 py-2 text-center">% meta</th>
                   <th className="px-3 py-2 text-right">Recebido</th>
-                  <th className="px-3 py-2 text-right">Meta</th>
+                  <th className="px-3 py-2 text-center">Meta</th>
                   <th className="px-3 py-2 text-center">Gap</th>
                   <th className="px-3 py-2 text-center">Atingido</th>
                   <th
@@ -1804,7 +1808,10 @@ export function ReceitaComparativoChart({
           </div>
 
           {areaGapRecebidoSemDepartamento > 1 && (
-            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-amber-700">
+            <p
+              className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-amber-700"
+              data-chart-export-ignore
+            >
               <span>
                 + {formatCurrency(areaGapRecebidoSemDepartamento)} recebido sem departamento
                 vinculado (não entra no rateio por área).
