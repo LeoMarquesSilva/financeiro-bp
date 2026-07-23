@@ -197,7 +197,8 @@ export function ReceitaInadimplenciaGrupoSheet({
             )}
           </div>
           <SheetDescription className="text-left">
-            Selecione os grupos que compõem a inadimplência do mês.
+            Selecione os grupos que compõem a inadimplência do mês. Meses encerrados são congelados
+            automaticamente na virada do mês (seleção salva ou todos os inadimplentes).
             {congelado && fechamento?.valor_total != null && (
               <span className="mt-1 block text-slate-600">
                 Valor congelado na evolução: {formatCurrency(fechamento.valor_total)}

@@ -860,7 +860,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                       key={m.mes}
                       className="pb-2 px-2 text-center text-[11px] font-bold uppercase tracking-wider"
                       style={{ color: NAVY }}
-                      title={m.congelado ? undefined : 'Valor calculado ao vivo — será congelado no próximo mês'}
+                      title={m.congelado ? undefined : 'Valor calculado ao vivo — congelamento automático na virada do mês'}
                     >
                       {m.mes_label}
                       {!m.congelado && <span className="text-amber-600">*</span>}
@@ -912,7 +912,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 Valores faturados no mês (vencimento) em inadimplência — inclui clientes inativos — clique no valor para selecionar grupos
                 {dashboard.evolucao.some((m: ReceitaInadimplenciaEvolucaoMes) => !m.congelado) && (
                   <span className="block text-amber-700/90">
-                    * Mês ainda não congelado — valor calculado com dados atuais do VIOS
+                    * Mês corrente — valor ao vivo; meses encerrados são congelados automaticamente na virada
                   </span>
                 )}
                 {dashboard.evolucao.some((m) => m.ajustado) && (
