@@ -95,7 +95,7 @@ export function CobrancaSeguimentoPage() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
             <Clock className="h-6 w-6 text-slate-600" />
-            Seguimento de Cobrança
+            Inadimplência Pontual
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
             Títulos vencidos de 1 a 60 dias após a cobrança D+1. Acima de 60 dias, incluir no Comitê

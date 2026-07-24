@@ -12,7 +12,7 @@ export async function incluirGrupoNoComiteInadimplencia(
   options?: IncluirOptions,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const statusClasse = options?.statusClasse ?? 'C'
-  const observacoes = `Incluído via Seguimento de Cobrança · ${grupo.max_dias_atraso} dias de atraso · ${grupo.qtd_titulos} título(s).`
+  const observacoes = `Incluído via Inadimplência Pontual · ${grupo.max_dias_atraso} dias de atraso · ${grupo.qtd_titulos} título(s).`
 
   const existenteResolvido = await inadimplenciaService.findResolvidoByGrupo(grupo.grupo_chave)
   if (existenteResolvido) {
