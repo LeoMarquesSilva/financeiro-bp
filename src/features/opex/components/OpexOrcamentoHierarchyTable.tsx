@@ -6,9 +6,11 @@ import { MESES_CURTOS } from '../constants'
 import type { OpexOrcamentoLinha } from '../types/opex.types'
 import {
   departamentosDoFornecedor,
+  descricaoLinhaLabel,
   fornecedoresDoPlanoMicro,
   linhasPorDescricao,
   orcamentoPathKey,
+  partitionDescricoesOrcamento,
   planosMicroDoGrupo,
   type PlanoContasResumo,
 } from '../utils/opexOrcamentoGrouping'
@@ -38,6 +40,72 @@ function ChevronToggle({ expanded }: { expanded: boolean }) {
     <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
   ) : (
     <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+  )
+}
+
+function OrcamentoMesLinhas({
+  linhas,
+  tituloBase,
+  onEditarValor,
+  onExcluir,
+  ciLabel,
+}: {
+  linhas: OpexOrcamentoLinha[]
+  tituloBase: string
+  onEditarValor: (linha: OpexOrcamentoLinha, titulo: string) => void
+  onExcluir: (id: string) => void
+  ciLabel?: boolean
+}) {
+  return (
+    <ul className="space-y-1 border-t border-slate-100 bg-slate-50/50 px-2 py-2">
+      {linhas.map((l) => {
+        const editTitulo = `${tituloBase} · ${MESES_CURTOS[l.mes - 1]}`
+        return (
+          <li
+            key={l.id}
+            className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-md border border-slate-100 bg-white px-2.5 py-1.5 text-xs sm:grid-cols-[3.5rem_minmax(0,1fr)_auto]"
+          >
+            <span className="font-medium uppercase text-slate-500">{MESES_CURTOS[l.mes - 1]}</span>
+            <button
+              type="button"
+              onClick={() => onEditarValor(l, editTitulo)}
+              className="min-w-0 text-left tabular-nums font-medium text-slate-800 transition-colors hover:text-violet-800"
+              title="Editar valor"
+            >
+              {ciLabel ? (
+                <span className="block truncate">
+                  <span className="text-slate-500">{l.titulo_ref.trim() || descricaoLinhaLabel(l)} · </span>
+                  {formatCurrency(l.valor)}
+                </span>
+              ) : (
+                formatCurrency(l.valor)
+              )}
+            </button>
+            <div className="flex justify-end gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title="Editar valor"
+                onClick={() => onEditarValor(l, editTitulo)}
+              >
+                <Pencil className="h-3 w-3" aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-red-600 hover:text-red-700"
+                onClick={() => onExcluir(l.id)}
+              >
+                <Trash2 className="h-3 w-3" aria-hidden />
+              </Button>
+            </div>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -229,6 +297,20 @@ export function OpexOrcamentoHierarchyTable({
                                               )
                                               const deptExpandido = departamentosAbertos.has(deptKey)
                                               const descricoes = linhasPorDescricao(d.linhas)
+                                              const { descricoesNormais, linhasCiFlat } =
+                                                partitionDescricoesOrcamento(descricoes)
+                                              const tituloBaseDept = `${g.grupoConta} · ${m.planoMicro} · ${f.fornecedor} · ${d.departamento}`
+                                              const qtdCi = new Set(
+                                                linhasCiFlat.map((l) => l.titulo_ref.trim() || descricaoLinhaLabel(l)),
+                                              ).size
+                                              const deptDetalhe =
+                                                descricoesNormais.length > 0 && qtdCi > 0
+                                                  ? `${descricoesNormais.length} descrições · ${qtdCi} CI`
+                                                  : descricoesNormais.length > 0
+                                                    ? `${descricoesNormais.length} descrições`
+                                                    : qtdCi > 0
+                                                      ? `${linhasCiFlat.length} lançamentos`
+                                                      : 'Sem lançamentos'
                                               return (
                                                 <li
                                                   key={deptKey}
@@ -245,7 +327,7 @@ export function OpexOrcamentoHierarchyTable({
                                                       <span className="min-w-0">
                                                         <span className="block">{d.departamento}</span>
                                                         <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
-                                                          Departamento · {d.qtdDescricoes} descrições
+                                                          Departamento · {deptDetalhe}
                                                         </span>
                                                       </span>
                                                     </button>
@@ -281,7 +363,16 @@ export function OpexOrcamentoHierarchyTable({
                                                   </div>
                                                   {deptExpandido && (
                                                     <ul className="space-y-2 border-t border-slate-100 bg-slate-50/50 px-2 py-2">
-                                                      {descricoes.map((desc) => {
+                                                      {linhasCiFlat.length > 0 && (
+                                                        <OrcamentoMesLinhas
+                                                          linhas={linhasCiFlat}
+                                                          tituloBase={tituloBaseDept}
+                                                          onEditarValor={onEditarValor}
+                                                          onExcluir={onExcluir}
+                                                          ciLabel={qtdCi > 1}
+                                                        />
+                                                      )}
+                                                      {descricoesNormais.map((desc) => {
                                                         const linhaRef = desc.linhas[0]!
                                                         const descKey = orcamentoPathKey(
                                                           g.grupoConta,
@@ -316,50 +407,12 @@ export function OpexOrcamentoHierarchyTable({
                                                               </span>
                                                             </button>
                                                             {descExpandida && (
-                                                              <ul className="space-y-1 border-t border-slate-100 bg-slate-50/50 px-2 py-2">
-                                                                {desc.linhas.map((l) => {
-                                                                  const editTitulo = `${tituloBase} · ${MESES_CURTOS[l.mes - 1]}`
-                                                                  return (
-                                                                    <li
-                                                                      key={l.id}
-                                                                      className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-md border border-slate-100 bg-white px-2.5 py-1.5 text-xs sm:grid-cols-[3.5rem_minmax(0,1fr)_auto]"
-                                                                    >
-                                                                      <span className="font-medium uppercase text-slate-500">
-                                                                        {MESES_CURTOS[l.mes - 1]}
-                                                                      </span>
-                                                                      <button
-                                                                        type="button"
-                                                                        onClick={() => onEditarValor(l, editTitulo)}
-                                                                        className="text-left tabular-nums font-medium text-slate-800 transition-colors hover:text-violet-800"
-                                                                        title="Editar valor"
-                                                                      >
-                                                                        {formatCurrency(l.valor)}
-                                                                      </button>
-                                                                      <div className="flex justify-end gap-1">
-                                                                        <Button
-                                                                          type="button"
-                                                                          variant="ghost"
-                                                                          size="icon"
-                                                                          className="h-7 w-7"
-                                                                          title="Editar valor"
-                                                                          onClick={() => onEditarValor(l, editTitulo)}
-                                                                        >
-                                                                          <Pencil className="h-3 w-3" aria-hidden />
-                                                                        </Button>
-                                                                        <Button
-                                                                          type="button"
-                                                                          variant="ghost"
-                                                                          size="icon"
-                                                                          className="h-7 w-7 text-red-600 hover:text-red-700"
-                                                                          onClick={() => onExcluir(l.id)}
-                                                                        >
-                                                                          <Trash2 className="h-3 w-3" aria-hidden />
-                                                                        </Button>
-                                                                      </div>
-                                                                    </li>
-                                                                  )
-                                                                })}
-                                                              </ul>
+                                                              <OrcamentoMesLinhas
+                                                                linhas={desc.linhas}
+                                                                tituloBase={tituloBase}
+                                                                onEditarValor={onEditarValor}
+                                                                onExcluir={onExcluir}
+                                                              />
                                                             )}
                                                           </li>
                                                         )

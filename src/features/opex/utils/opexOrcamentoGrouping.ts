@@ -88,6 +88,28 @@ export function descricaoLinhaLabel(l: OpexOrcamentoLinha): string {
   return parseFornecedorDescricao(l).descricaoDetalhe
 }
 
+/** Referência VIOS (ex.: "CI 11911") — não vira nível próprio na hierarquia. */
+export function isCiOrcamentoReferencia(text: string): boolean {
+  return /^CI\s*\d+/i.test(text.trim())
+}
+
+export function partitionDescricoesOrcamento(descricoes: DescricaoOrcamentoResumo[]): {
+  descricoesNormais: DescricaoOrcamentoResumo[]
+  linhasCiFlat: OpexOrcamentoLinha[]
+} {
+  const descricoesNormais: DescricaoOrcamentoResumo[] = []
+  const linhasCiFlat: OpexOrcamentoLinha[] = []
+  for (const desc of descricoes) {
+    if (isCiOrcamentoReferencia(desc.descricao)) {
+      linhasCiFlat.push(...desc.linhas)
+    } else {
+      descricoesNormais.push(desc)
+    }
+  }
+  linhasCiFlat.sort((a, b) => a.mes - b.mes || a.titulo_ref.localeCompare(b.titulo_ref, 'pt-BR'))
+  return { descricoesNormais, linhasCiFlat }
+}
+
 export function planosContasDasLinhas(linhas: OpexOrcamentoLinha[]): PlanoContasResumo[] {
   const map = new Map<string, OpexOrcamentoLinha[]>()
   for (const l of linhas) {
@@ -163,7 +185,9 @@ export function departamentosDoFornecedor(
       total: deptLinhas.reduce((s, item) => s + item.valor, 0),
       linhas: sortLinhasOrcamento(deptLinhas),
       qtdDescricoes: new Set(
-        deptLinhas.map((item) => `${descricaoLinhaLabel(item)}\0${item.titulo_ref}`),
+        deptLinhas
+          .filter((item) => !isCiOrcamentoReferencia(descricaoLinhaLabel(item)))
+          .map((item) => `${descricaoLinhaLabel(item)}\0${item.titulo_ref}`),
       ).size,
     }))
     .sort((a, b) => b.total - a.total || a.departamento.localeCompare(b.departamento, 'pt-BR'))
