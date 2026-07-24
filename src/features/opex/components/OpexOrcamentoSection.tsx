@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ComponentProps } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,
   ChevronDown,
@@ -14,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -25,8 +27,10 @@ import {
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyInput, formatDate, parseCurrencyBr } from '@/shared/utils/format'
 import { MESES_CURTOS, MESES_LONGOS } from '../constants'
+import { toggleMesFiltro } from '../utils/opexPeriodo'
 import { useOpexOrcamento } from '../hooks/useOpexOrcamento'
 import { opexOrcamentoService } from '../services/opexOrcamentoService'
+import { opexService } from '../services/opexService'
 import {
   exportOrcamentoBackupExcel,
   parseOrcamentoXlsxFile,
@@ -37,12 +41,14 @@ import {
   countFornecedoresUnicos,
   countPlanosContasUnicos,
   countPlanosMicroUnicos,
+  departamentoOrcamentoLabel,
   parseFornecedorDescricao,
   planosContasDasLinhas,
 } from '../utils/opexOrcamentoGrouping'
+import { departamentoLabel } from '../utils/departamentoLabel'
 import { OpexOrcamentoMesChart } from './OpexOrcamentoMesChart'
 import { OpexOrcamentoHierarchyTable } from './OpexOrcamentoHierarchyTable'
-import type { OpexOrcamentoLinha } from '../types/opex.types'
+import type { OpexDashboard, OpexOrcamentoLinha } from '../types/opex.types'
 
 function numberToCurrencyInput(value: number): string {
   return formatCurrencyInput(String(Math.round(value * 100)))
@@ -79,11 +85,9 @@ type Props = {
 }
 
 type LinhaForm = {
-  mes: string
+  meses: number[]
   grupo_conta: string
   plano_contas: string
-  conta_numero: string
-  titulo_ref: string
   descricao: string
   departamento: string
   valor: string
@@ -95,15 +99,21 @@ type ValorEditContext = {
 }
 
 const emptyForm = (): LinhaForm => ({
-  mes: '1',
+  meses: [],
   grupo_conta: '',
   plano_contas: '',
-  conta_numero: '',
-  titulo_ref: '',
   descricao: '',
   departamento: '',
   valor: '',
 })
+
+const MESES_ANO = Array.from({ length: 12 }, (_, i) => i + 1)
+
+const ORCAMENTO_FIELD_SELECT =
+  'flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/25 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400'
+
+const ORCAMENTO_MES_CHIP =
+  'rounded-lg border px-2 py-2 text-xs font-medium capitalize transition-colors sm:py-1.5'
 
 export function OpexOrcamentoSection({ ano }: Props) {
   const { meta, linhas, isLoading, invalidate } = useOpexOrcamento(ano)
@@ -156,6 +166,73 @@ export function OpexOrcamentoSection({ ano }: Props) {
     () => planosContasDasLinhas(linhasFiltradas),
     [linhasFiltradas],
   )
+
+  const { data: dashboardGrupos } = useQuery({
+    queryKey: ['opex', 'grupos-conta-opcoes', ano],
+    queryFn: () => opexService.fetchDashboard(ano),
+    staleTime: 5 * 60 * 1000,
+    select: (data: OpexDashboard) =>
+      data.grupos.map((g) => g.grupo_conta).filter((g) => g.trim()),
+  })
+
+  const grupoContaOpcoes = useMemo(() => {
+    const set = new Set<string>(dashboardGrupos ?? [])
+    for (const l of linhas) {
+      const g = l.grupo_conta.trim()
+      if (g) set.add(g)
+    }
+    if (form.grupo_conta.trim()) set.add(form.grupo_conta.trim())
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [dashboardGrupos, linhas, form.grupo_conta])
+
+  const grupoContaSelecionado = form.grupo_conta.trim()
+
+  const { data: planosDoGrupo } = useQuery({
+    queryKey: ['opex', 'planos-micro-opcoes', ano, grupoContaSelecionado],
+    queryFn: () => opexService.fetchPlanosGrupo(ano, grupoContaSelecionado),
+    enabled: dialogOpen && grupoContaSelecionado.length > 0,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const planoMicroOpcoes = useMemo(() => {
+    if (!grupoContaSelecionado) return []
+    const set = new Set<string>()
+    for (const p of planosDoGrupo ?? []) {
+      const plano = p.plano_contas.trim()
+      if (plano) set.add(plano)
+    }
+    for (const l of linhas) {
+      if (l.grupo_conta.trim() === grupoContaSelecionado) {
+        const plano = l.plano_contas.trim()
+        if (plano) set.add(plano)
+      }
+    }
+    if (form.plano_contas.trim()) set.add(form.plano_contas.trim())
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [grupoContaSelecionado, planosDoGrupo, linhas, form.plano_contas])
+
+  const { data: departamentosVios } = useQuery({
+    queryKey: ['opex', 'departamentos-opcoes', ano],
+    queryFn: () => opexService.fetchDepartamentos(ano),
+    enabled: dialogOpen,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const departamentoOpcoes = useMemo(() => {
+    const set = new Set<string>()
+    for (const d of departamentosVios ?? []) {
+      const dept = d.departamento.trim()
+      if (dept && dept !== 'Sem departamento') set.add(dept)
+    }
+    for (const l of linhas) {
+      const dept = departamentoOrcamentoLabel(l)
+      if (dept && dept !== 'Sem departamento') set.add(dept)
+    }
+    if (form.departamento.trim()) set.add(form.departamento.trim())
+    return Array.from(set).sort((a, b) =>
+      departamentoLabel(a).localeCompare(departamentoLabel(b), 'pt-BR'),
+    )
+  }, [departamentosVios, linhas, form.departamento])
 
   const toggleSet = (setter: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void) =>
     (key: string) => {
@@ -265,32 +342,56 @@ export function OpexOrcamentoSection({ ano }: Props) {
 
   const abrirNovaLinha = () => {
     setEditId(null)
-    setForm(emptyForm())
+    const mesDefault = mesFiltro ?? new Date().getMonth() + 1
+    setForm({ ...emptyForm(), meses: [mesDefault] })
     setDialogOpen(true)
   }
 
   const handleSalvarLinha = async () => {
-    const mes = Number(form.mes)
+    const meses = [...form.meses].sort((a, b) => a - b)
     const valor = parseCurrencyBr(form.valor)
-    if (!mes || mes < 1 || mes > 12 || !form.grupo_conta.trim() || !form.plano_contas.trim() || valor <= 0) {
-      setErro('Preencha mês, plano contas, plano micro e valor.')
+    if (
+      !meses.length ||
+      meses.some((m) => m < 1 || m > 12) ||
+      !form.grupo_conta.trim() ||
+      !form.plano_contas.trim() ||
+      !form.departamento.trim() ||
+      valor <= 0
+    ) {
+      setErro('Selecione ao menos um mês e preencha plano contas, plano micro, departamento e valor.')
       return
     }
     setSalvando(true)
     setErro(null)
     try {
-      await opexOrcamentoService.upsertLinha({
-        id: editId,
-        ano: editId ? undefined : ano,
-        mes,
+      const titulo_ref = form.descricao.trim() || form.departamento.trim() || '—'
+      const payload = {
         grupo_conta: form.grupo_conta.trim(),
         plano_contas: form.plano_contas.trim(),
-        conta_numero: form.conta_numero.trim(),
-        titulo_ref: form.titulo_ref.trim() || '—',
+        conta_numero: '',
+        titulo_ref,
         descricao: form.descricao.trim(),
-        departamento: form.departamento.trim() || 'Sem departamento',
+        departamento: form.departamento.trim(),
         valor,
-      })
+      }
+
+      if (editId) {
+        await opexOrcamentoService.upsertLinha({
+          id: editId,
+          mes: meses[0],
+          ...payload,
+        })
+      } else {
+        await Promise.all(
+          meses.map((mes) =>
+            opexOrcamentoService.upsertLinha({
+              ano,
+              mes,
+              ...payload,
+            }),
+          ),
+        )
+      }
       setDialogOpen(false)
       await invalidate()
     } catch (e) {
@@ -488,19 +589,21 @@ export function OpexOrcamentoSection({ ano }: Props) {
               {formatCurrency(importPreview?.totalGeral ?? 0)}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-            {importPreview?.preview.map((l, i) => (
-              <div key={i} className="flex justify-between gap-2 py-1">
-                <span className="truncate">
-                  {MESES_CURTOS[l.mes - 1]} · {l.grupo_conta} / {l.plano_contas}
-                </span>
-                <span className="shrink-0 tabular-nums">{formatCurrency(l.valor)}</span>
-              </div>
-            ))}
+          <div className="space-y-4 px-6 py-4">
+            <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-xs">
+              {importPreview?.preview.map((l, i) => (
+                <div key={i} className="flex justify-between gap-3 py-1.5">
+                  <span className="truncate">
+                    {MESES_CURTOS[l.mes - 1]} · {l.grupo_conta} / {l.plano_contas}
+                  </span>
+                  <span className="shrink-0 tabular-nums">{formatCurrency(l.valor)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs leading-relaxed text-amber-700">
+              Isso substituirá todo o orçamento de {ano} existente.
+            </p>
           </div>
-          <p className="text-xs text-amber-700">
-            Isso substituirá todo o orçamento de {ano} existente.
-          </p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setImportPreview(null)}>
               Cancelar
@@ -519,19 +622,21 @@ export function OpexOrcamentoSection({ ano }: Props) {
             <DialogDescription>{valorEdit?.titulo}</DialogDescription>
           </DialogHeader>
           {valorEdit && (
-            <div className="space-y-4">
-              <label className="block text-xs text-slate-600">
-                Valor em {MESES_LONGOS[valorEdit.linha.mes - 1]} ({MESES_CURTOS[valorEdit.linha.mes - 1]})
+            <div className="space-y-4 px-6 py-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="orcamento-valor-edit">
+                  Valor em {MESES_LONGOS[valorEdit.linha.mes - 1]} ({MESES_CURTOS[valorEdit.linha.mes - 1]})
+                </Label>
                 <CurrencyBrInput
+                  id="orcamento-valor-edit"
                   value={valorInput}
                   onValueChange={setValorInput}
                   placeholder="0,00"
-                  className="mt-1"
                   autoFocus
                 />
-              </label>
+              </div>
               {valorEdit.linha.mes < 12 && (
-                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-3">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
                   <Checkbox
                     checked={replicarProximos}
                     onCheckedChange={(checked) => setReplicarProximos(checked === true)}
@@ -566,59 +671,160 @@ export function OpexOrcamentoSection({ ano }: Props) {
       </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="gap-0 overflow-hidden sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{editId ? 'Editar linha' : 'Nova linha de orçamento'}</DialogTitle>
+            <DialogDescription>
+              Informe plano, departamento e valor. O lançamento é replicado em cada mês selecionado.
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-slate-600">
-              Mês
-              <select
-                value={form.mes}
-                onChange={(e) => setForm((f) => ({ ...f, mes: e.target.value }))}
-                className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm"
-              >
-                {MESES_CURTOS.map((label, i) => (
-                  <option key={label} value={i + 1}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-slate-600">
-              Valor
+          <div className="space-y-5 px-6 py-5">
+            <section className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-slate-700">Meses</Label>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, meses: MESES_ANO }))}
+                    className={cn(
+                      'rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                      form.meses.length === 12
+                        ? 'border-violet-400 bg-violet-100 text-violet-900'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-violet-200',
+                    )}
+                  >
+                    Ano inteiro
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, meses: [] }))}
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition-colors hover:border-violet-200"
+                  >
+                    Limpar
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+                {MESES_CURTOS.map((label, idx) => {
+                  const mes = idx + 1
+                  const selected = form.meses.includes(mes)
+                  return (
+                    <button
+                      key={mes}
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          meses: toggleMesFiltro(f.meses, mes),
+                        }))
+                      }
+                      className={cn(
+                        ORCAMENTO_MES_CHIP,
+                        selected
+                          ? 'border-violet-400 bg-violet-100 text-violet-900 shadow-sm'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:bg-violet-50/60',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                {form.meses.length === 0
+                  ? 'Selecione um ou mais meses — o valor será replicado em cada um.'
+                  : form.meses.length === 1
+                    ? `1 mês selecionado (${MESES_LONGOS[form.meses[0]! - 1]})`
+                    : `${form.meses.length} meses selecionados — valor replicado em cada um`}
+              </p>
+            </section>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="orcamento-valor">Valor</Label>
               <CurrencyBrInput
+                id="orcamento-valor"
                 value={form.valor}
                 onValueChange={(valor) => setForm((f) => ({ ...f, valor }))}
-                className="mt-1"
               />
-            </label>
-            <label className="text-xs text-slate-600 sm:col-span-2">
-              Plano contas
-              <Input value={form.grupo_conta} onChange={(e) => setForm((f) => ({ ...f, grupo_conta: e.target.value }))} className="mt-1" />
-            </label>
-            <label className="text-xs text-slate-600 sm:col-span-2">
-              Plano de contas micro
-              <Input value={form.plano_contas} onChange={(e) => setForm((f) => ({ ...f, plano_contas: e.target.value }))} className="mt-1" />
-            </label>
-            <label className="text-xs text-slate-600">
-              Nº conta
-              <Input value={form.conta_numero} onChange={(e) => setForm((f) => ({ ...f, conta_numero: e.target.value }))} className="mt-1" />
-            </label>
-            <label className="text-xs text-slate-600">
-              Departamento
-              <Input value={form.departamento} onChange={(e) => setForm((f) => ({ ...f, departamento: e.target.value }))} className="mt-1" />
-            </label>
-            <label className="text-xs text-slate-600">
-              Título/Referência
-              <Input value={form.titulo_ref} onChange={(e) => setForm((f) => ({ ...f, titulo_ref: e.target.value }))} className="mt-1" />
-            </label>
-            <label className="text-xs text-slate-600 sm:col-span-2">
-              Descrição
-              <Input value={form.descricao} onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))} className="mt-1" />
-            </label>
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-slate-200/80 p-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="orcamento-grupo">Plano contas</Label>
+                <select
+                  id="orcamento-grupo"
+                  value={form.grupo_conta}
+                  onChange={(e) => {
+                    const grupo_conta = e.target.value
+                    setForm((f) => ({
+                      ...f,
+                      grupo_conta,
+                      plano_contas: f.grupo_conta === grupo_conta ? f.plano_contas : '',
+                    }))
+                  }}
+                  className={ORCAMENTO_FIELD_SELECT}
+                  required
+                >
+                  <option value="">Selecione o plano contas…</option>
+                  {grupoContaOpcoes.map((grupo) => (
+                    <option key={grupo} value={grupo}>
+                      {grupo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="orcamento-plano">Plano de contas micro</Label>
+                <select
+                  id="orcamento-plano"
+                  value={form.plano_contas}
+                  onChange={(e) => setForm((f) => ({ ...f, plano_contas: e.target.value }))}
+                  className={ORCAMENTO_FIELD_SELECT}
+                  required
+                  disabled={!grupoContaSelecionado}
+                >
+                  <option value="">
+                    {grupoContaSelecionado ? 'Selecione o plano micro…' : 'Selecione o plano contas primeiro'}
+                  </option>
+                  {planoMicroOpcoes.map((plano) => (
+                    <option key={plano} value={plano}>
+                      {plano}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="orcamento-departamento">Departamento</Label>
+                <select
+                  id="orcamento-departamento"
+                  value={form.departamento}
+                  onChange={(e) => setForm((f) => ({ ...f, departamento: e.target.value }))}
+                  className={ORCAMENTO_FIELD_SELECT}
+                  required
+                >
+                  <option value="">Selecione…</option>
+                  {departamentoOpcoes.map((departamento) => (
+                    <option key={departamento} value={departamento}>
+                      {departamentoLabel(departamento)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5 sm:col-span-1">
+                <Label htmlFor="orcamento-descricao">Descrição</Label>
+                <Input
+                  id="orcamento-descricao"
+                  value={form.descricao}
+                  onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))}
+                  placeholder="Opcional"
+                />
+              </div>
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="bg-slate-50/50">
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancelar
             </Button>
