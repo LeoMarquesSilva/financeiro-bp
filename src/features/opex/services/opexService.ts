@@ -89,20 +89,52 @@ function rpcMeses(meses?: number[] | null): number[] | null {
   return meses?.length ? meses : null
 }
 
+function rpcPlanoFiltro(filtro?: { gruposExcluidos: string[]; planosExcluidos: string[] } | null) {
+  if (!filtro) {
+    return { p_grupos_excluidos: null, p_planos_excluidos: null }
+  }
+  return {
+    p_grupos_excluidos: filtro.gruposExcluidos.length ? filtro.gruposExcluidos : null,
+    p_planos_excluidos: filtro.planosExcluidos.length ? filtro.planosExcluidos : null,
+  }
+}
+
 export const opexService = {
-  async fetchDashboard(ano: number, meses?: number[] | null): Promise<OpexDashboard> {
+  async fetchCatalogoPlanos(ano: number) {
+    const { data, error } = await supabase.rpc('opex_catalogo_planos' as never, { p_ano: ano } as never)
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      grupo_conta: String(row.grupo_conta ?? ''),
+      plano_contas: String(row.plano_contas ?? ''),
+      fixo: Boolean(row.fixo),
+    }))
+  },
+
+  async fetchDashboard(
+    ano: number,
+    meses?: number[] | null,
+    planoFiltro?: { gruposExcluidos: string[]; planosExcluidos: string[] } | null,
+  ): Promise<OpexDashboard> {
     const { data, error } = await supabase.rpc(
       'opex_dashboard' as never,
-      { p_ano: ano, p_meses: rpcMeses(meses) } as never,
+      {
+        p_ano: ano,
+        p_meses: rpcMeses(meses),
+        ...rpcPlanoFiltro(planoFiltro),
+      } as never,
     )
     if (error) throw error
     return mapDashboard((data ?? {}) as Record<string, unknown>)
   },
 
-  async fetchMesGrupos(ano: number, mes: number): Promise<OpexMesGrupoRow[]> {
+  async fetchMesGrupos(
+    ano: number,
+    mes: number,
+    planoFiltro?: { gruposExcluidos: string[]; planosExcluidos: string[] } | null,
+  ): Promise<OpexMesGrupoRow[]> {
     const { data, error } = await supabase.rpc(
       'opex_mes_grupos' as never,
-      { p_ano: ano, p_mes: mes } as never,
+      { p_ano: ano, p_mes: mes, ...rpcPlanoFiltro(planoFiltro) } as never,
     )
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
@@ -142,10 +174,20 @@ export const opexService = {
     }))
   },
 
-  async fetchPlanosGrupo(ano: number, grupo: string, meses?: number[] | null): Promise<OpexPlanoRow[]> {
+  async fetchPlanosGrupo(
+    ano: number,
+    grupo: string,
+    meses?: number[] | null,
+    planoFiltro?: { gruposExcluidos: string[]; planosExcluidos: string[] } | null,
+  ): Promise<OpexPlanoRow[]> {
     const { data, error } = await supabase.rpc(
       'opex_planos_grupo' as never,
-      { p_ano: ano, p_grupo: grupo, p_meses: rpcMeses(meses) } as never,
+      {
+        p_ano: ano,
+        p_grupo: grupo,
+        p_meses: rpcMeses(meses),
+        ...rpcPlanoFiltro(planoFiltro),
+      } as never,
     )
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
@@ -161,10 +203,17 @@ export const opexService = {
     grupo: string,
     plano: string,
     meses?: number[] | null,
+    planoFiltro?: { gruposExcluidos: string[]; planosExcluidos: string[] } | null,
   ): Promise<OpexTituloRow[]> {
     const { data, error } = await supabase.rpc(
       'opex_plano_titulos' as never,
-      { p_ano: ano, p_grupo: grupo, p_plano: plano, p_meses: rpcMeses(meses) } as never,
+      {
+        p_ano: ano,
+        p_grupo: grupo,
+        p_plano: plano,
+        p_meses: rpcMeses(meses),
+        ...rpcPlanoFiltro(planoFiltro),
+      } as never,
     )
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
@@ -177,6 +226,7 @@ export const opexService = {
       data_vencimento: row.data_vencimento ? String(row.data_vencimento) : null,
       data_pagamento: row.data_pagamento ? String(row.data_pagamento) : null,
       valor_previsto: Number(row.valor_previsto) || 0,
+      valor_orcamento: Number(row.valor_orcamento) || 0,
       valor_realizado: Number(row.valor_realizado) || 0,
     }))
   },
@@ -303,6 +353,7 @@ export const opexService = {
       data_vencimento: row.data_vencimento ? String(row.data_vencimento) : null,
       data_pagamento: row.data_pagamento ? String(row.data_pagamento) : null,
       valor_previsto: Number(row.valor_previsto) || 0,
+      valor_orcamento: Number(row.valor_orcamento) || 0,
       valor_realizado: Number(row.valor_realizado) || 0,
     }))
   },

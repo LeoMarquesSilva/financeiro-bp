@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { RefreshCw, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -11,7 +11,9 @@ import { OpexDepartamentosChart } from '../components/OpexDepartamentosChart'
 import { OpexMetasEstrategicas } from '../components/OpexMetasEstrategicas'
 import { OpexOrcamentoSection } from '../components/OpexOrcamentoSection'
 import { OpexPeriodoSelector } from '../components/OpexPeriodoSelector'
+import { OpexPlanoContasFiltro } from '../components/OpexPlanoContasFiltro'
 import { formatPeriodoOpex, temFiltroMeses } from '../utils/opexPeriodo'
+import { loadOpexPlanoFiltro, type OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 
 const ANOS = [2025, 2026, 2027]
 
@@ -19,7 +21,18 @@ export function OpexPage() {
   const [ano, setAno] = useState(new Date().getFullYear())
   const [mesesFiltro, setMesesFiltro] = useState<number[]>([])
   const [soFixas, setSoFixas] = useState(false)
-  const { data, isLoading, error, refetch, isFetching } = useOpexDashboard(ano, mesesFiltro)
+  const [planoFiltro, setPlanoFiltro] = useState<OpexPlanoFiltroState>(() => loadOpexPlanoFiltro(ano))
+  const [sortGruposVariacaoTrigger, setSortGruposVariacaoTrigger] = useState(0)
+  const { data, isLoading, error, refetch, isFetching } = useOpexDashboard(ano, mesesFiltro, planoFiltro)
+
+  useEffect(() => {
+    setPlanoFiltro(loadOpexPlanoFiltro(ano))
+  }, [ano])
+
+  const handleOrdenarGruposPorVariacao = () => {
+    setSortGruposVariacaoTrigger((n) => n + 1)
+    document.getElementById('opex-grupos-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const handleAnoChange = (y: number) => {
     setAno(y)
@@ -39,6 +52,7 @@ export function OpexPage() {
           <p className="mt-1 text-sm text-slate-500">
             Despesas operacionais — orçamento congelado x realizado (VIOS) e projeção de fixas.
           </p>
+          <OpexPlanoContasFiltro ano={ano} filtro={planoFiltro} onChange={setPlanoFiltro} />
         </div>
         <div className="flex flex-col items-end gap-3">
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -112,6 +126,8 @@ export function OpexPage() {
             ano={data.ano}
             mesesFiltro={mesesFiltro}
             orcamentoImportado={data.orcamento_importado}
+            onOrdenarPorVariacao={handleOrdenarGruposPorVariacao}
+            planoFiltro={planoFiltro}
           />
 
           {!temFiltroMeses(mesesFiltro) && (
@@ -125,12 +141,15 @@ export function OpexPage() {
             soFixas={soFixas}
             orcamentoImportado={data.orcamento_importado}
             onSoFixasChange={setSoFixas}
+            sortByVariacaoTrigger={sortGruposVariacaoTrigger}
+            planoFiltro={planoFiltro}
             chartSlot={
               <OpexDepartamentosChart
                 ano={data.ano}
                 mesesFiltro={mesesFiltro}
                 somenteFixas={soFixas}
                 mesAtual={data.mes_atual}
+                orcamentoImportado={data.orcamento_importado}
               />
             }
           />

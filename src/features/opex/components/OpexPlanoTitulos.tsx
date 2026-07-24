@@ -4,7 +4,8 @@ import { cn } from '@/lib/utils'
 import { formatCurrency, formatDate } from '@/shared/utils/format'
 import { opexService } from '../services/opexService'
 import { OPEX_COLORS } from '../constants'
-import { mesesFiltroKey } from '../utils/opexPeriodo'
+import { mesesFiltroKey, planoFiltroKey } from '../utils/opexPeriodo'
+import type { OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 import type { OpexTituloRow } from '../types/opex.types'
 
 type Props = {
@@ -12,6 +13,8 @@ type Props = {
   grupo: string
   plano: string
   mesesFiltro: number[]
+  orcamentoImportado?: boolean
+  planoFiltro?: OpexPlanoFiltroState
 }
 
 function situacaoBadgeClass(situacao: string): string {
@@ -21,7 +24,17 @@ function situacaoBadgeClass(situacao: string): string {
   return 'bg-slate-50 text-slate-600 border-slate-200'
 }
 
-function TituloCard({ titulo }: { titulo: OpexTituloRow }) {
+function TituloCard({
+  titulo,
+  orcamentoImportado,
+}: {
+  titulo: OpexTituloRow
+  orcamentoImportado?: boolean
+}) {
+  const referenciaLabel = orcamentoImportado ? 'Orçado' : 'Previsto'
+  const referenciaValor = orcamentoImportado ? titulo.valor_orcamento : titulo.valor_previsto
+  const referenciaColor = orcamentoImportado ? OPEX_COLORS.orcamento.text : OPEX_COLORS.previsto.text
+
   return (
     <article className="rounded-lg border border-slate-200/80 bg-white p-3 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -63,9 +76,9 @@ function TituloCard({ titulo }: { titulo: OpexTituloRow }) {
           </dd>
         </div>
         <div>
-          <dt className={cn('text-slate-500', OPEX_COLORS.previsto.text)}>Previsto</dt>
-          <dd className={cn('mt-0.5 font-semibold tabular-nums', OPEX_COLORS.previsto.text)}>
-            {titulo.valor_previsto > 0 ? formatCurrency(titulo.valor_previsto) : '—'}
+          <dt className={cn('text-slate-500', referenciaColor)}>{referenciaLabel}</dt>
+          <dd className={cn('mt-0.5 font-semibold tabular-nums', referenciaColor)}>
+            {referenciaValor > 0 ? formatCurrency(referenciaValor) : '—'}
           </dd>
         </div>
         <div>
@@ -85,10 +98,25 @@ function TituloCard({ titulo }: { titulo: OpexTituloRow }) {
   )
 }
 
-export function OpexPlanoTitulos({ ano, grupo, plano, mesesFiltro }: Props) {
+export function OpexPlanoTitulos({
+  ano,
+  grupo,
+  plano,
+  mesesFiltro,
+  orcamentoImportado,
+  planoFiltro,
+}: Props) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['opex', 'titulos', ano, grupo, plano, mesesFiltroKey(mesesFiltro)],
-    queryFn: () => opexService.fetchPlanoTitulos(ano, grupo, plano, mesesFiltro),
+    queryKey: [
+      'opex',
+      'titulos',
+      ano,
+      grupo,
+      plano,
+      mesesFiltroKey(mesesFiltro),
+      planoFiltroKey(planoFiltro ?? { gruposExcluidos: [], planosExcluidos: [] }),
+    ],
+    queryFn: () => opexService.fetchPlanoTitulos(ano, grupo, plano, mesesFiltro, planoFiltro),
     staleTime: 60_000,
   })
 
@@ -116,7 +144,7 @@ export function OpexPlanoTitulos({ ano, grupo, plano, mesesFiltro }: Props) {
   return (
     <div className="grid gap-2 pt-2 sm:grid-cols-2 xl:grid-cols-3">
       {data.map((titulo: OpexTituloRow) => (
-        <TituloCard key={titulo.ci_item} titulo={titulo} />
+        <TituloCard key={titulo.ci_item} titulo={titulo} orcamentoImportado={orcamentoImportado} />
       ))}
     </div>
   )

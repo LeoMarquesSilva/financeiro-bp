@@ -17,6 +17,7 @@ type Props = {
   mesesFiltro: number[]
   somenteFixas: boolean
   mensalRows: OpexDepartamentoMesRow[]
+  orcamentoImportado?: boolean
 }
 
 function pct(realizado: number, previsto: number): string {
@@ -31,6 +32,7 @@ function TitulosDepartamento({
   plano,
   mesesFiltro,
   somenteFixas,
+  orcamentoImportado,
 }: {
   ano: number
   departamento: string
@@ -38,6 +40,7 @@ function TitulosDepartamento({
   plano: string
   mesesFiltro: number[]
   somenteFixas: boolean
+  orcamentoImportado?: boolean
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ['opex', 'departamento-titulos', ano, departamento, grupo, plano, mesesFiltroKey(mesesFiltro), somenteFixas],
@@ -54,16 +57,22 @@ function TitulosDepartamento({
 
   return (
     <div className="space-y-2 px-1 pb-1">
-      {data.map((titulo: OpexTituloRow) => (
+      {data.map((titulo: OpexTituloRow) => {
+        const referenciaLabel = orcamentoImportado ? 'Orç.' : 'Prev.'
+        const referenciaValor = orcamentoImportado ? titulo.valor_orcamento : titulo.valor_previsto
+        const referenciaColor = orcamentoImportado ? OPEX_COLORS.orcamento.text : OPEX_COLORS.previsto.text
+
+        return (
         <article key={titulo.ci_item} className="rounded-lg border border-slate-200/80 bg-white px-3 py-2.5">
           <p className="text-sm font-medium text-slate-800">{titulo.descricao}</p>
           <p className="mt-0.5 text-[11px] text-slate-500">Título {titulo.nro_titulo}</p>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
-            <span className={OPEX_COLORS.previsto.text}>Prev. {formatCurrency(titulo.valor_previsto)}</span>
+            <span className={referenciaColor}>{referenciaLabel} {formatCurrency(referenciaValor)}</span>
             <span className={OPEX_COLORS.realizado.text}>Real. {formatCurrency(titulo.valor_realizado)}</span>
           </div>
         </article>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -76,6 +85,7 @@ function PlanoRow({
   mesesFiltro,
   somenteFixas,
   metric,
+  orcamentoImportado,
   expandido,
   onToggle,
 }: {
@@ -86,6 +96,7 @@ function PlanoRow({
   mesesFiltro: number[]
   somenteFixas: boolean
   metric: 'realizado' | 'previsto'
+  orcamentoImportado?: boolean
   expandido: boolean
   onToggle: () => void
 }) {
@@ -121,6 +132,7 @@ function PlanoRow({
             plano={plano.plano_contas}
             mesesFiltro={mesesFiltro}
             somenteFixas={somenteFixas}
+            orcamentoImportado={orcamentoImportado}
           />
         </div>
       )}
@@ -135,6 +147,7 @@ function GrupoRow({
   mesesFiltro,
   somenteFixas,
   metric,
+  orcamentoImportado,
 }: {
   ano: number
   departamento: string
@@ -142,6 +155,7 @@ function GrupoRow({
   mesesFiltro: number[]
   somenteFixas: boolean
   metric: 'realizado' | 'previsto'
+  orcamentoImportado?: boolean
 }) {
   const [aberto, setAberto] = useState(false)
   const [planoAberto, setPlanoAberto] = useState<string | null>(null)
@@ -205,6 +219,7 @@ function GrupoRow({
                 mesesFiltro={mesesFiltro}
                 somenteFixas={somenteFixas}
                 metric={metric}
+                orcamentoImportado={orcamentoImportado}
                 expandido={planoAberto === plano.plano_contas}
                 onToggle={() =>
                   setPlanoAberto((prev) => (prev === plano.plano_contas ? null : plano.plano_contas))
@@ -227,6 +242,7 @@ export function OpexDepartamentoDetalhe({
   mesesFiltro,
   somenteFixas,
   mensalRows,
+  orcamentoImportado,
 }: Props) {
   const filtroAtivo = temFiltroMeses(mesesFiltro)
 
@@ -320,6 +336,7 @@ export function OpexDepartamentoDetalhe({
             mesesFiltro={mesesFiltro}
             somenteFixas={somenteFixas}
             metric={metric}
+            orcamentoImportado={orcamentoImportado}
           />
         ))}
       </div>

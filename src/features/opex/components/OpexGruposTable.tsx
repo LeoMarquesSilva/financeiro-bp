@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { Fragment, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Pin } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Pin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { opexService } from '../services/opexService'
 import { OPEX_COLORS } from '../constants'
-import { formatPeriodoOpex, mesesFiltroKey, temFiltroMeses } from '../utils/opexPeriodo'
+import { formatPeriodoOpex, mesesFiltroKey, planoFiltroKey, temFiltroMeses } from '../utils/opexPeriodo'
+import type { OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 import { OpexPlanoTitulos } from './OpexPlanoTitulos'
 import type { OpexGrupoRow, OpexPlanoRow } from '../types/opex.types'
 
@@ -17,11 +18,120 @@ type Props = {
   orcamentoImportado?: boolean
   onSoFixasChange: (value: boolean) => void
   chartSlot: ReactNode
+  sortByVariacaoTrigger?: number
+  planoFiltro?: OpexPlanoFiltroState
 }
 
-function pct(realizado: number, previsto: number): string {
-  if (!previsto) return '—'
-  return formatPercent((realizado / previsto) * 100)
+type SortKey =
+  | 'grupo_conta'
+  | 'realizado_ytd'
+  | 'previsto_ano'
+  | 'previsto_vios'
+  | 'projetado_ano'
+  | 'variacao'
+  | 'pct'
+
+type SortDir = 'asc' | 'desc'
+
+function pct(realizado: number, referencia: number): string {
+  if (!referencia) return '—'
+  return formatPercent((realizado / referencia) * 100)
+}
+
+function referenciaGrupoMeta(orcamentoImportado: boolean | undefined, filtroAtivo: boolean) {
+  return {
+    label: orcamentoImportado
+      ? filtroAtivo
+        ? 'Orçado período'
+        : 'Orçado ano'
+      : filtroAtivo
+        ? 'Previsto período'
+        : 'Previsto ano',
+    labelCurto: orcamentoImportado ? 'orç.' : 'prev.',
+    pctLabel: orcamentoImportado ? '% do orçado' : '% do previsto',
+    color: orcamentoImportado ? OPEX_COLORS.orcamento.text : OPEX_COLORS.previsto.text,
+  }
+}
+
+function grupoVariacao(g: OpexGrupoRow): number {
+  return g.realizado_ytd - g.previsto_ano
+}
+
+function variacaoClass(valor: number): string {
+  if (valor > 0) return 'text-rose-700'
+  if (valor < 0) return 'text-emerald-700'
+  return 'text-slate-500'
+}
+
+function pctValue(realizado: number, referencia: number): number {
+  if (!referencia) return -1
+  return (realizado / referencia) * 100
+}
+
+function compareGrupos(a: OpexGrupoRow, b: OpexGrupoRow, key: SortKey): number {
+  switch (key) {
+    case 'grupo_conta':
+      return a.grupo_conta.localeCompare(b.grupo_conta, 'pt-BR')
+    case 'realizado_ytd':
+      return a.realizado_ytd - b.realizado_ytd
+    case 'previsto_ano':
+      return a.previsto_ano - b.previsto_ano
+    case 'previsto_vios':
+      return a.previsto_vios - b.previsto_vios
+    case 'projetado_ano':
+      return a.projetado_ano - b.projetado_ano
+    case 'variacao':
+      return grupoVariacao(a) - grupoVariacao(b)
+    case 'pct':
+      return pctValue(a.realizado_ytd, a.previsto_ano) - pctValue(b.realizado_ytd, b.previsto_ano)
+    default:
+      return 0
+  }
+}
+
+function SortableTh({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onSort,
+  className,
+  align = 'left',
+}: {
+  label: string
+  sortKey: SortKey
+  activeKey: SortKey
+  dir: SortDir
+  onSort: (key: SortKey) => void
+  className?: string
+  align?: 'left' | 'center' | 'right'
+}) {
+  const active = activeKey === sortKey
+  const Icon = active ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown
+
+  return (
+    <th
+      className={cn(
+        className,
+        align === 'right' && 'text-right',
+        align === 'center' && 'text-center',
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          'inline-flex items-center gap-1 transition-colors hover:text-slate-800',
+          align === 'right' && 'w-full justify-end',
+          align === 'center' && 'w-full justify-center',
+          active ? 'text-slate-800' : 'text-slate-600',
+        )}
+      >
+        {label}
+        <Icon className={cn('h-3.5 w-3.5 shrink-0', !active && 'opacity-40')} aria-hidden />
+      </button>
+    </th>
+  )
 }
 
 function PlanoRow({
@@ -29,6 +139,8 @@ function PlanoRow({
   ano,
   grupo,
   mesesFiltro,
+  orcamentoImportado,
+  planoFiltro,
   expandido,
   onToggle,
 }: {
@@ -36,9 +148,14 @@ function PlanoRow({
   ano: number
   grupo: string
   mesesFiltro: number[]
+  orcamentoImportado?: boolean
+  planoFiltro?: OpexPlanoFiltroState
   expandido: boolean
   onToggle: () => void
 }) {
+  const referenciaLabelCurto = orcamentoImportado ? 'Orç.' : 'Prev.'
+  const referenciaColor = orcamentoImportado ? OPEX_COLORS.orcamento.text : OPEX_COLORS.previsto.text
+
   return (
     <div className="rounded-lg border border-slate-200/80 bg-white">
       <button
@@ -57,8 +174,8 @@ function PlanoRow({
             <span className={OPEX_COLORS.realizado.text}>
               Real. {formatCurrency(plano.realizado_ytd)}
             </span>
-            <span className={OPEX_COLORS.previsto.text}>
-              Prev. {formatCurrency(plano.previsto_ano)}
+            <span className={referenciaColor}>
+              {referenciaLabelCurto} {formatCurrency(plano.previsto_ano)}
             </span>
           </span>
         </span>
@@ -66,14 +183,21 @@ function PlanoRow({
           <span className={cn('min-w-[5.5rem]', OPEX_COLORS.realizado.text)}>
             {formatCurrency(plano.realizado_ytd)}
           </span>
-          <span className={cn('min-w-[5.5rem]', OPEX_COLORS.previsto.text)}>
+          <span className={cn('min-w-[5.5rem]', referenciaColor)}>
             {formatCurrency(plano.previsto_ano)}
           </span>
         </span>
       </button>
       {expandido && (
         <div className="border-t border-slate-100 bg-slate-50/60 px-3 pb-3 pt-1 sm:px-4">
-          <OpexPlanoTitulos ano={ano} grupo={grupo} plano={plano.plano_contas} mesesFiltro={mesesFiltro} />
+          <OpexPlanoTitulos
+            ano={ano}
+            grupo={grupo}
+            plano={plano.plano_contas}
+            mesesFiltro={mesesFiltro}
+            orcamentoImportado={orcamentoImportado}
+            planoFiltro={planoFiltro}
+          />
         </div>
       )}
     </div>
@@ -84,16 +208,27 @@ function GrupoDetalhe({
   ano,
   grupo,
   mesesFiltro,
+  orcamentoImportado,
+  planoFiltro,
 }: {
   ano: number
   grupo: string
   mesesFiltro: number[]
+  orcamentoImportado?: boolean
+  planoFiltro?: OpexPlanoFiltroState
 }) {
   const [planoAberto, setPlanoAberto] = useState<string | null>(null)
   const filtroAtivo = temFiltroMeses(mesesFiltro)
+  const referenciaLabel = orcamentoImportado
+    ? filtroAtivo
+      ? 'Orçado período'
+      : 'Orçado ano'
+    : filtroAtivo
+      ? 'Previsto período'
+      : 'Previsto ano'
   const { data, isLoading } = useQuery({
-    queryKey: ['opex', 'planos', ano, grupo, mesesFiltroKey(mesesFiltro)],
-    queryFn: () => opexService.fetchPlanosGrupo(ano, grupo, mesesFiltro),
+    queryKey: ['opex', 'planos', ano, grupo, mesesFiltroKey(mesesFiltro), planoFiltroKey(planoFiltro ?? { gruposExcluidos: [], planosExcluidos: [] })],
+    queryFn: () => opexService.fetchPlanosGrupo(ano, grupo, mesesFiltro, planoFiltro),
     staleTime: 60_000,
   })
 
@@ -110,9 +245,7 @@ function GrupoDetalhe({
           <span className="min-w-[5.5rem] text-right">
             {filtroAtivo ? 'Realizado período' : 'Realizado YTD'}
           </span>
-          <span className="min-w-[5.5rem] text-right">
-            {filtroAtivo ? 'Previsto período' : 'Previsto ano'}
-          </span>
+          <span className="min-w-[5.5rem] text-right">{referenciaLabel}</span>
         </span>
       </div>
       <p className="mb-2 text-[11px] text-slate-500 sm:hidden">
@@ -126,6 +259,8 @@ function GrupoDetalhe({
             ano={ano}
             grupo={grupo}
             mesesFiltro={mesesFiltro}
+            orcamentoImportado={orcamentoImportado}
+            planoFiltro={planoFiltro}
             expandido={planoAberto === p.plano_contas}
             onToggle={() => setPlanoAberto((prev) => (prev === p.plano_contas ? null : p.plano_contas))}
           />
@@ -135,14 +270,57 @@ function GrupoDetalhe({
   )
 }
 
-export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, orcamentoImportado, onSoFixasChange, chartSlot }: Props) {
+export function OpexGruposTable({
+  grupos,
+  ano,
+  mesesFiltro,
+  soFixas,
+  orcamentoImportado,
+  onSoFixasChange,
+  chartSlot,
+  sortByVariacaoTrigger,
+  planoFiltro,
+}: Props) {
   const [aberto, setAberto] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('realizado_ytd')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const filtroAtivo = temFiltroMeses(mesesFiltro)
 
-  const lista = soFixas ? grupos.filter((g) => g.fixo) : grupos
+  useEffect(() => {
+    if (sortByVariacaoTrigger) {
+      setSortKey('variacao')
+      setSortDir('desc')
+    }
+  }, [sortByVariacaoTrigger])
+
+  const handleSort = (key: SortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(key === 'grupo_conta' ? 'asc' : 'desc')
+    }
+  }
+
+  const lista = useMemo(() => {
+    const base = soFixas ? grupos.filter((g) => g.fixo) : grupos
+    const list = [...base]
+    const sign = sortDir === 'asc' ? 1 : -1
+    list.sort((a, b) => sign * compareGrupos(a, b, sortKey))
+    return list
+  }, [grupos, soFixas, sortKey, sortDir])
+
+  const referenciaMeta = referenciaGrupoMeta(orcamentoImportado, filtroAtivo)
+  const colSpanDetalhe = filtroAtivo
+    ? orcamentoImportado
+      ? 6
+      : 5
+    : orcamentoImportado
+      ? 7
+      : 6
 
   return (
-    <section className="rounded-xl border border-slate-200/60 bg-white shadow-sm">
+    <section id="opex-grupos-table" className="rounded-xl border border-slate-200/60 bg-white shadow-sm scroll-mt-6">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 sm:px-5">
         <div>
           <h2 className="text-sm font-semibold text-slate-900">Despesas por grupo de conta</h2>
@@ -173,23 +351,78 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, orcamentoIm
         <table className="w-full min-w-0 text-sm md:min-w-[720px]">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-              <th className="px-4 py-3 sm:px-5">Grupo</th>
-              <th className="px-4 py-3 text-right">
-                {filtroAtivo ? 'Realizado período' : 'Realizado YTD'}
-              </th>
-              <th className="hidden px-4 py-3 text-right sm:table-cell">
-                {filtroAtivo ? 'Orçamento período' : 'Orçamento ano'}
-              </th>
+              <SortableTh
+                label="Grupo"
+                sortKey="grupo_conta"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={handleSort}
+                className="px-4 py-3 sm:px-5"
+              />
+              <SortableTh
+                label={filtroAtivo ? 'Realizado período' : 'Realizado YTD'}
+                sortKey="realizado_ytd"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={handleSort}
+                className="px-4 py-3 text-right"
+                align="right"
+              />
+              <SortableTh
+                label={referenciaMeta.label}
+                sortKey="previsto_ano"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={handleSort}
+                className={cn('hidden px-4 py-3 sm:table-cell', referenciaMeta.color)}
+                align="right"
+              />
               {orcamentoImportado && (
-                <th className="hidden px-4 py-3 text-right md:table-cell">Previsto VIOS</th>
+                <SortableTh
+                  label="Previsto VIOS"
+                  sortKey="previsto_vios"
+                  activeKey={sortKey}
+                  dir={sortDir}
+                  onSort={handleSort}
+                  className={cn('hidden px-4 py-3 md:table-cell', OPEX_COLORS.previsto.text)}
+                  align="right"
+                />
               )}
-              {!filtroAtivo && <th className="hidden px-4 py-3 text-right lg:table-cell">Projetado ano</th>}
-              <th className="hidden px-4 py-3 text-center md:table-cell">% realizado</th>
+              {!filtroAtivo && (
+                <SortableTh
+                  label="Projetado ano"
+                  sortKey="projetado_ano"
+                  activeKey={sortKey}
+                  dir={sortDir}
+                  onSort={handleSort}
+                  className={cn('hidden px-4 py-3 lg:table-cell', OPEX_COLORS.projetado.text)}
+                  align="right"
+                />
+              )}
+              <SortableTh
+                label="Variação"
+                sortKey="variacao"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={handleSort}
+                className="hidden px-4 py-3 md:table-cell"
+                align="right"
+              />
+              <SortableTh
+                label={referenciaMeta.pctLabel}
+                sortKey="pct"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={handleSort}
+                className="hidden px-4 py-3 md:table-cell"
+                align="center"
+              />
             </tr>
           </thead>
           <tbody>
             {lista.map((g) => {
               const expandido = aberto === g.grupo_conta
+              const variacao = grupoVariacao(g)
               return (
                 <Fragment key={g.grupo_conta}>
                   <tr
@@ -209,8 +442,8 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, orcamentoIm
                             <span className={OPEX_COLORS.realizado.text}>
                               {formatCurrency(g.realizado_ytd)}
                             </span>
-                            <span className={OPEX_COLORS.previsto.text}>
-                              prev. {formatCurrency(g.previsto_ano)}
+                            <span className={referenciaMeta.color}>
+                              {referenciaMeta.labelCurto} {formatCurrency(g.previsto_ano)}
                             </span>
                           </span>
                         </span>
@@ -230,11 +463,11 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, orcamentoIm
                     <td className={cn('px-4 py-2.5 text-right tabular-nums', OPEX_COLORS.realizado.text)}>
                       {formatCurrency(g.realizado_ytd)}
                     </td>
-                    <td className={cn('hidden px-4 py-2.5 text-right tabular-nums sm:table-cell', OPEX_COLORS.previsto.text)}>
+                    <td className={cn('hidden px-4 py-2.5 text-right tabular-nums sm:table-cell', referenciaMeta.color)}>
                       {formatCurrency(g.previsto_ano)}
                     </td>
                     {orcamentoImportado && (
-                      <td className="hidden px-4 py-2.5 text-right tabular-nums text-violet-700 md:table-cell">
+                      <td className={cn('hidden px-4 py-2.5 text-right tabular-nums md:table-cell', OPEX_COLORS.previsto.text)}>
                         {formatCurrency(g.previsto_vios)}
                       </td>
                     )}
@@ -243,14 +476,23 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, orcamentoIm
                         {formatCurrency(g.projetado_ano)}
                       </td>
                     )}
+                    <td className={cn('hidden px-4 py-2.5 text-right tabular-nums md:table-cell', variacaoClass(variacao))}>
+                      {formatCurrency(variacao)}
+                    </td>
                     <td className="hidden px-4 py-2.5 text-center tabular-nums text-slate-500 md:table-cell">
                       {pct(g.realizado_ytd, g.previsto_ano)}
                     </td>
                   </tr>
                   {expandido && (
                     <tr>
-                      <td colSpan={filtroAtivo ? (orcamentoImportado ? 5 : 4) : orcamentoImportado ? 6 : 5} className="p-0">
-                        <GrupoDetalhe ano={ano} grupo={g.grupo_conta} mesesFiltro={mesesFiltro} />
+                      <td colSpan={colSpanDetalhe} className="p-0">
+                        <GrupoDetalhe
+                          ano={ano}
+                          grupo={g.grupo_conta}
+                          mesesFiltro={mesesFiltro}
+                          orcamentoImportado={orcamentoImportado}
+                          planoFiltro={planoFiltro}
+                        />
                       </td>
                     </tr>
                   )}

@@ -1,8 +1,18 @@
 import { useMemo } from 'react'
+import {
+  CartesianGrid,
+  LabelList,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  type DotItemDotProps,
+} from 'recharts'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
-import { MESES_CURTOS } from '../constants'
-import { OPEX_COLORS } from '../constants'
+import { MESES_CURTOS, OPEX_COLORS } from '../constants'
 import type { OpexOrcamentoLinha } from '../types/opex.types'
 
 type MesTotal = {
@@ -17,6 +27,49 @@ type Props = {
   onMesSelect: (mes: number | null) => void
   compact?: boolean
   className?: string
+}
+
+function formatAxis(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
+function OrcamentoMesDot({
+  cx,
+  cy,
+  payload,
+  mesSelecionado,
+  onMesSelect,
+}: DotItemDotProps & {
+  mesSelecionado: number | null
+  onMesSelect: (mes: number | null) => void
+}) {
+  if (cx == null || cy == null || !payload || typeof payload.mes !== 'number') return null
+
+  const mes = payload.mes
+  const selecionado = mesSelecionado === mes
+  const esmaecido = mesSelecionado != null && !selecionado
+
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={selecionado ? 6 : 4}
+      fill={selecionado ? OPEX_COLORS.orcamento.hex : '#a78bfa'}
+      stroke="#fff"
+      strokeWidth={2}
+      opacity={esmaecido ? 0.35 : 1}
+      style={{ cursor: 'pointer' }}
+      onClick={(event) => {
+        event.stopPropagation()
+        onMesSelect(selecionado ? null : mes)
+      }}
+    />
+  )
 }
 
 export function buildTotaisPorMes(linhas: OpexOrcamentoLinha[]): MesTotal[] {
@@ -40,7 +93,7 @@ export function OpexOrcamentoMesChart({
 }: Props) {
   const chartData = useMemo(() => buildTotaisPorMes(linhas), [linhas])
   const maxTotal = useMemo(() => Math.max(...chartData.map((d) => d.total), 0), [chartData])
-  const plotHeight = compact ? 56 : 128
+  const chartHeight = compact ? 132 : 220
 
   if (!maxTotal) {
     return (
@@ -51,69 +104,82 @@ export function OpexOrcamentoMesChart({
   }
 
   return (
-    <div className={cn('w-full min-w-0 overflow-x-auto', className)}>
-      <div
-        className={cn(
-          'grid w-full gap-0.5 sm:gap-1',
-          compact ? 'min-w-[480px] py-1' : 'min-w-[640px] py-2',
-        )}
-        style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))' }}
-        role="group"
-        aria-label="Distribuição mensal do orçamento"
-      >
-      {chartData.map((entry) => {
-        const selecionado = mesSelecionado === entry.mes
-        const esmaecido = mesSelecionado != null && !selecionado
-        const pct = entry.total > 0 ? Math.max((entry.total / maxTotal) * 100, 6) : 0
-
-        return (
-          <button
-            key={entry.mes}
-            type="button"
-            aria-pressed={selecionado}
-            aria-label={`${entry.label}: ${formatCurrency(entry.total)}`}
-            title={`${entry.label.toUpperCase()} · ${formatCurrency(entry.total)}`}
-            onClick={() => onMesSelect(selecionado ? null : entry.mes)}
-            className={cn(
-              'group flex min-w-0 flex-col items-center gap-1 rounded-md px-0.5 transition-opacity sm:px-1',
-              esmaecido ? 'opacity-40' : 'opacity-100',
-              'hover:bg-slate-50/80',
-            )}
-          >
-            {!compact && (
-              <span className="hidden h-4 truncate text-[10px] tabular-nums text-slate-500 opacity-0 transition-opacity group-hover:opacity-100 sm:block">
-                {formatCurrencyCompact(entry.total)}
-              </span>
-            )}
-            <div
-              className="relative flex w-full items-end justify-center border-b border-slate-200/80"
-              style={{ height: plotHeight }}
-            >
-              <div
-                className={cn(
-                  'w-full max-w-[28px] rounded-t-sm transition-all sm:max-w-[36px]',
-                  selecionado
-                    ? 'bg-purple-600 shadow-sm'
-                    : 'bg-violet-300 group-hover:bg-violet-400',
-                )}
-                style={{
-                  height: `${pct}%`,
-                  backgroundColor: selecionado ? OPEX_COLORS.previsto.hex : undefined,
-                }}
+    <div
+      className={cn('w-full min-w-0', className)}
+      role="group"
+      aria-label="Distribuição mensal do orçamento"
+    >
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <LineChart
+          data={chartData}
+          margin={{
+            top: compact ? 12 : 24,
+            right: 8,
+            left: compact ? 0 : 4,
+            bottom: 0,
+          }}
+        >
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: compact ? 9 : 10, fill: '#64748b' }}
+            tickLine={false}
+            axisLine={{ stroke: '#e2e8f0' }}
+            interval={0}
+          />
+          <YAxis
+            tickFormatter={formatAxis}
+            width={compact ? 52 : 64}
+            tick={{ fontSize: 10, fill: '#64748b' }}
+            tickLine={false}
+            axisLine={false}
+            domain={[0, (max: number) => Math.max(max * 1.12, maxTotal * 0.05 || 1)]}
+            padding={{ top: compact ? 8 : 12 }}
+          />
+          <Tooltip
+            cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null
+              const row = payload[0].payload as MesTotal
+              return (
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
+                  <p className="font-semibold uppercase text-slate-700">{row.label}</p>
+                  <p className="mt-1 tabular-nums text-slate-900">{formatCurrency(row.total)}</p>
+                  <p className="mt-1 text-[10px] text-slate-500">Clique no ponto para filtrar a tabela</p>
+                </div>
+              )
+            }}
+          />
+          <Line
+            type="monotone"
+            dataKey="total"
+            stroke={OPEX_COLORS.orcamento.hex}
+            strokeWidth={2}
+            dot={(props) => (
+              <OrcamentoMesDot
+                {...props}
+                mesSelecionado={mesSelecionado}
+                onMesSelect={onMesSelect}
               />
-            </div>
-            <span
-              className={cn(
-                'w-full truncate text-center text-[9px] font-medium uppercase leading-none sm:text-[10px]',
-                selecionado ? 'font-semibold text-violet-800' : 'text-slate-500',
-              )}
-            >
-              {entry.label}
-            </span>
-          </button>
-        )
-      })}
-      </div>
+            )}
+            activeDot={false}
+            opacity={mesSelecionado != null ? 0.45 : 1}
+          />
+          {!compact && (
+            <LabelList
+              dataKey="total"
+              position="top"
+              formatter={(value) => {
+                const n = Number(value)
+                return n > 0 ? formatCurrencyCompact(n) : ''
+              }}
+              fill="#64748b"
+              fontSize={10}
+              offset={8}
+            />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   )
 }

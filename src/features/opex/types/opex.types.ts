@@ -72,6 +72,7 @@ export type OpexTituloRow = {
   data_vencimento: string | null
   data_pagamento: string | null
   valor_previsto: number
+  valor_orcamento: number
   valor_realizado: number
 }
 

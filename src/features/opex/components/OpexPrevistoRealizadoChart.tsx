@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   Cell,
   ComposedChart,
+  LabelList,
   Legend,
   Line,
   ResponsiveContainer,
@@ -15,11 +16,12 @@ import {
 import { ArrowLeft, BarChart3, Download, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
 import { MESES_CURTOS, OPEX_COLORS } from '../constants'
 import { useOpexMesGrupos } from '../hooks/useOpexMesGrupos'
 import { exportOpexMesGruposExcel } from '../utils/opexMesGruposExport'
 import { temFiltroMeses } from '../utils/opexPeriodo'
+import type { OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 import type { OpexMesGrupoRow, OpexMesRow } from '../types/opex.types'
 
 type Props = {
@@ -28,6 +30,8 @@ type Props = {
   ano: number
   mesesFiltro: number[]
   orcamentoImportado?: boolean
+  onOrdenarPorVariacao?: () => void
+  planoFiltro?: OpexPlanoFiltroState
 }
 
 function formatAxis(value: number): string {
@@ -44,16 +48,122 @@ function truncateLabel(label: string, max = 28): string {
   return `${label.slice(0, max - 1)}…`
 }
 
-export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, orcamentoImportado }: Props) {
+function OpexBarValueLabel({
+  x,
+  y,
+  width,
+  value,
+  color = '#334155',
+}: {
+  x?: number | string
+  y?: number | string
+  width?: number | string
+  value?: number | string | null
+  color?: string
+}) {
+  const nx = Number(x)
+  const ny = Number(y)
+  const nw = Number(width)
+  const n = Number(value)
+  if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nw) || !n || n <= 0) return null
+  return (
+    <text
+      x={nx + nw / 2}
+      y={ny - 6}
+      textAnchor="middle"
+      fill={color}
+      fontSize={10}
+      fontWeight={600}
+    >
+      {formatCurrencyCompact(n)}
+    </text>
+  )
+}
+
+function OpexBarValueLabelHorizontal({
+  x,
+  y,
+  width,
+  height,
+  value,
+  color = '#334155',
+}: {
+  x?: number | string
+  y?: number | string
+  width?: number | string
+  height?: number | string
+  value?: number | string | null
+  color?: string
+}) {
+  const nx = Number(x)
+  const ny = Number(y)
+  const nw = Number(width)
+  const nh = Number(height)
+  const n = Number(value)
+  if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nw) || !Number.isFinite(nh) || !n || n <= 0) {
+    return null
+  }
+  return (
+    <text
+      x={nx + nw + 6}
+      y={ny + nh / 2}
+      dy={4}
+      textAnchor="start"
+      fill={color}
+      fontSize={10}
+      fontWeight={600}
+    >
+      {formatCurrencyCompact(n)}
+    </text>
+  )
+}
+
+function renderOpexBarLabel(color: string) {
+  return (props: { x?: number | string; y?: number | string; width?: number | string; value?: unknown }) => (
+    <OpexBarValueLabel {...props} value={props.value as number | string | null | undefined} color={color} />
+  )
+}
+
+function renderOpexBarLabelHorizontal(color: string) {
+  return (props: {
+    x?: number | string
+    y?: number | string
+    width?: number | string
+    height?: number | string
+    value?: unknown
+  }) => (
+    <OpexBarValueLabelHorizontal
+      {...props}
+      value={props.value as number | string | null | undefined}
+      color={color}
+    />
+  )
+}
+
+export function OpexPrevistoRealizadoChart({
+  rows,
+  mesAtual,
+  ano,
+  mesesFiltro,
+  orcamentoImportado,
+  onOrdenarPorVariacao,
+  planoFiltro,
+}: Props) {
   const [drillMes, setDrillMes] = useState<number | null>(null)
+  const [drillSortVariacao, setDrillSortVariacao] = useState(false)
   const [exportando, setExportando] = useState(false)
   const [erroExport, setErroExport] = useState<string | null>(null)
   const filtroAtivo = temFiltroMeses(mesesFiltro)
 
   useEffect(() => {
     setDrillMes(null)
+    setDrillSortVariacao(false)
     setErroExport(null)
-  }, [ano, mesesFiltro])
+  }, [ano, mesesFiltro, planoFiltro])
+
+  useEffect(() => {
+    setDrillSortVariacao(false)
+  }, [drillMes])
 
   const chartData = useMemo(
     () =>
@@ -65,16 +175,16 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
     [rows, mesAtual, mesesFiltro, filtroAtivo],
   )
 
-  const { data: gruposMes, isLoading: loadingGrupos } = useOpexMesGrupos(ano, drillMes)
+  const { data: gruposMes, isLoading: loadingGrupos } = useOpexMesGrupos(ano, drillMes, planoFiltro)
 
-  const drillChartData = useMemo(
-    () =>
-      (gruposMes ?? []).slice(0, 16).map((g: OpexMesGrupoRow) => ({
-        ...g,
-        labelCurta: truncateLabel(g.grupo_conta),
-      })),
-    [gruposMes],
-  )
+  const drillChartData = useMemo(() => {
+    const base = (gruposMes ?? []).slice(0, 16).map((g: OpexMesGrupoRow) => ({
+      ...g,
+      labelCurta: truncateLabel(g.grupo_conta),
+    }))
+    if (!drillSortVariacao) return base
+    return [...base].sort((a, b) => b.variacao - a.variacao)
+  }, [gruposMes, drillSortVariacao])
 
   const drillMesLabel = drillMes != null ? MESES_CURTOS[drillMes - 1] : ''
 
@@ -107,16 +217,22 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
   }
 
   const drillTotais = useMemo(() => {
-    if (!gruposMes?.length) return { previsto: 0, previsto_vios: 0, realizado: 0 }
+    if (!gruposMes?.length) return { previsto: 0, realizado: 0 }
     return gruposMes.reduce(
-      (acc: { previsto: number; previsto_vios: number; realizado: number }, g: OpexMesGrupoRow) => ({
+      (acc: { previsto: number; realizado: number }, g: OpexMesGrupoRow) => ({
         previsto: acc.previsto + g.previsto,
-        previsto_vios: acc.previsto_vios + g.previsto_vios,
         realizado: acc.realizado + g.realizado,
       }),
-      { previsto: 0, previsto_vios: 0, realizado: 0 },
+      { previsto: 0, realizado: 0 },
     )
   }, [gruposMes])
+
+  const drillVariacao = drillTotais.realizado - drillTotais.previsto
+
+  const handleOrdenarPorVariacao = () => {
+    setDrillSortVariacao(true)
+    onOrdenarPorVariacao?.()
+  }
 
   const chartHeight = drillMes != null ? Math.max(320, drillChartData.length * 36 + 80) : 320
 
@@ -137,7 +253,7 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
             </h2>
             <p className="text-xs text-slate-500">
               {drillMes != null
-                ? 'Orçamento e realizado por grupo · linha tracejada = previsto VIOS'
+                ? 'Orçamento e realizado por grupo de conta'
                 : 'Clique no mês para detalhar · barras = orçamento (ou VIOS se não importado)'}
             </p>
           </div>
@@ -180,10 +296,6 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
             <strong className="tabular-nums text-slate-800">{formatCurrency(drillTotais.previsto)}</strong>
           </span>
           <span>
-            Previsto VIOS:{' '}
-            <strong className="tabular-nums text-violet-700">{formatCurrency(drillTotais.previsto_vios)}</strong>
-          </span>
-          <span>
             Realizado:{' '}
             <strong className={cn('tabular-nums', OPEX_COLORS.realizado.text)}>
               {formatCurrency(drillTotais.realizado)}
@@ -191,14 +303,17 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
           </span>
           <span>
             Variação:{' '}
-            <strong
+            <button
+              type="button"
+              onClick={handleOrdenarPorVariacao}
               className={cn(
-                'tabular-nums',
-                drillTotais.realizado - drillTotais.previsto > 0 ? 'text-rose-700' : 'text-emerald-700',
+                'rounded px-1 -mx-1 tabular-nums underline-offset-2 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300',
+                drillVariacao > 0 ? 'text-rose-700 hover:text-rose-800' : 'text-emerald-700 hover:text-emerald-800',
               )}
+              title="Ordenar grupos por variação (realizado − orçamento)"
             >
-              {formatCurrency(drillTotais.realizado - drillTotais.previsto)}
-            </strong>
+              <strong>{formatCurrency(drillVariacao)}</strong>
+            </button>
           </span>
         </div>
       )}
@@ -222,7 +337,7 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
             <BarChart
               data={drillChartData}
               layout="vertical"
-              margin={{ left: 8, right: 16, top: 8, bottom: 4 }}
+              margin={{ left: 8, right: 72, top: 8, bottom: 4 }}
               barCategoryGap="20%"
               barGap={4}
             >
@@ -248,16 +363,19 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
                 contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', maxWidth: 320 }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="previsto" name="Orçamento" fill={OPEX_COLORS.previsto.hex} radius={[0, 4, 4, 0]} maxBarSize={14} />
-              <Bar dataKey="previsto_vios" name="Previsto VIOS" fill="#8b5cf6" radius={[0, 4, 4, 0]} maxBarSize={14} />
-              <Bar dataKey="realizado" name="Realizado" fill={OPEX_COLORS.realizado.hex} radius={[0, 4, 4, 0]} maxBarSize={14} />
+              <Bar dataKey="previsto" name="Orçamento" fill={OPEX_COLORS.previsto.hex} radius={[0, 4, 4, 0]} maxBarSize={14}>
+                <LabelList dataKey="previsto" content={renderOpexBarLabelHorizontal('#6b21a8')} />
+              </Bar>
+              <Bar dataKey="realizado" name="Realizado" fill={OPEX_COLORS.realizado.hex} radius={[0, 4, 4, 0]} maxBarSize={14}>
+                <LabelList dataKey="realizado" content={renderOpexBarLabelHorizontal('#047857')} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         )}
 
         {drillMes == null && (
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
-            <ComposedChart data={chartData} margin={{ left: 4, right: 12, top: 8, bottom: 4 }}>
+            <ComposedChart data={chartData} margin={{ left: 4, right: 12, top: 28, bottom: 4 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
               <XAxis
                 dataKey="mesLabel"
@@ -273,7 +391,14 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
                 axisLine={false}
                 tickLine={false}
               />
-              <YAxis tickFormatter={formatAxis} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={60} />
+              <YAxis
+                tickFormatter={formatAxis}
+                tick={{ fontSize: 11, fill: '#64748b' }}
+                axisLine={false}
+                tickLine={false}
+                width={60}
+                padding={{ top: 20 }}
+              />
               <Tooltip
                 formatter={(value, name) => [
                   formatCurrency(typeof value === 'number' ? value : Number(value) || 0),
@@ -295,18 +420,8 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
                 {chartData.map((entry) => (
                   <Cell key={`prev-${entry.mes}`} fillOpacity={entry.ativo ? 1 : 0.25} />
                 ))}
+                <LabelList dataKey="previsto" content={renderOpexBarLabel('#6b21a8')} />
               </Bar>
-              {orcamentoImportado && (
-                <Line
-                  type="monotone"
-                  dataKey="previsto_vios"
-                  name="Previsto VIOS"
-                  stroke="#8b5cf6"
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
-                  dot={{ r: 2, fill: '#8b5cf6' }}
-                />
-              )}
               <Bar
                 dataKey="realizado"
                 name="Realizado"
@@ -319,6 +434,7 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, o
                 {chartData.map((entry) => (
                   <Cell key={`real-${entry.mes}`} fillOpacity={entry.ativo ? 1 : 0.25} />
                 ))}
+                <LabelList dataKey="realizado" content={renderOpexBarLabel('#047857')} />
               </Bar>
               <Line
                 type="monotone"

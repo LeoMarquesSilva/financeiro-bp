@@ -1,5 +1,11 @@
 import { MESES_CURTOS } from '../constants'
 
+export function planoFiltroKey(filtro: { gruposExcluidos: string[]; planosExcluidos: string[] }): string {
+  const g = [...filtro.gruposExcluidos].sort().join('\u001f')
+  const p = [...filtro.planosExcluidos].sort().join('\u001f')
+  return `${g}\u001e${p}`
+}
+
 export function mesesFiltroKey(meses: number[]): string {
   if (!meses.length) return 'ano'
   return [...meses].sort((a, b) => a - b).join(',')

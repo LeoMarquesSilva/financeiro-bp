@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Building2, Loader2 } from 'lucide-react'
+import { Building2, Loader2, X } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
@@ -20,6 +20,7 @@ type Props = {
   mesesFiltro: number[]
   somenteFixas: boolean
   mesAtual?: number
+  orcamentoImportado?: boolean
 }
 
 type Metric = 'realizado' | 'previsto'
@@ -50,9 +51,16 @@ function tooltipTotal(
   }, 0)
 }
 
-export function OpexDepartamentosChart({ ano, mesesFiltro, somenteFixas, mesAtual = 0 }: Props) {
+export function OpexDepartamentosChart({
+  ano,
+  mesesFiltro,
+  somenteFixas,
+  mesAtual = 0,
+  orcamentoImportado,
+}: Props) {
   const [metric, setMetric] = useState<Metric>('realizado')
   const [selectedSlice, setSelectedSlice] = useState<OpexAreaSlice | null>(null)
+  const [departamentosExcluidos, setDepartamentosExcluidos] = useState<Set<string>>(() => new Set())
   const filtroAtivo = temFiltroMeses(mesesFiltro)
   const { cores } = useReceitaDepartamentoCores()
   const departamentoCores = cores ?? RECEITA_DEPARTAMENTO_CORES
@@ -66,11 +74,21 @@ export function OpexDepartamentosChart({ ano, mesesFiltro, somenteFixas, mesAtua
     [data, mesesChart, metric, departamentoCores],
   )
 
+  const slicesVisiveis = useMemo(
+    () => areaSlices.filter((s) => !departamentosExcluidos.has(s.departamento)),
+    [areaSlices, departamentosExcluidos],
+  )
+
+  const slicesOcultos = useMemo(
+    () => areaSlices.filter((s) => departamentosExcluidos.has(s.departamento)),
+    [areaSlices, departamentosExcluidos],
+  )
+
   const chartData = useMemo(() => {
     const points = buildOpexDepartamentosChartData(
       ano,
       data ?? [],
-      areaSlices,
+      slicesVisiveis,
       metric,
       mesesChart,
       mesAtual,
@@ -78,7 +96,7 @@ export function OpexDepartamentosChart({ ano, mesesFiltro, somenteFixas, mesAtua
     if (!filtroAtivo) return points
     const ativos = new Set(mesesFiltro)
     return points.map((p) => ({ ...p, ativo: ativos.has(p.mes) }))
-  }, [ano, data, areaSlices, metric, mesesChart, mesAtual, filtroAtivo, mesesFiltro])
+  }, [ano, data, slicesVisiveis, metric, mesesChart, mesAtual, filtroAtivo, mesesFiltro])
 
   const totalMetric = useMemo(
     () => chartData.reduce((sum, row) => sum + (typeof row.total === 'number' ? row.total : 0), 0),
@@ -90,6 +108,27 @@ export function OpexDepartamentosChart({ ano, mesesFiltro, somenteFixas, mesAtua
   const toggleSlice = (slice: OpexAreaSlice) => {
     setSelectedSlice((prev) => (prev?.dataKey === slice.dataKey ? null : slice))
   }
+
+  const ocultarDepartamento = (departamento: string) => {
+    setDepartamentosExcluidos((prev) => new Set(prev).add(departamento))
+    setSelectedSlice((prev) => (prev?.departamento === departamento ? null : prev))
+  }
+
+  const restaurarDepartamento = (departamento: string) => {
+    setDepartamentosExcluidos((prev) => {
+      const next = new Set(prev)
+      next.delete(departamento)
+      return next
+    })
+  }
+
+  useEffect(() => {
+    setDepartamentosExcluidos((prev) => {
+      const validos = new Set(areaSlices.map((s) => s.departamento))
+      const next = new Set([...prev].filter((d) => validos.has(d)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [areaSlices])
 
   useEffect(() => {
     if (selectedSlice && !areaSlices.some((s) => s.dataKey === selectedSlice.dataKey)) {
@@ -134,7 +173,7 @@ export function OpexDepartamentosChart({ ano, mesesFiltro, somenteFixas, mesAtua
               </button>
             ))}
           </div>
-          {!isLoading && areaSlices.length > 0 && (
+          {!isLoading && slicesVisiveis.length > 0 && (
             <span className="text-xs text-slate-600">
               Total:{' '}
               <strong
@@ -171,7 +210,13 @@ export function OpexDepartamentosChart({ ano, mesesFiltro, somenteFixas, mesAtua
           </p>
         )}
 
-        {!isLoading && !error && areaSlices.length > 0 && (
+        {!isLoading && !error && areaSlices.length > 0 && slicesVisiveis.length === 0 && (
+          <p className="flex h-full items-center justify-center px-4 text-center text-sm text-slate-500">
+            Todos os departamentos foram ocultos. Restaure abaixo para exibir o gráfico.
+          </p>
+        )}
+
+        {!isLoading && !error && slicesVisiveis.length > 0 && (
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
             <BarChart data={chartData} margin={{ left: 4, right: 12, top: 8, bottom: 8 }} barCategoryGap="18%">
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
@@ -210,12 +255,12 @@ export function OpexDepartamentosChart({ ano, mesesFiltro, somenteFixas, mesAtua
                   String(name),
                 ]}
                 labelFormatter={(label, payload) => {
-                  const total = tooltipTotal(payload, areaSlices)
+                  const total = tooltipTotal(payload, slicesVisiveis)
                   return `${String(label).toUpperCase()} · ${formatCurrency(total)}`
                 }}
                 contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', maxWidth: 320 }}
               />
-              {areaSlices.map((slice) => (
+              {slicesVisiveis.map((slice) => (
                 <Bar
                   key={slice.dataKey}
                   dataKey={slice.dataKey}
@@ -248,35 +293,78 @@ export function OpexDepartamentosChart({ ano, mesesFiltro, somenteFixas, mesAtua
       {!isLoading && !error && areaSlices.length > 0 && (
         <div className="mt-4 rounded-lg border border-slate-200/80 bg-white px-3 py-3 shadow-sm">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            Áreas · clique para detalhar
+            Áreas · clique para detalhar · X oculta do gráfico
           </p>
           <div className="flex flex-wrap gap-x-3 gap-y-2">
-            {areaSlices.map((slice) => {
+            {slicesVisiveis.map((slice) => {
               const selected = selectedSlice?.dataKey === slice.dataKey
               return (
-                <button
+                <div
                   key={slice.dataKey}
-                  type="button"
-                  onClick={() => toggleSlice(slice)}
                   className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                    'inline-flex items-center overflow-hidden rounded-full border text-xs transition-colors',
                     selected
                       ? 'border-slate-300 bg-slate-900 text-white shadow-sm'
-                      : 'border-transparent bg-slate-100 text-slate-700 hover:bg-slate-200/80',
+                      : 'border-transparent bg-slate-100 text-slate-700',
                   )}
                 >
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-black/5"
-                    style={{ backgroundColor: slice.color }}
-                    aria-hidden
-                  />
-                  {slice.label}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleSlice(slice)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 py-1 pl-2.5 pr-1 transition-colors',
+                      !selected && 'hover:bg-slate-200/80',
+                    )}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-black/5"
+                      style={{ backgroundColor: slice.color }}
+                      aria-hidden
+                    />
+                    {slice.label}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => ocultarDepartamento(slice.departamento)}
+                    className={cn(
+                      'inline-flex h-full items-center px-1.5 py-1 transition-colors',
+                      selected ? 'hover:bg-white/10' : 'text-slate-500 hover:bg-slate-200/80 hover:text-slate-800',
+                    )}
+                    aria-label={`Ocultar ${slice.label} do gráfico`}
+                    title="Ocultar do gráfico"
+                  >
+                    <X className="h-3 w-3" aria-hidden />
+                  </button>
+                </div>
               )
             })}
           </div>
 
-          {selectedSlice && (
+          {slicesOcultos.length > 0 && (
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <p className="mb-2 text-[11px] font-medium text-slate-500">Ocultos do gráfico</p>
+              <div className="flex flex-wrap gap-2">
+                {slicesOcultos.map((slice) => (
+                  <button
+                    key={slice.dataKey}
+                    type="button"
+                    onClick={() => restaurarDepartamento(slice.departamento)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-slate-300 bg-slate-50 px-2.5 py-1 text-xs text-slate-600 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-800"
+                  >
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-sm opacity-50"
+                      style={{ backgroundColor: slice.color }}
+                      aria-hidden
+                    />
+                    {slice.label}
+                    <span className="text-[10px] font-medium text-violet-700">Restaurar</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedSlice && slicesVisiveis.some((s) => s.dataKey === selectedSlice.dataKey) && (
             <OpexDepartamentoDetalhe
               ano={ano}
               departamento={selectedSlice.departamento}
@@ -286,6 +374,7 @@ export function OpexDepartamentosChart({ ano, mesesFiltro, somenteFixas, mesAtua
               mesesFiltro={mesesFiltro}
               somenteFixas={somenteFixas}
               mensalRows={data ?? []}
+              orcamentoImportado={orcamentoImportado}
             />
           )}
         </div>

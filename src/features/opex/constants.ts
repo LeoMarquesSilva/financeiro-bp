@@ -1,5 +1,6 @@
 export const OPEX_COLORS = {
   previsto: { hex: '#9333ea', text: 'text-purple-700', bg: 'bg-purple-50' },
+  orcamento: { hex: '#6d28d9', text: 'text-violet-700', bg: 'bg-violet-50' },
   realizado: { hex: '#059669', text: 'text-emerald-700', bg: 'bg-emerald-50' },
   projetado: { hex: '#f59e0b', text: 'text-amber-700', bg: 'bg-amber-50' },
   fixo: { hex: '#7c3aed', text: 'text-violet-700', bg: 'bg-violet-50' },
