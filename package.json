@@ -14,7 +14,9 @@
     "sync:vios": "node scripts/sync-vios-to-supabase.cjs",
     "resync:itens-encoding": "node scripts/resync-financeiro-itens-encoding.mjs",
     "vios:baixar-e-sync": "node scripts/baixar-vios-e-sync.cjs",
-    "seed:auth": "node scripts/seed-auth-users.cjs"
+    "seed:auth": "node scripts/seed-auth-users.cjs",
+    "import:orcamento": "node scripts/import-orcamento-xlsx.cjs",
+    "verify:orcamento": "node scripts/verify-orcamento-xlsx.cjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",

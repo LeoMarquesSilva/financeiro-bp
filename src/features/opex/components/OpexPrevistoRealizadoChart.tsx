@@ -12,12 +12,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { ArrowLeft, BarChart3, Loader2 } from 'lucide-react'
+import { ArrowLeft, BarChart3, Download, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
 import { MESES_CURTOS, OPEX_COLORS } from '../constants'
 import { useOpexMesGrupos } from '../hooks/useOpexMesGrupos'
+import { exportOpexMesGruposExcel } from '../utils/opexMesGruposExport'
 import { temFiltroMeses } from '../utils/opexPeriodo'
 import type { OpexMesGrupoRow, OpexMesRow } from '../types/opex.types'
 
@@ -26,6 +27,7 @@ type Props = {
   mesAtual: number
   ano: number
   mesesFiltro: number[]
+  orcamentoImportado?: boolean
 }
 
 function formatAxis(value: number): string {
@@ -42,12 +44,15 @@ function truncateLabel(label: string, max = 28): string {
   return `${label.slice(0, max - 1)}…`
 }
 
-export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro }: Props) {
+export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro, orcamentoImportado }: Props) {
   const [drillMes, setDrillMes] = useState<number | null>(null)
+  const [exportando, setExportando] = useState(false)
+  const [erroExport, setErroExport] = useState<string | null>(null)
   const filtroAtivo = temFiltroMeses(mesesFiltro)
 
   useEffect(() => {
     setDrillMes(null)
+    setErroExport(null)
   }, [ano, mesesFiltro])
 
   const chartData = useMemo(
@@ -81,16 +86,35 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro }:
 
   const handleVoltar = () => {
     setDrillMes(null)
+    setErroExport(null)
+  }
+
+  const handleExportar = async () => {
+    if (drillMes == null || !gruposMes?.length) return
+    setExportando(true)
+    setErroExport(null)
+    try {
+      await exportOpexMesGruposExcel(gruposMes, {
+        ano,
+        mes: drillMes,
+        mesLabel: drillMesLabel,
+      })
+    } catch (e) {
+      setErroExport(e instanceof Error ? e.message : 'Erro ao exportar planilha.')
+    } finally {
+      setExportando(false)
+    }
   }
 
   const drillTotais = useMemo(() => {
-    if (!gruposMes?.length) return { previsto: 0, realizado: 0 }
+    if (!gruposMes?.length) return { previsto: 0, previsto_vios: 0, realizado: 0 }
     return gruposMes.reduce(
-      (acc: { previsto: number; realizado: number }, g: OpexMesGrupoRow) => ({
+      (acc: { previsto: number; previsto_vios: number; realizado: number }, g: OpexMesGrupoRow) => ({
         previsto: acc.previsto + g.previsto,
+        previsto_vios: acc.previsto_vios + g.previsto_vios,
         realizado: acc.realizado + g.realizado,
       }),
-      { previsto: 0, realizado: 0 },
+      { previsto: 0, previsto_vios: 0, realizado: 0 },
     )
   }, [gruposMes])
 
@@ -107,28 +131,57 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro }:
             <h2 className="text-sm font-semibold text-slate-900">
               {drillMes != null
                 ? `Detalhe de ${drillMesLabel} / ${ano}`
-                : 'Previsto x realizado mensal'}
+                : orcamentoImportado
+                  ? 'Orçamento x realizado mensal'
+                  : 'Previsto x realizado mensal'}
             </h2>
             <p className="text-xs text-slate-500">
               {drillMes != null
-                ? 'Previsto e realizado por grupo de conta · clique em Voltar para a visão anual'
-                : 'Clique no mês para detalhar por grupo · use o seletor acima para filtrar meses'}
+                ? 'Orçamento e realizado por grupo · linha tracejada = previsto VIOS'
+                : 'Clique no mês para detalhar · barras = orçamento (ou VIOS se não importado)'}
             </p>
           </div>
         </div>
         {drillMes != null && (
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleVoltar}>
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-            Voltar
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={loadingGrupos || exportando || !gruposMes?.length}
+              onClick={() => void handleExportar()}
+            >
+              {exportando ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Download className="h-3.5 w-3.5" aria-hidden />
+              )}
+              Excel
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleVoltar}>
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+              Voltar
+            </Button>
+          </div>
         )}
       </div>
+
+      {erroExport && (
+        <p className="mb-3 text-xs text-red-600" role="alert">
+          {erroExport}
+        </p>
+      )}
 
       {drillMes != null && !loadingGrupos && gruposMes && (
         <div className="mb-3 flex flex-wrap gap-3 text-xs text-slate-600">
           <span>
-            Previsto:{' '}
+            Orçamento:{' '}
             <strong className="tabular-nums text-slate-800">{formatCurrency(drillTotais.previsto)}</strong>
+          </span>
+          <span>
+            Previsto VIOS:{' '}
+            <strong className="tabular-nums text-violet-700">{formatCurrency(drillTotais.previsto_vios)}</strong>
           </span>
           <span>
             Realizado:{' '}
@@ -195,7 +248,8 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro }:
                 contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', maxWidth: 320 }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="previsto" name="Previsto" fill={OPEX_COLORS.previsto.hex} radius={[0, 4, 4, 0]} maxBarSize={14} />
+              <Bar dataKey="previsto" name="Orçamento" fill={OPEX_COLORS.previsto.hex} radius={[0, 4, 4, 0]} maxBarSize={14} />
+              <Bar dataKey="previsto_vios" name="Previsto VIOS" fill="#8b5cf6" radius={[0, 4, 4, 0]} maxBarSize={14} />
               <Bar dataKey="realizado" name="Realizado" fill={OPEX_COLORS.realizado.hex} radius={[0, 4, 4, 0]} maxBarSize={14} />
             </BarChart>
           </ResponsiveContainer>
@@ -231,7 +285,7 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro }:
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar
                 dataKey="previsto"
-                name="Previsto"
+                name="Orçamento"
                 fill={OPEX_COLORS.previsto.hex}
                 radius={[4, 4, 0, 0]}
                 maxBarSize={40}
@@ -242,6 +296,17 @@ export function OpexPrevistoRealizadoChart({ rows, mesAtual, ano, mesesFiltro }:
                   <Cell key={`prev-${entry.mes}`} fillOpacity={entry.ativo ? 1 : 0.25} />
                 ))}
               </Bar>
+              {orcamentoImportado && (
+                <Line
+                  type="monotone"
+                  dataKey="previsto_vios"
+                  name="Previsto VIOS"
+                  stroke="#8b5cf6"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  dot={{ r: 2, fill: '#8b5cf6' }}
+                />
+              )}
               <Bar
                 dataKey="realizado"
                 name="Realizado"

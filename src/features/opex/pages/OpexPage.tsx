@@ -9,6 +9,7 @@ import { OpexProjecaoFixas } from '../components/OpexProjecaoFixas'
 import { OpexGruposTable } from '../components/OpexGruposTable'
 import { OpexDepartamentosChart } from '../components/OpexDepartamentosChart'
 import { OpexMetasEstrategicas } from '../components/OpexMetasEstrategicas'
+import { OpexOrcamentoSection } from '../components/OpexOrcamentoSection'
 import { OpexPeriodoSelector } from '../components/OpexPeriodoSelector'
 import { formatPeriodoOpex, temFiltroMeses } from '../utils/opexPeriodo'
 
@@ -36,7 +37,7 @@ export function OpexPage() {
             OPEX
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Despesas operacionais do escritório (títulos PAGAR do VIOS) — previsto x realizado e projeção de fixas.
+            Despesas operacionais — orçamento congelado x realizado (VIOS) e projeção de fixas.
           </p>
         </div>
         <div className="flex flex-col items-end gap-3">
@@ -83,11 +84,15 @@ export function OpexPage() {
         </p>
       )}
 
+      <OpexOrcamentoSection ano={ano} />
+
       <OpexKpis
         kpis={data?.kpis ?? {
           realizado_ytd: 0,
           previsto_ytd: 0,
+          previsto_vios_ytd: 0,
           previsto_ano: 0,
+          previsto_vios_ano: 0,
           projetado_ano: 0,
           media_mensal_fixas: 0,
           variancia_ytd_pct: 0,
@@ -95,6 +100,7 @@ export function OpexPage() {
         ano={ano}
         mesAtual={data?.mes_atual ?? 0}
         mesesFiltro={mesesFiltro}
+        orcamentoImportado={data?.orcamento_importado}
         loading={isLoading}
       />
 
@@ -105,6 +111,7 @@ export function OpexPage() {
             mesAtual={data.mes_atual}
             ano={data.ano}
             mesesFiltro={mesesFiltro}
+            orcamentoImportado={data.orcamento_importado}
           />
 
           {!temFiltroMeses(mesesFiltro) && (
@@ -116,6 +123,7 @@ export function OpexPage() {
             ano={data.ano}
             mesesFiltro={mesesFiltro}
             soFixas={soFixas}
+            orcamentoImportado={data.orcamento_importado}
             onSoFixasChange={setSoFixas}
             chartSlot={
               <OpexDepartamentosChart
@@ -139,7 +147,8 @@ export function OpexPage() {
       )}
 
       <p className="text-xs leading-relaxed text-slate-500">
-        <strong>Previsto:</strong> compromissos por data de vencimento no ano.{' '}
+        <strong>Orçamento:</strong> previsão orçamentária congelada (importada ou editada no painel acima).{' '}
+        <strong>Previsto VIOS:</strong> títulos lançados por vencimento — comparativo operacional.{' '}
         <strong>Realizado:</strong> pagamentos efetuados.{' '}
         {temFiltroMeses(mesesFiltro) ? (
           <>

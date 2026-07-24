@@ -49,6 +49,10 @@ interface ModalCadastroProps {
   open: boolean
   onClose: () => void
   onSuccess: () => void
+  initialGrupo?: string
+  initialValor?: number
+  initialPessoaId?: string | null
+  initialClasse?: InadimplenciaClasse
 }
 
 interface FormState {
@@ -71,7 +75,15 @@ const initialForm: FormState = {
   observacoes_gerais: '',
 }
 
-export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) {
+export function ModalCadastro({
+  open,
+  onClose,
+  onSuccess,
+  initialGrupo,
+  initialValor,
+  initialPessoaId,
+  initialClasse,
+}: ModalCadastroProps) {
   const { fullName } = useAuth()
   const { createCliente, reabrirCliente } = useInadimplenciaMutations()
   const { teamMembers } = useTeamMembers()
@@ -137,6 +149,18 @@ export function ModalCadastro({ open, onClose, onSuccess }: ModalCadastroProps) 
     lista = filtrado.slice(0, MAX_GRUPOS_DROPDOWN)
     return { filteredGrupos: lista, totalFiltrado: total, excedeuLimite: total > MAX_GRUPOS_DROPDOWN }
   }, [grupos, grupoSearch])
+
+  useEffect(() => {
+    if (!open) return
+    if (!initialGrupo?.trim()) return
+    setForm((f) => ({
+      ...f,
+      grupo: initialGrupo,
+      pessoaIdPrincipal: initialPessoaId ?? null,
+      valorEmAtraso: initialValor ?? 0,
+      status_classe: initialClasse ?? 'C',
+    }))
+  }, [open, initialGrupo, initialValor, initialPessoaId, initialClasse])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

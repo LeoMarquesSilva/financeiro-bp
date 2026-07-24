@@ -116,7 +116,7 @@ export const RECEITA_DEPARTAMENTO_CORES: Record<string, string> = {
   civel: '#dc2626',
   civel_insolvencia: '#9333ea',
   contratos: '#7c2d12',
-  tributario: '#d97706',
+  tributario: '#7c3aed',
   trabalhista: '#db2777',
   recuperacao_de_credito: '#0891b2',
   distressed_deals: '#ea580c',

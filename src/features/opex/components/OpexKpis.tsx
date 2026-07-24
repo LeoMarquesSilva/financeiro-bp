@@ -10,6 +10,7 @@ type Props = {
   ano: number
   mesAtual: number
   mesesFiltro: number[]
+  orcamentoImportado?: boolean
   loading?: boolean
 }
 
@@ -42,7 +43,7 @@ function KpiCard({
   )
 }
 
-export function OpexKpis({ kpis, ano, mesAtual, mesesFiltro, loading }: Props) {
+export function OpexKpis({ kpis, ano, mesAtual, mesesFiltro, orcamentoImportado, loading }: Props) {
   if (loading) {
     return (
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -68,16 +69,26 @@ export function OpexKpis({ kpis, ano, mesAtual, mesesFiltro, loading }: Props) {
         accent={OPEX_COLORS.realizado.text}
       />
       <KpiCard
-        label={filtroAtivo ? (umMes ? 'Previsto no mês' : 'Previsto no período') : 'Previsto no período'}
+        label={filtroAtivo ? (umMes ? 'Orçamento no mês' : 'Orçamento no período') : 'Orçamento no período'}
         value={formatCurrency(kpis.previsto_ytd)}
-        sub="Compromissos por vencimento"
+        sub={
+          orcamentoImportado
+            ? `Previsto VIOS: ${formatCurrency(kpis.previsto_vios_ytd)}`
+            : 'Orçamento não importado — usando VIOS'
+        }
         icon={Target}
         accent="text-slate-800"
       />
       <KpiCard
-        label={filtroAtivo ? 'Previsto no ano' : 'Projeção até dez'}
+        label={filtroAtivo ? 'Orçamento no ano' : 'Projeção até dez'}
         value={formatCurrency(filtroAtivo ? kpis.previsto_ano : kpis.projetado_ano)}
-        sub={filtroAtivo ? 'Compromissos anuais por vencimento' : 'Realizado + previsto futuro'}
+        sub={
+          orcamentoImportado
+            ? `Previsto VIOS anual: ${formatCurrency(kpis.previsto_vios_ano)}`
+            : filtroAtivo
+              ? 'Compromissos anuais por vencimento'
+              : 'Realizado + orçamento futuro'
+        }
         icon={CalendarRange}
         accent={OPEX_COLORS.projetado.text}
       />
@@ -101,7 +112,7 @@ export function OpexKpis({ kpis, ano, mesAtual, mesesFiltro, loading }: Props) {
               {formatPercent(Math.abs(kpis.variancia_ytd_pct))}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              {filtroAtivo ? 'Realizado vs previsto no período selecionado' : 'Realizado vs previsto no período'}
+              {filtroAtivo ? 'Realizado vs orçamento no período selecionado' : 'Realizado vs orçamento no período'}
             </p>
           </div>
           <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', 'bg-slate-100')}>

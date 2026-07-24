@@ -9,6 +9,7 @@ import { InadimplenciaDashboardPage } from '@/features/inadimplencia/pages/Inadi
 import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
 import { EscritorioFinanceiroDetalhePage } from '@/features/escritorio/pages/EscritorioFinanceiroDetalhePage'
 import { CobrancaPage } from '@/features/cobranca/pages/CobrancaPage'
+import { CobrancaSeguimentoPage } from '@/features/cobranca/pages/CobrancaSeguimentoPage'
 import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
 import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesPage'
 import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
@@ -79,6 +80,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
                 <CobrancaPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="cobranca/seguimento"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
+                <CobrancaSeguimentoPage />
               </ProtectedRoute>
             }
           />

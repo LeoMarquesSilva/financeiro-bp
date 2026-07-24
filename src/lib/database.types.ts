@@ -660,6 +660,47 @@ export interface Database {
         Insert: unknown
         Update: unknown
       }
+      cobranca_seguimento_acoes: {
+        Row: {
+          id: string
+          grupo_chave: string
+          tipo:
+            | 'ligacao'
+            | 'email'
+            | 'whatsapp'
+            | 'reuniao'
+            | 'acordo'
+            | 'promessa_pagamento'
+            | 'outro'
+          descricao: string
+          data_acao: string
+          data_follow_up: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          grupo_chave: string
+          tipo:
+            | 'ligacao'
+            | 'email'
+            | 'whatsapp'
+            | 'reuniao'
+            | 'acordo'
+            | 'promessa_pagamento'
+            | 'outro'
+          descricao: string
+          data_acao?: string
+          data_follow_up?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          descricao?: string
+          data_acao?: string
+          data_follow_up?: string | null
+        }
+      }
     }
   }
 }
@@ -668,6 +709,7 @@ export type CobrancaPainelRow = Database['public']['Tables']['cobranca_painel'][
 export type CobrancaTituloAbertoRow = Database['public']['Tables']['cobranca_titulos_abertos']['Row']
 export type CobrancaKpiRow = Database['public']['Tables']['cobranca_kpi']['Row']
 export type CobrancaEventoRow = Database['public']['Tables']['cobranca_eventos']['Row']
+export type CobrancaSeguimentoAcaoRow = Database['public']['Tables']['cobranca_seguimento_acoes']['Row']
 export type WhatsappChatRow = Database['public']['Tables']['whatsapp_chats']['Row']
 export type WhatsappMensagemRow = Database['public']['Tables']['whatsapp_mensagens']['Row']
 

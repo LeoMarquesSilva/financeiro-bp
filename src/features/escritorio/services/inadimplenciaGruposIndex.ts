@@ -20,6 +20,8 @@ export interface InadimplenciaGrupoRef {
 export interface InadimplenciaGruposIndex {
   byPessoaId: Map<string, InadimplenciaGrupoRef>
   byGrupoNorm: Map<string, InadimplenciaGrupoRef>
+  /** Chave normalizada de grupo_cliente → card do comitê (via pessoa_id). */
+  byGrupoClienteNorm: Map<string, InadimplenciaGrupoRef>
   /** Nomes de grupo normalizados com inadimplência ativa */
   gruposAtivosNorm: Set<string>
   /** Nomes de grupo normalizados só com histórico resolvido */
@@ -134,7 +136,16 @@ export async function fetchInadimplenciaGruposIndex(): Promise<InadimplenciaGrup
   const pessoaGrupos = await fetchGruposByPessoaIds([...byPessoaId.keys()])
   const { gruposAtivosNorm, gruposResolvidosNorm } = buildGrupoNormSets(byPessoaId, byGrupoNorm, pessoaGrupos)
 
-  return { byPessoaId, byGrupoNorm, gruposAtivosNorm, gruposResolvidosNorm }
+  const byGrupoClienteNorm = new Map<string, InadimplenciaGrupoRef>()
+  for (const [pessoaId, ref] of byPessoaId) {
+    const grupoNome = pessoaGrupos.get(pessoaId)
+    if (!grupoNome) continue
+    const norm = normalizarNomeGrupo(grupoNome)
+    if (!norm) continue
+    byGrupoClienteNorm.set(norm, preferRef(byGrupoClienteNorm.get(norm), ref))
+  }
+
+  return { byPessoaId, byGrupoNorm, byGrupoClienteNorm, gruposAtivosNorm, gruposResolvidosNorm }
 }
 
 export function grupoDisplayNorm(grupoCliente: string): string {
@@ -247,4 +258,49 @@ export function getInadimplenciaAtivaForGrupo(
   index: InadimplenciaGruposIndex
 ): InadimplenciaGrupoRef | null {
   return getInadimplenciaStatusForGrupo(grupo, index).ativa
+}
+
+/** Resolve status do comitê a partir da chave de grupo do seguimento de cobrança / receita. */
+export function getInadimplenciaStatusForGrupoChave(
+  grupoChave: string,
+  index: InadimplenciaGruposIndex
+): InadimplenciaGrupoStatus {
+  const norm = normalizarNomeGrupo(grupoChave)
+  if (!norm) return { ativa: null, resolvida: null }
+
+  const byGrupoCliente = index.byGrupoClienteNorm.get(norm)
+  if (byGrupoCliente) {
+    return byGrupoCliente.resolvido_at
+      ? { ativa: null, resolvida: byGrupoCliente }
+      : { ativa: byGrupoCliente, resolvida: null }
+  }
+
+  const byRazao = index.byGrupoNorm.get(norm)
+  if (byRazao) {
+    return byRazao.resolvido_at
+      ? { ativa: null, resolvida: byRazao }
+      : { ativa: byRazao, resolvida: null }
+  }
+
+  return { ativa: null, resolvida: null }
+}
+
+/** Grupo/cliente com card ativo no comitê de inadimplência. */
+export function grupoChaveNoComiteInadimplencia(
+  grupoChave: string,
+  index: InadimplenciaGruposIndex,
+): boolean {
+  return getInadimplenciaStatusForGrupoChave(grupoChave, index).ativa != null
+}
+
+export function grupoChaveMatchesComite(
+  grupoChave: string,
+  index: InadimplenciaGruposIndex,
+  filtro: FiltroComite,
+): boolean {
+  if (filtro === 'todos') return true
+  const noComite = grupoChaveNoComiteInadimplencia(grupoChave, index)
+  if (filtro === 'comite') return noComite
+  if (filtro === 'fora_comite') return !noComite
+  return true
 }

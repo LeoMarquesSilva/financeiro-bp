@@ -14,6 +14,7 @@ type Props = {
   ano: number
   mesesFiltro: number[]
   soFixas: boolean
+  orcamentoImportado?: boolean
   onSoFixasChange: (value: boolean) => void
   chartSlot: ReactNode
 }
@@ -134,7 +135,7 @@ function GrupoDetalhe({
   )
 }
 
-export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, onSoFixasChange, chartSlot }: Props) {
+export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, orcamentoImportado, onSoFixasChange, chartSlot }: Props) {
   const [aberto, setAberto] = useState<string | null>(null)
   const filtroAtivo = temFiltroMeses(mesesFiltro)
 
@@ -177,8 +178,11 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, onSoFixasCh
                 {filtroAtivo ? 'Realizado período' : 'Realizado YTD'}
               </th>
               <th className="hidden px-4 py-3 text-right sm:table-cell">
-                {filtroAtivo ? 'Previsto período' : 'Previsto ano'}
+                {filtroAtivo ? 'Orçamento período' : 'Orçamento ano'}
               </th>
+              {orcamentoImportado && (
+                <th className="hidden px-4 py-3 text-right md:table-cell">Previsto VIOS</th>
+              )}
               {!filtroAtivo && <th className="hidden px-4 py-3 text-right lg:table-cell">Projetado ano</th>}
               <th className="hidden px-4 py-3 text-center md:table-cell">% realizado</th>
             </tr>
@@ -229,6 +233,11 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, onSoFixasCh
                     <td className={cn('hidden px-4 py-2.5 text-right tabular-nums sm:table-cell', OPEX_COLORS.previsto.text)}>
                       {formatCurrency(g.previsto_ano)}
                     </td>
+                    {orcamentoImportado && (
+                      <td className="hidden px-4 py-2.5 text-right tabular-nums text-violet-700 md:table-cell">
+                        {formatCurrency(g.previsto_vios)}
+                      </td>
+                    )}
                     {!filtroAtivo && (
                       <td className={cn('hidden px-4 py-2.5 text-right tabular-nums lg:table-cell', OPEX_COLORS.projetado.text)}>
                         {formatCurrency(g.projetado_ano)}
@@ -240,7 +249,7 @@ export function OpexGruposTable({ grupos, ano, mesesFiltro, soFixas, onSoFixasCh
                   </tr>
                   {expandido && (
                     <tr>
-                      <td colSpan={filtroAtivo ? 4 : 5} className="p-0">
+                      <td colSpan={filtroAtivo ? (orcamentoImportado ? 5 : 4) : orcamentoImportado ? 6 : 5} className="p-0">
                         <GrupoDetalhe ano={ano} grupo={g.grupo_conta} mesesFiltro={mesesFiltro} />
                       </td>
                     </tr>

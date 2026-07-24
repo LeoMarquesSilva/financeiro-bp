@@ -7,6 +7,7 @@ import type {
   OpexDepartamentoPlanoRow,
   OpexDepartamentoRow,
   OpexMesGrupoRow,
+  OpexMesItemRow,
   OpexPlanoRow,
   OpexTituloRow,
 } from '../types/opex.types'
@@ -41,6 +42,7 @@ function mapDashboard(raw: Record<string, unknown>): OpexDashboard {
       mes,
       mesLabel: MESES_CURTOS[mes - 1] ?? String(mes),
       previsto: Number(e.previsto) || 0,
+      previsto_vios: Number(e.previsto_vios) || 0,
       realizado: Number(e.realizado) || 0,
       projetado_fixas: Number(e.projetado_fixas) || 0,
       variacao: Number(e.variacao) || 0,
@@ -51,6 +53,7 @@ function mapDashboard(raw: Record<string, unknown>): OpexDashboard {
     fixo: Boolean(g.fixo),
     realizado_ytd: Number(g.realizado_ytd) || 0,
     previsto_ano: Number(g.previsto_ano) || 0,
+    previsto_vios: Number(g.previsto_vios) || 0,
     previsto_restante: Number(g.previsto_restante) || 0,
     projetado_ano: Number(g.projetado_ano) || 0,
   }))
@@ -66,10 +69,13 @@ function mapDashboard(raw: Record<string, unknown>): OpexDashboard {
     ano: Number(raw.ano) || new Date().getFullYear(),
     mes_atual: Number(raw.mes_atual) || 0,
     meses_filtro,
+    orcamento_importado: Boolean(raw.orcamento_importado),
     kpis: {
       realizado_ytd: Number(kpis.realizado_ytd) || 0,
       previsto_ytd: Number(kpis.previsto_ytd) || 0,
+      previsto_vios_ytd: Number(kpis.previsto_vios_ytd) || 0,
       previsto_ano: Number(kpis.previsto_ano) || 0,
+      previsto_vios_ano: Number(kpis.previsto_vios_ano) || 0,
       projetado_ano: Number(kpis.projetado_ano) || 0,
       media_mensal_fixas: Number(kpis.media_mensal_fixas) || 0,
       variancia_ytd_pct: Number(kpis.variancia_ytd_pct) || 0,
@@ -103,8 +109,36 @@ export const opexService = {
       grupo_conta: String(row.grupo_conta ?? ''),
       fixo: Boolean(row.fixo),
       previsto: Number(row.previsto) || 0,
+      previsto_vios: Number(row.previsto_vios) || 0,
       realizado: Number(row.realizado) || 0,
       variacao: Number(row.variacao) || 0,
+    }))
+  },
+
+  async fetchMesItens(ano: number, mes: number): Promise<OpexMesItemRow[]> {
+    const { data, error } = await supabase.rpc(
+      'opex_mes_itens' as never,
+      { p_ano: ano, p_mes: mes } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      grupo_conta: String(row.grupo_conta ?? ''),
+      plano_contas: String(row.plano_contas ?? ''),
+      conta_numero: String(row.conta_numero ?? ''),
+      fixo: Boolean(row.fixo),
+      ci_item: Number(row.ci_item) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      nro_titulo: String(row.nro_titulo ?? ''),
+      descricao: String(row.descricao ?? ''),
+      fornecedor: String(row.fornecedor ?? ''),
+      departamento: String(row.departamento ?? ''),
+      situacao_titulo: String(row.situacao_titulo ?? ''),
+      data_vencimento: row.data_vencimento ? String(row.data_vencimento) : null,
+      data_pagamento: row.data_pagamento ? String(row.data_pagamento) : null,
+      valor_previsto: Number(row.valor_previsto) || 0,
+      valor_previsto_vios: Number(row.valor_previsto_vios) || 0,
+      valor_orcamento: Number(row.valor_orcamento) || 0,
+      valor_realizado: Number(row.valor_realizado) || 0,
     }))
   },
 
@@ -118,6 +152,7 @@ export const opexService = {
       plano_contas: String(row.plano_contas ?? ''),
       realizado_ytd: Number(row.realizado_ytd) || 0,
       previsto_ano: Number(row.previsto_ano) || 0,
+      previsto_vios: Number(row.previsto_vios) || 0,
     }))
   },
 

@@ -37,4 +37,21 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow: 0 0 20px rgba(213, 177, 112, 0.08);
   }
+
+  .cobranca-kpi-card {
+    container-type: inline-size;
+  }
+
+  .cobranca-kpi-value {
+    font-size: clamp(1rem, 9cqi, 1.875rem);
+    line-height: 1.15;
+  }
+
+  .cobranca-kpi-value--short {
+    font-size: clamp(1.25rem, 11cqi, 2.25rem);
+  }
+
+  .cobranca-kpi-value--long {
+    font-size: clamp(0.875rem, 7.5cqi, 1.375rem);
+  }
 }
