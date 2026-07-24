@@ -2,12 +2,22 @@ import { supabase } from '@/lib/supabaseClient'
 import { startOfMonth, endOfMonth } from 'date-fns'
 import { DATA_INICIO_COMITE } from '@/shared/constants/inadimplencia'
 import { FINANCEIRO_PARCELAS_SO_RECEBER_OR } from '@/shared/utils/financeiroTitulo'
+import { cobrancaSeguimentoService } from '@/features/cobranca/services/cobrancaSeguimentoService'
+import {
+  fetchInadimplenciaGruposIndex,
+  grupoChaveNoComiteInadimplencia,
+} from '@/features/escritorio/services/inadimplenciaGruposIndex'
 
 export interface DashboardTotais {
   totalEmAberto: number
   totalClasseA: number
   totalClasseB: number
   totalClasseC: number
+  comiteClasseA: number
+  comiteClasseB: number
+  comiteClasseC: number
+  pontualClasseA: number
+  pontualClasseB: number
   totalRecuperadoMes: number
   percentualRecuperacao: number
 }
@@ -88,6 +98,22 @@ function getTotaisPorClasseFromRows(rows: ClientListRow[]): { A: number; B: numb
     acc[r.status_classe as keyof typeof acc] += Number(r.valor_em_aberto)
   }
   return acc
+}
+
+async function getPontualTotaisPorClasse(): Promise<{ A: number; B: number }> {
+  const [seguimento, index] = await Promise.all([
+    cobrancaSeguimentoService.fetchDashboard(),
+    fetchInadimplenciaGruposIndex(),
+  ])
+
+  let A = 0
+  let B = 0
+  for (const g of seguimento.grupos) {
+    if (grupoChaveNoComiteInadimplencia(g.grupo_chave, index)) continue
+    if (g.max_dias_atraso <= 30) A += g.valor_total
+    else B += g.valor_total
+  }
+  return { A, B }
 }
 
 function getValorEmAbertoPorGestorFromRows(rows: ClientListRow[]): RankingItem[] {
@@ -315,6 +341,7 @@ export const dashboardService = {
       rankingAreas,
       tempoMedio,
       followUpAlerts,
+      pontualPorClasse,
     ] = await Promise.all([
       fetchClientListRows(),
       getTotalRecuperadoNoMes(),
@@ -322,10 +349,13 @@ export const dashboardService = {
       getRankingAreas(),
       getTempoMedioRecuperacao(),
       getFollowUpAlerts(),
+      getPontualTotaisPorClasse(),
     ])
 
-    const emAberto = getTotalEmAbertoFromRows(clientListRows)
+    const emAbertoComite = getTotalEmAbertoFromRows(clientListRows)
     const porClasse = getTotaisPorClasseFromRows(clientListRows)
+    const pontualEmAberto = pontualPorClasse.A + pontualPorClasse.B
+    const emAberto = emAbertoComite + pontualEmAberto
     const valorPorGestor = getValorEmAbertoPorGestorFromRows(clientListRows)
     const valorPorArea = getValorEmAbertoPorAreaFromRows(clientListRows)
     const taxaRecuperacaoComite = await getTaxaRecuperacaoComite(clientListRows)
@@ -337,9 +367,14 @@ export const dashboardService = {
     return {
       totais: {
         totalEmAberto: emAberto,
-        totalClasseA: porClasse.A,
-        totalClasseB: porClasse.B,
+        totalClasseA: porClasse.A + pontualPorClasse.A,
+        totalClasseB: porClasse.B + pontualPorClasse.B,
         totalClasseC: porClasse.C,
+        comiteClasseA: porClasse.A,
+        comiteClasseB: porClasse.B,
+        comiteClasseC: porClasse.C,
+        pontualClasseA: pontualPorClasse.A,
+        pontualClasseB: pontualPorClasse.B,
         totalRecuperadoMes: recuperadoMes,
         percentualRecuperacao,
       },

@@ -151,20 +151,32 @@ export function InadimplenciaDashboardPage() {
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 font-semibold text-slate-800">Total por classe (em aberto)</h3>
+          <h3 className="mb-1 font-semibold text-slate-800">Total por classe (em aberto)</h3>
+          <p className="mb-3 text-xs text-slate-500">
+            Inclui Comitê de Inadimplência e títulos da Inadimplência Pontual (fora do comitê).
+          </p>
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between rounded bg-blue-50 px-3 py-2">
-              <span className="text-sm font-medium text-blue-900">Classe A</span>
-              <span className="font-bold text-blue-900">{formatCurrency(totais.totalClasseA)}</span>
-            </div>
-            <div className="flex items-center justify-between rounded bg-amber-50 px-3 py-2">
-              <span className="text-sm font-medium text-amber-900">Classe B</span>
-              <span className="font-bold text-amber-900">{formatCurrency(totais.totalClasseB)}</span>
-            </div>
-            <div className="flex items-center justify-between rounded bg-red-50 px-3 py-2">
-              <span className="text-sm font-medium text-red-900">Classe C</span>
-              <span className="font-bold text-red-900">{formatCurrency(totais.totalClasseC)}</span>
-            </div>
+            <ClasseTotalRow
+              label="Classe A"
+              total={totais.totalClasseA}
+              comite={totais.comiteClasseA}
+              pontual={totais.pontualClasseA}
+              tone="blue"
+            />
+            <ClasseTotalRow
+              label="Classe B"
+              total={totais.totalClasseB}
+              comite={totais.comiteClasseB}
+              pontual={totais.pontualClasseB}
+              tone="amber"
+            />
+            <ClasseTotalRow
+              label="Classe C"
+              total={totais.totalClasseC}
+              comite={totais.comiteClasseC}
+              pontual={0}
+              tone="red"
+            />
           </div>
           <div className="mt-4 h-48">
             <GraficoClasses
@@ -299,6 +311,53 @@ export function InadimplenciaDashboardPage() {
           )}
         </div>
       </section>
+    </div>
+  )
+}
+
+function ClasseTotalRow({
+  label,
+  total,
+  comite,
+  pontual,
+  tone,
+}: {
+  label: string
+  total: number
+  comite: number
+  pontual: number
+  tone: 'blue' | 'amber' | 'red'
+}) {
+  const tones = {
+    blue: {
+      box: 'bg-blue-50',
+      title: 'text-blue-900',
+      detail: 'text-blue-800/75',
+    },
+    amber: {
+      box: 'bg-amber-50',
+      title: 'text-amber-900',
+      detail: 'text-amber-800/75',
+    },
+    red: {
+      box: 'bg-red-50',
+      title: 'text-red-900',
+      detail: 'text-red-800/75',
+    },
+  }[tone]
+
+  return (
+    <div className={`rounded px-3 py-2 ${tones.box}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={`text-sm font-medium ${tones.title}`}>{label}</span>
+        <span className={`font-bold ${tones.title}`}>{formatCurrency(total)}</span>
+      </div>
+      {(comite > 0 || pontual > 0) && (
+        <p className={`mt-0.5 text-[11px] ${tones.detail}`}>
+          Comitê {formatCurrency(comite)}
+          {pontual > 0 ? ` · Pontual ${formatCurrency(pontual)}` : ''}
+        </p>
+      )}
     </div>
   )
 }

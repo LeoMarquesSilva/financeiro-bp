@@ -22,6 +22,7 @@ import { EditarContatoModal } from '../components/EditarContatoModal'
 import { ConfirmarCobrancaModal } from '../components/ConfirmarCobrancaModal'
 import { CobrarGrupoModal } from '../components/CobrarGrupoModal'
 import { CobrarEmailModal } from '../components/CobrarEmailModal'
+import { CobrancaArquivarModal } from '../components/CobrancaArquivarModal'
 import { WhatsappInbox } from '../components/WhatsappInbox'
 import {
   BellRing,
@@ -76,6 +77,7 @@ export function CobrancaPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [editRow, setEditRow] = useState<CobrancaPainelRow | null>(null)
+  const [arquivarRow, setArquivarRow] = useState<CobrancaPainelRow | null>(null)
   const [canalEnvio, setCanalEnvio] = useState<'whatsapp' | 'email' | null>(null)
   const [pendingWhatsapp, setPendingWhatsapp] = useState<PendingWhatsappCobranca | null>(null)
   const [openWhatsapp, setOpenWhatsapp] = useState<OpenWhatsappConversa | null>(null)
@@ -141,31 +143,31 @@ export function CobrancaPage() {
     })
   }
 
-  const handleArquivar = async (row: CobrancaPainelRow) => {
+  const handleArquivar = (row: CobrancaPainelRow) => {
     if (!canArquivar) {
       toast.error('Sem permissão para remover títulos do painel.')
       return
     }
-    try {
-      await cobrancaService.arquivar(row.parcela_id, null, fullName)
-      toast.success('Título removido do painel', {
-        action: {
-          label: 'Desfazer',
-          onClick: async () => {
-            await cobrancaService.desarquivar(row.parcela_id)
-            refreshPainel()
-          },
+    setArquivarRow(row)
+  }
+
+  const confirmarArquivar = async (row: CobrancaPainelRow, motivo: string) => {
+    await cobrancaService.arquivar(row.parcela_id, motivo, fullName)
+    toast.success('Título removido do painel', {
+      action: {
+        label: 'Desfazer',
+        onClick: async () => {
+          await cobrancaService.desarquivar(row.parcela_id)
+          refreshPainel()
         },
-      })
-      setSelectedIds((prev) => {
-        const next = new Set(prev)
-        next.delete(row.parcela_id)
-        return next
-      })
-      refreshPainel()
-    } catch {
-      toast.error('Erro ao remover título')
-    }
+      },
+    })
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(row.parcela_id)
+      return next
+    })
+    refreshPainel()
   }
 
   const handleDesarquivar = async (parcela_id: string) => {
@@ -380,6 +382,7 @@ export function CobrancaPage() {
                         <p className="text-xs text-slate-400">
                           Título {a.nro_titulo ?? '-'} · {formatCurrency(Number(a.valor ?? 0))} ·
                           venc. {formatDate(a.data_vencimento)}
+                          {a.motivo ? ` · ${a.motivo}` : ''}
                         </p>
                       </div>
                       <Button variant="outline" size="sm" onClick={() => handleDesarquivar(a.parcela_id)}>
@@ -497,6 +500,12 @@ export function CobrancaPage() {
         open={grupoParaEmail.length > 0}
         rows={grupoParaEmail}
         onClose={() => setGrupoParaEmail([])}
+      />
+      <CobrancaArquivarModal
+        open={!!arquivarRow}
+        row={arquivarRow}
+        onClose={() => setArquivarRow(null)}
+        onConfirm={confirmarArquivar}
       />
     </div>
   )

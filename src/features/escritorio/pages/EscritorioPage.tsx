@@ -155,9 +155,6 @@ export function EscritorioPage() {
           <Building2 className="h-7 w-7 shrink-0 text-slate-600" />
           Escritório
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
-          Grupos e, dentro de cada grupo, as empresas. Processos (contagem CI), horas (TimeSheets) e financeiro. Atualizado pelo sync.
-        </p>
       </header>
 
       {/* Cards de totais — scroll horizontal no mobile, grid no desktop */}
