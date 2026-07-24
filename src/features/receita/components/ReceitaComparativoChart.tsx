@@ -1009,7 +1009,7 @@ export function ReceitaComparativoChart({
     queryFn: async () => {
       const porMes: Record<number, Awaited<ReturnType<typeof receitaInadimplenciaService.fetchGruposMes>>> = {}
       await Promise.all(
-        (inadSelecoesMes ?? []).map(async ({ mes }) => {
+        (inadSelecoesMes ?? []).map(async ({ mes }: { mes: number }) => {
           porMes[mes] = await receitaInadimplenciaService.fetchGruposMes(ano, mes)
         }),
       )

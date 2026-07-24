@@ -269,21 +269,6 @@ export function OpexOrcamentoSection({ ano }: Props) {
     setDialogOpen(true)
   }
 
-  const abrirEditar = (linha: OpexOrcamentoLinha) => {
-    setEditId(linha.id)
-    setForm({
-      mes: String(linha.mes),
-      grupo_conta: linha.grupo_conta,
-      plano_contas: linha.plano_contas,
-      conta_numero: linha.conta_numero,
-      titulo_ref: linha.titulo_ref,
-      descricao: linha.descricao,
-      departamento: linha.departamento,
-      valor: numberToCurrencyInput(linha.valor),
-    })
-    setDialogOpen(true)
-  }
-
   const handleSalvarLinha = async () => {
     const mes = Number(form.mes)
     const valor = parseCurrencyBr(form.valor)
