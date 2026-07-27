@@ -39,6 +39,7 @@ function mapRecebidoItensRows(data: unknown): ReceitaRecebidoItemRow[] {
         : null,
     plano_contas: String(row.plano_contas ?? ''),
     situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+    departamento: row.departamento != null ? String(row.departamento) : null,
   }))
 }
 

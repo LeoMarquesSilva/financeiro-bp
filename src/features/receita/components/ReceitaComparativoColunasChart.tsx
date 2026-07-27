@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -52,6 +53,7 @@ import { labelPlanoContas } from '../utils/planoContasLabel'
 import {
   agruparRecebidoPorGrupo,
   buildClienteGrupoMap,
+  resolverGrupoCliente,
   valorRecebidoItem,
 } from '../utils/recebidoGrupos'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
@@ -364,6 +366,66 @@ type MesDetalheItem = {
   pctShare: number | null
   /** Recebido ÷ meta do mês (visão consolidada por área). */
   pctMeta: number | null
+  /** Rateio por departamento dentro do grupo (% do valor do grupo). */
+  departamentos?: { nome: string; pct: number }[]
+}
+
+function labelDepartamentoRecebido(raw: string | null | undefined): string {
+  const trimmed = raw?.trim() || 'Sem departamento'
+  const key = departamentoNormKey(trimmed)
+  return RECEITA_DEPARTAMENTO_LABELS[key] ?? trimmed
+}
+
+function buildGrupoDepartamentoSplit(
+  itens: ReceitaRecebidoItemRow[],
+  grupo: string,
+  clienteGrupoMap: Map<string, string>,
+): { nome: string; pct: number }[] {
+  const byDept = new Map<string, number>()
+  let total = 0
+
+  for (const item of itens) {
+    if (resolverGrupoCliente(item.cliente, clienteGrupoMap) !== grupo) continue
+    const valor = valorRecebidoItem(item)
+    if (valor <= 0) continue
+    const dept = labelDepartamentoRecebido(item.departamento)
+    byDept.set(dept, (byDept.get(dept) ?? 0) + valor)
+    total += valor
+  }
+
+  if (total <= 0) return []
+
+  return [...byDept.entries()]
+    .map(([nome, valor]) => ({ nome, pct: (valor / total) * 100 }))
+    .filter((d) => d.pct > 0)
+    .sort((a, b) => b.pct - a.pct)
+}
+
+function MesDetalheItemNomeCell({ item }: { item: MesDetalheItem }) {
+  return (
+    <span className="inline-flex min-w-0 items-start gap-2">
+      <span
+        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: item.color }}
+        aria-hidden
+      />
+      <span className="min-w-0">
+        <span className="block whitespace-normal">{item.name}</span>
+        {item.departamentos?.length ? (
+          <span className="mt-1 block space-y-0.5">
+            {item.departamentos.map((d) => (
+              <span
+                key={d.nome}
+                className="block text-[10px] font-normal leading-snug text-slate-500"
+              >
+                {d.nome} · {formatPercent(d.pct)}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </span>
+    </span>
+  )
 }
 
 function buildMesDetalheItems(
@@ -444,6 +506,7 @@ function buildGrupoDetalheItemsFromItens(
     pctShare:
       !percentMetaMode && totalRecebido > 0 ? (g.total / totalRecebido) * 100 : null,
     pctMeta: percentMetaMode ? g.total : null,
+    departamentos: buildGrupoDepartamentoSplit(itens, g.grupo, clienteGrupoMap),
   }))
 }
 
@@ -1016,13 +1079,7 @@ function ColunasTooltipContent({
             {items.map((item) => (
               <tr key={item.key} className="align-top">
                 <td className="pb-2.5 pr-4 text-slate-600">
-                  <span className="inline-flex items-start gap-1.5">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="min-w-0 whitespace-normal">{item.name}</span>
-                  </span>
+                  <MesDetalheItemNomeCell item={item} />
                 </td>
                 <td
                   data-legend-item-value
@@ -1121,6 +1178,7 @@ function ColunasMesDetalhePanel({
   detalheItems,
   detalheLoading,
   detalheError,
+  totalNovosMes,
   onDetalheBreakdownChange,
 }: {
   point: ReceitaColunasChartPoint
@@ -1139,6 +1197,7 @@ function ColunasMesDetalhePanel({
   detalheItems?: MesDetalheItem[]
   detalheLoading?: boolean
   detalheError?: Error | null
+  totalNovosMes?: number | null
   onDetalheBreakdownChange?: (value: DetalheBreakdown | null) => void
 }) {
   const areaPoint = breakdownPoint ?? point
@@ -1156,6 +1215,8 @@ function ColunasMesDetalhePanel({
       ? recebidoMes
       : null
     : pctDaMeta(recebidoMes, metaMes)
+  const previstoMes = Number(point.previsto) || 0
+  const showPrevistoMetric = visibleMetrics.has('previsto') && previstoMes > 0
   const exportData = useMemo(
     () =>
       buildColunasDetalheExportData({
@@ -1291,18 +1352,50 @@ function ColunasMesDetalhePanel({
               const v = Number(point[m.key]) || 0
               if (!v) return null
               return (
-                <li key={m.key} className="flex items-center gap-1.5 text-slate-700">
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: m.color }}
-                  />
-                  <span>{m.legend}:</span>
-                  <span className="font-semibold tabular-nums">
-                    {percentMetaMode ? formatPercentLabel(v) : formatCurrency(v)}
-                  </span>
-                </li>
+                <Fragment key={m.key}>
+                  <li className="flex items-center gap-1.5 text-slate-700">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: m.color }}
+                    />
+                    <span>{m.legend}:</span>
+                    <span className="font-semibold tabular-nums">
+                      {percentMetaMode ? formatPercentLabel(v) : formatCurrency(v)}
+                    </span>
+                  </li>
+                  {m.key === 'previsto' && detalheBreakdown === 'novo' && (
+                    <li key="novos-mes-total" className="flex items-center gap-1.5 text-slate-700">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
+                      <span>Novos no mês:</span>
+                      <span className="font-semibold tabular-nums text-emerald-800">
+                        {detalheLoading ? (
+                          <Loader2 className="inline h-3.5 w-3.5 animate-spin text-emerald-600" aria-hidden />
+                        ) : totalNovosMes != null && totalNovosMes > 0 ? (
+                          formatCurrency(totalNovosMes)
+                        ) : (
+                          formatCurrency(0)
+                        )}
+                      </span>
+                    </li>
+                  )}
+                </Fragment>
               )
             })}
+            {detalheBreakdown === 'novo' && !showPrevistoMetric && (
+              <li key="novos-mes-total" className="flex items-center gap-1.5 text-slate-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
+                <span>Novos no mês:</span>
+                <span className="font-semibold tabular-nums text-emerald-800">
+                  {detalheLoading ? (
+                    <Loader2 className="inline h-3.5 w-3.5 animate-spin text-emerald-600" aria-hidden />
+                  ) : totalNovosMes != null && totalNovosMes > 0 ? (
+                    formatCurrency(totalNovosMes)
+                  ) : (
+                    formatCurrency(0)
+                  )}
+                </span>
+              </li>
+            )}
           </ul>
         )}
 
@@ -1337,13 +1430,7 @@ function ColunasMesDetalhePanel({
               items.map((item) => (
                 <tr key={item.key} className="align-top">
                   <td className="rounded-l-lg bg-white/80 px-2.5 py-2 text-slate-700">
-                    <span className="inline-flex items-start gap-2">
-                      <span
-                        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="min-w-0 whitespace-normal">{item.name}</span>
-                    </span>
+                    <MesDetalheItemNomeCell item={item} />
                   </td>
                   <td
                     data-legend-item-value
@@ -1597,6 +1684,14 @@ export function ReceitaComparativoColunasChart({
     }
     return buildPlanoDetalheItemsFromItens(itensMesDetalheData, metaMes, percentMetaMode)
   }, [itensMesDetalheData, detalheBreakdown, selectedPoint, clienteGrupoMap, percentMetaMode])
+
+  const totalNovosMes = useMemo(() => {
+    if (detalheBreakdown !== 'novo' || !itensMesDetalheData?.length) return null
+    return itensMesDetalheData.reduce(
+      (sum: number, item: ReceitaRecebidoItemRow) => sum + valorRecebidoItem(item),
+      0,
+    )
+  }, [detalheBreakdown, itensMesDetalheData])
 
   const selectArea = (key: string) => {
     if (areaSelecionada === key) {
@@ -2055,6 +2150,7 @@ export function ReceitaComparativoColunasChart({
               detalheItems={detalheItems}
               detalheLoading={loadingItensMes}
               detalheError={errorItensMes instanceof Error ? errorItensMes : null}
+              totalNovosMes={totalNovosMes}
               onDetalheBreakdownChange={showAreaDrilldown ? setDetalheBreakdown : undefined}
             />
           )}

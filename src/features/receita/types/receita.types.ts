@@ -96,6 +96,7 @@ export type ReceitaRecebidoItemRow = {
   valor_fluxo_item: number | null
   plano_contas: string
   situacao_titulo: string | null
+  departamento?: string | null
 }
 
 export type ReceitaEncargosItemRow = {
