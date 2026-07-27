@@ -22,6 +22,26 @@ type TotaisMensaisRow = {
   encargos: number
 }
 
+function mapRecebidoItensRows(data: unknown): ReceitaRecebidoItemRow[] {
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    ci_item: Number(row.ci_item) || 0,
+    ci_titulo: Number(row.ci_titulo) || 0,
+    cliente: row.cliente != null ? String(row.cliente) : null,
+    descricao: row.descricao != null ? String(row.descricao) : null,
+    nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
+    data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
+    valor_recebido: Number(row.valor_recebido ?? row.valor_pago_item) || 0,
+    valor_encargos: Number(row.valor_encargos) || 0,
+    valor_pago_item: Number(row.valor_pago_item) || 0,
+    valor_fluxo_item:
+      row.valor_fluxo_item != null && row.valor_fluxo_item !== ''
+        ? Number(row.valor_fluxo_item)
+        : null,
+    plano_contas: String(row.plano_contas ?? ''),
+    situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+  }))
+}
+
 export const receitaService = {
   async fetchTotaisMensais(
     ano: number,
@@ -156,29 +176,37 @@ export const receitaService = {
     ano: number,
     mes: number,
     areaKey: string,
+    somenteEntradaNova = false,
   ): Promise<ReceitaRecebidoItemRow[]> {
     const { data, error } = await supabase.rpc(
       'receita_recebido_itens_area' as never,
-      { p_ano: ano, p_mes: mes, p_area_key: areaKey } as never,
+      {
+        p_ano: ano,
+        p_mes: mes,
+        p_area_key: areaKey,
+        p_somente_entrada_nova: somenteEntradaNova,
+      } as never,
     )
     if (error) throw error
-    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-      ci_item: Number(row.ci_item) || 0,
-      ci_titulo: Number(row.ci_titulo) || 0,
-      cliente: row.cliente != null ? String(row.cliente) : null,
-      descricao: row.descricao != null ? String(row.descricao) : null,
-      nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
-      data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
-      valor_recebido: Number(row.valor_recebido ?? row.valor_pago_item) || 0,
-      valor_encargos: Number(row.valor_encargos) || 0,
-      valor_pago_item: Number(row.valor_pago_item) || 0,
-      valor_fluxo_item:
-        row.valor_fluxo_item != null && row.valor_fluxo_item !== ''
-          ? Number(row.valor_fluxo_item)
-          : null,
-      plano_contas: String(row.plano_contas ?? ''),
-      situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
-    }))
+    return mapRecebidoItensRows(data)
+  },
+
+  /** Itens recebidos no mês (cota), sem filtro de área. */
+  async fetchRecebidoItensMes(
+    ano: number,
+    mes: number,
+    somenteEntradaNova = false,
+  ): Promise<ReceitaRecebidoItemRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_recebido_itens_mes' as never,
+      {
+        p_ano: ano,
+        p_mes: mes,
+        p_somente_entrada_nova: somenteEntradaNova,
+      } as never,
+    )
+    if (error) throw error
+    return mapRecebidoItensRows(data)
   },
 
   async fetchRecebidoItens(

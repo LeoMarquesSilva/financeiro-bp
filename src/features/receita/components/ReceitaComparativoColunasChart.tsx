@@ -8,7 +8,7 @@ import {
   type SetStateAction,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, Check, Copy, Layers, Loader2, Percent, Users, X } from 'lucide-react'
+import { BarChart3, Check, Copy, Layers, Loader2, Percent, UserPlus, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -76,7 +76,13 @@ type MetricKey = (typeof RECEITA_COLUNAS_METRICAS)[number]['key']
 
 type StackMode = 'area' | 'plano_percent'
 
-type DetalheBreakdown = 'plano' | 'grupo'
+type DetalheBreakdown = 'plano' | 'grupo' | 'novo'
+
+function detalheBreakdownLabel(breakdown: DetalheBreakdown): string {
+  if (breakdown === 'grupo') return 'Por grupo de empresas'
+  if (breakdown === 'novo') return 'Clientes novos (1º recebimento na cota no mês)'
+  return 'Por plano de contas'
+}
 
 function AreaDetalheBreakdownToggle({
   detalheBreakdown,
@@ -116,6 +122,21 @@ function AreaDetalheBreakdownToggle({
       >
         <Users className="h-3 w-3 shrink-0" aria-hidden />
         Por grupo
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(detalheBreakdown === 'novo' ? null : 'novo')}
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+          detalheBreakdown === 'novo'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-800 shadow-sm'
+            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+        )}
+        aria-pressed={detalheBreakdown === 'novo'}
+        title="Cliente/grupo com 1º recebimento na cota neste mês (sem histórico anterior)"
+      >
+        <UserPlus className="h-3 w-3 shrink-0" aria-hidden />
+        Novos no mês
       </button>
     </div>
   )
@@ -713,10 +734,7 @@ function buildColunasDetalheExportData({
 
   if (detalheBreakdown) {
     headerLines.push({
-      text:
-        detalheBreakdown === 'grupo'
-          ? 'Detalhe por grupo de empresas'
-          : 'Detalhe por plano de contas',
+      text: detalheBreakdownLabel(detalheBreakdown),
       font: smallFont,
       color: C.muted,
     })
@@ -731,7 +749,7 @@ function buildColunasDetalheExportData({
   }
 
   const exportItems: MesDetalheExportItem[] =
-    detalheBreakdown === 'grupo'
+    detalheBreakdown === 'grupo' || detalheBreakdown === 'novo'
       ? aggregateGrupoItemsForCopyExport(items, metaMes, percentMetaMode)
       : items
 
@@ -875,11 +893,12 @@ function ColunasTooltipContent({
   detalheLoading?: boolean
 }) {
   const areaPoint = breakdownPoint ?? point
-  const itemsDefault = porArea && !areaSelecionada
-    ? buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
-    : []
+  const itemsDefault =
+    porArea && !detalheBreakdown && !areaSelecionada
+      ? buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
+      : []
   const items: MesDetalheItem[] =
-    areaSelecionada && detalheBreakdown ? (detalheItems ?? []) : itemsDefault
+    detalheBreakdown ? (detalheItems ?? []) : itemsDefault
   const recebidoMes = resolveRecebidoMes(point, stackSlices).recebidoMes
   const semArea = porArea && !areaSelecionada ? resolveRecebidoMes(areaPoint, stackSlices).semArea : 0
   const metaMes = Number(point.meta) || 0
@@ -938,7 +957,7 @@ function ColunasTooltipContent({
             )}
             {detalheBreakdown && (
               <p className="mt-0.5 text-[10px] text-slate-500">
-                {detalheBreakdown === 'grupo' ? 'Por grupo de empresas' : 'Por plano de contas'}
+                {detalheBreakdownLabel(detalheBreakdown)}
               </p>
             )}
           </div>
@@ -979,7 +998,8 @@ function ColunasTooltipContent({
 
       {areaSelecionada && !detalheBreakdown && (
         <p className="mb-2 text-xs text-sky-700">
-          Selecione <strong>Por plano</strong> ou <strong>Por grupo</strong> para detalhar esta área.
+          Selecione <strong>Por plano</strong>, <strong>Por grupo</strong> ou{' '}
+          <strong>Novos no mês</strong> para detalhar esta área.
         </p>
       )}
 
@@ -1100,6 +1120,7 @@ function ColunasMesDetalhePanel({
   detalheBreakdown,
   detalheItems,
   detalheLoading,
+  detalheError,
   onDetalheBreakdownChange,
 }: {
   point: ReceitaColunasChartPoint
@@ -1117,14 +1138,16 @@ function ColunasMesDetalhePanel({
   detalheBreakdown?: DetalheBreakdown | null
   detalheItems?: MesDetalheItem[]
   detalheLoading?: boolean
+  detalheError?: Error | null
   onDetalheBreakdownChange?: (value: DetalheBreakdown | null) => void
 }) {
   const areaPoint = breakdownPoint ?? point
-  const itemsDefault = !areaSelecionada
-    ? buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
-    : []
+  const itemsDefault =
+    !detalheBreakdown && !areaSelecionada
+      ? buildMesDetalheItems(areaPoint, stackSlices, planoShareMode, percentMetaMode)
+      : []
   const items: MesDetalheItem[] =
-    areaSelecionada && detalheBreakdown ? (detalheItems ?? []) : itemsDefault
+    detalheBreakdown ? (detalheItems ?? []) : itemsDefault
   const recebidoMes = resolveRecebidoMes(point, stackSlices).recebidoMes
   const semArea = !areaSelecionada ? resolveRecebidoMes(areaPoint, stackSlices).semArea : 0
   const metaMes = Number(point.meta) || 0
@@ -1168,7 +1191,7 @@ function ColunasMesDetalhePanel({
           Detalhe do mês
         </p>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {areaSelecionada && onDetalheBreakdownChange && (
+          {onDetalheBreakdownChange && (
             <AreaDetalheBreakdownToggle
               detalheBreakdown={detalheBreakdown ?? null}
               onChange={onDetalheBreakdownChange}
@@ -1228,6 +1251,19 @@ function ColunasMesDetalhePanel({
           )}
         </div>
 
+        {!detalheBreakdown && areaSelecionada && (
+          <p className="m-0 text-xs text-sky-700">
+            Selecione <strong>Por plano</strong>, <strong>Por grupo</strong> ou{' '}
+            <strong>Novos no mês</strong> para detalhar esta área.
+          </p>
+        )}
+
+        {!detalheBreakdown && !areaSelecionada && (
+          <p className="m-0 text-[11px] text-slate-500">
+            Por padrão, detalhe por área. Use os botões acima para ver por plano, grupo ou entradas novas.
+          </p>
+        )}
+
         <div className="mb-3 flex flex-wrap gap-1.5" data-chart-export-ignore>
           {chartData.map((d) => (
             <button
@@ -1281,12 +1317,20 @@ function ColunasMesDetalhePanel({
                   </span>
                 </td>
               </tr>
+            ) : detalheError ? (
+              <tr>
+                <td colSpan={2} className="py-2 text-red-600">
+                  Não foi possível carregar o detalhe. Tente novamente ou escolha outro recorte.
+                </td>
+              </tr>
             ) : items.length === 0 ? (
               <tr>
                 <td colSpan={2} className="py-1 text-slate-500">
                   {detalheBreakdown
                     ? 'Nenhum item neste recorte.'
-                    : 'Sem recebido neste mês.'}
+                    : areaSelecionada
+                      ? 'Selecione Por plano, Por grupo ou Novos no mês acima.'
+                      : 'Sem recebido neste mês.'}
                 </td>
               </tr>
             ) : (
@@ -1412,21 +1456,37 @@ export function ReceitaComparativoColunasChart({
     enabled: showAreaDrilldown && !!areaSelecionada,
   })
 
-  const { data: itensMesDetalheData, isLoading: loadingItensMes } = useQuery({
-    queryKey: ['receita', 'colunas-area-itens', ano, selectedMes, areaSelecionada],
-    queryFn: () =>
-      receitaService.fetchRecebidoItensPorArea(ano, selectedMes!, areaSelecionada!),
-    enabled:
-      showAreaDrilldown &&
-      !!areaSelecionada &&
-      detalheBreakdown != null &&
-      selectedMes != null,
+  const {
+    data: itensMesDetalheData,
+    isLoading: loadingItensMes,
+    error: errorItensMes,
+  } = useQuery({
+    queryKey: [
+      'receita',
+      'colunas-itens',
+      ano,
+      selectedMes,
+      areaSelecionada ?? 'all',
+      detalheBreakdown,
+    ],
+    queryFn: () => {
+      const somenteEntradaNova = detalheBreakdown === 'novo'
+      return areaSelecionada
+        ? receitaService.fetchRecebidoItensPorArea(
+            ano,
+            selectedMes!,
+            areaSelecionada,
+            somenteEntradaNova,
+          )
+        : receitaService.fetchRecebidoItensMes(ano, selectedMes!, somenteEntradaNova)
+    },
+    enabled: showAreaDrilldown && detalheBreakdown != null && selectedMes != null,
   })
 
   const { data: empresasNomeGrupo } = useQuery({
     queryKey: ['receita', 'empresas-nome-grupo'],
     queryFn: () => receitaService.fetchEmpresasNomeGrupo(),
-    enabled: showAreaDrilldown && detalheBreakdown === 'grupo' && !!areaSelecionada,
+    enabled: showAreaDrilldown && (detalheBreakdown === 'grupo' || detalheBreakdown === 'novo'),
     staleTime: 30 * 60 * 1000,
   })
 
@@ -1527,7 +1587,7 @@ export function ReceitaComparativoColunasChart({
   const detalheItems = useMemo(() => {
     if (!itensMesDetalheData?.length || !detalheBreakdown || !selectedPoint) return []
     const metaMes = Number(selectedPoint.meta) || 0
-    if (detalheBreakdown === 'grupo') {
+    if (detalheBreakdown === 'grupo' || detalheBreakdown === 'novo') {
       return buildGrupoDetalheItemsFromItens(
         itensMesDetalheData,
         clienteGrupoMap,
@@ -1994,9 +2054,8 @@ export function ReceitaComparativoColunasChart({
               detalheBreakdown={showAreaDrilldown ? detalheBreakdown : null}
               detalheItems={detalheItems}
               detalheLoading={loadingItensMes}
-              onDetalheBreakdownChange={
-                showAreaDrilldown && areaSelecionada ? setDetalheBreakdown : undefined
-              }
+              detalheError={errorItensMes instanceof Error ? errorItensMes : null}
+              onDetalheBreakdownChange={showAreaDrilldown ? setDetalheBreakdown : undefined}
             />
           )}
         </>
