@@ -9,7 +9,20 @@ import {
   type SetStateAction,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, Check, Copy, Layers, Loader2, Percent, UserPlus, Users, X } from 'lucide-react'
+import {
+  BarChart3,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  FileText,
+  Layers,
+  Loader2,
+  Percent,
+  UserPlus,
+  Users,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,7 +39,7 @@ import {
 import type { LabelProps, XAxisTickContentProps } from 'recharts'
 import type { MouseHandlerDataParam } from 'recharts/types/synchronisation/types'
 import { cn } from '@/lib/utils'
-import { formatCurrency, formatPercent } from '@/shared/utils/format'
+import { formatCurrency, formatDate, formatPercent } from '@/shared/utils/format'
 import { receitaService } from '../services/receitaService'
 import { RECEITA_CHART_LABEL, RECEITA_CHART_AXIS, RECEITA_CHART_LAYOUT, RECEITA_COLUNAS_METRICAS, RECEITA_COLORS, RECEITA_DEPARTAMENTO_CORES, RECEITA_DEPARTAMENTO_LABELS, RECEITA_AREA_FALLBACK_PALETTE, RECEITA_PLANO_PALETTE, mesNome } from '../constants'
 import type {
@@ -52,6 +65,7 @@ import {
 import { labelPlanoContas } from '../utils/planoContasLabel'
 import {
   agruparRecebidoPorGrupo,
+  agruparRecebidoPorTitulo,
   buildClienteGrupoMap,
   resolverGrupoCliente,
   valorRecebidoItem,
@@ -401,14 +415,32 @@ function buildGrupoDepartamentoSplit(
     .sort((a, b) => b.pct - a.pct)
 }
 
-function MesDetalheItemNomeCell({ item }: { item: MesDetalheItem }) {
+function MesDetalheItemNomeCell({
+  item,
+  expandable,
+  expanded,
+}: {
+  item: MesDetalheItem
+  expandable?: boolean
+  expanded?: boolean
+}) {
   return (
     <span className="inline-flex min-w-0 items-start gap-2">
-      <span
-        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-        style={{ backgroundColor: item.color }}
-        aria-hidden
-      />
+      {expandable ? (
+        <span className="mt-0.5 shrink-0 text-slate-400" aria-hidden>
+          {expanded ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </span>
+      ) : (
+        <span
+          className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: item.color }}
+          aria-hidden
+        />
+      )}
       <span className="min-w-0">
         <span className="block whitespace-normal">{item.name}</span>
         {item.departamentos?.length ? (
@@ -425,6 +457,68 @@ function MesDetalheItemNomeCell({ item }: { item: MesDetalheItem }) {
         ) : null}
       </span>
     </span>
+  )
+}
+
+function GrupoTitulosDetalhe({
+  titulos,
+}: {
+  titulos: ReturnType<typeof agruparRecebidoPorTitulo>
+}) {
+  if (titulos.length === 0) {
+    return (
+      <p className="px-3 py-2 text-xs text-slate-500">Nenhum título neste grupo.</p>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[480px] text-xs">
+        <thead>
+          <tr className="border-b border-slate-200/80 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-3 py-1.5">Título</th>
+            <th className="hidden px-3 py-1.5 sm:table-cell">Cliente</th>
+            <th className="px-3 py-1.5">Pagamento</th>
+            <th className="px-3 py-1.5 text-right">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {titulos.map((titulo) => (
+            <tr key={titulo.ci_titulo} className="border-t border-slate-100/80">
+              <td className="px-3 py-2 align-top">
+                <div className="flex items-start gap-1.5">
+                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-800">
+                      {titulo.nro_titulo ? `Tít. ${titulo.nro_titulo}` : `CI ${titulo.ci_titulo}`}
+                    </p>
+                    {titulo.descricao ? (
+                      <p className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">
+                        {titulo.descricao}
+                      </p>
+                    ) : null}
+                    {titulo.quantidadeItens > 1 ? (
+                      <p className="mt-0.5 text-[10px] text-slate-400">
+                        {titulo.quantidadeItens} itens no título
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </td>
+              <td className="hidden max-w-[160px] px-3 py-2 align-top text-slate-600 sm:table-cell">
+                <span className="line-clamp-2">{titulo.cliente || '—'}</span>
+              </td>
+              <td className="whitespace-nowrap px-3 py-2 align-top tabular-nums text-slate-600">
+                {formatDate(titulo.data_pagamento)}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2 text-right align-top font-semibold tabular-nums text-sky-700">
+                {formatCurrency(titulo.total)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -1180,6 +1274,8 @@ function ColunasMesDetalhePanel({
   detalheError,
   totalNovosMes,
   onDetalheBreakdownChange,
+  itensMesDetalhe,
+  clienteGrupoMap,
 }: {
   point: ReceitaColunasChartPoint
   breakdownPoint?: ReceitaColunasChartPoint
@@ -1199,7 +1295,24 @@ function ColunasMesDetalhePanel({
   detalheError?: Error | null
   totalNovosMes?: number | null
   onDetalheBreakdownChange?: (value: DetalheBreakdown | null) => void
+  itensMesDetalhe?: ReceitaRecebidoItemRow[]
+  clienteGrupoMap?: Map<string, string>
 }) {
+  const [grupoExpandido, setGrupoExpandido] = useState<string | null>(null)
+
+  useEffect(() => {
+    setGrupoExpandido(null)
+  }, [detalheBreakdown, selectedMes, areaSelecionada])
+
+  const grupoDrilldown =
+    (detalheBreakdown === 'grupo' || detalheBreakdown === 'novo') &&
+    !!itensMesDetalhe?.length &&
+    !!clienteGrupoMap
+
+  const titulosGrupoExpandido = useMemo(() => {
+    if (!grupoExpandido || !itensMesDetalhe?.length || !clienteGrupoMap) return []
+    return agruparRecebidoPorTitulo(itensMesDetalhe, grupoExpandido, clienteGrupoMap)
+  }, [grupoExpandido, itensMesDetalhe, clienteGrupoMap])
   const areaPoint = breakdownPoint ?? point
   const itemsDefault =
     !detalheBreakdown && !areaSelecionada
@@ -1427,24 +1540,70 @@ function ColunasMesDetalhePanel({
                 </td>
               </tr>
             ) : (
-              items.map((item) => (
-                <tr key={item.key} className="align-top">
-                  <td className="rounded-l-lg bg-white/80 px-2.5 py-2 text-slate-700">
-                    <MesDetalheItemNomeCell item={item} />
-                  </td>
-                  <td
-                    data-legend-item-value
-                    className="rounded-r-lg bg-white/80 px-2.5 py-2 text-right align-top tabular-nums text-slate-900"
-                  >
-                    <MesDetalheItemValor
-                      item={item}
-                      planoShareMode={planoShareMode || detalheBreakdown === 'plano'}
-                      percentMetaMode={percentMetaMode}
-                      subClassName="text-xs"
-                    />
-                  </td>
-                </tr>
-              ))
+              items.map((item) => {
+                const expanded = grupoExpandido === item.key
+                const toggleGrupo = () =>
+                  setGrupoExpandido((prev) => (prev === item.key ? null : item.key))
+                return (
+                  <Fragment key={item.key}>
+                    <tr
+                      className={cn('align-top', grupoDrilldown && 'cursor-pointer')}
+                      onClick={grupoDrilldown ? toggleGrupo : undefined}
+                      onKeyDown={
+                        grupoDrilldown
+                          ? (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                toggleGrupo()
+                              }
+                            }
+                          : undefined
+                      }
+                      tabIndex={grupoDrilldown ? 0 : undefined}
+                      role={grupoDrilldown ? 'button' : undefined}
+                      aria-expanded={grupoDrilldown ? expanded : undefined}
+                    >
+                      <td
+                        className={cn(
+                          'rounded-l-lg bg-white/80 px-2.5 py-2 text-slate-700',
+                          grupoDrilldown && expanded && 'bg-sky-50/80 text-sky-900',
+                          grupoDrilldown && !expanded && 'hover:bg-sky-50/60',
+                        )}
+                      >
+                        <MesDetalheItemNomeCell
+                          item={item}
+                          expandable={grupoDrilldown}
+                          expanded={expanded}
+                        />
+                      </td>
+                      <td
+                        data-legend-item-value
+                        className={cn(
+                          'rounded-r-lg bg-white/80 px-2.5 py-2 text-right align-top tabular-nums text-slate-900',
+                          grupoDrilldown && expanded && 'bg-sky-50/80',
+                          grupoDrilldown && !expanded && 'hover:bg-sky-50/60',
+                        )}
+                      >
+                        <MesDetalheItemValor
+                          item={item}
+                          planoShareMode={planoShareMode || detalheBreakdown === 'plano'}
+                          percentMetaMode={percentMetaMode}
+                          subClassName="text-xs"
+                        />
+                      </td>
+                    </tr>
+                    {grupoDrilldown && expanded ? (
+                      <tr>
+                        <td colSpan={2} className="pb-2 pt-0">
+                          <div className="overflow-hidden rounded-lg border border-sky-200/60 bg-sky-50/30">
+                            <GrupoTitulosDetalhe titulos={titulosGrupoExpandido} />
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                )
+              })
             )}
           </tbody>
         </table>
@@ -2152,6 +2311,8 @@ export function ReceitaComparativoColunasChart({
               detalheError={errorItensMes instanceof Error ? errorItensMes : null}
               totalNovosMes={totalNovosMes}
               onDetalheBreakdownChange={showAreaDrilldown ? setDetalheBreakdown : undefined}
+              itensMesDetalhe={itensMesDetalheData}
+              clienteGrupoMap={clienteGrupoMap}
             />
           )}
         </>
