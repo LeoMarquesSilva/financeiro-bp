@@ -6,6 +6,29 @@ import type {
   OpexOrcamentoImportResult,
   OpexOrcamentoLinha,
 } from '../types/opex.types'
+import { reconstruirDescricaoOrcamento, parseFornecedorDescricao } from '../utils/opexOrcamentoGrouping'
+
+function normTituloRefOrcamento(titulo: string): string {
+  const s = titulo.trim()
+  return s || '—'
+}
+
+function normDepartamentoOrcamento(departamento: string): string {
+  const s = departamento.trim()
+  return s || 'Sem departamento'
+}
+
+/** Mesma linha lógica entre meses (espelha chave do upsert no banco). */
+function mesmaLinhaOrcamento(a: OpexOrcamentoLinha, b: OpexOrcamentoLinha): boolean {
+  return (
+    a.grupo_conta === b.grupo_conta &&
+    a.plano_contas === b.plano_contas &&
+    normTituloRefOrcamento(a.titulo_ref) === normTituloRefOrcamento(b.titulo_ref) &&
+    normDepartamentoOrcamento(a.departamento) === normDepartamentoOrcamento(b.departamento) &&
+    a.descricao.trim() === b.descricao.trim() &&
+    a.conta_numero.trim() === b.conta_numero.trim()
+  )
+}
 
 function mapLinha(row: Record<string, unknown>): OpexOrcamentoLinha {
   return {
@@ -131,42 +154,121 @@ export const opexOrcamentoService = {
     if (error) throw error
   },
 
+  async updateDescricaoLinhas(
+    linhas: OpexOrcamentoLinha[],
+    novaDescricaoDetalhe: string,
+  ): Promise<void> {
+    const desc = novaDescricaoDetalhe.trim()
+    if (!desc || !linhas.length) return
+
+    await Promise.all(
+      linhas.map((linha) => {
+        const temSeparadorFornecedor = linha.descricao.includes(' · ')
+        const novaDescricao = temSeparadorFornecedor
+          ? reconstruirDescricaoOrcamento(linha, desc)
+          : desc
+        // Sem separador, o rótulo na hierarquia vem de titulo_ref — manter sincronizado.
+        const syncTituloRef =
+          !temSeparadorFornecedor ||
+          parseFornecedorDescricao(linha).descricaoDetalhe === linha.titulo_ref.trim()
+
+        return this.upsertLinha({
+          id: linha.id,
+          descricao: novaDescricao,
+          ...(syncTituloRef ? { titulo_ref: desc } : {}),
+        })
+      }),
+    )
+  },
+
   async updateValorComReplicacao(
     linha: OpexOrcamentoLinha,
     valor: number,
-    opts?: { replicarProximosMeses?: boolean; todasLinhas?: OpexOrcamentoLinha[] },
+    opts?: {
+      replicarProximosMeses?: boolean
+      todasLinhas?: OpexOrcamentoLinha[]
+      grupo_conta?: string
+      plano_contas?: string
+      departamento?: string
+      linhasGrupo?: OpexOrcamentoLinha[]
+    },
   ): Promise<void> {
-    await this.upsertLinha({ id: linha.id, valor })
+    const grupo = opts?.grupo_conta?.trim() || linha.grupo_conta
+    const plano = opts?.plano_contas?.trim() || linha.plano_contas
+    const departamento =
+      opts?.departamento?.trim() || normDepartamentoOrcamento(linha.departamento)
+    const planoMudou = grupo !== linha.grupo_conta || plano !== linha.plano_contas
+    const deptMudou =
+      normDepartamentoOrcamento(departamento) !==
+      normDepartamentoOrcamento(linha.departamento)
+
+    if ((planoMudou || deptMudou) && opts?.linhasGrupo?.length) {
+      await Promise.all(
+        opts.linhasGrupo.map((l) =>
+          this.upsertLinha({
+            id: l.id,
+            ...(planoMudou ? { grupo_conta: grupo, plano_contas: plano } : {}),
+            ...(deptMudou ? { departamento } : {}),
+          }),
+        ),
+      )
+    }
+
+    await this.upsertLinha({
+      id: linha.id,
+      grupo_conta: grupo,
+      plano_contas: plano,
+      departamento,
+      valor,
+    })
 
     if (!opts?.replicarProximosMeses || linha.mes >= 12) return
 
-    const todas = opts.todasLinhas ?? []
+    const todas = opts?.todasLinhas ?? []
+    const alvos = new Map<string, OpexOrcamentoLinha>()
+
+    for (const l of todas) {
+      if (l.mes > linha.mes && mesmaLinhaOrcamento(l, linha)) {
+        alvos.set(l.id, l)
+      }
+    }
+    for (const l of opts?.linhasGrupo ?? []) {
+      if (l.mes > linha.mes && mesmaLinhaOrcamento(l, linha)) {
+        alvos.set(l.id, l)
+      }
+    }
+
     const tasks: Promise<string>[] = []
 
-    for (let mes = linha.mes + 1; mes <= 12; mes++) {
-      const existente = todas.find(
-        (l) =>
-          l.grupo_conta === linha.grupo_conta &&
-          l.plano_contas === linha.plano_contas &&
-          l.mes === mes,
+    for (const alvo of alvos.values()) {
+      tasks.push(
+        this.upsertLinha({
+          id: alvo.id,
+          grupo_conta: grupo,
+          plano_contas: plano,
+          departamento,
+          valor,
+        }),
       )
-      if (existente) {
-        tasks.push(this.upsertLinha({ id: existente.id, valor }))
-      } else {
-        tasks.push(
-          this.upsertLinha({
-            ano: linha.ano,
-            mes,
-            grupo_conta: linha.grupo_conta,
-            plano_contas: linha.plano_contas,
-            conta_numero: linha.conta_numero,
-            titulo_ref: linha.titulo_ref,
-            descricao: linha.descricao,
-            departamento: linha.departamento,
-            valor,
-          }),
-        )
-      }
+    }
+
+    for (let mes = linha.mes + 1; mes <= 12; mes++) {
+      const jaExiste = [...alvos.values()].some((l) => l.mes === mes)
+      if (jaExiste) continue
+
+      tasks.push(
+        this.upsertLinha({
+          ano: linha.ano,
+          mes,
+          grupo_conta: grupo,
+          plano_contas: plano,
+          conta_numero: linha.conta_numero,
+          titulo_ref: normTituloRefOrcamento(linha.titulo_ref),
+          descricao: linha.descricao,
+          departamento,
+          valor,
+        }),
+      )
     }
 
     await Promise.all(tasks)

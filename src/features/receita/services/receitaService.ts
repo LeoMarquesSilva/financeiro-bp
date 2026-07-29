@@ -13,6 +13,9 @@ import type {
   ReceitaPrevistoItemRow,
   ReceitaEncargosItemRow,
   ReceitaRecebidoSemAreaItemRow,
+  ReceitaRecebidoClassificacaoItemRow,
+  ReceitaRecebidoCategoriaKey,
+  ReceitaPrevistoFechamentoMes,
 } from '../types/receita.types'
 
 type TotaisMensaisRow = {
@@ -208,6 +211,64 @@ export const receitaService = {
     )
     if (error) throw error
     return mapRecebidoItensRows(data)
+  },
+
+  /** Itens recebidos no mês classificados (inadimplência, novos contratos, receita do mês). */
+  async fetchRecebidoClassificacaoMes(
+    ano: number,
+    mes: number,
+  ): Promise<ReceitaRecebidoClassificacaoItemRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_recebido_classificacao_mes' as never,
+      { p_ano: ano, p_mes: mes } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ci_item: Number(row.ci_item) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      cliente: row.cliente != null ? String(row.cliente) : null,
+      descricao: row.descricao != null ? String(row.descricao) : null,
+      nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
+      data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
+      data_vencimento: row.data_vencimento != null ? String(row.data_vencimento) : null,
+      valor_recebido: Number(row.valor_recebido ?? row.valor_pago_item) || 0,
+      valor_encargos: Number(row.valor_encargos) || 0,
+      valor_pago_item: Number(row.valor_pago_item) || 0,
+      valor_fluxo_item:
+        row.valor_fluxo_item != null && row.valor_fluxo_item !== ''
+          ? Number(row.valor_fluxo_item)
+          : null,
+      plano_contas: String(row.plano_contas ?? ''),
+      situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+      departamento: row.departamento != null ? String(row.departamento) : null,
+      categoria: String(row.categoria ?? 'receita_mes') as ReceitaRecebidoCategoriaKey,
+    }))
+  },
+
+  async fetchPrevistoFechamentoMes(
+    ano: number,
+    mes: number,
+  ): Promise<ReceitaPrevistoFechamentoMes> {
+    const { data, error } = await supabase.rpc(
+      'receita_previsto_fechamento_mes' as never,
+      { p_ano: ano, p_mes: mes } as never,
+    )
+    if (error) throw error
+    const raw = (data ?? {}) as Record<string, unknown>
+    const num = (k: string) => Number(raw[k]) || 0
+    return {
+      previsto: num('previsto'),
+      quitado_no_mes: num('quitado_no_mes'),
+      quitado_antecipado: num('quitado_antecipado'),
+      quitado_pago_depois: num('quitado_pago_depois'),
+      quitado_outro_mes: num('quitado_outro_mes'),
+      em_aberto: num('em_aberto'),
+      inadimplencia_kpi: num('inadimplencia_kpi'),
+      receita_mes_caixa: num('receita_mes_caixa'),
+      inad_recebida: num('inad_recebida'),
+      novos_total: num('novos_total'),
+      recebido_classificado: num('recebido_classificado'),
+    }
   },
 
   async fetchRecebidoItens(

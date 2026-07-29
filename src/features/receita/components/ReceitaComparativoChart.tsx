@@ -44,7 +44,7 @@ import {
 } from '../constants'
 import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
 import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
-import { ReceitaRecebidoDetalheSheet } from './ReceitaRecebidoDetalheSheet'
+import { ReceitaRecebidoClassificacaoSheet } from './ReceitaRecebidoClassificacaoSheet'
 import { ReceitaSemAreaDetalheSheet } from './ReceitaSemAreaDetalheSheet'
 import { isMesFuturo, valorRecebidoGrafico, inadimplenciaGraficoComparativo, isMesAtual, type ReceitaGraficoMesOptions } from '../utils/receitaMes'
 import { calcularPctInadimplencia, valorExibicaoEvolucao, aplicarSelecaoGrupos, type SelecaoGruposPorMes } from '../utils/receitaInadimplenciaCalc'
@@ -127,6 +127,7 @@ const DEFAULT_VISIBLE = new Set(
 )
 
 type ChartPoint = {
+  mes: number
   mesLabel: string
   meta: number | null
   projetadoBaseAbril: number | null
@@ -154,7 +155,8 @@ function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
     const meta = p.meta ?? 0
     if (meta <= 0) {
       return {
-        ...p,
+        mes: p.mes,
+        mesLabel: p.mesLabel,
         meta: null,
         projetadoBaseAbril: null,
         projetadoReal: null,
@@ -165,6 +167,7 @@ function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
     }
     return {
       mesLabel: p.mesLabel,
+      mes: p.mes,
       meta: 100,
       projetadoBaseAbril: ((p.projetadoBaseAbril ?? 0) / meta) * 100,
       projetadoReal: ((p.projetadoReal ?? 0) / meta) * 100,
@@ -1107,6 +1110,7 @@ export function ReceitaComparativoChart({
       rows.map((r) => {
         const inadCongelada = inadimplenciaCongeladaPorMes.get(r.mes)
         return {
+          mes: r.mes,
           mesLabel: r.mesLabel,
           meta: r.meta > 0 ? r.meta : null,
           projetadoBaseAbril: r.projetadoBaseAbril,
@@ -1218,6 +1222,13 @@ export function ReceitaComparativoChart({
     graficoOpts,
   ])
 
+  const inadimplenciaMesDetalhe = useMemo(() => {
+    if (!detalheMes) return null
+    const evo = inadimplenciaEvolucaoExibicao?.evolucao.find((e) => e.mes === detalheMes.mes)
+    if (!evo) return null
+    return valorExibicaoEvolucao(evo).valor
+  }, [detalheMes, inadimplenciaEvolucaoExibicao])
+
   const abrirAreaMesDetalhe = (point: AreaLinhaPoint, serie: 'recebido' | 'previsto') => {
     const total = serie === 'recebido' ? point.recebido : point.previsto
     if (total == null || total <= 0) return
@@ -1227,6 +1238,12 @@ export function ReceitaComparativoChart({
       total,
       serie,
     })
+  }
+
+  const abrirRecebidoDetalhe = (mes: number) => {
+    if (isMesFuturo(ano, mes)) return
+    const row = rows.find((r) => r.mes === mes)
+    if (row && row.recebido > 0) setDetalheMes(row)
   }
 
   const areaGapMetaTotal = useMemo(
@@ -1887,11 +1904,84 @@ export function ReceitaComparativoChart({
                   stroke={s.color}
                   strokeWidth={2.5}
                   fill={`url(#${'gradientId' in s ? s.gradientId : ''})`}
-                  dot={({ cx, cy, value }) => {
-                    if (value == null || cx == null || cy == null) return null
-                    return <circle cx={cx} cy={cy} r={3} fill={s.color} />
-                  }}
-                  activeDot={{ r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                  dot={
+                    s.key === 'recebido'
+                      ? ({ cx, cy, value, payload }) => {
+                          if (value == null || cx == null || cy == null) return null
+                          const point = payload as ChartPoint
+                          const clicavel =
+                            point.mes != null &&
+                            !isMesFuturo(ano, point.mes) &&
+                            (rows.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
+                          if (!clicavel) {
+                            return <circle cx={cx} cy={cy} r={3} fill={s.color} />
+                          }
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={5}
+                              fill={s.color}
+                              stroke="#fff"
+                              strokeWidth={2}
+                              className="cursor-pointer"
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Ver detalhe recebido — ${point.mesLabel}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                abrirRecebidoDetalhe(point.mes)
+                              }}
+                            />
+                          )
+                        }
+                      : ({ cx, cy, value }) => {
+                          if (value == null || cx == null || cy == null) return null
+                          return <circle cx={cx} cy={cy} r={3} fill={s.color} />
+                        }
+                  }
+                  activeDot={
+                    s.key === 'recebido'
+                      ? ({ cx, cy, value, payload }) => {
+                          if (value == null || cx == null || cy == null) return null
+                          const point = payload as ChartPoint
+                          const clicavel =
+                            point.mes != null &&
+                            !isMesFuturo(ano, point.mes) &&
+                            (rows.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
+                          if (!clicavel) {
+                            return (
+                              <circle
+                                cx={cx}
+                                cy={cy}
+                                r={5}
+                                fill={s.color}
+                                stroke="#fff"
+                                strokeWidth={2}
+                              />
+                            )
+                          }
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={6}
+                              fill={s.color}
+                              stroke="#fff"
+                              strokeWidth={2}
+                              className="cursor-pointer"
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Ver detalhe recebido — ${point.mesLabel}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                abrirRecebidoDetalhe(point.mes)
+                              }}
+                            />
+                          )
+                        }
+                      : { r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }
+                  }
                   connectNulls={false}
                 >
                   {s.key === 'recebido' && (
@@ -2094,8 +2184,8 @@ export function ReceitaComparativoChart({
                               RECEITA_COLORS.recebido.text,
                               'hover:text-sky-900',
                             )}
-                            title="Ver descritivo por plano de contas"
-                            aria-label={`Descritivo recebido ${r.mesLabel} ${ano}`}
+                            title="Ver recebido por classificação (inadimplência, novos, receita do mês)"
+                            aria-label={`Detalhe recebido ${r.mesLabel} ${ano}`}
                             onClick={() => setDetalheMes(r)}
                           >
                             <ListTree className="h-4 w-4" />
@@ -2172,7 +2262,7 @@ export function ReceitaComparativoChart({
       </section>
 
       {detalheMes && (
-        <ReceitaRecebidoDetalheSheet
+        <ReceitaRecebidoClassificacaoSheet
           open={!!detalheMes}
           onOpenChange={(open) => {
             if (!open) setDetalheMes(null)
@@ -2181,6 +2271,8 @@ export function ReceitaComparativoChart({
           mes={detalheMes.mes}
           mesLabel={detalheMes.mesLabel}
           totalRecebido={detalheMes.recebido}
+          totalPrevisto={detalheMes.previsto}
+          inadimplenciaMes={inadimplenciaMesDetalhe}
         />
       )}
 

@@ -26,6 +26,20 @@ export function parseFornecedorDescricao(l: OpexOrcamentoLinha): FornecedorDescr
   }
 }
 
+/** Atualiza o texto exibido na hierarquia, preservando fornecedor no campo descricao. */
+export function reconstruirDescricaoOrcamento(
+  linha: OpexOrcamentoLinha,
+  novaDescricaoDetalhe: string,
+): string {
+  const desc = novaDescricaoDetalhe.trim()
+  const { fornecedor } = parseFornecedorDescricao(linha)
+  const forn = fornecedor.trim()
+  if (desc && forn && forn !== 'Sem fornecedor') {
+    return `${desc}${DESC_FORN_SEP}${forn}`
+  }
+  return desc || linha.descricao.trim()
+}
+
 export function departamentoOrcamentoLabel(l: OpexOrcamentoLinha): string {
   const raw = l.departamento.trim() || 'Sem departamento'
   return formatDepartamentoLabel(raw)

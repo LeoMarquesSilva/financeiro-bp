@@ -31,7 +31,12 @@ type Props = {
   onToggleDepartamento: (key: string) => void
   onToggleDescricao: (key: string) => void
   onEditarValor: (linha: OpexOrcamentoLinha, titulo: string) => void
-  onEditarValorGrupo: (linhas: OpexOrcamentoLinha[], tituloBase: string) => void
+  onEditarValorGrupo: (
+    linhas: OpexOrcamentoLinha[],
+    tituloBase: string,
+    opts?: { editarDepartamento?: boolean },
+  ) => void
+  onEditarDescricao: (linhas: OpexOrcamentoLinha[], descricao: string, tituloBase: string) => void
   onExcluir: (id: string) => void
 }
 
@@ -125,6 +130,7 @@ export function OpexOrcamentoHierarchyTable({
   onToggleDescricao,
   onEditarValor,
   onEditarValorGrupo,
+  onEditarDescricao,
   onExcluir,
 }: Props) {
   return (
@@ -300,6 +306,7 @@ export function OpexOrcamentoHierarchyTable({
                                               const { descricoesNormais, linhasCiFlat } =
                                                 partitionDescricoesOrcamento(descricoes)
                                               const tituloBaseDept = `${g.grupoConta} · ${m.planoMicro} · ${f.fornecedor} · ${d.departamento}`
+                                              const editarDeptOpts = { editarDepartamento: true as const }
                                               const qtdCi = new Set(
                                                 linhasCiFlat.map((l) => l.titulo_ref.trim() || descricaoLinhaLabel(l)),
                                               ).size
@@ -336,7 +343,8 @@ export function OpexOrcamentoHierarchyTable({
                                                       onClick={() =>
                                                         onEditarValorGrupo(
                                                           d.linhas,
-                                                          `${g.grupoConta} · ${m.planoMicro} · ${f.fornecedor} · ${d.departamento}`,
+                                                          tituloBaseDept,
+                                                          editarDeptOpts,
                                                         )
                                                       }
                                                       className="tabular-nums text-sm font-semibold text-slate-900 transition-colors hover:text-violet-800"
@@ -349,11 +357,12 @@ export function OpexOrcamentoHierarchyTable({
                                                         variant="ghost"
                                                         size="icon"
                                                         className="h-8 w-8"
-                                                        title="Editar valor"
+                                                        title="Editar departamento e valor"
                                                         onClick={() =>
                                                           onEditarValorGrupo(
                                                             d.linhas,
-                                                            `${g.grupoConta} · ${m.planoMicro} · ${f.fornecedor} · ${d.departamento}`,
+                                                            tituloBaseDept,
+                                                            editarDeptOpts,
                                                           )
                                                         }
                                                       >
@@ -389,23 +398,52 @@ export function OpexOrcamentoHierarchyTable({
                                                             key={descKey}
                                                             className="overflow-hidden rounded-lg border border-slate-200/80 bg-white"
                                                           >
-                                                            <button
-                                                              type="button"
-                                                              onClick={() => onToggleDescricao(descKey)}
-                                                              aria-expanded={descExpandida}
-                                                              className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-slate-50/80"
-                                                            >
-                                                              <ChevronToggle expanded={descExpandida} />
-                                                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                                                                {desc.descricao}
-                                                              </span>
-                                                              <span className="shrink-0 text-[11px] text-slate-500">
+                                                            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+                                                              <button
+                                                                type="button"
+                                                                onClick={() => onToggleDescricao(descKey)}
+                                                                aria-expanded={descExpandida}
+                                                                className="flex min-w-0 items-center gap-2 text-left transition-colors hover:text-violet-800"
+                                                              >
+                                                                <ChevronToggle expanded={descExpandida} />
+                                                                <span className="min-w-0 truncate text-sm font-medium text-slate-800">
+                                                                  {desc.descricao}
+                                                                </span>
+                                                              </button>
+                                                              <span className="hidden text-[11px] text-slate-500 sm:inline">
                                                                 {desc.qtdMeses} meses
                                                               </span>
-                                                              <span className="shrink-0 tabular-nums text-sm font-semibold text-slate-900">
+                                                              <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                  onEditarValorGrupo(
+                                                                    desc.linhas,
+                                                                    tituloBase,
+                                                                  )
+                                                                }
+                                                                className="tabular-nums text-sm font-semibold text-slate-900 transition-colors hover:text-violet-800"
+                                                              >
                                                                 {formatCurrency(desc.total)}
-                                                              </span>
-                                                            </button>
+                                                              </button>
+                                                              <div className="flex justify-end gap-1">
+                                                                <Button
+                                                                  type="button"
+                                                                  variant="ghost"
+                                                                  size="icon"
+                                                                  className="h-8 w-8"
+                                                                  title="Editar descrição"
+                                                                  onClick={() =>
+                                                                    onEditarDescricao(
+                                                                      desc.linhas,
+                                                                      desc.descricao,
+                                                                      tituloBase,
+                                                                    )
+                                                                  }
+                                                                >
+                                                                  <Pencil className="h-3.5 w-3.5" aria-hidden />
+                                                                </Button>
+                                                              </div>
+                                                            </div>
                                                             {descExpandida && (
                                                               <OrcamentoMesLinhas
                                                                 linhas={desc.linhas}

@@ -115,9 +115,18 @@ export function formatCurrencyInput(value: string): string {
   const digits = value.replace(/\D/g, '')
   if (digits.length === 0) return ''
   const cents = digits.slice(-2).padStart(2, '0')
-  const intPart = digits.slice(0, -2) || '0'
+  const intPart = (digits.slice(0, -2).replace(/^0+(?=\d)/, '') || '0')
   const withThousands = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   return `${withThousands},${cents}`
+}
+
+/** Converte número (reais) para string de input BRL sem máscara de centavos duplicada. */
+export function formatNumberToCurrencyInput(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return ''
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
 }
 
 /**

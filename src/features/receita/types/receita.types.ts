@@ -99,6 +99,34 @@ export type ReceitaRecebidoItemRow = {
   departamento?: string | null
 }
 
+export type ReceitaRecebidoCategoriaKey = 'inadimplencia' | 'novos_contratos' | 'receita_mes'
+
+export type ReceitaRecebidoClassificacaoItemRow = ReceitaRecebidoItemRow & {
+  data_vencimento: string | null
+  categoria: ReceitaRecebidoCategoriaKey
+}
+
+/** Decomposição previsto × caixa (RPC receita_previsto_fechamento_mes). */
+export type ReceitaPrevistoFechamentoMes = {
+  previsto: number
+  /** Vencimento neste mês, quitado neste mês (valor_item — inclui novos contratos). */
+  quitado_no_mes: number
+  /** Vencimento neste mês, baixa antes do mês (valor_item). */
+  quitado_antecipado: number
+  /** Vencimento neste mês, baixa após o mês — vira inad. recuperada no caixa da baixa. */
+  quitado_pago_depois: number
+  /** quitado_antecipado + quitado_pago_depois (retrocompat.). */
+  quitado_outro_mes: number
+  /** Vencimento neste mês, ainda não pago (valor_item). */
+  em_aberto: number
+  /** KPI inadimplência (grupos / congelado) — pode diferir de em_aberto. */
+  inadimplencia_kpi: number
+  receita_mes_caixa: number
+  inad_recebida: number
+  novos_total: number
+  recebido_classificado: number
+}
+
 export type ReceitaEncargosItemRow = {
   ci_item: number
   ci_titulo: number

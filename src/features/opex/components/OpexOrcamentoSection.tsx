@@ -25,7 +25,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { formatCurrency, formatCurrencyInput, formatDate, parseCurrencyBr } from '@/shared/utils/format'
+import { formatCurrency, formatCurrencyInput, formatDate, formatNumberToCurrencyInput, parseCurrencyBr } from '@/shared/utils/format'
 import { MESES_CURTOS, MESES_LONGOS } from '../constants'
 import { toggleMesFiltro } from '../utils/opexPeriodo'
 import { useOpexOrcamento } from '../hooks/useOpexOrcamento'
@@ -51,7 +51,7 @@ import { OpexOrcamentoHierarchyTable } from './OpexOrcamentoHierarchyTable'
 import type { OpexDashboard, OpexOrcamentoLinha } from '../types/opex.types'
 
 function numberToCurrencyInput(value: number): string {
-  return formatCurrencyInput(String(Math.round(value * 100)))
+  return formatNumberToCurrencyInput(value)
 }
 
 function CurrencyBrInput({
@@ -73,6 +73,7 @@ function CurrencyBrInput({
         {...props}
         value={value}
         onChange={(e) => onValueChange(formatCurrencyInput(e.target.value))}
+        onFocus={(e) => e.target.select()}
         className="pl-10 tabular-nums"
         inputMode="numeric"
       />
@@ -95,6 +96,18 @@ type LinhaForm = {
 
 type ValorEditContext = {
   linha: OpexOrcamentoLinha
+  titulo: string
+  /** Linhas do nível hierárquico — troca de plano/depto propaga a todo o grupo. */
+  linhasGrupo?: OpexOrcamentoLinha[]
+  editarDepartamento?: boolean
+}
+
+type ValorEditGrupoOpts = {
+  editarDepartamento?: boolean
+}
+
+type DescricaoEditContext = {
+  linhas: OpexOrcamentoLinha[]
   titulo: string
 }
 
@@ -136,7 +149,13 @@ export function OpexOrcamentoSection({ ano }: Props) {
   const [departamentosAbertos, setDepartamentosAbertos] = useState<Set<string>>(() => new Set())
   const [descricoesAbertas, setDescricoesAbertas] = useState<Set<string>>(() => new Set())
   const [valorEdit, setValorEdit] = useState<ValorEditContext | null>(null)
+  const [valorEditGrupoConta, setValorEditGrupoConta] = useState('')
+  const [valorEditPlanoContas, setValorEditPlanoContas] = useState('')
+  const [valorEditDepartamento, setValorEditDepartamento] = useState('')
   const [valorInput, setValorInput] = useState('')
+  const [descricaoEdit, setDescricaoEdit] = useState<DescricaoEditContext | null>(null)
+  const [descricaoInput, setDescricaoInput] = useState('')
+  const [salvandoDescricao, setSalvandoDescricao] = useState(false)
   const [replicarProximos, setReplicarProximos] = useState(false)
   const [salvandoValor, setSalvandoValor] = useState(false)
 
@@ -190,9 +209,35 @@ export function OpexOrcamentoSection({ ano }: Props) {
   const { data: planosDoGrupo } = useQuery({
     queryKey: ['opex', 'planos-micro-opcoes', ano, grupoContaSelecionado],
     queryFn: () => opexService.fetchPlanosGrupo(ano, grupoContaSelecionado),
-    enabled: dialogOpen && grupoContaSelecionado.length > 0,
+    enabled: (dialogOpen || valorEdit != null) && grupoContaSelecionado.length > 0,
     staleTime: 5 * 60 * 1000,
   })
+
+  const valorEditGrupoSelecionado = valorEditGrupoConta.trim()
+
+  const { data: planosDoGrupoValorEdit } = useQuery({
+    queryKey: ['opex', 'planos-micro-opcoes', ano, valorEditGrupoSelecionado],
+    queryFn: () => opexService.fetchPlanosGrupo(ano, valorEditGrupoSelecionado),
+    enabled: valorEdit != null && valorEditGrupoSelecionado.length > 0,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const planoMicroOpcoesValorEdit = useMemo(() => {
+    if (!valorEditGrupoSelecionado) return []
+    const set = new Set<string>()
+    for (const p of planosDoGrupoValorEdit ?? []) {
+      const plano = p.plano_contas.trim()
+      if (plano) set.add(plano)
+    }
+    for (const l of linhas) {
+      if (l.grupo_conta.trim() === valorEditGrupoSelecionado) {
+        const plano = l.plano_contas.trim()
+        if (plano) set.add(plano)
+      }
+    }
+    if (valorEditPlanoContas.trim()) set.add(valorEditPlanoContas.trim())
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [valorEditGrupoSelecionado, planosDoGrupoValorEdit, linhas, valorEditPlanoContas])
 
   const planoMicroOpcoes = useMemo(() => {
     if (!grupoContaSelecionado) return []
@@ -214,7 +259,7 @@ export function OpexOrcamentoSection({ ano }: Props) {
   const { data: departamentosVios } = useQuery({
     queryKey: ['opex', 'departamentos-opcoes', ano],
     queryFn: () => opexService.fetchDepartamentos(ano),
-    enabled: dialogOpen,
+    enabled: dialogOpen || valorEdit != null,
     staleTime: 5 * 60 * 1000,
   })
 
@@ -229,10 +274,11 @@ export function OpexOrcamentoSection({ ano }: Props) {
       if (dept && dept !== 'Sem departamento') set.add(dept)
     }
     if (form.departamento.trim()) set.add(form.departamento.trim())
+    if (valorEditDepartamento.trim()) set.add(valorEditDepartamento.trim())
     return Array.from(set).sort((a, b) =>
       departamentoLabel(a).localeCompare(departamentoLabel(b), 'pt-BR'),
     )
-  }, [departamentosVios, linhas, form.departamento])
+  }, [departamentosVios, linhas, form.departamento, valorEditDepartamento])
 
   const toggleSet = (setter: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void) =>
     (key: string) => {
@@ -301,27 +347,89 @@ export function OpexOrcamentoSection({ ano }: Props) {
     }
   }
 
-  const abrirEditarValor = (linha: OpexOrcamentoLinha, titulo: string) => {
-    setValorEdit({ linha, titulo })
+  const abrirEditarValor = (
+    linha: OpexOrcamentoLinha,
+    titulo: string,
+    linhasGrupo?: OpexOrcamentoLinha[],
+    opts?: ValorEditGrupoOpts,
+  ) => {
+    setValorEdit({ linha, titulo, linhasGrupo, editarDepartamento: opts?.editarDepartamento })
+    setValorEditGrupoConta(linha.grupo_conta.trim())
+    setValorEditPlanoContas(linha.plano_contas.trim())
+    setValorEditDepartamento(departamentoOrcamentoLabel(linha))
     setValorInput(numberToCurrencyInput(linha.valor))
     setReplicarProximos(false)
     setErro(null)
   }
 
-  const linhaReferencia = (grupoLinhas: OpexOrcamentoLinha[]) =>
-    (mesFiltro != null ? grupoLinhas.find((l) => l.mes === mesFiltro) : null) ?? grupoLinhas[0]
+  const linhaReferencia = (grupoLinhas: OpexOrcamentoLinha[]) => {
+    if (mesFiltro != null) {
+      return grupoLinhas.find((l) => l.mes === mesFiltro) ?? null
+    }
+    return [...grupoLinhas].sort((a, b) => a.mes - b.mes)[0] ?? null
+  }
 
-  const abrirEditarValorGrupo = (grupoLinhas: OpexOrcamentoLinha[], tituloBase: string) => {
+  const abrirEditarValorGrupo = (
+    grupoLinhas: OpexOrcamentoLinha[],
+    tituloBase: string,
+    opts?: ValorEditGrupoOpts,
+  ) => {
     const linha = linhaReferencia(grupoLinhas)
     if (!linha) return
-    abrirEditarValor(linha, `${tituloBase} · ${MESES_CURTOS[linha.mes - 1]}`)
+    abrirEditarValor(
+      linha,
+      `${tituloBase} · ${MESES_CURTOS[linha.mes - 1]}`,
+      grupoLinhas,
+      opts,
+    )
+  }
+
+  const abrirEditarDescricao = (
+    linhasGrupo: OpexOrcamentoLinha[],
+    descricao: string,
+    tituloBase: string,
+  ) => {
+    setDescricaoEdit({ linhas: linhasGrupo, titulo: tituloBase })
+    setDescricaoInput(descricao)
+    setErro(null)
+  }
+
+  const handleSalvarDescricao = async () => {
+    if (!descricaoEdit) return
+    const descricao = descricaoInput.trim()
+    if (!descricao) {
+      setErro('Informe a descrição.')
+      return
+    }
+    setSalvandoDescricao(true)
+    setErro(null)
+    try {
+      await opexOrcamentoService.updateDescricaoLinhas(descricaoEdit.linhas, descricao)
+      setDescricaoEdit(null)
+      await invalidate()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao salvar descrição.')
+    } finally {
+      setSalvandoDescricao(false)
+    }
   }
 
   const handleSalvarValor = async () => {
     if (!valorEdit) return
     const valor = parseCurrencyBr(valorInput)
+    const grupo_conta = valorEditGrupoConta.trim()
+    const plano_contas = valorEditPlanoContas.trim()
+    const departamento = valorEditDepartamento.trim()
     if (valor <= 0) {
       setErro('Informe um valor maior que zero.')
+      return
+    }
+    if (!grupo_conta || !plano_contas) {
+      setErro('Selecione o plano contas e o plano micro.')
+      return
+    }
+    if (valorEdit.editarDepartamento && !departamento) {
+      setErro('Selecione o departamento.')
       return
     }
     setSalvandoValor(true)
@@ -330,6 +438,10 @@ export function OpexOrcamentoSection({ ano }: Props) {
       await opexOrcamentoService.updateValorComReplicacao(valorEdit.linha, valor, {
         replicarProximosMeses: replicarProximos,
         todasLinhas: linhas,
+        grupo_conta,
+        plano_contas,
+        departamento: valorEdit.editarDepartamento ? departamento : undefined,
+        linhasGrupo: valorEdit.linhasGrupo,
       })
       setValorEdit(null)
       await invalidate()
@@ -572,6 +684,7 @@ export function OpexOrcamentoSection({ ano }: Props) {
               onToggleDescricao={toggleDescricao}
               onEditarValor={abrirEditarValor}
               onEditarValorGrupo={abrirEditarValorGrupo}
+              onEditarDescricao={abrirEditarDescricao}
               onExcluir={(id) => void handleExcluir(id)}
             />
           </table>
@@ -618,11 +731,74 @@ export function OpexOrcamentoSection({ ano }: Props) {
       <Dialog open={valorEdit != null} onOpenChange={(open) => !open && setValorEdit(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Editar valor do orçamento</DialogTitle>
+            <DialogTitle>Editar orçamento</DialogTitle>
             <DialogDescription>{valorEdit?.titulo}</DialogDescription>
           </DialogHeader>
           {valorEdit && (
             <div className="space-y-4 px-6 py-4">
+              <div className="space-y-4 rounded-xl border border-slate-200/80 p-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="orcamento-valor-edit-grupo">Plano contas</Label>
+                  <select
+                    id="orcamento-valor-edit-grupo"
+                    value={valorEditGrupoConta}
+                    onChange={(e) => {
+                      const grupo_conta = e.target.value
+                      setValorEditGrupoConta(grupo_conta)
+                      setValorEditPlanoContas((prev) =>
+                        valorEditGrupoConta === grupo_conta ? prev : '',
+                      )
+                    }}
+                    className={ORCAMENTO_FIELD_SELECT}
+                  >
+                    <option value="">Selecione o plano contas…</option>
+                    {grupoContaOpcoes.map((grupo) => (
+                      <option key={grupo} value={grupo}>
+                        {grupo}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="orcamento-valor-edit-plano">Plano de contas micro</Label>
+                  <select
+                    id="orcamento-valor-edit-plano"
+                    value={valorEditPlanoContas}
+                    onChange={(e) => setValorEditPlanoContas(e.target.value)}
+                    className={ORCAMENTO_FIELD_SELECT}
+                    disabled={!valorEditGrupoSelecionado}
+                  >
+                    <option value="">
+                      {valorEditGrupoSelecionado
+                        ? 'Selecione o plano micro…'
+                        : 'Selecione o plano contas primeiro'}
+                    </option>
+                    {planoMicroOpcoesValorEdit.map((plano) => (
+                      <option key={plano} value={plano}>
+                        {plano}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {valorEdit.editarDepartamento ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="orcamento-valor-edit-departamento">Departamento</Label>
+                    <select
+                      id="orcamento-valor-edit-departamento"
+                      value={valorEditDepartamento}
+                      onChange={(e) => setValorEditDepartamento(e.target.value)}
+                      className={ORCAMENTO_FIELD_SELECT}
+                    >
+                      <option value="">Selecione o departamento…</option>
+                      {departamentoOpcoes.map((departamento) => (
+                        <option key={departamento} value={departamento}>
+                          {departamentoLabel(departamento)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="orcamento-valor-edit">
                   Valor em {MESES_LONGOS[valorEdit.linha.mes - 1]} ({MESES_CURTOS[valorEdit.linha.mes - 1]})
@@ -664,6 +840,48 @@ export function OpexOrcamentoSection({ ano }: Props) {
             </Button>
             <Button type="button" disabled={salvandoValor} className="gap-1.5" onClick={() => void handleSalvarValor()}>
               {salvandoValor ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={descricaoEdit != null} onOpenChange={(open) => !open && setDescricaoEdit(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar descrição</DialogTitle>
+            <DialogDescription>{descricaoEdit?.titulo}</DialogDescription>
+          </DialogHeader>
+          {descricaoEdit && (
+            <div className="space-y-4 px-6 py-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="orcamento-descricao-edit">Descrição</Label>
+                <Input
+                  id="orcamento-descricao-edit"
+                  value={descricaoInput}
+                  onChange={(e) => setDescricaoInput(e.target.value)}
+                  placeholder="Ex.: SEGURO RESPONSABILIDADE CIVIL - PARCELA 10/10"
+                  autoFocus
+                />
+                <p className="text-[11px] leading-snug text-slate-500">
+                  Atualiza todos os meses deste lançamento ({descricaoEdit.linhas.length}{' '}
+                  {descricaoEdit.linhas.length === 1 ? 'linha' : 'linhas'}). O fornecedor vinculado
+                  é preservado.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDescricaoEdit(null)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={salvandoDescricao}
+              className="gap-1.5"
+              onClick={() => void handleSalvarDescricao()}
+            >
+              {salvandoDescricao ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salvar
             </Button>
           </DialogFooter>
