@@ -47,8 +47,8 @@ import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
 import { ReceitaRecebidoClassificacaoSheet } from './ReceitaRecebidoClassificacaoSheet'
 import { ReceitaSemAreaDetalheSheet } from './ReceitaSemAreaDetalheSheet'
 import { isMesFuturo, valorRecebidoGrafico, inadimplenciaGraficoComparativo, isMesAtual, type ReceitaGraficoMesOptions } from '../utils/receitaMes'
-import { calcularPctInadimplencia, valorExibicaoEvolucao, aplicarSelecaoGrupos, type SelecaoGruposPorMes } from '../utils/receitaInadimplenciaCalc'
-import { inadimplenciaAreaMes } from '../utils/receitaInadimplenciaAreaFilter'
+import { valorExibicaoEvolucao, aplicarSelecaoGrupos, type SelecaoGruposPorMes } from '../utils/receitaInadimplenciaCalc'
+import { buildAreaLinhaData, type AreaLinhaPoint } from '../utils/receitaGestaoVista'
 import {
   edgeAwareAnchor,
   labelYForPosition,
@@ -292,16 +292,6 @@ function formatGap(value: number): string {
   return `${sign}${formatCurrency(Math.abs(value))}`
 }
 
-type AreaLinhaPoint = {
-  mes: number
-  mesLabel: string
-  meta: number | null
-  previsto: number
-  recebido: number | null
-  inadimplencia: number | null
-  inadimplenciaPct: number | null
-}
-
 const AREA_LINHA_SERIES = [
   {
     key: 'meta',
@@ -332,60 +322,6 @@ const AREA_LINHA_SERIES = [
     strokeDasharray: '3 3',
   },
 ] as const
-
-/**
- * Série mensal (ano todo) de uma única área: meta individual (meta do mês × % da área),
- * previsto e recebido vindos do banco por departamento, e inadimplência nos meses congelados
- * com alocação VIOS por departamento (mesma regra da aba Inadimplência ao filtrar por área).
- */
-function buildAreaLinhaData(
-  rows: ReceitaMesRow[],
-  deptRowsRecebido: ReceitaRecebidoDepartamentoRow[],
-  deptRowsPrevisto: ReceitaRecebidoDepartamentoRow[],
-  deptInadPorMes: Record<number, ReceitaInadimplenciaDepartamentoMes[]>,
-  mesesCongelados: Set<number>,
-  areaKey: string,
-  areaPct: number,
-  ano: number,
-  graficoOpts?: ReceitaGraficoMesOptions,
-): AreaLinhaPoint[] {
-  const pct = areaPct
-
-  const recebidoPorMes = new Map<number, number>()
-  for (const d of deptRowsRecebido) {
-    if (departamentoNormKey(d.departamento) !== areaKey) continue
-    recebidoPorMes.set(d.mes, (recebidoPorMes.get(d.mes) ?? 0) + d.total)
-  }
-
-  const previstoPorMes = new Map<number, number>()
-  for (const d of deptRowsPrevisto) {
-    if (departamentoNormKey(d.departamento) !== areaKey) continue
-    previstoPorMes.set(d.mes, (previstoPorMes.get(d.mes) ?? 0) + d.total)
-  }
-
-  return rows.map((r) => {
-    const previsto = previstoPorMes.get(r.mes) ?? 0
-    const inadimplenciaRaw =
-      mesesCongelados.has(r.mes) &&
-      !(graficoOpts?.omitMesAtual && isMesAtual(ano, r.mes))
-        ? inadimplenciaAreaMes(deptInadPorMes[r.mes] ?? [], areaKey)
-        : null
-    const inadimplencia =
-      inadimplenciaRaw != null && inadimplenciaRaw > 0 ? inadimplenciaRaw : null
-    return {
-      mes: r.mes,
-      mesLabel: r.mesLabel,
-      meta: r.meta > 0 ? (r.meta * pct) / 100 : null,
-      previsto,
-      recebido: valorRecebidoGrafico(recebidoPorMes.get(r.mes) ?? 0, ano, r.mes, undefined, graficoOpts),
-      inadimplencia,
-      inadimplenciaPct:
-        inadimplencia != null && previsto > 0
-          ? calcularPctInadimplencia(inadimplencia, previsto)
-          : null,
-    }
-  })
-}
 
 /** Rótulo do ponto da série de uma área. */
 function AreaLinhaChangeLabel({

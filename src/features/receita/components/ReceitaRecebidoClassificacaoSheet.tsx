@@ -129,7 +129,6 @@ export function ReceitaRecebidoClassificacaoSheet({
 
   const categoriasAgg = useMemo(() => agruparRecebidoPorCategoria(itens), [itens])
   const somaCategorias = useMemo(() => somaRecebidoClassificado(categoriasAgg), [categoriasAgg])
-  const baseTotal = somaCategorias > 0 ? somaCategorias : totalRecebido
 
   const categoriasComPct = useMemo(() => {
     const totalNovos =

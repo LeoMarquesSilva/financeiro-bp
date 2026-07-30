@@ -35,6 +35,33 @@ export type ReceitaDashboardData = {
   rows: ReceitaMesRow[]
 }
 
+/** Linha mensal da seção Gestão à vista. */
+export type GestaoVistaMesRow = {
+  mes: number
+  mesLabel: string
+  meta: number | null
+  previsto: number
+  recebido: number | null
+  pctMeta: number | null
+  pctPrevisto: number | null
+  inadimplencia: number | null
+  inadimplenciaPct: number | null
+  /** Mês com snapshot de inadimplência congelado. */
+  congelado: boolean
+}
+
+/** KPIs acumulados do período Jan–mês atual na Gestão à vista. */
+export type GestaoVistaResumo = {
+  metaAcumulada: number
+  previstoAcumulado: number
+  recebidoAcumulado: number
+  pctMeta: number | null
+  inadimplenciaPeriodo: number
+  inadimplenciaPctPeriodo: number | null
+  periodoLabel: string
+  mesesNoPeriodo: number[]
+}
+
 export type ReceitaAcumuladoChartPoint = {
   mes: number
   mesLabel: string

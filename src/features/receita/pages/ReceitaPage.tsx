@@ -10,6 +10,7 @@ import { ReceitaComparativoChart } from '../components/ReceitaComparativoChart'
 import { ReceitaComparativoColunasChart } from '../components/ReceitaComparativoColunasChart'
 import { ReceitaAcumuladoChart } from '../components/ReceitaAcumuladoChart'
 import { ReceitaKpis } from '../components/ReceitaKpis'
+import { ReceitaGestaoAVistaSection } from '../components/ReceitaGestaoAVistaSection'
 import { ReceitaInadimplenciaSection } from '../components/ReceitaInadimplenciaSection'
 import {
   PLANOS_CONTAS_INCLUIDOS_COTA,
@@ -110,6 +111,13 @@ export function ReceitaPage() {
       )}
 
       <ReceitaKpis rows={data?.rows ?? []} ano={data?.ano ?? metas.ano} loading={dashLoading} />
+
+      <ReceitaGestaoAVistaSection
+        ano={metas.ano}
+        rows={data?.rows ?? []}
+        departamentoCores={coresParaGrafico}
+        loading={dashLoading}
+      />
 
       <ReceitaInadimplenciaSection ano={metas.ano} />
 
