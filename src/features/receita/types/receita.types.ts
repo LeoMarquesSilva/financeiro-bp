@@ -54,12 +54,21 @@ export type GestaoVistaMesRow = {
 export type GestaoVistaResumo = {
   metaAcumulada: number
   previstoAcumulado: number
+  /** Caixa acumulado no período Jan–mês atual. */
   recebidoAcumulado: number
+  /** Caixa só nos meses com meta (ex.: Jul–Dez) — base do atingimento. */
+  recebidoAtingimento: number
   pctMeta: number | null
   inadimplenciaPeriodo: number
   inadimplenciaPctPeriodo: number | null
   periodoLabel: string
+  /** Período dos meses com meta já decorridos (ex.: Jul/2026). */
+  periodoMetaLabel: string
+  /** Vigência da meta no ano (ex.: Jul–Dez/2026). */
+  periodoMetaAnualLabel: string
   mesesNoPeriodo: number[]
+  mesesMetaNoPeriodo: number[]
+  mesesMetaAno: number[]
 }
 
 export type ReceitaAcumuladoChartPoint = {
@@ -151,7 +160,23 @@ export type ReceitaPrevistoFechamentoMes = {
   receita_mes_caixa: number
   inad_recebida: number
   novos_total: number
+  /** Novos contratos com vencimento neste mês (caixa líquido). */
+  novos_vencimento_mes: number
+  /** Novos contratos com vencimento em mês anterior (caixa líquido). */
+  novos_vencimento_anterior: number
+  /** receita_mes_caixa + novos_vencimento_mes — parcela do recebido ligada ao previsto. */
+  recebido_previsto_caixa: number
   recebido_classificado: number
+}
+
+export type ReceitaPrevistoFechamentoBucket =
+  | 'em_aberto'
+  | 'quitado_no_mes'
+  | 'quitado_antecipado'
+  | 'quitado_pago_depois'
+
+export type ReceitaPrevistoFechamentoItemRow = ReceitaPrevistoItemRow & {
+  data_pagamento: string | null
 }
 
 export type ReceitaEncargosItemRow = {

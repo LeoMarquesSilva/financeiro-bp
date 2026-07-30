@@ -16,6 +16,8 @@ import type {
   ReceitaRecebidoClassificacaoItemRow,
   ReceitaRecebidoCategoriaKey,
   ReceitaPrevistoFechamentoMes,
+  ReceitaPrevistoFechamentoBucket,
+  ReceitaPrevistoFechamentoItemRow,
 } from '../types/receita.types'
 
 type TotaisMensaisRow = {
@@ -267,8 +269,58 @@ export const receitaService = {
       receita_mes_caixa: num('receita_mes_caixa'),
       inad_recebida: num('inad_recebida'),
       novos_total: num('novos_total'),
+      novos_vencimento_mes: num('novos_vencimento_mes'),
+      novos_vencimento_anterior: num('novos_vencimento_anterior'),
+      recebido_previsto_caixa: num('recebido_previsto_caixa'),
       recebido_classificado: num('recebido_classificado'),
     }
+  },
+
+  async fetchPrevistoFechamentoItens(
+    ano: number,
+    mes: number,
+    bucket: ReceitaPrevistoFechamentoBucket,
+  ): Promise<ReceitaPrevistoFechamentoItemRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_previsto_fechamento_itens' as never,
+      { p_ano: ano, p_mes: mes, p_bucket: bucket } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ci_item: Number(row.ci_item) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      cliente: row.cliente != null ? String(row.cliente) : null,
+      descricao: row.descricao != null ? String(row.descricao) : null,
+      nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
+      data_vencimento: row.data_vencimento != null ? String(row.data_vencimento) : null,
+      data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
+      valor_item: Number(row.valor_item) || 0,
+      plano_contas: row.plano_contas != null ? String(row.plano_contas) : '',
+      situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+    }))
+  },
+
+  async fetchPrevistoMesItens(
+    ano: number,
+    mes: number,
+  ): Promise<ReceitaPrevistoFechamentoItemRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_previsto_mes_itens' as never,
+      { p_ano: ano, p_mes: mes } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ci_item: Number(row.ci_item) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      cliente: row.cliente != null ? String(row.cliente) : null,
+      descricao: row.descricao != null ? String(row.descricao) : null,
+      nro_titulo: row.nro_titulo != null ? String(row.nro_titulo) : null,
+      data_vencimento: row.data_vencimento != null ? String(row.data_vencimento) : null,
+      data_pagamento: row.data_pagamento != null ? String(row.data_pagamento) : null,
+      valor_item: Number(row.valor_item) || 0,
+      plano_contas: row.plano_contas != null ? String(row.plano_contas) : '',
+      situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+    }))
   },
 
   async fetchRecebidoItens(

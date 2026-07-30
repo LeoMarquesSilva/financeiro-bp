@@ -111,8 +111,8 @@ export function ReceitaGestaoAVistaKpis({ resumo, areaLabel, loading }: Props) {
         label="Meta acumulada"
         value={formatCurrencyCompact(resumo.metaAcumulada)}
         valueTitle={formatCurrency(resumo.metaAcumulada)}
-        periodo={resumo.periodoLabel}
-        hint={`${escopo}Meta do período`}
+        periodo={resumo.periodoMetaAnualLabel}
+        hint={`${escopo}Teto anual ${resumo.periodoMetaAnualLabel}`}
         iconColor={RECEITA_COLORS.meta.bgIcon}
         valueColor={RECEITA_COLORS.meta.textStrong}
       />
@@ -138,9 +138,9 @@ export function ReceitaGestaoAVistaKpis({ resumo, areaLabel, loading }: Props) {
         icon={TrendingUp}
         label="Atingimento meta"
         value={formatPercent(pctMeta)}
-        valueTitle={`${formatPercent(pctMeta)} · ${formatCurrency(resumo.recebidoAcumulado)} de ${formatCurrency(resumo.metaAcumulada)}`}
-        periodo={resumo.periodoLabel}
-        hint="Recebido ÷ meta acumulada"
+        valueTitle={`${formatPercent(pctMeta)} · ${formatCurrency(resumo.recebidoAtingimento)} de ${formatCurrency(resumo.metaAcumulada)}`}
+        periodo={resumo.periodoMetaLabel}
+        hint={`Recebido ${resumo.periodoMetaLabel} ÷ meta ${resumo.periodoMetaAnualLabel}`}
         iconColor={pctIcon}
         valueColor={pctColor}
       />

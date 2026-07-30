@@ -1,0 +1,110 @@
+# Classificação do recebido — regras fixas
+
+**Status: alinhado ao RPC `receita_recebido_classificacao_mes`. Não reverter sem aprovação.**
+
+Antes de alterar `recebidoClassificacao.ts`, `ReceitaRecebidoClassificacaoSheet`,
+`ReceitaMesVisaoGerencialPanel`, `ReceitaPrevistoFechamentoContabilPanel` ou migrações
+`*recebido_classificacao*`, reler esta rule.
+
+---
+
+## 1. Três categorias do caixa (mês M)
+
+Fonte: `receita_recebido_classificacao_mes(p_ano, p_mes)`.
+
+| Chave | UI | Definição |
+|-------|-----|-----------|
+| `inadimplencia` | **Inadimplência recuperada** | Pagamento **no mês M** com **vencimento antes do dia 1 de M** |
+| `novos_contratos` | Novos contratos | **1º pagamento na cota** do cliente/grupo cai em M |
+| `receita_mes` | Receita do mês | Demais: vencimento em M (ou sem vencimento), caixa em M |
+
+Prioridade no `CASE` SQL (não reordenar):
+
+1. `novos_contratos` — 1º pagamento na cota no mês
+2. `inadimplencia` — `data_vencimento < make_date(ano, mes, 1)`
+3. `receita_mes` — restante
+
+Base: honorários na cota (`plano_contas_na_cota`), `valor_pago_item <> 0`, `data_pagamento` no mês.
+
+---
+
+## 2. Inadimplência do mês = sempre por grupo
+
+**Regra de negócio:** o que vale é o **grupo**. Pagamento de qualquer razão social do
+mesmo grupo **abate** a dívida consolidada — ver
+`.cursor/rules/receita-inadimplencia-agregacao.mdc`.
+
+| Conceito | O que é | Onde aparece |
+|----------|---------|--------------|
+| **Inadimplência recuperada** | **Caixa** de atrasos pagos neste mês | Composição do recebido |
+| **Não quitado no item** | Itens com venc. em M sem baixa (`valor_item`) | Validação contábil — fecha o **previsto** |
+| **Inadimplência do mês (KPI)** | `max(0, Σ faturado − Σ recebido)` **por grupo** no mês | Cabeçalho, card vermelho gerencial, aba Inadimplência |
+| **Compensado no grupo** | `max(0, não quitado no item − inad KPI)` | Validação contábil |
+
+**Proibido:** tratar “não quitado no item” como inadimplência do mês na UI gerencial.
+**Proibido:** usar saldo item a item como proxy do KPI de inadimplência.
+
+---
+
+## 3. Labels e textos na UI
+
+Use sempre `RECEBIDO_CATEGORIA_LABELS` e `RECEBIDO_DETALHE_*` de
+`src/features/receita/utils/recebidoClassificacao.ts` e `RECEBIDO_GERENCIAL_LINHAS` em
+`receitaPrevistoFechamento.ts`:
+
+- Label: **Inadimplência recuperada** (nunca só "Inadimplência" na composição do recebido)
+- Cabeçalho do sheet: **Inad. mês** = snapshot por grupo (KPI)
+
+---
+
+## 4. Visão gerencial vs contábil (UI)
+
+**Sheet** `ReceitaRecebidoClassificacaoSheet.tsx`:
+
+- **Cabeçalho:** *Visão do mês* — 3 KPIs em grid (Previsto · Recebido · Inad. mês)
+  - **Previsto** é clicável → drill por grupo com quitado no mês e em aberto
+- **Corpo gerencial:** `ReceitaMesVisaoGerencialPanel.tsx`
+  1. Composição do recebido (4 linhas clicáveis → títulos)
+  2. Inadimplência do mês por grupo (card vermelho → grupos)
+  3. Validação contábil (recolhida) → `ReceitaPrevistoFechamentoContabilPanel.tsx`
+
+**Proibido** duplicar a composição do recebido em lista separada abaixo do painel.
+
+Split de novos no RPC `receita_previsto_fechamento_mes`:
+
+| Campo | Definição |
+|-------|-----------|
+| `novos_vencimento_mes` | `novos_contratos` com `data_vencimento` no mês M |
+| `novos_vencimento_anterior` | `novos_contratos` com `data_vencimento` antes de M |
+| `recebido_previsto_caixa` | `receita_mes_caixa + novos_vencimento_mes` |
+
+Drill contábil: `receita_previsto_fechamento_itens(ano, mes, bucket)`; inad grupo:
+`receita_inadimplencia_grupo_mes`; previsto por grupo:
+`receita_previsto_mes_itens(ano, mes)` — agrupa por grupo com `quitado_no_mes`
+(baixa no mês M). **Inadimplência do previsto** = `previsto − quitado_no_mes` (header e coluna da tabela).
+
+---
+
+## 5. Migração canônica
+
+| Migração | O que fixa |
+|----------|------------|
+| `20260729120000_receita_recebido_classificacao_mes.sql` | Classificação item a item |
+| `20260730100000_receita_previsto_fechamento_novos_split.sql` | Split novos + fechamento previsto |
+| `20260730110000_receita_previsto_fechamento_itens.sql` | Itens por bucket (drill-down validação) |
+| `20260730120000_receita_previsto_mes_itens.sql` | Previsto do mês item a item (drill por grupo) |
+
+Nova migração: **estender** o `CASE` existente — não duplicar lógica no frontend.
+
+---
+
+## 6. Casos de teste
+
+| Caso | Esperado |
+|------|----------|
+| Pagamento em jun/26, vencimento mai/26 | `inadimplencia` (recuperada) |
+| 1º pagamento do cliente em jun/26 | `novos_contratos` (mesmo com vencimento antigo) |
+| Pagamento e vencimento em jun/26 | `receita_mes` |
+| Soma das 4 linhas do recebido | = `recebido_classificado` |
+| Previsto Jul/26 | quitado + antecipado + pago depois + em aberto ≈ R$ 1.210.540,69 |
+| Novos split Jul/26 | venc. mês + venc. anterior = `novos_total` |

@@ -1,5 +1,10 @@
 import type { ReceitaRecebidoClassificacaoItemRow } from '../types/receita.types'
-import { valorRecebidoItem } from './recebidoGrupos'
+import {
+  agruparRecebidoPorGrupo,
+  resolverGrupoCliente,
+  valorRecebidoItem,
+  type ReceitaRecebidoGrupoAgg,
+} from './recebidoGrupos'
 
 export type ReceitaRecebidoCategoria = 'inadimplencia' | 'novos_contratos' | 'receita_mes'
 
@@ -10,15 +15,107 @@ export const RECEBIDO_CATEGORIA_ORDER: ReceitaRecebidoCategoria[] = [
 ]
 
 export const RECEBIDO_CATEGORIA_LABELS: Record<ReceitaRecebidoCategoria, string> = {
-  inadimplencia: 'Inadimplência',
+  inadimplencia: 'Inadimplência recuperada',
   novos_contratos: 'Novos contratos',
   receita_mes: 'Receita do mês',
 }
 
+/** Regra fixa — ver `.cursor/rules/receita-recebido-classificacao.mdc` */
 export const RECEBIDO_CATEGORIA_DESCRICOES: Record<ReceitaRecebidoCategoria, string> = {
-  inadimplencia: 'Recebidos no mês com vencimento anterior ao mês',
+  inadimplencia:
+    'Caixa do mês com vencimento em meses anteriores — atrasos pagos agora (extra ao previsto)',
   novos_contratos: '1º recebimento na cota — contratos novos no escritório',
   receita_mes: 'Vencimentos do mês pagos no mês',
+}
+
+/** Chaves exibidas no detalhe do sheet (novos split por vencimento). */
+export type ReceitaRecebidoDetalheKey =
+  | 'inadimplencia'
+  | 'receita_mes'
+  | 'novos_vencimento_mes'
+  | 'novos_vencimento_anterior'
+
+export const RECEBIDO_DETALHE_ORDER: ReceitaRecebidoDetalheKey[] = [
+  'inadimplencia',
+  'receita_mes',
+  'novos_vencimento_mes',
+  'novos_vencimento_anterior',
+]
+
+export const RECEBIDO_DETALHE_LABELS: Record<ReceitaRecebidoDetalheKey, string> = {
+  inadimplencia: RECEBIDO_CATEGORIA_LABELS.inadimplencia,
+  receita_mes: RECEBIDO_CATEGORIA_LABELS.receita_mes,
+  novos_vencimento_mes: 'Novos contratos — vencimento neste mês',
+  novos_vencimento_anterior: 'Novos contratos — vencimento em mês anterior',
+}
+
+export const RECEBIDO_DETALHE_DESCRICOES: Record<ReceitaRecebidoDetalheKey, string> = {
+  inadimplencia: RECEBIDO_CATEGORIA_DESCRICOES.inadimplencia,
+  receita_mes: 'Vencimento e pagamento neste mês (exceto 1º pagamento na cota)',
+  novos_vencimento_mes: '1º pagamento na cota com vencimento neste mês — compõe o previsto',
+  novos_vencimento_anterior:
+    '1º pagamento na cota com vencimento anterior — extra ao previsto do mês',
+}
+
+export function isNovosVencimentoMes(
+  item: Pick<ReceitaRecebidoClassificacaoItemRow, 'categoria' | 'data_vencimento'>,
+  ano: number,
+  mes: number,
+): boolean {
+  if (item.categoria !== 'novos_contratos' || !item.data_vencimento) return false
+  const d = new Date(`${item.data_vencimento}T12:00:00`)
+  return d.getFullYear() === ano && d.getMonth() + 1 === mes
+}
+
+export function filtrarItensDetalheRecebido(
+  itens: ReceitaRecebidoClassificacaoItemRow[],
+  key: ReceitaRecebidoDetalheKey,
+  ano: number,
+  mes: number,
+): ReceitaRecebidoClassificacaoItemRow[] {
+  switch (key) {
+    case 'inadimplencia':
+      return itens.filter((i) => i.categoria === 'inadimplencia')
+    case 'receita_mes':
+      return itens.filter((i) => i.categoria === 'receita_mes')
+    case 'novos_vencimento_mes':
+      return itens.filter((i) => isNovosVencimentoMes(i, ano, mes))
+    case 'novos_vencimento_anterior':
+      return itens.filter(
+        (i) =>
+          i.categoria === 'novos_contratos' &&
+          (!i.data_vencimento || !isNovosVencimentoMes(i, ano, mes)),
+      )
+  }
+}
+
+export type ReceitaRecebidoDetalheAgg = {
+  key: ReceitaRecebidoDetalheKey
+  total: number
+  quantidadeTitulos: number
+  quantidadeItens: number
+}
+
+export function agruparRecebidoDetalhe(
+  itens: ReceitaRecebidoClassificacaoItemRow[],
+  ano: number,
+  mes: number,
+): ReceitaRecebidoDetalheAgg[] {
+  return RECEBIDO_DETALHE_ORDER.map((key) => {
+    const filtrados = filtrarItensDetalheRecebido(itens, key, ano, mes)
+    const titulos = new Set<number>()
+    let total = 0
+    for (const item of filtrados) {
+      total += valorRecebidoItem(item)
+      titulos.add(item.ci_titulo)
+    }
+    return {
+      key,
+      total,
+      quantidadeTitulos: titulos.size,
+      quantidadeItens: filtrados.length,
+    }
+  }).filter((row) => row.total > 0.009 || row.quantidadeItens > 0)
 }
 
 export type ReceitaRecebidoCategoriaAgg = {
@@ -67,11 +164,29 @@ export function agruparRecebidoPorCategoria(
   })
 }
 
+export type ReceitaRecebidoClassificacaoGrupoAgg = ReceitaRecebidoGrupoAgg
+
+export function agruparClassificacaoPorGrupo(
+  itens: ReceitaRecebidoClassificacaoItemRow[],
+  clienteGrupoMap: Map<string, string>,
+  categoria?: ReceitaRecebidoCategoria,
+): ReceitaRecebidoClassificacaoGrupoAgg[] {
+  const filtrados = categoria ? itens.filter((i) => i.categoria === categoria) : itens
+  return agruparRecebidoPorGrupo(filtrados, clienteGrupoMap)
+}
+
 export function agruparClassificacaoPorTitulo(
   itens: ReceitaRecebidoClassificacaoItemRow[],
   categoria?: ReceitaRecebidoCategoria,
+  grupo?: string,
+  clienteGrupoMap?: Map<string, string>,
 ): ReceitaRecebidoClassificacaoTituloAgg[] {
-  const filtrados = categoria ? itens.filter((i) => i.categoria === categoria) : itens
+  let filtrados = categoria ? itens.filter((i) => i.categoria === categoria) : itens
+  if (grupo && clienteGrupoMap) {
+    filtrados = filtrados.filter(
+      (i) => resolverGrupoCliente(i.cliente, clienteGrupoMap) === grupo,
+    )
+  }
   const byTitulo = new Map<number, ReceitaRecebidoClassificacaoTituloAgg>()
 
   for (const item of filtrados) {

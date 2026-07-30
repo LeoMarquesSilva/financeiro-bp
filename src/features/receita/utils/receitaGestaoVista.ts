@@ -22,6 +22,7 @@ import {
 import {
   inadimplenciaGraficoComparativo,
   isMesAtual,
+  isMesFuturo,
   valorRecebidoGrafico,
   type ReceitaGraficoMesOptions,
 } from './receitaMes'
@@ -68,6 +69,21 @@ function periodoGestaoLabel(meses: number[], ano: number): string {
 function mesesNoPeriodoGestao(rows: ReceitaMesRow[], ano: number, ref = new Date()): number[] {
   const mesMax = mesMaxDisponivelInadimplencia(ano, ref)
   return rows.map((r) => r.mes).filter((m) => m <= mesMax)
+}
+
+/** Todos os meses do ano com meta definida (ex.: Jul–Dez). */
+function mesesMetaAnoGestao(rows: ReceitaMesRow[]): number[] {
+  return rows.filter((r) => r.metaBase > 0).map((r) => r.mes)
+}
+
+/** Meses com meta definida já decorridos (ex.: meta só a partir de jul → [7] em jul/26). */
+function mesesMetaNoPeriodoGestao(rows: ReceitaMesRow[], ano: number, ref = new Date()): number[] {
+  const mesMax = mesMaxDisponivelInadimplencia(ano, ref)
+  return rows
+    .filter(
+      (r) => r.metaBase > 0 && r.mes <= mesMax && !isMesFuturo(ano, r.mes, ref),
+    )
+    .map((r) => r.mes)
 }
 
 /**
@@ -149,10 +165,13 @@ function areaLinhaToGestaoRow(
 
 function buildResumoFromMeses(
   mesesPeriodo: number[],
+  mesesMetaPeriodo: number[],
+  mesesMetaAno: number[],
   inadPeriodo: number,
   previstoPeriodoInad: number,
   metaAcumulada: number,
   recebidoAcumulado: number,
+  recebidoAtingimento: number,
   previstoAcumulado: number,
   ano: number,
 ): GestaoVistaResumo {
@@ -160,11 +179,16 @@ function buildResumoFromMeses(
     metaAcumulada,
     previstoAcumulado,
     recebidoAcumulado,
-    pctMeta: calcPctBatimento(recebidoAcumulado, metaAcumulada),
+    recebidoAtingimento,
+    pctMeta: calcPctBatimento(recebidoAtingimento, metaAcumulada),
     inadimplenciaPeriodo: inadPeriodo,
     inadimplenciaPctPeriodo: calcularPctInadimplencia(inadPeriodo, previstoPeriodoInad),
     periodoLabel: periodoGestaoLabel(mesesPeriodo, ano),
+    periodoMetaLabel: periodoGestaoLabel(mesesMetaPeriodo, ano),
+    periodoMetaAnualLabel: periodoGestaoLabel(mesesMetaAno, ano),
     mesesNoPeriodo: mesesPeriodo,
+    mesesMetaNoPeriodo: mesesMetaPeriodo,
+    mesesMetaAno,
   }
 }
 
@@ -179,6 +203,8 @@ export function buildGestaoVistaConsolidado(
 ): { meses: GestaoVistaMesRow[]; resumo: GestaoVistaResumo } {
   const mesesPeriodo = mesesNoPeriodoGestao(rows, ano, ref)
   const mesesPeriodoSet = new Set(mesesPeriodo)
+  const mesesMetaPeriodo = mesesMetaNoPeriodoGestao(rows, ano, ref)
+  const mesesMetaAno = mesesMetaAnoGestao(rows)
 
   const inadPorMes = new Map<number, { valor: number; pct: number; congelado: boolean }>()
   for (const m of inadEvolucao) {
@@ -206,16 +232,22 @@ export function buildGestaoVistaConsolidado(
     }
   })
 
-  const atingimento = calcularAtingimentoMetaKpi(ano, rows, ref, mesesPeriodoSet)
+  const atingimento = calcularAtingimentoMetaKpi(ano, rows, ref)
   const previstoAcumulado = rows
     .filter((r) => mesesPeriodoSet.has(r.mes))
     .reduce((s, r) => s + r.previsto, 0)
+  const recebidoAcumulado = rows
+    .filter((r) => mesesPeriodoSet.has(r.mes) && !isMesFuturo(ano, r.mes, ref))
+    .reduce((s, r) => s + r.recebido, 0)
 
   const resumo = buildResumoFromMeses(
     mesesPeriodo,
+    mesesMetaPeriodo,
+    mesesMetaAno,
     inadValorPeriodo,
     inadPrevistoPeriodo,
     atingimento.metaAnual,
+    recebidoAcumulado,
     atingimento.recebidoAcumulado,
     previstoAcumulado,
     ano,
@@ -239,6 +271,9 @@ export function buildGestaoVistaArea(
 ): { meses: GestaoVistaMesRow[]; resumo: GestaoVistaResumo } {
   const mesesPeriodo = mesesNoPeriodoGestao(rows, ano, ref)
   const mesesPeriodoSet = new Set(mesesPeriodo)
+  const mesesMetaPeriodo = mesesMetaNoPeriodoGestao(rows, ano, ref)
+  const mesesMetaSet = new Set(mesesMetaPeriodo)
+  const mesesMetaAno = mesesMetaAnoGestao(rows)
 
   const areaLinha = buildAreaLinhaData(
     rows,
@@ -254,11 +289,15 @@ export function buildGestaoVistaArea(
   const meses = areaLinha.map((p) => areaLinhaToGestaoRow(p, mesesCongelados))
 
   const metaAcumulada = rows
-    .filter((r) => mesesPeriodoSet.has(r.mes) && r.meta > 0)
-    .reduce((s, r) => s + (r.meta * areaPct) / 100, 0)
+    .filter((r) => r.metaBase > 0)
+    .reduce((s, r) => s + (r.metaBase * areaPct) / 100, 0)
 
   const recebidoAcumulado = meses
     .filter((m) => mesesPeriodoSet.has(m.mes) && m.recebido != null)
+    .reduce((s, m) => s + (m.recebido ?? 0), 0)
+
+  const recebidoAtingimento = meses
+    .filter((m) => mesesMetaSet.has(m.mes) && m.recebido != null)
     .reduce((s, m) => s + (m.recebido ?? 0), 0)
 
   const previstoAcumulado = meses
@@ -272,10 +311,13 @@ export function buildGestaoVistaArea(
 
   const resumo = buildResumoFromMeses(
     mesesPeriodo,
+    mesesMetaPeriodo,
+    mesesMetaAno,
     inadValorPeriodo,
     previstoPeriodoInad,
     metaAcumulada,
     recebidoAcumulado,
+    recebidoAtingimento,
     previstoAcumulado,
     ano,
   )
@@ -287,14 +329,25 @@ export function buildGestaoVistaArea(
 export function buildGestaoVistaTotalYtd(
   meses: GestaoVistaMesRow[],
   mesesPeriodo: number[],
+  mesesMetaPeriodo: number[] = [],
+  metaAnualKpi?: number,
+  recebidoAtingimentoKpi?: number,
 ): GestaoVistaMesRow {
   const set = new Set(mesesPeriodo)
+  const metaSet = new Set(mesesMetaPeriodo)
   const noPeriodo = meses.filter((m) => set.has(m.mes))
 
   const meta = noPeriodo.reduce((s, m) => s + (m.meta ?? 0), 0)
   const previsto = noPeriodo.reduce((s, m) => s + m.previsto, 0)
   const recebidoVals = noPeriodo.map((m) => m.recebido).filter((v): v is number => v != null)
   const recebido = recebidoVals.length > 0 ? recebidoVals.reduce((s, v) => s + v, 0) : null
+
+  const recebidoMetaVals = noPeriodo
+    .filter((m) => metaSet.has(m.mes))
+    .map((m) => m.recebido)
+    .filter((v): v is number => v != null)
+  const recebidoMeta =
+    recebidoMetaVals.length > 0 ? recebidoMetaVals.reduce((s, v) => s + v, 0) : null
 
   const inadVals = noPeriodo
     .map((m) => m.inadimplencia)
@@ -307,7 +360,10 @@ export function buildGestaoVistaTotalYtd(
     meta: meta > 0 ? meta : null,
     previsto,
     recebido,
-    pctMeta: calcPctBatimento(recebido, meta),
+    pctMeta: calcPctBatimento(
+      recebidoAtingimentoKpi ?? recebidoMeta ?? recebido,
+      metaAnualKpi ?? meta,
+    ),
     pctPrevisto: calcPctBatimento(recebido, previsto),
     inadimplencia: inad,
     inadimplenciaPct: inad != null && previsto > 0 ? calcularPctInadimplencia(inad, previsto) : null,

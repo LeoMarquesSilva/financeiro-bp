@@ -156,7 +156,13 @@ export function useReceitaGestaoVista(
 
   const totalYtd = useMemo(() => {
     if (mesesGestao.length === 0 || !resumo) return null
-    return buildGestaoVistaTotalYtd(mesesGestao, resumo.mesesNoPeriodo)
+    return buildGestaoVistaTotalYtd(
+      mesesGestao,
+      resumo.mesesNoPeriodo,
+      resumo.mesesMetaNoPeriodo,
+      resumo.metaAcumulada,
+      resumo.recebidoAtingimento,
+    )
   }, [mesesGestao, resumo])
 
   const isLoading =
