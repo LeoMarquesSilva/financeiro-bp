@@ -114,33 +114,42 @@ export function InadimplenciaJudicializadaPage() {
         </div>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-500">Total em aberto (ativos)</p>
+          <p className="text-xs font-medium text-slate-500">Valor corrigido (ativos)</p>
           <p className="text-2xl font-bold text-slate-900">{formatCurrency(kpis.totalEmAberto)}</p>
-          <p className="mt-0.5 text-[10px] text-slate-400">Com correção INPC e juros TJSP (1% a.m.)</p>
+          <p className="mt-0.5 text-[10px] text-slate-400">INPC + juros TJSP (1% a.m.)</p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-500">Processos judicializados</p>
+          <p className="text-xs font-medium text-slate-500">Valor de ajuizamento</p>
+          <p className="text-2xl font-bold text-slate-900">{formatCurrency(kpis.totalValorCausa)}</p>
+          <p className="mt-0.5 text-[10px] text-slate-400">Soma valor da causa na planilha</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium text-slate-500">Lançamento VIOS (grupo)</p>
+          <p className="text-2xl font-bold text-slate-900">{formatCurrency(kpis.totalLancamentoVios)}</p>
+          <p className="mt-0.5 text-[10px] text-slate-400">Saldo financeiro vinculado ao grupo</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium text-slate-500">Processos / grupos</p>
           <p className="text-2xl font-bold text-slate-900">{kpis.qtdProcessos}</p>
           <p className="mt-0.5 text-xs text-slate-400">{kpis.qtdGrupos} grupo(s) distintos</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="mb-2 text-xs font-medium text-slate-500">Por área (top 3)</p>
-          {kpis.porArea.length === 0 ? (
-            <p className="text-sm text-slate-400">—</p>
-          ) : (
-            <ul className="space-y-1 text-sm">
-              {kpis.porArea.slice(0, 3).map((item) => (
-                <li key={item.area} className="flex justify-between gap-2">
-                  <span className="truncate text-slate-700">{item.area}</span>
-                  <span className="shrink-0 font-medium">{formatCurrency(item.valor)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       </section>
+
+      {kpis.porArea.length > 0 && (
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-2 text-xs font-medium text-slate-500">Por área (top 3)</p>
+          <ul className="space-y-1 text-sm">
+            {kpis.porArea.slice(0, 3).map((item) => (
+              <li key={item.area} className="flex justify-between gap-2">
+                <span className="truncate text-slate-700">{item.area}</span>
+                <span className="shrink-0 font-medium">{formatCurrency(item.valor)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="flex flex-wrap items-center gap-4">
         <div className="relative min-w-[220px] flex-1 max-w-md">

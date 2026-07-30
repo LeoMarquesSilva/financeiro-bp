@@ -54,6 +54,9 @@ export type InadimplenciaJudicializadaRow = {
   fase_processual: string | null
   advogado_responsavel: string | null
   processo_cliente: string | null
+  processo_grupo_vios: string | null
+  processo_ci: string | null
+  processo_pessoa_id: string | null
   parte_passiva: string | null
   valor_causa: number | null
   status_planilha: string | null
@@ -88,6 +91,7 @@ export type CreateJudicializadaInput = {
 }
 
 export type UpdateJudicializadaInput = {
+  grupo_cliente?: string
   processo_id?: string
   data_judicializacao?: string | null
   observacoes?: string | null
@@ -96,6 +100,8 @@ export type UpdateJudicializadaInput = {
 
 export type JudicializadaKpis = {
   totalEmAberto: number
+  totalValorCausa: number
+  totalLancamentoVios: number
   qtdGrupos: number
   qtdProcessos: number
   porArea: { area: string; valor: number; qtd: number }[]

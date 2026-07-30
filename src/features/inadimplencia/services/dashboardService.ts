@@ -35,6 +35,8 @@ export interface DashboardCarteiraRecorrente {
 
 export interface DashboardCarteiraJudicializada {
   valorEmAberto: number
+  totalValorCausa: number
+  totalLancamentoVios: number
   qtdProcessos: number
   qtdGrupos: number
   porArea: { area: string; valor: number; qtd: number }[]
@@ -609,6 +611,8 @@ export const dashboardService = {
       },
       judicializada: {
         valorEmAberto: judicializadaKpis.totalEmAberto,
+        totalValorCausa: judicializadaKpis.totalValorCausa,
+        totalLancamentoVios: judicializadaKpis.totalLancamentoVios,
         qtdProcessos: judicializadaKpis.qtdProcessos,
         qtdGrupos: judicializadaKpis.qtdGrupos,
         porArea: judicializadaKpis.porArea.slice(0, 3),

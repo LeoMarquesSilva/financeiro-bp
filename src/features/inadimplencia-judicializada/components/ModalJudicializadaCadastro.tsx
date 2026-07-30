@@ -21,6 +21,7 @@ import {
   useProcessosDoGrupo,
   useValorAutoGrupo,
 } from '../hooks/useJudicializada'
+import { judicializadaService } from '../services/judicializadaService'
 import type { ProcessoViosRow } from '../types/judicializada.types'
 
 const inputSelectClass =
@@ -61,6 +62,8 @@ export function ModalJudicializadaCadastro({
   const [dataJudicializacao, setDataJudicializacao] = useState('')
   const [observacoes, setObservacoes] = useState('')
   const [valorAjuste, setValorAjuste] = useState('')
+  const [cnjBusca, setCnjBusca] = useState('')
+  const [cnjLoading, setCnjLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const grupoListRef = useRef<HTMLDivElement>(null)
@@ -131,6 +134,7 @@ export function ModalJudicializadaCadastro({
       setDataJudicializacao('')
       setObservacoes('')
       setValorAjuste('')
+      setCnjBusca('')
       return
     }
     if (initialGrupoSearch.trim()) {
@@ -178,6 +182,39 @@ export function ModalJudicializadaCadastro({
     setProcessoId(p.id)
     setProcessoSearch('')
     setProcessoDropdownOpen(false)
+  }
+
+  const handleLookupCnj = async () => {
+    const cnj = cnjBusca.trim()
+    if (!cnj) {
+      toast.error('Informe o CNJ do processo.')
+      return
+    }
+    setCnjLoading(true)
+    try {
+      const processosCnj = await judicializadaService.lookupProcessosPorCnj(cnj)
+      if (processosCnj.length === 0) {
+        toast.error('CNJ não encontrado na base VIOS.')
+        return
+      }
+      const processo = processosCnj[0]
+      setProcessoId(processo.id)
+      setProcessoSearch('')
+      const grupoSugerido = await judicializadaService.resolveGrupoFromPartePassiva(null, processo)
+      if (grupoSugerido) {
+        setGrupo(grupoSugerido)
+        setGrupoSearch('')
+      }
+      if (processosCnj.length > 1) {
+        toast.message(`${processosCnj.length} processos com este CNJ — selecionado o primeiro.`)
+      } else {
+        toast.success('Processo VIOS encontrado.')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao buscar CNJ.')
+    } finally {
+      setCnjLoading(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -232,6 +269,31 @@ export function ModalJudicializadaCadastro({
       className="max-w-lg"
     >
       <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+          <Label htmlFor="cnj-busca">Buscar processo por CNJ (VIOS)</Label>
+          <div className="flex gap-2">
+            <Input
+              id="cnj-busca"
+              value={cnjBusca}
+              onChange={(e) => setCnjBusca(e.target.value)}
+              placeholder="Ex.: 0000000-00.0000.0.00.0000"
+              className="font-mono text-sm"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleLookupCnj}
+              disabled={cnjLoading}
+            >
+              {cnjLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Buscar'}
+            </Button>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Localiza o processo no VIOS e sugere o grupo devedor. Depois confirme ou ajuste o vínculo
+            abaixo.
+          </p>
+        </div>
+
         <div className="space-y-2" ref={grupoListRef}>
           <Label>Grupo do cliente</Label>
           {grupo ? (

@@ -24,7 +24,7 @@ import { normalizarCnj } from '../utils/cnjUtils'
 import { atualizarValorInpcTjsp } from '../utils/correcaoMonetariaInpcTjsp'
 
 const LIST_SELECT =
-  'id, grupo_cliente, grupo_chave, processo_id, valor_em_aberto_auto, valor_em_aberto_ajuste, valor_em_aberto_nominal, valor_em_aberto, valor_correcao_inpc, valor_juros_mora, meses_atualizacao, data_judicializacao, observacoes, encerrado_at, created_by, created_at, updated_at, nro_cnj, acao, area, departamento, situacao_processo, fase_processual, advogado_responsavel, processo_cliente, parte_passiva, valor_causa, status_planilha, andamentos_resumo, providencias_planilha, citacao, tribunal, tipo_acao_planilha, importado_em, importado_de, andamentos_sync_em, andamentos_fonte'
+  'id, grupo_cliente, grupo_chave, processo_id, valor_em_aberto_auto, valor_em_aberto_ajuste, valor_em_aberto_nominal, valor_em_aberto, valor_correcao_inpc, valor_juros_mora, meses_atualizacao, data_judicializacao, observacoes, encerrado_at, created_by, created_at, updated_at, nro_cnj, acao, area, departamento, situacao_processo, fase_processual, advogado_responsavel, processo_cliente, processo_grupo_vios, processo_ci, processo_pessoa_id, parte_passiva, valor_causa, status_planilha, andamentos_resumo, providencias_planilha, citacao, tribunal, tipo_acao_planilha, importado_em, importado_de, andamentos_sync_em, andamentos_fonte'
 
 function enrichValorAtualizado(
   raw: Record<string, unknown>,
@@ -94,6 +94,11 @@ function parseRow(raw: Record<string, unknown>): InadimplenciaJudicializadaRow {
       raw.advogado_responsavel != null ? String(raw.advogado_responsavel) : null,
     processo_cliente:
       raw.processo_cliente != null ? String(raw.processo_cliente) : null,
+    processo_grupo_vios:
+      raw.processo_grupo_vios != null ? String(raw.processo_grupo_vios) : null,
+    processo_ci: raw.processo_ci != null ? String(raw.processo_ci) : null,
+    processo_pessoa_id:
+      raw.processo_pessoa_id != null ? String(raw.processo_pessoa_id) : null,
     parte_passiva: raw.parte_passiva != null ? String(raw.parte_passiva) : null,
     valor_causa: raw.valor_causa != null ? Number(raw.valor_causa) : null,
     status_planilha: raw.status_planilha != null ? String(raw.status_planilha) : null,
@@ -166,7 +171,7 @@ export async function calcularValorAutoGrupo(grupoCliente: string): Promise<numb
 
   const { data, error } = await supabase
     .from('escritorio_grupos_resumo')
-    .select('valor_em_atraso')
+    .select('valor_em_atraso, valor_em_atraso_ativos')
     .eq('grupo_cliente', grupo)
     .maybeSingle()
 
@@ -175,18 +180,29 @@ export async function calcularValorAutoGrupo(grupoCliente: string): Promise<numb
     return 0
   }
 
-  if (data) return Number((data as { valor_em_atraso: number }).valor_em_atraso) || 0
+  if (data) {
+    const row = data as { valor_em_atraso: number; valor_em_atraso_ativos: number }
+    const ativos = Number(row.valor_em_atraso_ativos) || 0
+    const total = Number(row.valor_em_atraso) || 0
+    return ativos > 0 ? ativos : total
+  }
 
   const grupoNorm = buildGrupoChave(grupo)
   const { data: allRows, error: errAll } = await supabase
     .from('escritorio_grupos_resumo')
-    .select('grupo_cliente, valor_em_atraso')
+    .select('grupo_cliente, valor_em_atraso, valor_em_atraso_ativos')
 
   if (errAll) return 0
 
-  for (const row of (allRows ?? []) as { grupo_cliente: string; valor_em_atraso: number }[]) {
+  for (const row of (allRows ?? []) as {
+    grupo_cliente: string
+    valor_em_atraso: number
+    valor_em_atraso_ativos: number
+  }[]) {
     if (normalizarNomeGrupo(row.grupo_cliente) === grupoNorm) {
-      return Number(row.valor_em_atraso) || 0
+      const ativos = Number(row.valor_em_atraso_ativos) || 0
+      const total = Number(row.valor_em_atraso) || 0
+      return ativos > 0 ? ativos : total
     }
   }
 
@@ -276,12 +292,24 @@ export async function fetchProcessosDoGrupo(
   }
 
   if (termo) {
+    const cnjNorm = normalizarCnj(termo)
+    if (cnjNorm.length >= 10) {
+      try {
+        const porCnj = await lookupProcessosPorCnj(termo)
+        for (const p of porCnj) {
+          if (!processos.some((x) => x.id === p.id)) processos.push(p)
+        }
+      } catch {
+        /* fallback só busca local */
+      }
+    }
+
     processos = processos.filter((p) => {
-      const haystack = [p.nro_cnj, p.acao, p.area, p.cliente, p.ci]
+      const haystack = [p.nro_cnj, p.acao, p.area, p.cliente, p.ci, p.grupo_cliente]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
-      return haystack.includes(termo)
+      return haystack.includes(termo.toLowerCase()) || normalizarCnj(p.nro_cnj ?? '').includes(cnjNorm)
     })
   }
 
@@ -315,8 +343,14 @@ export function calcularKpis(rows: InadimplenciaJudicializadaRow[]): Judicializa
   const byArea = new Map<string, { valor: number; qtd: number }>()
 
   let totalEmAberto = 0
+  let totalValorCausa = 0
+  let totalLancamentoVios = 0
   for (const r of ativos) {
     totalEmAberto += r.valor_em_aberto
+    totalLancamentoVios += r.valor_em_aberto_nominal
+    if (r.valor_causa != null && r.valor_causa > 0) {
+      totalValorCausa += r.valor_causa
+    }
     const area = r.area?.trim() || 'Não informada'
     const cur = byArea.get(area) ?? { valor: 0, qtd: 0 }
     cur.valor += r.valor_em_aberto
@@ -326,6 +360,8 @@ export function calcularKpis(rows: InadimplenciaJudicializadaRow[]): Judicializa
 
   return {
     totalEmAberto,
+    totalValorCausa,
+    totalLancamentoVios,
     qtdGrupos: new Set(ativos.map((r) => r.grupo_chave)).size,
     qtdProcessos: ativos.length,
     porArea: Array.from(byArea.entries())
@@ -401,7 +437,7 @@ export async function updateJudicializada(
 ): Promise<InadimplenciaJudicializadaRow> {
   const { data: current, error: errCurrent } = await supabase
     .from('inadimplencia_judicializada')
-    .select('grupo_cliente, encerrado_at')
+    .select('grupo_cliente, encerrado_at, processo_id')
     .eq('id', id)
     .single()
 
@@ -409,12 +445,24 @@ export async function updateJudicializada(
   if (!current) throw new Error('Registro não encontrado.')
 
   const grupoCliente = String((current as { grupo_cliente: string }).grupo_cliente)
+  const encerradoAt = (current as { encerrado_at: string | null }).encerrado_at
 
-  if (input.processo_id) {
-    await assertProcessoDoGrupo(input.processo_id, grupoCliente)
+  if (input.processo_id && input.processo_id !== (current as { processo_id?: string }).processo_id) {
+    await assertProcessoDisponivel(input.processo_id, id)
+    await assertProcessoDoGrupo(input.processo_id, input.grupo_cliente ?? grupoCliente)
+  }
+
+  const novoGrupo = input.grupo_cliente?.trim() ?? grupoCliente
+  if (input.grupo_cliente !== undefined && !encerradoAt) {
+    await assertGrupoNaoNoComite(novoGrupo)
   }
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (input.grupo_cliente !== undefined) {
+    patch.grupo_cliente = novoGrupo
+    patch.grupo_chave = buildGrupoChave(novoGrupo)
+    patch.valor_em_aberto_auto = await calcularValorAutoGrupo(novoGrupo)
+  }
   if (input.processo_id !== undefined) patch.processo_id = input.processo_id
   if (input.data_judicializacao !== undefined) patch.data_judicializacao = input.data_judicializacao
   if (input.observacoes !== undefined) patch.observacoes = input.observacoes?.trim() || null

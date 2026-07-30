@@ -19,6 +19,7 @@ import { useAuth } from '@/lib/AuthContext'
 import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
 import { useJudicializadaMutations } from '../hooks/useJudicializada'
 import { judicializadaService } from '../services/judicializadaService'
+import { normalizarNomeGrupo } from '@/features/escritorio/services/escritorioService'
 import type {
   InadimplenciaJudicializadaAndamentoRow,
   InadimplenciaJudicializadaRow,
@@ -47,6 +48,9 @@ export function JudicializadaDetailSheet({
   const [valorAjuste, setValorAjuste] = useState('')
   const [dataJudicializacao, setDataJudicializacao] = useState('')
   const [observacoes, setObservacoes] = useState('')
+  const [grupoEdit, setGrupoEdit] = useState('')
+  const [cnjRelink, setCnjRelink] = useState('')
+  const [cnjRelinkLoading, setCnjRelinkLoading] = useState(false)
   const [confirmEncerrar, setConfirmEncerrar] = useState(false)
   const [saving, setSaving] = useState(false)
   const andamentosSectionRef = useRef<HTMLElement>(null)
@@ -70,6 +74,8 @@ export function JudicializadaDetailSheet({
     )
     setDataJudicializacao(row.data_judicializacao ?? '')
     setObservacoes(row.observacoes ?? '')
+    setGrupoEdit(row.grupo_cliente)
+    setCnjRelink('')
   }, [row])
 
   useEffect(() => {
@@ -109,6 +115,8 @@ export function JudicializadaDetailSheet({
       await update.mutateAsync({
         id: row.id,
         input: {
+          grupo_cliente:
+            grupoEdit.trim() !== row.grupo_cliente ? grupoEdit.trim() : undefined,
           valor_em_aberto_ajuste: ajusteParsed,
           data_judicializacao: dataJudicializacao || null,
           observacoes: observacoes.trim() || null,
@@ -158,6 +166,39 @@ export function JudicializadaDetailSheet({
     }
   }
 
+  const handleRelinkCnj = async () => {
+    if (!row || !canEdit) return
+    const cnj = cnjRelink.trim()
+    if (!cnj) {
+      toast.error('Informe o CNJ.')
+      return
+    }
+    setCnjRelinkLoading(true)
+    try {
+      const processos = await judicializadaService.lookupProcessosPorCnj(cnj)
+      if (processos.length === 0) {
+        toast.error('CNJ não encontrado no VIOS.')
+        return
+      }
+      await update.mutateAsync({
+        id: row.id,
+        input: { processo_id: processos[0].id },
+      })
+      toast.success('Processo VIOS atualizado.')
+      setCnjRelink('')
+      onUpdated()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao vincular processo.')
+    } finally {
+      setCnjRelinkLoading(false)
+    }
+  }
+
+  const grupoViosDiverge =
+    row?.processo_grupo_vios != null &&
+    row.processo_grupo_vios.trim() !== '' &&
+    normalizarNomeGrupo(row.processo_grupo_vios) !== normalizarNomeGrupo(row.grupo_cliente)
+
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
@@ -184,6 +225,92 @@ export function JudicializadaDetailSheet({
                 Encerrado em {formatDateTime(row.encerrado_at!)}
               </Badge>
             )}
+
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-[10px] font-medium uppercase text-slate-400">Ajuizamento</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {row.valor_causa != null && row.valor_causa > 0
+                    ? formatCurrency(row.valor_causa)
+                    : '—'}
+                </p>
+                <p className="text-[10px] text-slate-400">Valor da causa</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-[10px] font-medium uppercase text-slate-400">Lançamento VIOS</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {formatCurrency(row.valor_em_aberto_nominal)}
+                </p>
+                <p className="text-[10px] text-slate-400">Saldo do grupo devedor</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-[10px] font-medium uppercase text-slate-400">Corrigido</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {formatCurrency(row.valor_em_aberto)}
+                </p>
+                <p className="text-[10px] text-slate-400">INPC + juros TJSP</p>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Vínculo grupo ↔ processo
+              </h3>
+              <div className="mt-3 space-y-3 text-sm">
+                {canEdit && !encerrado ? (
+                  <div className="space-y-1">
+                    <Label htmlFor="grupo-devedor">Grupo devedor</Label>
+                    <Input
+                      id="grupo-devedor"
+                      value={grupoEdit}
+                      onChange={(e) => setGrupoEdit(e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <dt className="text-slate-500">Grupo devedor</dt>
+                    <dd className="font-medium text-slate-900">{row.grupo_cliente}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="text-slate-500">Grupo no processo (VIOS)</dt>
+                  <dd>{row.processo_grupo_vios || '—'}</dd>
+                </div>
+                {grupoViosDiverge && (
+                  <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                    O grupo do processo no VIOS difere do grupo devedor vinculado — comum em ações
+                    de cobrança.
+                  </p>
+                )}
+                {canEdit && !encerrado && (
+                  <div className="space-y-1">
+                    <Label htmlFor="cnj-relink">Trocar processo por CNJ</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="cnj-relink"
+                        value={cnjRelink}
+                        onChange={(e) => setCnjRelink(e.target.value)}
+                        placeholder="CNJ do processo VIOS"
+                        className="font-mono text-xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleRelinkCnj}
+                        disabled={cnjRelinkLoading}
+                      >
+                        {cnjRelinkLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          'Vincular'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
 
             <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">

@@ -86,7 +86,7 @@ export function InadimplenciaDashboardPage() {
           <DashboardCarteiraCard
             to="/financeiro/inadimplencia"
             title="Inadimplência Recorrente"
-            description="Comitê de Inadimplência — clientes com atraso recorrente e classes A/B/C."
+            description="Clientes com atraso recorrente e classes A/B/C."
             icon={AlertTriangle}
             accentClass="bg-red-100 text-red-700"
             stats={[
@@ -106,11 +106,20 @@ export function InadimplenciaDashboardPage() {
             accentClass="bg-slate-200 text-slate-700"
             stats={[
               {
-                label: 'Valor em aberto (corrigido)',
-                value: carteiraCurrency(carteiras.judicializada.valorEmAberto),
+                label: 'Valor de ajuizamento',
+                value: carteiraCurrency(carteiras.judicializada.totalValorCausa),
+                hint: 'Soma valor da causa (planilha)',
               },
-              { label: 'Processos', value: String(carteiras.judicializada.qtdProcessos) },
-              { label: 'Grupos', value: String(carteiras.judicializada.qtdGrupos) },
+              {
+                label: 'Lançamento VIOS (grupo)',
+                value: carteiraCurrency(carteiras.judicializada.totalLancamentoVios),
+                hint: 'Saldo financeiro do grupo devedor',
+              },
+              {
+                label: 'Valor corrigido',
+                value: carteiraCurrency(carteiras.judicializada.valorEmAberto),
+                hint: 'INPC + juros TJSP',
+              },
             ]}
           />
         </div>
@@ -129,7 +138,7 @@ export function InadimplenciaDashboardPage() {
               },
               {
                 key: 'recorrente',
-                label: 'Recorrente (Comitê)',
+                label: 'Recorrente',
                 valor: carteiras.recorrente.valorEmAberto,
                 colorClass: 'bg-red-500',
               },
