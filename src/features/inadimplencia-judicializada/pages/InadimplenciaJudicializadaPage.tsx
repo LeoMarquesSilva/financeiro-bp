@@ -27,6 +27,7 @@ export function InadimplenciaJudicializadaPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [selectedRow, setSelectedRow] = useState<InadimplenciaJudicializadaRow | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [focusAndamentos, setFocusAndamentos] = useState(false)
 
   const { data: rows = [], isLoading, isFetching, refetch } = useJudicializadaList(incluirEncerrados)
 
@@ -60,7 +61,19 @@ export function InadimplenciaJudicializadaPage() {
 
   const handleOpenRow = (row: InadimplenciaJudicializadaRow) => {
     setSelectedRow(row)
+    setFocusAndamentos(false)
     setSheetOpen(true)
+  }
+
+  const handleOpenAndamentos = (row: InadimplenciaJudicializadaRow) => {
+    setSelectedRow(row)
+    setFocusAndamentos(true)
+    setSheetOpen(true)
+  }
+
+  const handleSheetOpenChange = (open: boolean) => {
+    setSheetOpen(open)
+    if (!open) setFocusAndamentos(false)
   }
 
   return (
@@ -105,6 +118,7 @@ export function InadimplenciaJudicializadaPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium text-slate-500">Total em aberto (ativos)</p>
           <p className="text-2xl font-bold text-slate-900">{formatCurrency(kpis.totalEmAberto)}</p>
+          <p className="mt-0.5 text-[10px] text-slate-400">Com correção INPC e juros TJSP (1% a.m.)</p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium text-slate-500">Processos judicializados</p>
@@ -154,6 +168,7 @@ export function InadimplenciaJudicializadaPage() {
         rows={filtradas}
         loading={isLoading}
         onOpenRow={handleOpenRow}
+        onOpenAndamentos={handleOpenAndamentos}
         buscaAtiva={busca.trim()}
         onIncluirCaso={canEdit ? abrirCadastro : undefined}
       />
@@ -174,8 +189,9 @@ export function InadimplenciaJudicializadaPage() {
       <JudicializadaDetailSheet
         row={selectedRow}
         open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        onOpenChange={handleSheetOpenChange}
         onUpdated={() => refetch()}
+        focusAndamentos={focusAndamentos}
       />
     </div>
   )

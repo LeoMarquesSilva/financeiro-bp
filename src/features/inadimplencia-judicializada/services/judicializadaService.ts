@@ -21,9 +21,48 @@ import type {
   PlanilhaAjuizadoRow,
 } from '../utils/judicializadaImport'
 import { normalizarCnj } from '../utils/cnjUtils'
+import { atualizarValorInpcTjsp } from '../utils/correcaoMonetariaInpcTjsp'
 
 const LIST_SELECT =
-  'id, grupo_cliente, grupo_chave, processo_id, valor_em_aberto_auto, valor_em_aberto_ajuste, valor_em_aberto, data_judicializacao, observacoes, encerrado_at, created_by, created_at, updated_at, nro_cnj, acao, area, departamento, situacao_processo, fase_processual, advogado_responsavel, processo_cliente, parte_passiva, valor_causa, status_planilha, andamentos_resumo, providencias_planilha, citacao, tribunal, tipo_acao_planilha, importado_em, importado_de, andamentos_sync_em, andamentos_fonte'
+  'id, grupo_cliente, grupo_chave, processo_id, valor_em_aberto_auto, valor_em_aberto_ajuste, valor_em_aberto_nominal, valor_em_aberto, valor_correcao_inpc, valor_juros_mora, meses_atualizacao, data_judicializacao, observacoes, encerrado_at, created_by, created_at, updated_at, nro_cnj, acao, area, departamento, situacao_processo, fase_processual, advogado_responsavel, processo_cliente, parte_passiva, valor_causa, status_planilha, andamentos_resumo, providencias_planilha, citacao, tribunal, tipo_acao_planilha, importado_em, importado_de, andamentos_sync_em, andamentos_fonte'
+
+function enrichValorAtualizado(
+  raw: Record<string, unknown>,
+): Pick<
+  InadimplenciaJudicializadaRow,
+  | 'valor_em_aberto_nominal'
+  | 'valor_em_aberto'
+  | 'valor_correcao_inpc'
+  | 'valor_juros_mora'
+  | 'meses_atualizacao'
+> {
+  const nominal =
+    raw.valor_em_aberto_nominal != null
+      ? Number(raw.valor_em_aberto_nominal)
+      : Number(raw.valor_em_aberto_ajuste ?? raw.valor_em_aberto_auto) || 0
+
+  if (raw.valor_em_aberto_nominal != null && raw.meses_atualizacao != null) {
+    return {
+      valor_em_aberto_nominal: nominal,
+      valor_em_aberto: Number(raw.valor_em_aberto) || 0,
+      valor_correcao_inpc: Number(raw.valor_correcao_inpc) || 0,
+      valor_juros_mora: Number(raw.valor_juros_mora) || 0,
+      meses_atualizacao: Number(raw.meses_atualizacao) || 0,
+    }
+  }
+
+  const atualizado = atualizarValorInpcTjsp(
+    nominal,
+    raw.data_judicializacao != null ? String(raw.data_judicializacao) : null,
+  )
+  return {
+    valor_em_aberto_nominal: nominal,
+    valor_em_aberto: atualizado.valorAtualizado,
+    valor_correcao_inpc: atualizado.valorCorrecaoInpc,
+    valor_juros_mora: atualizado.valorJurosMora,
+    meses_atualizacao: atualizado.mesesAtualizacao,
+  }
+}
 
 const PROCESSO_SELECT =
   'id, ci, grupo_cliente, departamento, area, advogado_responsavel, cliente, acao, nro_cnj, situacao_processo, fase_processual, pessoa_id'
@@ -37,7 +76,7 @@ function parseRow(raw: Record<string, unknown>): InadimplenciaJudicializadaRow {
     valor_em_aberto_auto: Number(raw.valor_em_aberto_auto) || 0,
     valor_em_aberto_ajuste:
       raw.valor_em_aberto_ajuste != null ? Number(raw.valor_em_aberto_ajuste) : null,
-    valor_em_aberto: Number(raw.valor_em_aberto) || 0,
+    ...enrichValorAtualizado(raw),
     data_judicializacao: raw.data_judicializacao != null ? String(raw.data_judicializacao) : null,
     observacoes: raw.observacoes != null ? String(raw.observacoes) : null,
     encerrado_at: raw.encerrado_at != null ? String(raw.encerrado_at) : null,

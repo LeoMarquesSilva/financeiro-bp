@@ -15,7 +15,7 @@ export function viosConfig() {
     usuario: process.env.VIOS_USER || '',
     senha: process.env.VIOS_PASS || '',
     headless: process.env.VIOS_HEADLESS === 'true',
-    dataInicio: process.env.VIOS_FIN_DATA_INICIO || '01/01/2025',
+    dataInicio: process.env.VIOS_FIN_DATA_INICIO || '01/01/1900',
     dataFim: process.env.VIOS_FIN_DATA_FIM || '31/12/2027',
     tipos: (process.env.VIOS_FIN_TIPOS || FINANCEIRO_TIPOS_PADRAO.join(','))
       .split(',')

@@ -33,7 +33,13 @@ export type InadimplenciaJudicializadaRow = {
   processo_id: string
   valor_em_aberto_auto: number
   valor_em_aberto_ajuste: number | null
+  /** Valor base (ajuste ou automático), sem correção. */
+  valor_em_aberto_nominal: number
+  /** Valor com INPC + juros TJSP desde data_judicializacao. */
   valor_em_aberto: number
+  valor_correcao_inpc: number
+  valor_juros_mora: number
+  meses_atualizacao: number
   data_judicializacao: string | null
   observacoes: string | null
   encerrado_at: string | null

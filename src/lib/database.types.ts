@@ -366,7 +366,11 @@ export interface Database {
           processo_id: string
           valor_em_aberto_auto: number
           valor_em_aberto_ajuste: number | null
+          valor_em_aberto_nominal: number
           valor_em_aberto: number
+          valor_correcao_inpc: number
+          valor_juros_mora: number
+          meses_atualizacao: number
           data_judicializacao: string | null
           observacoes: string | null
           encerrado_at: string | null
@@ -396,6 +400,20 @@ export interface Database {
         }
         Insert: unknown
         Update: unknown
+      }
+      indices_inpc_mensal: {
+        Row: {
+          referencia_mes: string
+          variacao_pct: number
+        }
+        Insert: {
+          referencia_mes: string
+          variacao_pct: number
+        }
+        Update: {
+          referencia_mes?: string
+          variacao_pct?: number
+        }
       }
       timesheets: {
         Row: {

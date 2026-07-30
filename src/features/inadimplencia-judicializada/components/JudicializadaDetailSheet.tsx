@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Sheet,
@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, RefreshCw, Scale, XCircle, RotateCcw } from 'lucide-react'
-import { formatCurrency, formatDateTime } from '@/shared/utils/format'
+import { formatCurrency, formatDate, formatDateTime } from '@/shared/utils/format'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/AuthContext'
 import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
@@ -29,9 +29,17 @@ type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onUpdated: () => void
+  /** Rola até a seção de andamentos ao abrir (ex.: clique no botão da tabela). */
+  focusAndamentos?: boolean
 }
 
-export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }: Props) {
+export function JudicializadaDetailSheet({
+  row,
+  open,
+  onOpenChange,
+  onUpdated,
+  focusAndamentos = false,
+}: Props) {
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
   const { update, recalcular, encerrar, reabrir } = useJudicializadaMutations()
@@ -41,6 +49,19 @@ export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }:
   const [observacoes, setObservacoes] = useState('')
   const [confirmEncerrar, setConfirmEncerrar] = useState(false)
   const [saving, setSaving] = useState(false)
+  const andamentosSectionRef = useRef<HTMLElement>(null)
+
+  const rowId = row?.id
+
+  const {
+    data: andamentos = [],
+    isLoading: loadingAndamentos,
+    isError: andamentosErro,
+  } = useQuery({
+    queryKey: ['inadimplencia', 'judicializada', 'andamentos', rowId],
+    queryFn: () => judicializadaService.fetchAndamentosJudicializada(rowId!),
+    enabled: open && !!rowId,
+  })
 
   useEffect(() => {
     if (!row) return
@@ -51,18 +72,26 @@ export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }:
     setObservacoes(row.observacoes ?? '')
   }, [row])
 
-  if (!row) return null
+  useEffect(() => {
+    if (!open || !focusAndamentos || !row) return
+    const timer = window.setTimeout(() => {
+      andamentosSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [open, focusAndamentos, row])
 
-  const encerrado = Boolean(row.encerrado_at)
-
-  const { data: andamentos = [] } = useQuery({
-    queryKey: ['inadimplencia', 'judicializada', 'andamentos', row.id],
-    queryFn: () => judicializadaService.fetchAndamentosJudicializada(row.id),
-    enabled: open,
-  })
+  const encerrado = Boolean(row?.encerrado_at)
+  const resumoPlanilha =
+    row?.andamentos_resumo?.trim() &&
+    !andamentos.some(
+      (a: InadimplenciaJudicializadaAndamentoRow) =>
+        a.descricao.trim() === row.andamentos_resumo?.trim(),
+    )
+      ? row.andamentos_resumo
+      : null
 
   const handleSave = async () => {
-    if (!canEdit) {
+    if (!row || !canEdit) {
       toast.error('Sem permissão para editar.')
       return
     }
@@ -95,7 +124,7 @@ export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }:
   }
 
   const handleRecalcular = async () => {
-    if (!canEdit) return
+    if (!row || !canEdit) return
     try {
       await recalcular.mutateAsync(row.id)
       toast.success('Saldo automático recalculado.')
@@ -106,7 +135,7 @@ export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }:
   }
 
   const handleEncerrar = async () => {
-    if (!canEdit) return
+    if (!row || !canEdit) return
     try {
       await encerrar.mutateAsync(row.id)
       toast.success('Caso encerrado.')
@@ -119,7 +148,7 @@ export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }:
   }
 
   const handleReabrir = async () => {
-    if (!canEdit) return
+    if (!row || !canEdit) return
     try {
       await reabrir.mutateAsync(row.id)
       toast.success('Caso reaberto.')
@@ -133,6 +162,12 @@ export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }:
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
+          {!row ? (
+            <div className="flex flex-1 items-center justify-center py-16 text-sm text-slate-500">
+              Carregando caso…
+            </div>
+          ) : (
+            <>
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
               <Scale className="h-5 w-5 text-slate-600" />
@@ -204,57 +239,75 @@ export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }:
               </dl>
             </section>
 
-            {(row.andamentos_resumo || andamentos.length > 0) && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Andamentos
-                  </h3>
-                  {row.andamentos_fonte && (
-                    <Badge variant="outline" className="text-[10px]">
-                      Fonte: {row.andamentos_fonte}
-                      {row.andamentos_sync_em ? ' · sync VIOS pendente' : ''}
-                    </Badge>
-                  )}
-                </div>
-                {row.andamentos_resumo && (
-                  <div className="rounded-lg border border-slate-200 bg-white p-3">
-                    <p className="mb-1 text-[10px] font-medium uppercase text-slate-400">
-                      Resumo (planilha)
-                    </p>
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                      {row.andamentos_resumo}
-                    </p>
-                  </div>
+            <section ref={andamentosSectionRef} className="space-y-3 scroll-mt-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Andamentos
+                </h3>
+                {row.andamentos_fonte && (
+                  <Badge variant="outline" className="text-[10px]">
+                    Fonte: {row.andamentos_fonte}
+                    {row.andamentos_sync_em ? ` · VIOS ${formatDateTime(row.andamentos_sync_em)}` : ' · sync VIOS em breve'}
+                  </Badge>
                 )}
-                {andamentos.length > 0 && (
-                  <ul className="space-y-2">
-                    {andamentos.map((a: InadimplenciaJudicializadaAndamentoRow) => (
-                      <li
-                        key={a.id}
-                        className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm"
-                      >
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <Badge variant="secondary" className="text-[10px]">
+              </div>
+
+              {loadingAndamentos ? (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando andamentos…
+                </div>
+              ) : andamentosErro ? (
+                <p className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  Não foi possível carregar os andamentos.
+                </p>
+              ) : andamentos.length > 0 ? (
+                <ul className="space-y-2">
+                  {andamentos.map((a: InadimplenciaJudicializadaAndamentoRow) => (
+                    <li
+                      key={a.id}
+                      className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm"
+                    >
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-[10px] capitalize">
                             {a.fonte}
                           </Badge>
-                          {a.vios_evento_id && (
-                            <span className="font-mono text-[10px] text-slate-400">
-                              vios:{a.vios_evento_id}
+                          {a.data_andamento && (
+                            <span className="text-[11px] font-medium text-slate-500">
+                              {formatDate(a.data_andamento)}
                             </span>
                           )}
                         </div>
-                        <p className="whitespace-pre-wrap text-slate-700">{a.descricao}</p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="text-xs text-slate-400">
-                  Andamentos futuros do VIOS serão sincronizados nesta lista (campo{' '}
-                  <code className="text-[10px]">vios_evento_id</code>).
+                        {a.vios_evento_id && (
+                          <span className="font-mono text-[10px] text-slate-400">
+                            vios:{a.vios_evento_id}
+                          </span>
+                        )}
+                      </div>
+                      <p className="whitespace-pre-wrap leading-relaxed text-slate-700">
+                        {a.descricao}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : resumoPlanilha ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="mb-1 text-[10px] font-medium uppercase text-slate-400">
+                    Resumo (planilha)
+                  </p>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                    {resumoPlanilha}
+                  </p>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+                  Nenhum andamento registrado. Importe pela planilha ou aguarde a sincronização com o
+                  VIOS.
                 </p>
-              </section>
-            )}
+              )}
+
+            </section>
 
             {row.providencias_planilha && (
               <section className="rounded-lg border border-amber-100 bg-amber-50/50 p-3">
@@ -275,10 +328,36 @@ export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }:
                 <p className="text-2xl font-bold text-slate-900">
                   {formatCurrency(row.valor_em_aberto)}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Automático: {formatCurrency(row.valor_em_aberto_auto)}
+                {row.meses_atualizacao > 0 && row.data_judicializacao ? (
+                  <div className="mt-2 space-y-1 text-xs text-slate-600">
+                    <p>
+                      Nominal na judicialização ({formatDate(row.data_judicializacao)}):{' '}
+                      <span className="font-medium">{formatCurrency(row.valor_em_aberto_nominal)}</span>
+                    </p>
+                    <p>
+                      Correção INPC ({row.meses_atualizacao} mês(es)):{' '}
+                      <span className="font-medium text-emerald-700">
+                        +{formatCurrency(row.valor_correcao_inpc)}
+                      </span>
+                    </p>
+                    <p>
+                      Juros moratórios TJSP (1% a.m.):{' '}
+                      <span className="font-medium text-emerald-700">
+                        +{formatCurrency(row.valor_juros_mora)}
+                      </span>
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {row.data_judicializacao
+                      ? 'Sem valor nominal para atualizar.'
+                      : 'Informe a data de judicialização para aplicar INPC + TJSP.'}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-slate-500">
+                  Automático (VIOS): {formatCurrency(row.valor_em_aberto_auto)}
                   {row.valor_em_aberto_ajuste != null && (
-                    <> · Ajuste manual aplicado</>
+                    <> · Ajuste manual: {formatCurrency(row.valor_em_aberto_ajuste)}</>
                   )}
                 </p>
                 {canEdit && !encerrado && (
@@ -364,6 +443,8 @@ export function JudicializadaDetailSheet({ row, open, onOpenChange, onUpdated }:
               {row.created_by ? ` por ${row.created_by}` : ''}
             </p>
           </div>
+            </>
+          )}
         </SheetContent>
       </Sheet>
 

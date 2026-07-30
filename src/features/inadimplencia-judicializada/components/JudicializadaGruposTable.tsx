@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ExternalLink } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type { InadimplenciaJudicializadaRow } from '../types/judicializada.types'
@@ -18,6 +18,7 @@ type Props = {
   rows: InadimplenciaJudicializadaRow[]
   loading?: boolean
   onOpenRow: (row: InadimplenciaJudicializadaRow) => void
+  onOpenAndamentos: (row: InadimplenciaJudicializadaRow) => void
   buscaAtiva?: string
   onIncluirCaso?: () => void
 }
@@ -26,6 +27,7 @@ export function JudicializadaGruposTable({
   rows,
   loading,
   onOpenRow,
+  onOpenAndamentos,
   buscaAtiva = '',
   onIncluirCaso,
 }: Props) {
@@ -108,7 +110,12 @@ export function JudicializadaGruposTable({
               <TableHead>Ação</TableHead>
               <TableHead>Área</TableHead>
               <TableHead>Situação</TableHead>
-              <TableHead className="text-right">Valor em aberto</TableHead>
+              <TableHead className="text-right">
+                <span className="block">Valor em aberto</span>
+                <span className="block text-[10px] font-normal normal-case tracking-normal text-slate-400">
+                  INPC + TJSP
+                </span>
+              </TableHead>
               <TableHead>Judicializado em</TableHead>
               <TableHead className="w-12" />
             </TableRow>
@@ -136,6 +143,11 @@ export function JudicializadaGruposTable({
                 </TableCell>
                 <TableCell className="text-right font-semibold text-slate-900">
                   {formatCurrency(row.valor_em_aberto)}
+                  {row.meses_atualizacao > 0 && (
+                    <span className="ml-1 block text-[10px] font-normal text-slate-400">
+                      nominal {formatCurrency(row.valor_em_aberto_nominal)}
+                    </span>
+                  )}
                   {row.valor_em_aberto_ajuste != null && (
                     <span className="ml-1 text-[10px] font-normal text-amber-600">ajustado</span>
                   )}
@@ -143,14 +155,24 @@ export function JudicializadaGruposTable({
                 <TableCell className="text-sm text-slate-600">
                   {row.data_judicializacao ? formatDate(row.data_judicializacao) : '—'}
                 </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1">
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-end gap-1">
                     {row.encerrado_at && (
                       <Badge variant="secondary" className="text-[10px]">
                         Encerrado
                       </Badge>
                     )}
-                    <ExternalLink className="h-4 w-4 text-slate-400" />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1 px-2 text-slate-600"
+                      title="Ver andamentos do caso"
+                      onClick={() => onOpenAndamentos(row)}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Andamentos</span>
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>

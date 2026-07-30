@@ -143,7 +143,7 @@ Para parcelas **e** itens na mesma sessão: **`FinanceiroRelatorioCompleto.js`**
 Variáveis opcionais no `.env` do vios-app:
 
 - `VIOS_FIN_TIPOS=RECEBER,PAGAR` (padrão)
-- `VIOS_FIN_DATA_INICIO` / `VIOS_FIN_DATA_FIM`
+- `VIOS_FIN_DATA_INICIO` / `VIOS_FIN_DATA_FIM` — padrão **01/01/1900** a **31/12/2027** (histórico completo)
 - `VIOS_FIN_REL_PARCELAS_PATH` / `VIOS_FIN_REL_ITENS_PATH` (caminho da página no VIOS)
 
 **Estratégia replace (fonte da verdade):** o sync usa a RPC `sync_relatorio_financeiro_replace`, que em uma transação (1) remove da tabela todos os registros cujo `ci_titulo` **não** está no relatório atual, (2) faz upsert das linhas do arquivo e (3) executa a vinculação com pessoas. Assim, **parcelas/faturas excluídas no VIOS passam a sumir do banco** no próximo sync. É essencial que o relatório exportado seja o **conjunto completo** de parcelas; se no futuro houver exportação parcial, será necessário outro critério (ex.: escopo por cliente ou data) para não apagar dados que não fazem parte do relatório.

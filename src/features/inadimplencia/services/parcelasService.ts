@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { collectPaginatedRows } from '@/lib/supabasePaginate'
 import {
   FINANCEIRO_PARCELAS_SO_RECEBER_OR,
   financeiroTituloEhReceber,
@@ -32,6 +33,43 @@ export interface ParcelasPorCliente {
 const HOJE = new Date().toISOString().slice(0, 10)
 const ULTIMOS_MESES_PAGAS = 10
 
+const PARCELAS_SELECT =
+  'id, pessoa_id, nro_titulo, parcela, parcelas, data_vencimento, data_baixa, situacao, valor, valor_pago, descricao, competencia, tipo, forma, cliente, plano_contas'
+
+async function fetchParcelasRows(params: {
+  pessoa_ids: string[]
+  razao_social: string
+}): Promise<ParcelaRow[]> {
+  const { pessoa_ids, razao_social } = params
+
+  if (pessoa_ids.length === 0 && !razao_social?.trim()) {
+    return []
+  }
+
+  try {
+    return await collectPaginatedRows<ParcelaRow>(async (from, to) => {
+      let query = supabase
+        .from('financeiro_parcelas')
+        .select(PARCELAS_SELECT)
+        .or(FINANCEIRO_PARCELAS_SO_RECEBER_OR)
+        .order('id', { ascending: true })
+        .range(from, to)
+
+      if (pessoa_ids.length > 0) {
+        query = query.in('pessoa_id', pessoa_ids)
+      } else {
+        const term = `%${razao_social.trim().replace(/%/g, '\\%')}%`
+        query = query.ilike('cliente', term)
+      }
+
+      return query
+    })
+  } catch (error) {
+    console.error('[parcelasService] fetchParcelasRows:', error)
+    return []
+  }
+}
+
 function limitarPagasPorUltimosMeses(parcelas: ParcelaRow[], maxMeses: number): ParcelaRow[] {
   const ordenadas = [...parcelas]
     .filter((p) => p.data_baixa)
@@ -64,28 +102,16 @@ export async function fetchParcelasPorCliente(params: {
       ? [pessoa_id]
       : []
 
-  let query = supabase
-    .from('financeiro_parcelas')
-    .select('id, pessoa_id, nro_titulo, parcela, parcelas, data_vencimento, data_baixa, situacao, valor, valor_pago, descricao, competencia, tipo, forma, cliente, plano_contas')
-    .or(FINANCEIRO_PARCELAS_SO_RECEBER_OR)
-
-  if (ids.length > 0) {
-    query = query.in('pessoa_id', ids)
-  } else if (razao_social?.trim()) {
-    const term = `%${razao_social.trim().replace(/%/g, '\\%')}%`
-    query = query.ilike('cliente', term)
-  } else {
+  if (ids.length === 0 && !razao_social?.trim()) {
     return { pagas: [], emAtraso: [], aVencer: [] }
   }
 
-  const { data: rows, error } = await query
+  const rows = await fetchParcelasRows({
+    pessoa_ids: ids,
+    razao_social: razao_social ?? '',
+  })
 
-  if (error) {
-    console.error('[parcelasService] fetchParcelasPorCliente:', error)
-    return { pagas: [], emAtraso: [], aVencer: [] }
-  }
-
-  const parcelas = ((rows ?? []) as ParcelaRow[]).filter((p) => financeiroTituloEhReceber(p.tipo))
+  const parcelas = rows.filter((p) => financeiroTituloEhReceber(p.tipo))
 
   const pagas = limitarPagasPorUltimosMeses(
     parcelas.filter((p) => (p.situacao ?? '').toUpperCase() === 'PAGO'),
@@ -119,31 +145,38 @@ export async function fetchPagamentosPorPeriodo(params: {
     return { parcelas: [], totalPago: 0 }
   }
 
-  let query = supabase
-    .from('financeiro_parcelas')
-    .select('id, pessoa_id, nro_titulo, parcela, parcelas, data_vencimento, data_baixa, situacao, valor, valor_pago, descricao, competencia, tipo, forma, cliente, plano_contas')
-    .or(FINANCEIRO_PARCELAS_SO_RECEBER_OR)
-    .not('data_baixa', 'is', null)
-    .gte('data_baixa', dataInicio)
-    .lte('data_baixa', dataFim)
-
-  if (pessoa_ids.length > 0) {
-    query = query.in('pessoa_id', pessoa_ids)
-  } else if (clienteNome?.trim()) {
-    const term = `%${clienteNome.trim().replace(/%/g, '\\%')}%`
-    query = query.ilike('cliente', term)
-  } else {
+  if (pessoa_ids.length === 0 && !clienteNome?.trim()) {
     return { parcelas: [], totalPago: 0 }
   }
 
-  const { data: rows, error } = await query
+  let rows: ParcelaRow[]
+  try {
+    rows = await collectPaginatedRows<ParcelaRow>(async (from, to) => {
+      let query = supabase
+        .from('financeiro_parcelas')
+        .select(PARCELAS_SELECT)
+        .or(FINANCEIRO_PARCELAS_SO_RECEBER_OR)
+        .not('data_baixa', 'is', null)
+        .gte('data_baixa', dataInicio)
+        .lte('data_baixa', dataFim)
+        .order('id', { ascending: true })
+        .range(from, to)
 
-  if (error) {
+      if (pessoa_ids.length > 0) {
+        query = query.in('pessoa_id', pessoa_ids)
+      } else {
+        const term = `%${clienteNome!.trim().replace(/%/g, '\\%')}%`
+        query = query.ilike('cliente', term)
+      }
+
+      return query
+    })
+  } catch (error) {
     console.error('[parcelasService] fetchPagamentosPorPeriodo:', error)
     return { parcelas: [], totalPago: 0 }
   }
 
-  const parcelas = ((rows ?? []) as ParcelaRow[])
+  const parcelas = rows
     .filter((p) => financeiroTituloEhReceber(p.tipo))
     .filter((p) => (p.situacao ?? '').toUpperCase() === 'PAGO' || p.data_baixa)
     .sort((a, b) => (b.data_baixa ?? '').localeCompare(a.data_baixa ?? ''))
