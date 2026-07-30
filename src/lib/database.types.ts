@@ -241,6 +241,162 @@ export interface Database {
           observacao?: string | null
         }
       }
+      inadimplencia_judicializada: {
+        Row: {
+          id: string
+          grupo_cliente: string
+          grupo_chave: string
+          processo_id: string
+          valor_em_aberto_auto: number
+          valor_em_aberto_ajuste: number | null
+          data_judicializacao: string | null
+          observacoes: string | null
+          encerrado_at: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          nro_cnj: string | null
+          parte_passiva: string | null
+          valor_causa: number | null
+          status_planilha: string | null
+          andamentos_resumo: string | null
+          providencias_planilha: string | null
+          citacao: string | null
+          tribunal: string | null
+          tipo_acao_planilha: string | null
+          importado_em: string | null
+          importado_de: string | null
+          andamentos_sync_em: string | null
+          andamentos_fonte: string
+        }
+        Insert: {
+          id?: string
+          grupo_cliente: string
+          grupo_chave: string
+          processo_id: string
+          valor_em_aberto_auto?: number
+          valor_em_aberto_ajuste?: number | null
+          data_judicializacao?: string | null
+          observacoes?: string | null
+          encerrado_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          nro_cnj?: string | null
+          parte_passiva?: string | null
+          valor_causa?: number | null
+          status_planilha?: string | null
+          andamentos_resumo?: string | null
+          providencias_planilha?: string | null
+          citacao?: string | null
+          tribunal?: string | null
+          tipo_acao_planilha?: string | null
+          importado_em?: string | null
+          importado_de?: string | null
+          andamentos_sync_em?: string | null
+          andamentos_fonte?: string
+        }
+        Update: {
+          grupo_cliente?: string
+          grupo_chave?: string
+          processo_id?: string
+          valor_em_aberto_auto?: number
+          valor_em_aberto_ajuste?: number | null
+          data_judicializacao?: string | null
+          observacoes?: string | null
+          encerrado_at?: string | null
+          updated_at?: string
+          nro_cnj?: string | null
+          parte_passiva?: string | null
+          valor_causa?: number | null
+          status_planilha?: string | null
+          andamentos_resumo?: string | null
+          providencias_planilha?: string | null
+          citacao?: string | null
+          tribunal?: string | null
+          tipo_acao_planilha?: string | null
+          importado_em?: string | null
+          importado_de?: string | null
+          andamentos_sync_em?: string | null
+          andamentos_fonte?: string
+        }
+      }
+      inadimplencia_judicializada_andamentos: {
+        Row: {
+          id: string
+          judicializada_id: string
+          processo_id: string
+          data_andamento: string | null
+          descricao: string
+          fonte: string
+          vios_evento_id: string | null
+          vios_sync_em: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          judicializada_id: string
+          processo_id: string
+          data_andamento?: string | null
+          descricao: string
+          fonte?: string
+          vios_evento_id?: string | null
+          vios_sync_em?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          judicializada_id?: string
+          processo_id?: string
+          data_andamento?: string | null
+          descricao?: string
+          fonte?: string
+          vios_evento_id?: string | null
+          vios_sync_em?: string | null
+          updated_at?: string
+        }
+      }
+      /** View: inadimplência judicializada + dados do processo VIOS. */
+      inadimplencia_judicializada_list: {
+        Row: {
+          id: string
+          grupo_cliente: string
+          grupo_chave: string
+          processo_id: string
+          valor_em_aberto_auto: number
+          valor_em_aberto_ajuste: number | null
+          valor_em_aberto: number
+          data_judicializacao: string | null
+          observacoes: string | null
+          encerrado_at: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          nro_cnj: string | null
+          acao: string | null
+          area: string | null
+          departamento: string | null
+          situacao_processo: string | null
+          fase_processual: string | null
+          advogado_responsavel: string | null
+          processo_cliente: string | null
+          parte_passiva: string | null
+          valor_causa: number | null
+          status_planilha: string | null
+          andamentos_resumo: string | null
+          providencias_planilha: string | null
+          citacao: string | null
+          tribunal: string | null
+          tipo_acao_planilha: string | null
+          importado_em: string | null
+          importado_de: string | null
+          andamentos_sync_em: string | null
+          andamentos_fonte: string | null
+        }
+        Insert: unknown
+        Update: unknown
+      }
       timesheets: {
         Row: {
           id: string
@@ -721,6 +877,11 @@ export type ProvidenciaRow = Database['public']['Tables']['providencias']['Row']
 export type ProvidenciaFollowUpRow = Database['public']['Tables']['providencia_follow_ups']['Row']
 export type InadimplenciaLogRow = Database['public']['Tables']['inadimplencia_logs']['Row']
 export type InadimplenciaPagamentoRow = Database['public']['Tables']['inadimplencia_pagamentos']['Row']
+export type InadimplenciaJudicializadaRow = Database['public']['Tables']['inadimplencia_judicializada']['Row']
+export type InadimplenciaJudicializadaListRow =
+  Database['public']['Tables']['inadimplencia_judicializada_list']['Row']
+export type InadimplenciaJudicializadaAndamentoRow =
+  Database['public']['Tables']['inadimplencia_judicializada_andamentos']['Row']
 export type PessoaRow = Database['public']['Tables']['pessoas']['Row']
 /** Empresa com processos, timesheets e financeiro (view escritorio_empresas_por_grupo). */
 export type EscritorioEmpresaRow = Database['public']['Tables']['escritorio_empresas_por_grupo']['Row']

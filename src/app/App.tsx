@@ -6,6 +6,7 @@ import { ResetPassword } from './ResetPassword'
 import { FinanceiroLayout } from './layouts/FinanceiroLayout'
 import { InadimplenciaPage } from '@/features/inadimplencia/pages/InadimplenciaPage'
 import { InadimplenciaDashboardPage } from '@/features/inadimplencia/pages/InadimplenciaDashboardPage'
+import { InadimplenciaJudicializadaPage } from '@/features/inadimplencia-judicializada/pages/InadimplenciaJudicializadaPage'
 import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
 import { EscritorioFinanceiroDetalhePage } from '@/features/escritorio/pages/EscritorioFinanceiroDetalhePage'
 import { CobrancaPage } from '@/features/cobranca/pages/CobrancaPage'
@@ -59,6 +60,14 @@ function AppRoutes() {
         <Route path="/financeiro" element={<FinanceiroLayout />}>
           <Route path="inadimplencia" element={<InadimplenciaPage />} />
           <Route path="inadimplencia/dashboard" element={<InadimplenciaDashboardPage />} />
+          <Route
+            path="inadimplencia/judicializada"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'financeiro', 'comite']}>
+                <InadimplenciaJudicializadaPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="escritorio"
             element={

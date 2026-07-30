@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
-import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock } from 'lucide-react'
+import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock, Scale } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: '/financeiro/inadimplencia', label: 'Inadimplência', icon: AlertTriangle, roles: ['admin', 'financeiro', 'comite'], end: true },
   { to: '/financeiro/cobranca/seguimento', label: 'Inadimplência Pontual', icon: Clock, roles: ['admin', 'financeiro', 'comite'] },
+  { to: '/financeiro/inadimplencia/judicializada', label: 'Inad. Judicializada', icon: Scale, roles: ['admin', 'financeiro', 'comite'] },
   { to: '/financeiro/inadimplencia/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'financeiro', 'comite'] },
   { to: '/financeiro/escritorio', label: 'Escritório', icon: Building2, roles: ['admin', 'financeiro'] },
   { to: '/financeiro/cobranca', label: 'Cobrança', icon: BellRing, roles: ['admin', 'financeiro'] },
