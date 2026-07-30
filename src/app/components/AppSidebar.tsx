@@ -19,10 +19,10 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  { to: '/financeiro/inadimplencia/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'financeiro', 'comite'] },
   { to: '/financeiro/inadimplencia', label: 'Inadimplência', icon: AlertTriangle, roles: ['admin', 'financeiro', 'comite'], end: true },
   { to: '/financeiro/cobranca/seguimento', label: 'Inadimplência Pontual', icon: Clock, roles: ['admin', 'financeiro', 'comite'] },
   { to: '/financeiro/inadimplencia/judicializada', label: 'Inad. Judicializada', icon: Scale, roles: ['admin', 'financeiro', 'comite'] },
-  { to: '/financeiro/inadimplencia/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'financeiro', 'comite'] },
   { to: '/financeiro/escritorio', label: 'Escritório', icon: Building2, roles: ['admin', 'financeiro'] },
   { to: '/financeiro/cobranca', label: 'Cobrança', icon: BellRing, roles: ['admin', 'financeiro'] },
   { to: '/financeiro/receita', label: 'Receita', icon: TrendingUp, roles: ['admin', 'financeiro', 'comite'] },

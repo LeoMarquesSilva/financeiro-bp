@@ -3,13 +3,51 @@ import { startOfMonth, endOfMonth } from 'date-fns'
 import { DATA_INICIO_COMITE } from '@/shared/constants/inadimplencia'
 import { FINANCEIRO_PARCELAS_SO_RECEBER_OR } from '@/shared/utils/financeiroTitulo'
 import { cobrancaSeguimentoService } from '@/features/cobranca/services/cobrancaSeguimentoService'
+import type { CobrancaSeguimentoGrupo } from '@/features/cobranca/types/cobrancaSeguimento.types'
+import {
+  judicializadaService,
+} from '@/features/inadimplencia-judicializada/services/judicializadaService'
 import {
   fetchInadimplenciaGruposIndex,
   grupoChaveNoComiteInadimplencia,
+  type InadimplenciaGruposIndex,
 } from '@/features/escritorio/services/inadimplenciaGruposIndex'
+
+export interface DashboardCarteiraPontual {
+  valorEmAberto: number
+  qtdGrupos: number
+  valorFaixa1_30: number
+  valorFaixa31_60: number
+  mediaDiasAtraso: number
+  classeA: number
+  classeB: number
+}
+
+export interface DashboardCarteiraRecorrente {
+  valorEmAberto: number
+  qtdClientes: number
+  classeA: number
+  classeB: number
+  classeC: number
+}
+
+export interface DashboardCarteiraJudicializada {
+  valorEmAberto: number
+  qtdProcessos: number
+  qtdGrupos: number
+  porArea: { area: string; valor: number; qtd: number }[]
+}
+
+export interface DashboardCarteiras {
+  pontual: DashboardCarteiraPontual
+  recorrente: DashboardCarteiraRecorrente
+  judicializada: DashboardCarteiraJudicializada
+}
 
 export interface DashboardTotais {
   totalEmAberto: number
+  /** Comitê + Pontual (sem judicializada) — base dos KPIs de recuperação. */
+  totalEmAbertoOperacional: number
   totalClasseA: number
   totalClasseB: number
   totalClasseC: number
@@ -46,6 +84,7 @@ export interface TaxaRecuperacaoComite {
 
 export interface DashboardData {
   totais: DashboardTotais
+  carteiras: DashboardCarteiras
   taxaRecuperacaoComite: TaxaRecuperacaoComite
   rankingGestores: RankingItem[]
   rankingAreas: RankingItem[]
@@ -100,20 +139,41 @@ function getTotaisPorClasseFromRows(rows: ClientListRow[]): { A: number; B: numb
   return acc
 }
 
-async function getPontualTotaisPorClasse(): Promise<{ A: number; B: number }> {
-  const [seguimento, index] = await Promise.all([
-    cobrancaSeguimentoService.fetchDashboard(),
-    fetchInadimplenciaGruposIndex(),
-  ])
+function calcularCarteiraPontual(
+  grupos: CobrancaSeguimentoGrupo[],
+  index: InadimplenciaGruposIndex,
+): DashboardCarteiraPontual {
+  let valorEmAberto = 0
+  let valorFaixa1_30 = 0
+  let valorFaixa31_60 = 0
+  let classeA = 0
+  let classeB = 0
+  let qtdGrupos = 0
+  let somaMediaDias = 0
 
-  let A = 0
-  let B = 0
-  for (const g of seguimento.grupos) {
+  for (const g of grupos) {
     if (grupoChaveNoComiteInadimplencia(g.grupo_chave, index)) continue
-    if (g.max_dias_atraso <= 30) A += g.valor_total
-    else B += g.valor_total
+    qtdGrupos += 1
+    valorEmAberto += g.valor_total
+    somaMediaDias += g.media_dias_atraso ?? 0
+    if (g.max_dias_atraso <= 30) {
+      valorFaixa1_30 += g.valor_total
+      classeA += g.valor_total
+    } else {
+      valorFaixa31_60 += g.valor_total
+      classeB += g.valor_total
+    }
   }
-  return { A, B }
+
+  return {
+    valorEmAberto,
+    qtdGrupos,
+    valorFaixa1_30,
+    valorFaixa31_60,
+    mediaDiasAtraso: qtdGrupos > 0 ? Math.round(somaMediaDias / qtdGrupos) : 0,
+    classeA,
+    classeB,
+  }
 }
 
 function getValorEmAbertoPorGestorFromRows(rows: ClientListRow[]): RankingItem[] {
@@ -341,7 +401,9 @@ export const dashboardService = {
       rankingAreas,
       tempoMedio,
       followUpAlerts,
-      pontualPorClasse,
+      seguimentoDashboard,
+      gruposIndex,
+      judicializadaRows,
     ] = await Promise.all([
       fetchClientListRows(),
       getTotalRecuperadoNoMes(),
@@ -349,24 +411,51 @@ export const dashboardService = {
       getRankingAreas(),
       getTempoMedioRecuperacao(),
       getFollowUpAlerts(),
-      getPontualTotaisPorClasse(),
+      cobrancaSeguimentoService.fetchDashboard(),
+      fetchInadimplenciaGruposIndex(),
+      judicializadaService.fetchJudicializadaList(false),
     ])
 
+    const pontualCarteira = calcularCarteiraPontual(seguimentoDashboard.grupos, gruposIndex)
+    const pontualPorClasse = { A: pontualCarteira.classeA, B: pontualCarteira.classeB }
+
+    const activeClients = getActiveClients(clientListRows)
     const emAbertoComite = getTotalEmAbertoFromRows(clientListRows)
     const porClasse = getTotaisPorClasseFromRows(clientListRows)
-    const pontualEmAberto = pontualPorClasse.A + pontualPorClasse.B
-    const emAberto = emAbertoComite + pontualEmAberto
+    const pontualEmAberto = pontualCarteira.valorEmAberto
+    const judicializadaKpis = judicializadaService.calcularKpis(judicializadaRows)
+    const emAbertoOperacional = emAbertoComite + pontualEmAberto
+    const emAberto = emAbertoOperacional + judicializadaKpis.totalEmAberto
+
+    const carteiras: DashboardCarteiras = {
+      pontual: pontualCarteira,
+      recorrente: {
+        valorEmAberto: emAbertoComite,
+        qtdClientes: activeClients.length,
+        classeA: porClasse.A,
+        classeB: porClasse.B,
+        classeC: porClasse.C,
+      },
+      judicializada: {
+        valorEmAberto: judicializadaKpis.totalEmAberto,
+        qtdProcessos: judicializadaKpis.qtdProcessos,
+        qtdGrupos: judicializadaKpis.qtdGrupos,
+        porArea: judicializadaKpis.porArea.slice(0, 3),
+      },
+    }
+
     const valorPorGestor = getValorEmAbertoPorGestorFromRows(clientListRows)
     const valorPorArea = getValorEmAbertoPorAreaFromRows(clientListRows)
     const taxaRecuperacaoComite = await getTaxaRecuperacaoComite(clientListRows)
 
-    const totalInicioMes = emAberto + recuperadoMes
+    const totalInicioMes = emAbertoOperacional + recuperadoMes
     const percentualRecuperacao =
       totalInicioMes > 0 ? (recuperadoMes / totalInicioMes) * 100 : 0
 
     return {
       totais: {
         totalEmAberto: emAberto,
+        totalEmAbertoOperacional: emAbertoOperacional,
         totalClasseA: porClasse.A + pontualPorClasse.A,
         totalClasseB: porClasse.B + pontualPorClasse.B,
         totalClasseC: porClasse.C,
@@ -378,6 +467,7 @@ export const dashboardService = {
         totalRecuperadoMes: recuperadoMes,
         percentualRecuperacao,
       },
+      carteiras,
       taxaRecuperacaoComite,
       rankingGestores,
       rankingAreas,

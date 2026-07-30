@@ -243,7 +243,7 @@ export function InadimplenciaPage() {
       </header>
 
       <KPIsHeader
-        totalEmAberto={totais?.totalEmAberto ?? 0}
+        totalEmAberto={totais?.totalEmAbertoOperacional ?? totais?.totalEmAberto ?? 0}
         totalClasseA={totais?.totalClasseA ?? 0}
         totalClasseB={totais?.totalClasseB ?? 0}
         totalClasseC={totais?.totalClasseC ?? 0}

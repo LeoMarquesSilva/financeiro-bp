@@ -5,6 +5,9 @@
  */
 import { chromium } from 'playwright';
 import axios from 'axios';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { decodeViosCsvBuffer } from './sync-vios-to-supabase.js';
 
 export const FINANCEIRO_TIPOS_PADRAO = ['RECEBER', 'PAGAR'];
@@ -127,9 +130,28 @@ export async function baixarCsvRelatorio(page, context, config, { linkSelector, 
   return decodeViosCsvBuffer(Buffer.from(response.data));
 }
 
+function resolveChromiumExecutable() {
+  const cache = path.join(os.homedir(), 'Library/Caches/ms-playwright');
+  const candidates = [
+    path.join(
+      cache,
+      'chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+    ),
+    path.join(
+      cache,
+      'chromium_headless_shell-1208/chrome-headless-shell-mac-arm64/chrome-headless-shell',
+    ),
+  ];
+  return candidates.find((p) => fs.existsSync(p));
+}
+
 export async function withViosBrowser(run) {
   const config = viosConfig();
-  const browser = await chromium.launch({ headless: config.headless });
+  const executablePath = resolveChromiumExecutable();
+  const browser = await chromium.launch({
+    headless: config.headless,
+    ...(executablePath ? { executablePath } : {}),
+  });
   const context = await browser.newContext({ viewport: { width: 1600, height: 950 } });
   const page = await context.newPage();
   page.setDefaultTimeout(0);

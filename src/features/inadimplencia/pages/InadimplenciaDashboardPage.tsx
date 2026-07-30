@@ -6,6 +6,12 @@ import type { RankingItem } from '../services/dashboardService'
 import { useDashboard } from '../hooks/useDashboard'
 import { useTeamMembers } from '../hooks/useTeamMembers'
 import { useExibirTaxaRecuperacaoComite } from '@/features/configuracoes/hooks/useExibirTaxaRecuperacaoComite'
+import {
+  DashboardCarteiraCard,
+  carteiraCurrency,
+} from '../components/DashboardCarteiraCard'
+import { DashboardComposicaoBar } from '../components/DashboardComposicaoBar'
+import { AlertTriangle, Clock, Scale } from 'lucide-react'
 
 export function InadimplenciaDashboardPage() {
   const { data, loading, error } = useDashboard()
@@ -38,6 +44,7 @@ export function InadimplenciaDashboardPage() {
 
   const {
     totais,
+    carteiras,
     taxaRecuperacaoComite,
     rankingGestores,
     rankingAreas,
@@ -46,12 +53,96 @@ export function InadimplenciaDashboardPage() {
     tempoMedioRecuperacaoDias,
   } = data
 
+  const barDenominatorRecorrente = carteiras.recorrente.valorEmAberto
+
   return (
     <div className="space-y-8">
       <header>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard Estratégico</h1>
-        <p className="mt-1 text-sm text-slate-500">Visão geral e indicadores de inadimplência</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Visão consolidada das três carteiras de inadimplência
+        </p>
       </header>
+
+      <section>
+        <h2 className="mb-3 text-lg font-semibold text-slate-800">Carteiras de inadimplência</h2>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <DashboardCarteiraCard
+            to="/financeiro/cobranca/seguimento"
+            title="Inadimplência Pontual"
+            description="Títulos vencidos de 1 a 60 dias após a cobrança D+1 (fora do comitê)."
+            icon={Clock}
+            accentClass="bg-amber-100 text-amber-700"
+            stats={[
+              { label: 'Valor em aberto', value: carteiraCurrency(carteiras.pontual.valorEmAberto) },
+              { label: 'Grupos devedores', value: String(carteiras.pontual.qtdGrupos) },
+              {
+                label: 'Faixa 31–60 dias',
+                value: carteiraCurrency(carteiras.pontual.valorFaixa31_60),
+                hint: `${carteiras.pontual.mediaDiasAtraso} dias (média)`,
+              },
+            ]}
+          />
+          <DashboardCarteiraCard
+            to="/financeiro/inadimplencia"
+            title="Inadimplência Recorrente"
+            description="Comitê de Inadimplência — clientes com atraso recorrente e classes A/B/C."
+            icon={AlertTriangle}
+            accentClass="bg-red-100 text-red-700"
+            stats={[
+              { label: 'Valor em aberto', value: carteiraCurrency(carteiras.recorrente.valorEmAberto) },
+              { label: 'Clientes ativos', value: String(carteiras.recorrente.qtdClientes) },
+              {
+                label: 'Classes A / B / C',
+                value: `${carteiraCurrency(carteiras.recorrente.classeA)} / ${carteiraCurrency(carteiras.recorrente.classeB)} / ${carteiraCurrency(carteiras.recorrente.classeC)}`,
+              },
+            ]}
+          />
+          <DashboardCarteiraCard
+            to="/financeiro/inadimplencia/judicializada"
+            title="Inadimplência Judicializada"
+            description="Casos antigos ajuizados, com processo VIOS e correção INPC + juros TJSP."
+            icon={Scale}
+            accentClass="bg-slate-200 text-slate-700"
+            stats={[
+              {
+                label: 'Valor em aberto (corrigido)',
+                value: carteiraCurrency(carteiras.judicializada.valorEmAberto),
+              },
+              { label: 'Processos', value: String(carteiras.judicializada.qtdProcessos) },
+              { label: 'Grupos', value: String(carteiras.judicializada.qtdGrupos) },
+            ]}
+          />
+        </div>
+        <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-500">
+            Composição do total em aberto
+          </p>
+          <DashboardComposicaoBar
+            total={totais.totalEmAberto}
+            items={[
+              {
+                key: 'pontual',
+                label: 'Pontual',
+                valor: carteiras.pontual.valorEmAberto,
+                colorClass: 'bg-amber-500',
+              },
+              {
+                key: 'recorrente',
+                label: 'Recorrente (Comitê)',
+                valor: carteiras.recorrente.valorEmAberto,
+                colorClass: 'bg-red-500',
+              },
+              {
+                key: 'judicializada',
+                label: 'Judicializada',
+                valor: carteiras.judicializada.valorEmAberto,
+                colorClass: 'bg-slate-600',
+              },
+            ]}
+          />
+        </div>
+      </section>
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-800">Resumo</h2>
@@ -59,6 +150,11 @@ export function InadimplenciaDashboardPage() {
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">Total em aberto</p>
             <p className="text-2xl font-bold text-slate-900">{formatCurrency(totais.totalEmAberto)}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+              Pontual {formatCurrency(carteiras.pontual.valorEmAberto)} · Recorrente{' '}
+              {formatCurrency(carteiras.recorrente.valorEmAberto)} · Judicializada{' '}
+              {formatCurrency(carteiras.judicializada.valorEmAberto)}
+            </p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">Total recuperado no mês</p>
@@ -67,6 +163,7 @@ export function InadimplenciaDashboardPage() {
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">% Recuperação</p>
             <p className="text-2xl font-bold text-slate-900">{formatPercent(totais.percentualRecuperacao)}</p>
+            <p className="mt-1 text-[11px] text-slate-400">Recorrente + Pontual (mês corrente)</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">Tempo médio de recuperação</p>
@@ -79,7 +176,7 @@ export function InadimplenciaDashboardPage() {
 
       {exibirTaxaRecuperacaoComite && (
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-800">Taxa de recuperação (desde início do comitê)</h2>
+        <h2 className="mb-3 text-lg font-semibold text-slate-800">Taxa de recuperação (Recorrente / Comitê)</h2>
         <p className="mb-1 text-sm text-slate-500">
           Pagamentos a partir de 05/02/2026 entram na porcentagem. O valor total em aberto no início é reconstruído (em aberto atual + total pago desde 05/02).
         </p>
@@ -153,7 +250,7 @@ export function InadimplenciaDashboardPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="mb-1 font-semibold text-slate-800">Total por classe (em aberto)</h3>
           <p className="mb-3 text-xs text-slate-500">
-            Inclui Comitê de Inadimplência e títulos da Inadimplência Pontual (fora do comitê).
+            Recorrente (Comitê) e Inadimplência Pontual. Judicializada não usa classes A/B/C.
           </p>
           <div className="flex flex-col gap-2">
             <ClasseTotalRow
@@ -238,7 +335,7 @@ export function InadimplenciaDashboardPage() {
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 font-semibold text-slate-800">Valor em aberto por gestor</h3>
+          <h3 className="mb-3 font-semibold text-slate-800">Valor em aberto por gestor (Recorrente)</h3>
           {valorEmAbertoPorGestor.length === 0 ? (
             <p className="text-sm text-slate-500">Nenhum dado.</p>
           ) : (
@@ -265,8 +362,8 @@ export function InadimplenciaDashboardPage() {
                         className="h-6 rounded bg-slate-600"
                         style={{
                           width: `${
-                            totais.totalEmAberto > 0
-                              ? Math.max(4, (item.valor / totais.totalEmAberto) * 100)
+                            barDenominatorRecorrente > 0
+                              ? Math.max(4, (item.valor / barDenominatorRecorrente) * 100)
                               : 0
                           }%`,
                         }}
@@ -282,7 +379,7 @@ export function InadimplenciaDashboardPage() {
           )}
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 font-semibold text-slate-800">Valor em aberto por área</h3>
+          <h3 className="mb-3 font-semibold text-slate-800">Valor em aberto por área (Recorrente)</h3>
           {valorEmAbertoPorArea.length === 0 ? (
             <p className="text-sm text-slate-500">Nenhum dado.</p>
           ) : (
@@ -295,8 +392,8 @@ export function InadimplenciaDashboardPage() {
                       className="h-6 rounded bg-slate-600"
                       style={{
                         width: `${
-                          totais.totalEmAberto > 0
-                            ? Math.max(4, (item.valor / totais.totalEmAberto) * 100)
+                          barDenominatorRecorrente > 0
+                            ? Math.max(4, (item.valor / barDenominatorRecorrente) * 100)
                             : 0
                         }%`,
                       }}
@@ -354,7 +451,7 @@ function ClasseTotalRow({
       </div>
       {(comite > 0 || pontual > 0) && (
         <p className={`mt-0.5 text-[11px] ${tones.detail}`}>
-          Comitê {formatCurrency(comite)}
+          Recorrente {formatCurrency(comite)}
           {pontual > 0 ? ` · Pontual ${formatCurrency(pontual)}` : ''}
         </p>
       )}

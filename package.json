@@ -12,6 +12,7 @@
     "verify:cdi": "node scripts/verify-cdi-xlsx.cjs",
     "map:dados": "node scripts/map-dados-xlsx.cjs",
     "sync:vios": "node scripts/sync-vios-to-supabase.cjs",
+    "sync:financeiro": "node scripts/sync-financeiro-completo.mjs",
     "resync:itens-encoding": "node scripts/resync-financeiro-itens-encoding.mjs",
     "vios:baixar-e-sync": "node scripts/baixar-vios-e-sync.cjs",
     "seed:auth": "node scripts/seed-auth-users.cjs",
