@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { collectPaginatedRows } from '@/lib/supabasePaginate'
 import { startOfMonth, endOfMonth } from 'date-fns'
 import { DATA_INICIO_COMITE } from '@/shared/constants/inadimplencia'
 import { FINANCEIRO_PARCELAS_SO_RECEBER_OR } from '@/shared/utils/financeiroTitulo'
@@ -12,6 +13,7 @@ import {
   grupoChaveNoComiteInadimplencia,
   type InadimplenciaGruposIndex,
 } from '@/features/escritorio/services/inadimplenciaGruposIndex'
+import { normalizarNomeGrupo } from '@/features/escritorio/services/escritorioService'
 
 export interface DashboardCarteiraPontual {
   valorEmAberto: number
@@ -108,6 +110,19 @@ type RowPagamentoClient = { client_id: string; valor_pago: number }
 type RowClientGestor = { id: string; gestor: string[] | string | null }
 type RowClientArea = { id: string; area: string[] | string | null }
 type RowResolvido = { created_at: string; resolvido_at: string | null }
+type ComiteGestorAreaRow = {
+  razao_social: string
+  pessoa_id: string | null
+  gestor: string[] | string | null
+  area: string[] | string | null
+  resolvido_at: string | null
+}
+type ProcessoGestorAreaRow = {
+  grupo_cliente: string | null
+  advogado_responsavel: string | null
+  area: string | null
+}
+type GrupoGestorArea = { gestor: string; area: string }
 
 /** Normaliza gestor/area (array ou string) para string única, evitando chaves duplicadas nas listas. */
 function normKey(value: string[] | string | null | undefined): string {
@@ -176,26 +191,178 @@ function calcularCarteiraPontual(
   }
 }
 
-function getValorEmAbertoPorGestorFromRows(rows: ClientListRow[]): RankingItem[] {
-  const byGestor = new Map<string, number>()
-  for (const r of getActiveClients(rows)) {
-    const nome = normKey(r.gestor)
-    byGestor.set(nome, (byGestor.get(nome) ?? 0) + Number(r.valor_em_aberto))
-  }
-  return Array.from(byGestor.entries())
+function rankingFromMap(byKey: Map<string, number>): RankingItem[] {
+  return Array.from(byKey.entries())
     .map(([nome, valor]) => ({ nome, valor, quantidade: 0 }))
     .sort((a, b) => b.valor - a.valor)
 }
 
-function getValorEmAbertoPorAreaFromRows(rows: ClientListRow[]): RankingItem[] {
+async function fetchPessoaGrupos(ids: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  if (ids.length === 0) return map
+
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500)
+    const { data, error } = await supabase
+      .from('pessoas')
+      .select('id, grupo_cliente')
+      .in('id', chunk)
+    if (error) return map
+    for (const row of (data ?? []) as { id: string; grupo_cliente: string | null }[]) {
+      if (row.grupo_cliente?.trim()) map.set(row.id, row.grupo_cliente.trim())
+    }
+  }
+  return map
+}
+
+/** Histórico do comitê (ativo ou resolvido) → gestor/área por grupo normalizado. */
+async function fetchGestorAreaHistoricoPorGrupo(): Promise<Map<string, GrupoGestorArea>> {
+  const rows = await collectPaginatedRows<ComiteGestorAreaRow>(async (from, to) =>
+    supabase
+      .from('clients_inadimplencia')
+      .select('razao_social, pessoa_id, gestor, area, resolvido_at')
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
+
+  const pessoaGrupos = await fetchPessoaGrupos(
+    [...new Set(rows.map((r) => r.pessoa_id).filter(Boolean))] as string[],
+  )
+
+  const map = new Map<string, GrupoGestorArea & { ativo: boolean }>()
+
+  for (const row of rows) {
+    const gestor = normKey(row.gestor)
+    const area = normKey(row.area)
+    const ativo = row.resolvido_at == null
+
+    const upsert = (grupoNorm: string) => {
+      if (!grupoNorm) return
+      const cur = map.get(grupoNorm)
+      if (!cur || (ativo && !cur.ativo)) {
+        map.set(grupoNorm, { gestor, area, ativo })
+      }
+    }
+
+    upsert(normalizarNomeGrupo(row.razao_social))
+    if (row.pessoa_id) {
+      const grupoCliente = pessoaGrupos.get(row.pessoa_id)
+      if (grupoCliente) upsert(normalizarNomeGrupo(grupoCliente))
+    }
+  }
+
+  return new Map([...map.entries()].map(([k, v]) => [k, { gestor: v.gestor, area: v.area }]))
+}
+
+/** Processos VIOS → gestor/área dominantes por grupo_cliente normalizado. */
+async function fetchGestorAreaProcessosPorGrupo(): Promise<Map<string, GrupoGestorArea>> {
+  const rows = await collectPaginatedRows<ProcessoGestorAreaRow>(async (from, to) =>
+    supabase
+      .from('processos_completo')
+      .select('grupo_cliente, advogado_responsavel, area')
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
+
+  const gestorCount = new Map<string, Map<string, number>>()
+  const areaCount = new Map<string, Map<string, number>>()
+
+  for (const row of rows) {
+    const grupoNorm = normalizarNomeGrupo(row.grupo_cliente ?? '')
+    if (!grupoNorm) continue
+
+    const gestor = row.advogado_responsavel?.trim() || 'Não informado'
+    const area = row.area?.trim() || 'Não informado'
+
+    if (!gestorCount.has(grupoNorm)) gestorCount.set(grupoNorm, new Map())
+    if (!areaCount.has(grupoNorm)) areaCount.set(grupoNorm, new Map())
+
+    const gMap = gestorCount.get(grupoNorm)!
+    const aMap = areaCount.get(grupoNorm)!
+    gMap.set(gestor, (gMap.get(gestor) ?? 0) + 1)
+    aMap.set(area, (aMap.get(area) ?? 0) + 1)
+  }
+
+  const result = new Map<string, GrupoGestorArea>()
+  for (const grupoNorm of gestorCount.keys()) {
+    const topGestor = [...(gestorCount.get(grupoNorm)?.entries() ?? [])].sort(
+      (a, b) => b[1] - a[1],
+    )[0]?.[0]
+    const topArea = [...(areaCount.get(grupoNorm)?.entries() ?? [])].sort(
+      (a, b) => b[1] - a[1],
+    )[0]?.[0]
+    result.set(grupoNorm, {
+      gestor: topGestor ?? 'Não informado',
+      area: topArea ?? 'Não informado',
+    })
+  }
+  return result
+}
+
+function resolveGestorAreaGrupoPontual(
+  grupoChave: string,
+  historico: Map<string, GrupoGestorArea>,
+  processos: Map<string, GrupoGestorArea>,
+  grupo?: CobrancaSeguimentoGrupo,
+): GrupoGestorArea {
+  const norm = normalizarNomeGrupo(grupoChave)
+  const hist = historico.get(norm)
+  const proc = processos.get(norm)
+  const gestor = hist?.gestor ?? proc?.gestor ?? 'Não informado'
+  let area = hist?.area ?? proc?.area ?? 'Não informado'
+
+  if (area === 'Não informado' && grupo?.departamentos?.length) {
+    const topDept = [...grupo.departamentos].sort((a, b) => b.valor - a.valor)[0]
+    if (topDept?.departamento) area = topDept.departamento
+  }
+
+  return { gestor, area }
+}
+
+function getValorEmAbertoPorGestorRecorrentePontual(
+  rows: ClientListRow[],
+  pontualGrupos: CobrancaSeguimentoGrupo[],
+  index: InadimplenciaGruposIndex,
+  historico: Map<string, GrupoGestorArea>,
+  processos: Map<string, GrupoGestorArea>,
+): RankingItem[] {
+  const byGestor = new Map<string, number>()
+
+  for (const r of getActiveClients(rows)) {
+    const nome = normKey(r.gestor)
+    byGestor.set(nome, (byGestor.get(nome) ?? 0) + Number(r.valor_em_aberto))
+  }
+
+  for (const g of pontualGrupos) {
+    if (grupoChaveNoComiteInadimplencia(g.grupo_chave, index)) continue
+    const { gestor } = resolveGestorAreaGrupoPontual(g.grupo_chave, historico, processos, g)
+    byGestor.set(gestor, (byGestor.get(gestor) ?? 0) + g.valor_total)
+  }
+
+  return rankingFromMap(byGestor)
+}
+
+function getValorEmAbertoPorAreaRecorrentePontual(
+  rows: ClientListRow[],
+  pontualGrupos: CobrancaSeguimentoGrupo[],
+  index: InadimplenciaGruposIndex,
+  historico: Map<string, GrupoGestorArea>,
+  processos: Map<string, GrupoGestorArea>,
+): RankingItem[] {
   const byArea = new Map<string, number>()
+
   for (const r of getActiveClients(rows)) {
     const nome = normKey(r.area)
     byArea.set(nome, (byArea.get(nome) ?? 0) + Number(r.valor_em_aberto))
   }
-  return Array.from(byArea.entries())
-    .map(([nome, valor]) => ({ nome, valor, quantidade: 0 }))
-    .sort((a, b) => b.valor - a.valor)
+
+  for (const g of pontualGrupos) {
+    if (grupoChaveNoComiteInadimplencia(g.grupo_chave, index)) continue
+    const { area } = resolveGestorAreaGrupoPontual(g.grupo_chave, historico, processos, g)
+    byArea.set(area, (byArea.get(area) ?? 0) + g.valor_total)
+  }
+
+  return rankingFromMap(byArea)
 }
 
 async function getTotalRecuperadoNoMes(): Promise<number> {
@@ -404,6 +571,8 @@ export const dashboardService = {
       seguimentoDashboard,
       gruposIndex,
       judicializadaRows,
+      gestorAreaHistorico,
+      gestorAreaProcessos,
     ] = await Promise.all([
       fetchClientListRows(),
       getTotalRecuperadoNoMes(),
@@ -414,6 +583,8 @@ export const dashboardService = {
       cobrancaSeguimentoService.fetchDashboard(),
       fetchInadimplenciaGruposIndex(),
       judicializadaService.fetchJudicializadaList(false),
+      fetchGestorAreaHistoricoPorGrupo(),
+      fetchGestorAreaProcessosPorGrupo(),
     ])
 
     const pontualCarteira = calcularCarteiraPontual(seguimentoDashboard.grupos, gruposIndex)
@@ -444,8 +615,20 @@ export const dashboardService = {
       },
     }
 
-    const valorPorGestor = getValorEmAbertoPorGestorFromRows(clientListRows)
-    const valorPorArea = getValorEmAbertoPorAreaFromRows(clientListRows)
+    const valorPorGestor = getValorEmAbertoPorGestorRecorrentePontual(
+      clientListRows,
+      seguimentoDashboard.grupos,
+      gruposIndex,
+      gestorAreaHistorico,
+      gestorAreaProcessos,
+    )
+    const valorPorArea = getValorEmAbertoPorAreaRecorrentePontual(
+      clientListRows,
+      seguimentoDashboard.grupos,
+      gruposIndex,
+      gestorAreaHistorico,
+      gestorAreaProcessos,
+    )
     const taxaRecuperacaoComite = await getTaxaRecuperacaoComite(clientListRows)
 
     const totalInicioMes = emAbertoOperacional + recuperadoMes

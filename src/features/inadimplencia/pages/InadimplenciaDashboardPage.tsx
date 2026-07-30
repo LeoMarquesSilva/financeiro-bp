@@ -53,7 +53,7 @@ export function InadimplenciaDashboardPage() {
     tempoMedioRecuperacaoDias,
   } = data
 
-  const barDenominatorRecorrente = carteiras.recorrente.valorEmAberto
+  const barDenominatorOperacional = totais.totalEmAbertoOperacional
 
   return (
     <div className="space-y-8">
@@ -335,7 +335,7 @@ export function InadimplenciaDashboardPage() {
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 font-semibold text-slate-800">Valor em aberto por gestor (Recorrente)</h3>
+          <h3 className="mb-3 font-semibold text-slate-800">Valor em aberto por gestor (Recorrente + Pontual)</h3>
           {valorEmAbertoPorGestor.length === 0 ? (
             <p className="text-sm text-slate-500">Nenhum dado.</p>
           ) : (
@@ -362,8 +362,8 @@ export function InadimplenciaDashboardPage() {
                         className="h-6 rounded bg-slate-600"
                         style={{
                           width: `${
-                            barDenominatorRecorrente > 0
-                              ? Math.max(4, (item.valor / barDenominatorRecorrente) * 100)
+                            barDenominatorOperacional > 0
+                              ? Math.max(4, (item.valor / barDenominatorOperacional) * 100)
                               : 0
                           }%`,
                         }}
@@ -379,7 +379,7 @@ export function InadimplenciaDashboardPage() {
           )}
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 font-semibold text-slate-800">Valor em aberto por área (Recorrente)</h3>
+          <h3 className="mb-3 font-semibold text-slate-800">Valor em aberto por área (Recorrente + Pontual)</h3>
           {valorEmAbertoPorArea.length === 0 ? (
             <p className="text-sm text-slate-500">Nenhum dado.</p>
           ) : (
@@ -392,8 +392,8 @@ export function InadimplenciaDashboardPage() {
                       className="h-6 rounded bg-slate-600"
                       style={{
                         width: `${
-                          barDenominatorRecorrente > 0
-                            ? Math.max(4, (item.valor / barDenominatorRecorrente) * 100)
+                          barDenominatorOperacional > 0
+                            ? Math.max(4, (item.valor / barDenominatorOperacional) * 100)
                             : 0
                         }%`,
                       }}
