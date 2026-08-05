@@ -18,7 +18,7 @@ export type HeatCell = {
 
 type Props = {
   title: string
-  /** 12 células, Janeiro a Dezembro. */
+  /** 12 células, Janeiro a Dezembro (ignorado quando `modoAnual`). */
   cells: HeatCell[]
   acumulado: HeatCell
   /** Meta fixa na mesma escala de HeatCell.value (fallback quando metasPorMes não informado). */
@@ -29,10 +29,23 @@ type Props = {
   metaAcumulado?: number
   /** Sobrescreve o texto "Meta X%" gerado automaticamente (ex.: "Meta x" quando ainda não definida). */
   metaLabel?: string
-  /** Mês (1–12) em destaque no filtro; null = nenhum. */
-  mesDestaque?: number | null
+  /** Meses (1–12) em destaque no filtro; null/[] = nenhum. */
+  mesDestaque?: number | number[] | null
+  /**
+   * Indicador anual (ex.: Retenção): uma coluna do ano + Acum., sem Jan–Dez.
+   * Usa `acumulado` nas duas células de valor.
+   */
+  modoAnual?: boolean
+  /** Rótulo da coluna anual (ex.: "2026"). */
+  anoLabel?: string
   /** Quando informado, mostra o botão "Racional" que abre o detalhamento das linhas do indicador. */
   onRacionalClick?: () => void
+}
+
+function mesesDestaqueSet(mesDestaque: number | number[] | null): Set<number> | null {
+  if (mesDestaque == null) return null
+  const list = Array.isArray(mesDestaque) ? mesDestaque : [mesDestaque]
+  return list.length > 0 ? new Set(list) : null
 }
 
 function cellStyle(cell: HeatCell, meta: number, bold: boolean): CSSProperties {
@@ -67,6 +80,8 @@ export function OverviewKpiHeatRow({
   metaAcumulado,
   metaLabel,
   mesDestaque = null,
+  modoAnual = false,
+  anoLabel,
   onRacionalClick,
 }: Props) {
   const metasDefinidas = (metasPorMes ?? []).filter((m): m is number => m != null)
@@ -76,6 +91,10 @@ export function OverviewKpiHeatRow({
   const metaTexto = resolveMetaTexto(meta, metaLabel, metasPorMes)
 
   const metaForCell = (index: number) => metasPorMes?.[index] ?? meta
+  const destaque = mesesDestaqueSet(mesDestaque)
+  /** Mesma largura total das linhas mensais: título | faixa dos 12 meses | Acum. */
+  const colAnoWidth = MESES_EFICIENCIA.length * COL_MES_WIDTH
+
   return (
     <div className="flex items-stretch gap-2">
       <div
@@ -91,6 +110,15 @@ export function OverviewKpiHeatRow({
       >
       <div className="overflow-x-auto">
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: TABLE_MIN_WIDTH }}>
+          <colgroup>
+            <col style={{ width: COL_TITLE_WIDTH }} />
+            {modoAnual ? (
+              <col style={{ width: colAnoWidth }} />
+            ) : (
+              MESES_EFICIENCIA.map((m) => <col key={m} style={{ width: COL_MES_WIDTH }} />)
+            )}
+            <col style={{ width: COL_ACUM_WIDTH }} />
+          </colgroup>
           <thead>
             <tr>
               <th
@@ -101,30 +129,56 @@ export function OverviewKpiHeatRow({
                   fontWeight: 600,
                   color: '#1F2937',
                   borderBottom: '2px solid #E5E7EB',
-                  width: COL_TITLE_WIDTH,
                 }}
               >
                 {title}
               </th>
-              {MESES_EFICIENCIA.map((m, i) => {
-                const destacado = mesDestaque === i + 1
-                return (
-                  <th
-                    key={m}
-                    style={{
-                      ...thBase,
-                      ...(destacado
-                        ? { color: '#0F172A', borderBottom: '2px solid #0F172A', fontWeight: 700 }
-                        : mesDestaque != null
-                          ? { opacity: 0.45 }
-                          : null),
-                    }}
-                  >
-                    {m}
-                  </th>
-                )
-              })}
-              <th style={{ ...thBase, color: '#1F2937', width: COL_ACUM_WIDTH }}>Acum.</th>
+              {modoAnual ? (
+                <th
+                  style={{
+                    padding: 4,
+                    textAlign: 'center',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: '#1F2937',
+                    borderBottom: '2px solid #E5E7EB',
+                  }}
+                >
+                  {anoLabel ?? 'Ano'}
+                </th>
+              ) : (
+                MESES_EFICIENCIA.map((m, i) => {
+                  const destacado = destaque?.has(i + 1) ?? false
+                  return (
+                    <th
+                      key={m}
+                      style={{
+                        ...thBase,
+                        width: undefined,
+                        ...(destacado
+                          ? { color: '#0F172A', borderBottom: '2px solid #0F172A', fontWeight: 700 }
+                          : destaque != null
+                            ? { opacity: 0.45 }
+                            : null),
+                      }}
+                    >
+                      {m}
+                    </th>
+                  )
+                })
+              )}
+              <th
+                style={{
+                  padding: 4,
+                  textAlign: 'center',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: '#1F2937',
+                  borderBottom: '2px solid #E5E7EB',
+                }}
+              >
+                Acum.
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -132,24 +186,37 @@ export function OverviewKpiHeatRow({
               <td style={{ padding: '4px 6px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: '#059669' }}>
                 {metaTexto}
               </td>
-              {cells.map((cell, i) => {
-                const destacado = mesDestaque === i + 1
-                return (
-                  <td
-                    key={i}
-                    style={{
-                      padding: 4,
-                      textAlign: 'center',
-                      fontSize: 11,
-                      ...cellStyle(cell, metaForCell(i), destacado),
-                      ...(mesDestaque != null && !destacado ? { opacity: 0.4 } : null),
-                      ...(destacado ? { outline: '2px solid #0F172A', outlineOffset: -2 } : null),
-                    }}
-                  >
-                    {cell.value == null ? '-' : cell.label}
-                  </td>
-                )
-              })}
+              {modoAnual ? (
+                <td
+                  style={{
+                    padding: 4,
+                    textAlign: 'center',
+                    fontSize: 11,
+                    ...cellStyle(acumulado, metaFallbackAcum, true),
+                  }}
+                >
+                  {acumulado.value == null ? '-' : acumulado.label}
+                </td>
+              ) : (
+                cells.map((cell, i) => {
+                  const destacado = destaque?.has(i + 1) ?? false
+                  return (
+                    <td
+                      key={i}
+                      style={{
+                        padding: 4,
+                        textAlign: 'center',
+                        fontSize: 11,
+                        ...cellStyle(cell, metaForCell(i), destacado),
+                        ...(destaque != null && !destacado ? { opacity: 0.4 } : null),
+                        ...(destacado ? { outline: '2px solid #0F172A', outlineOffset: -2 } : null),
+                      }}
+                    >
+                      {cell.value == null ? '-' : cell.label}
+                    </td>
+                  )
+                })
+              )}
               <td
                 style={{
                   padding: 4,

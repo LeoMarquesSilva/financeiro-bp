@@ -1,0 +1,43 @@
+# Alias AD incompleto → nome canônico (Eficiência)
+
+**Status: regra de negócio. Não reverter sem aprovação explícita.**
+
+Alguns colaboradores aparecem no SharePoint (listas de presença / pessoa) como
+**"Membros de email@dominio"** porque a conta no AD não tem display name completo.
+Esses identificadores **devem** ser linkados ao nome canônico do **turnover**.
+
+---
+
+## Alias canônico atual
+
+| Origem (SharePoint / AD incompleto) | Nome no turnover |
+|---|---|
+| `Membros de cristiana.costa@bismarchipires.com.br` | `CRISTIANE PEREIRA DA COSTA` |
+
+Chave normalizada (sem acento, UPPER, trim):  
+`MEMBROS DE CRISTIANA.COSTA@BISMARCHIPIRES.COM.BR`
+
+---
+
+## Onde aplicar
+
+| Camada | Arquivo |
+|---|---|
+| Sync (grava nome canônico) | `scripts/sharepoint/transforms.mjs` → `NOME_ALIASES_CHAVE` + `resolveNomeCanonico` |
+| Sync treinamentos | `sync-sharepoint.mjs` — `colaborador: resolveNomeCanonico(...)` |
+| Frontend match / racional | `EFICIENCIA_NOME_ALIASES_CHAVE` em `constants.ts` + `normalizeNomeChave` |
+| SQL join KPI | `eficiencia_nome_chave` (CASE de aliases) |
+
+Ao descobrir novo caso "Membros de …@…", **adicionar nas três listas** (transforms, constants, SQL) — não tratar só na UI.
+
+---
+
+## O que evitar
+
+```typescript
+// ❌ BAD — exibir/agrupar pelo literal do AD
+colaborador: "Membros de cristiana.costa@..."
+
+// ✅ GOOD — materializar nome do turnover no sync
+resolveNomeCanonico(expandUserField(...))
+```

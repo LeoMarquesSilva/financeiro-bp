@@ -5,18 +5,30 @@ import { calcularPctInadimplencia } from '@/features/receita/utils/receitaInadim
 import type { GestaoVistaMesRow, ReceitaMesRow } from '@/features/receita/types/receita.types'
 import type { ReceitaInadimplenciaDashboard } from '@/features/receita/types/receitaInadimplencia.types'
 import type { HeatCell } from '../components/OverviewKpiHeatRow'
-import { MES_INICIO_RESULTADO, type MesFiltroEficiencia } from '../constants'
+import {
+  MES_INICIO_RESULTADO,
+  isMesesFiltro,
+  mesNoFiltro,
+  type MesFiltroEficiencia,
+} from '../constants'
 
 const PCT0 = (v: number) => `${v.toFixed(2)}%`
 
-function mesNoEscopo(mes: number, filtro: MesFiltroEficiencia): boolean {
+function mesNoEscopoFinanceiro(
+  mes: number,
+  filtro: MesFiltroEficiencia,
+  ano?: number,
+): boolean {
   if (mes < MES_INICIO_RESULTADO) return false
-  if (typeof filtro === 'number') return mes === filtro
-  return true
+  return mesNoFiltro(mes, filtro, ano)
 }
 
-function filterGestaoMeses(meses: GestaoVistaMesRow[], filtro: MesFiltroEficiencia): GestaoVistaMesRow[] {
-  return meses.filter((m) => mesNoEscopo(m.mes, filtro))
+function filterGestaoMeses(
+  meses: GestaoVistaMesRow[],
+  filtro: MesFiltroEficiencia,
+  ano?: number,
+): GestaoVistaMesRow[] {
+  return meses.filter((m) => mesNoEscopoFinanceiro(m.mes, filtro, ano))
 }
 
 /** Receita Bruta (% recebido ÷ meta mensal); acum. Jun+ = recebido ÷ meta anual (meses com meta). */
@@ -35,13 +47,25 @@ export function buildOverviewReceitaBruta(
     return { value: row.pctMeta, label: PCT0(row.pctMeta) }
   })
 
-  if (typeof mesFiltro === 'number') {
-    const row = gestaoMeses.find((m) => m.mes === mesFiltro)
+  if (isMesesFiltro(mesFiltro) && mesFiltro.length === 1) {
+    const row = gestaoMeses.find((m) => m.mes === mesFiltro[0])
     if (!row || row.pctMeta == null) return { cells, acumulado: { value: null, label: '-' } }
     return {
       cells,
       acumulado: { value: row.pctMeta, label: PCT0(row.pctMeta) },
     }
+  }
+
+  if (
+    (isMesesFiltro(mesFiltro) && mesFiltro.length > 1) ||
+    mesFiltro === 'resultado'
+  ) {
+    const filtrados = filterGestaoMeses(gestaoMeses, mesFiltro, ano)
+    const recebido = filtrados.reduce((s, m) => s + (m.recebido ?? 0), 0)
+    const meta = filtrados.reduce((s, m) => s + (m.meta ?? 0), 0)
+    if (meta <= 0) return { cells, acumulado: { value: null, label: '-' } }
+    const pct = (recebido / meta) * 100
+    return { cells, acumulado: { value: pct, label: PCT0(pct) } }
   }
 
   const mesesMetaJun = new Set(
@@ -60,6 +84,7 @@ export function buildOverviewReceitaBruta(
 export function buildOverviewInadimplencia(
   gestaoMeses: GestaoVistaMesRow[],
   mesFiltro: MesFiltroEficiencia,
+  ano?: number,
 ): { cells: HeatCell[]; acumulado: HeatCell } {
   const cells: HeatCell[] = Array.from({ length: 12 }, (_, i) => {
     const mes = i + 1
@@ -69,15 +94,15 @@ export function buildOverviewInadimplencia(
     return { value: row.inadimplenciaPct, label: PCT0(row.inadimplenciaPct) }
   })
 
-  const filtrados = filterGestaoMeses(gestaoMeses, mesFiltro).filter(
+  const filtrados = filterGestaoMeses(gestaoMeses, mesFiltro, ano).filter(
     (m) => m.inadimplencia != null && m.inadimplencia > 0,
   )
   const inadTotal = filtrados.reduce((s, m) => s + (m.inadimplencia ?? 0), 0)
   const previstoTotal = filtrados.reduce((s, m) => s + m.previsto, 0)
   const pctAcum = calcularPctInadimplencia(inadTotal, previstoTotal)
 
-  if (typeof mesFiltro === 'number') {
-    const row = gestaoMeses.find((m) => m.mes === mesFiltro)
+  if (isMesesFiltro(mesFiltro) && mesFiltro.length === 1) {
+    const row = gestaoMeses.find((m) => m.mes === mesFiltro[0])
     if (!row || row.inadimplenciaPct == null) {
       return { cells, acumulado: { value: null, label: '-' } }
     }
@@ -112,10 +137,18 @@ export function buildGestaoConsolidadoFromInadDashboard(
   )
 }
 
-/** Aplica filtro Resultado (Jun+) nas células já montadas. */
-export function aplicarCelulasFiltro(cells: HeatCell[], filtro: MesFiltroEficiencia): HeatCell[] {
-  if (filtro !== 'resultado') return cells
-  return cells.map((c, i) =>
-    i + 1 < MES_INICIO_RESULTADO ? { value: null, label: '-' } : c,
-  )
+/** Aplica filtro Resultado (Jun+ fechados) ou meses selecionados nas células já montadas. */
+export function aplicarCelulasFiltro(
+  cells: HeatCell[],
+  filtro: MesFiltroEficiencia,
+  ano?: number,
+): HeatCell[] {
+  if (filtro == null) return cells
+  if (filtro === 'resultado') {
+    return cells.map((c, i) =>
+      mesNoFiltro(i + 1, 'resultado', ano) ? c : { value: null, label: '-' },
+    )
+  }
+  // Multi/mês único: mantém células; o destaque visual fica no heat row.
+  return cells
 }

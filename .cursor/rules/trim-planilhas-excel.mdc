@@ -1,0 +1,62 @@
+# TRIM em dados de planilha (Excel / CSV)
+
+**Status: regra de engenharia. Aplicar sempre em sync e imports.**
+
+Todo valor textual lido de **Excel (.xlsx)** ou **CSV** deve passar por
+`trim()` (remover espaços no início e no fim) **antes** de gravar no banco,
+comparar com listas canônicas ou usar em joins.
+
+---
+
+## Por que
+
+Planilhas costumam trazer espaços invisíveis (`"GERENTE "`, `"Nome "`).
+Match exato (`cargo = 'Gerente'`, `NOT IN (...)`) falha e distorce KPI
+(ex.: headcount 43 em vez de 42).
+
+---
+
+## Obrigatório no sync SharePoint
+
+1. **Valores** — toda string da linha: `trim()`; string vazia → `null`.
+2. **Cabeçalhos** — `trim()` nas chaves das colunas ao parsear
+   (`"Nome "` → `"Nome"`, `"Desligamento "` → `"Desligamento"`).
+3. **Comparações de domínio** (cargo, área, status, justificativa) —
+   usar o valor já trimado; preferir também match case-insensitive quando
+   a fonte for inconsistente (`GERENTE` / `Gerente`).
+
+Helpers canônicos em `scripts/sharepoint/sync-sharepoint.mjs`:
+
+- `parseXlsxBuffer` / `parseCsvBuffer` → já aplicam trim em chaves e valores.
+- Não “confiar” em `.trim()` pontual só no campo `nome` — o pipeline inteiro
+  deve sair limpo do parse.
+
+---
+
+## SQL / RPC
+
+Quando filtrar colunas textuais vindas de planilha:
+
+```sql
+-- ✅ GOOD
+upper(trim(cargo)) NOT IN ('GERENTE', 'SÓCIO DE ÁREA', ...)
+
+-- ❌ BAD — falha com "GERENTE "
+cargo NOT IN ('Gerente', ...)
+```
+
+---
+
+## Frontend
+
+Listas canônicas (ex.: cargos excluídos) devem comparar com
+`trim()` + normalização de caixa (`isCargoExcluidoDesenvolvimento`), não
+igualdade estrita ao valor cru do Supabase.
+
+---
+
+## Escopo
+
+Sync SharePoint (`scripts/sharepoint/*`), qualquer novo import Excel/CSV do
+SIOE, RPCs que filtram textos materializados de planilha, e utilitários de
+match (cargo, área, nome).

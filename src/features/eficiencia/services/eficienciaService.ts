@@ -23,6 +23,12 @@ import type {
   TurnoverTopTempoCasaRow,
   UltimaAtualizacaoRow,
 } from '../types/eficiencia.types'
+import type { IndicadoresResultadoMes } from '../types/indicadoresResultado.types'
+import {
+  buildResumoAmostra,
+  mapSlaRowToFatalExcludente,
+  selecionarAmostraExcludentes,
+} from '../utils/amostraChamados'
 
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.rpc(name as never, args as never)
@@ -67,10 +73,10 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
     tabela: 'sp_tarefas_historico',
     dataColuna: 'conclusao_completa',
     areaColuna: 'area_conclusao',
+    // Excludente entra no racional (visível), mas fica fora do KPI/% via RPC e resumo.
     filtros: [
       { tipo: 'eq', coluna: 'status', valor: 'Concluída' },
       { tipo: 'eq', coluna: 'etiqueta_tarefa', valor: 'PROTOCOLO' },
-      { tipo: 'distinctFrom', coluna: 'excludente', valor: 'Excludente' },
       {
         tipo: 'excludeInAllowNull',
         coluna: 'area_conclusao',
@@ -91,6 +97,8 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'data_para_conclusao', label: 'Data para conclusão' },
       { key: 'conclusao_completa', label: 'Conclusão Completa' },
       { key: 'fatal_apos18', label: 'Fatal apos 18' },
+      { key: 'justificativa_fatal', label: 'Justificativa de Fatal' },
+      { key: 'excludente', label: 'Excludente' },
     ],
   },
   eficiencia_protocolo: {
@@ -183,7 +191,6 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'sp_id', label: 'ID' },
       { key: 'colaborador', label: 'Colaborador' },
       { key: 'treinamento', label: 'Treinamento' },
-      { key: 'tipo_treinamento', label: 'Tipo' },
       { key: 'status', label: 'Status' },
       { key: 'data', label: 'Data' },
       { key: 'duracao_minutos', label: 'Duração (min)' },
@@ -429,6 +436,55 @@ export const eficienciaService = {
       linhas,
       truncado: false,
       resumo,
+    }
+  },
+
+  /**
+   * Compila racionais do mês + amostra de evidências (excludentes FATAL)
+   * para o Excel gerencial Indicadores Resultado.
+   */
+  async fetchIndicadoresResultadoMes(ano: number, mes: number): Promise<IndicadoresResultadoMes> {
+    if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
+      throw new Error('Mês inválido para Indicadores Resultado')
+    }
+    const mesFiltro: MesFiltroEficiencia = [mes]
+
+    const [
+      slaProtocolo,
+      eficienciaProtocolo,
+      agendamento,
+      vistagemRisco,
+      vistagemNormal,
+      desenvolvimento,
+    ] = await Promise.all([
+      this.fetchRacionalParaExport('sla_protocolo', ano, null, mesFiltro),
+      this.fetchRacionalParaExport('eficiencia_protocolo', ano, null, mesFiltro),
+      this.fetchRacionalParaExport('sla_ciencia_agendamentos', ano, null, mesFiltro),
+      this.fetchRacionalParaExport('sla_vistagem_risco', ano, null, mesFiltro),
+      this.fetchRacionalParaExport('sla_vistagem_normal', ano, null, mesFiltro),
+      this.fetchRacionalParaExport('desenvolvimento_equipe', ano, null, mesFiltro),
+    ])
+
+    const fatalExcludentes = slaProtocolo.linhas
+      .map((row) => mapSlaRowToFatalExcludente(row))
+      .filter((row): row is NonNullable<typeof row> => row != null)
+
+    const detalhesExcludentes = selecionarAmostraExcludentes(fatalExcludentes)
+    const amostraChamados = detalhesExcludentes.filter((r) => r.naAmostra)
+    const resumoAmostra = buildResumoAmostra(detalhesExcludentes)
+
+    return {
+      ano,
+      mes,
+      slaProtocolo,
+      eficienciaProtocolo,
+      agendamento,
+      vistagemRisco,
+      vistagemNormal,
+      desenvolvimento,
+      detalhesExcludentes,
+      amostraChamados,
+      resumoAmostra,
     }
   },
 }

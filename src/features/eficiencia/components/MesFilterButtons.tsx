@@ -1,6 +1,11 @@
 import { Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MESES_EFICIENCIA, type MesFiltroEficiencia } from '../constants'
+import {
+  MESES_EFICIENCIA,
+  isMesesFiltro,
+  toggleMesFiltro,
+  type MesFiltroEficiencia,
+} from '../constants'
 
 type Props = {
   value: MesFiltroEficiencia
@@ -29,19 +34,20 @@ export function MesFilterButtons({ value, onChange }: Props) {
         onClick={() => onChange('resultado')}
         className={cn(BTN, value === 'resultado' ? BTN_ON : BTN_OFF)}
         aria-pressed={value === 'resultado'}
-        title="Junho a dezembro — período de resultado"
+        title="Junho até o último mês fechado — exclui o mês corrente"
       >
         Resultado
       </button>
       {MESES_EFICIENCIA.map((label, idx) => {
         const mes = idx + 1
+        const ativo = isMesesFiltro(value) && value.includes(mes)
         return (
           <button
             key={mes}
             type="button"
-            onClick={() => onChange(mes)}
-            className={cn(BTN, value === mes ? BTN_ON : BTN_OFF)}
-            aria-pressed={value === mes}
+            onClick={() => onChange(toggleMesFiltro(value, mes))}
+            className={cn(BTN, ativo ? BTN_ON : BTN_OFF)}
+            aria-pressed={ativo}
           >
             {label}
           </button>

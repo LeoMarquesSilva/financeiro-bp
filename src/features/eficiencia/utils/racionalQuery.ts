@@ -1,8 +1,12 @@
 import { supabase } from '@/lib/supabaseClient'
 import {
   EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO,
-  EFICIENCIA_CARGOS_EXCLUIDOS_DESENVOLVIMENTO,
+  EFICIENCIA_NOME_ALIASES_CHAVE,
+  MESES_EFICIENCIA,
+  isCargoExcluidoDesenvolvimento,
+  isMesesFiltro,
   MES_INICIO_RESULTADO,
+  mesFimResultado,
   type MesFiltroEficiencia,
 } from '../constants'
 import type { RacionalColuna, RacionalIndicador, RacionalResultado } from '../types/eficiencia.types'
@@ -37,6 +41,13 @@ function quoteInList(valores: string[]): string {
   return `(${valores.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(',')})`
 }
 
+function rangeMes(ano: number, mes: number): { inicio: string; fim: string } {
+  const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`
+  const fim =
+    mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, '0')}-01`
+  return { inicio, fim }
+}
+
 export function applyRacionalPeriodo(
   query: AnyQuery,
   dataColuna: string,
@@ -45,13 +56,27 @@ export function applyRacionalPeriodo(
 ): AnyQuery {
   if (mes === 'resultado') {
     const inicio = `${ano}-${String(MES_INICIO_RESULTADO).padStart(2, '0')}-01`
-    return query.gte(dataColuna, inicio).lt(dataColuna, `${ano + 1}-01-01`)
-  }
-  if (typeof mes === 'number' && mes >= 1 && mes <= 12) {
-    const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`
+    const fimMes = mesFimResultado(ano)
+    // Sem mês fechado no período (ex.: ainda em jun): intervalo vazio.
+    if (fimMes < MES_INICIO_RESULTADO) {
+      return query.gte(dataColuna, inicio).lt(dataColuna, inicio)
+    }
     const fim =
-      mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, '0')}-01`
+      fimMes === 12
+        ? `${ano + 1}-01-01`
+        : `${ano}-${String(fimMes + 1).padStart(2, '0')}-01`
     return query.gte(dataColuna, inicio).lt(dataColuna, fim)
+  }
+  if (isMesesFiltro(mes) && mes.length > 0) {
+    if (mes.length === 1) {
+      const { inicio, fim } = rangeMes(ano, mes[0]!)
+      return query.gte(dataColuna, inicio).lt(dataColuna, fim)
+    }
+    const parts = mes.map((m) => {
+      const { inicio, fim } = rangeMes(ano, m)
+      return `and(${dataColuna}.gte.${inicio},${dataColuna}.lt.${fim})`
+    })
+    return query.or(parts.join(','))
   }
   return query.gte(dataColuna, `${ano}-01-01`).lt(dataColuna, `${ano + 1}-01-01`)
 }
@@ -91,41 +116,66 @@ export function applyRacionalFiltroNativo(
   }
 }
 
-function normalizeNome(nome: string): string {
-  return nome.trim().toUpperCase()
+/** Chave de match com turnover: sem acento, caixa alta, espaços colapsados (+ aliases AD). */
+export function normalizeNomeChave(nome: string): string {
+  const key = nome
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+  return EFICIENCIA_NOME_ALIASES_CHAVE[key] ?? key
 }
 
-/** População de treinamentos = join por nome com sp_turnover (mesmos filtros do RPC). */
+/**
+ * População de treinamentos = join por nome com sp_turnover (mesmos filtros do RPC).
+ * Usa o vínculo ativo atual (área “de agora”); match sem acento (ex.: Vinicius/VÍNICIUS).
+ */
 export async function fetchDesenvolvimentoRacional(
   cfg: RacionalConfig,
   ano: number,
   area: string | null,
   mes: MesFiltroEficiencia,
 ): Promise<RacionalResultado> {
-  let turnoverQuery = supabase
+  // Indicador anual: filtro Resultado = ano todo (mesmos minutos/meta do KPI).
+  const mesPeriodo: MesFiltroEficiencia = mes === 'resultado' ? null : mes
+
+  // Ativo no ano: desligamento nulo ou a partir de 1/jan do ano seguinte (equiv. year > ano).
+  const turnoverQuery = supabase
     .from('sp_turnover')
-    .select('nome')
+    .select('nome, area, cargo, admissao, desligamento')
     .lte('admissao', `${ano}-12-31`)
-    .or(`desligamento.is.null,desligamento.gte.${ano}-01-01`)
-
-  if (area) {
-    turnoverQuery = turnoverQuery.eq('area', area)
-  } else {
-    turnoverQuery = turnoverQuery.or('area.is.null,area.neq.Tributário')
-  }
-
-  turnoverQuery = turnoverQuery.or(
-    `cargo.is.null,cargo.not.in.${quoteInList([...EFICIENCIA_CARGOS_EXCLUIDOS_DESENVOLVIMENTO])}`,
-  )
+    .or(`desligamento.is.null,desligamento.gte.${ano + 1}-01-01`)
 
   const { data: turnoverRows, error: turnoverError } = await turnoverQuery
   if (turnoverError) throw turnoverError
 
-  const nomesElegiveis = new Set(
-    ((turnoverRows ?? []) as Array<{ nome: string | null }>)
-      .map((r) => normalizeNome(String(r.nome ?? '')))
-      .filter(Boolean),
-  )
+  // Um nome → vínculo mais recente ativo (mudança de área não duplica).
+  type TvRow = {
+    nome: string | null
+    area: string | null
+    cargo: string | null
+    admissao: string | null
+  }
+  const porNome = new Map<string, TvRow>()
+  for (const row of (turnoverRows ?? []) as TvRow[]) {
+    if (isCargoExcluidoDesenvolvimento(row.cargo)) continue
+    const key = normalizeNomeChave(String(row.nome ?? ''))
+    if (!key) continue
+    const prev = porNome.get(key)
+    if (!prev || String(row.admissao ?? '') > String(prev.admissao ?? '')) {
+      porNome.set(key, row)
+    }
+  }
+
+  const nomesElegiveis = new Set<string>()
+  for (const [key, row] of porNome) {
+    if (area) {
+      if (row.area === area) nomesElegiveis.add(key)
+    } else if (row.area == null || row.area !== 'Tributário') {
+      nomesElegiveis.add(key)
+    }
+  }
 
   let trainingQuery = supabase
     .from('sp_treinamentos_presenca')
@@ -133,17 +183,23 @@ export async function fetchDesenvolvimentoRacional(
     .order(cfg.dataColuna, { ascending: false })
     .limit(RACIONAL_LIMITE + 200)
 
-  trainingQuery = applyRacionalPeriodo(trainingQuery, cfg.dataColuna, ano, mes)
+  trainingQuery = applyRacionalPeriodo(trainingQuery, cfg.dataColuna, ano, mesPeriodo)
 
   const { data: trainingRows, error: trainingError } = await trainingQuery
   if (trainingError) throw trainingError
 
-  const linhas = ((trainingRows ?? []) as Array<Record<string, unknown>>).filter((row) =>
-    nomesElegiveis.has(normalizeNome(String(row.colaborador ?? ''))),
-  )
+  const linhas = ((trainingRows ?? []) as Array<Record<string, unknown>>)
+    .filter((row) => nomesElegiveis.has(normalizeNomeChave(String(row.colaborador ?? ''))))
+    .map((row) => {
+      const tv = porNome.get(normalizeNomeChave(String(row.colaborador ?? '')))
+      return { ...row, area: tv?.area ?? null }
+    })
 
   return {
-    colunas: cfg.colunas,
+    colunas: [
+      { key: 'area', label: 'Área' },
+      ...cfg.colunas,
+    ],
     linhas: linhas.slice(0, RACIONAL_LIMITE),
     truncado: linhas.length > RACIONAL_LIMITE,
   }
@@ -154,16 +210,19 @@ export function applyRetencaoRacionalPeriodo(
   ano: number,
   mes: MesFiltroEficiencia,
 ): AnyQuery {
+  // Base do ano: admitidos até 31/12 e (ativos ou desligados no ano).
+  // Resultado = ano todo (indicador anual — não recorta jun–dez).
   query = query
     .lte('admissao', `${ano}-12-31`)
     .or(`desligamento.is.null,desligamento.gte.${ano}-01-01`)
 
-  if (mes === 'resultado') {
-    return query.or(`desligamento.is.null,desligamento.gte.${ano}-06-01`)
+  if (mes === 'resultado' || mes == null) {
+    return query
   }
-  if (typeof mes === 'number' && mes >= 1 && mes <= 12) {
+  if (isMesesFiltro(mes) && mes.length > 0) {
+    const maxMes = Math.max(...mes)
     const fim =
-      mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, '0')}-01`
+      maxMes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(maxMes + 1).padStart(2, '0')}-01`
     return query.or(`desligamento.is.null,desligamento.lt.${fim}`)
   }
   return query
@@ -183,8 +242,21 @@ export function shouldSkipFiltroRetencaoArea(
 }
 
 export function formatRacionalPeriodoLabel(ano: number, mes: MesFiltroEficiencia): string {
-  if (mes === 'resultado') return `resultado (jun–dez/${ano})`
-  if (typeof mes === 'number') return `${String(mes).padStart(2, '0')}/${ano}`
+  if (mes === 'resultado') {
+    const fim = mesFimResultado(ano)
+    if (fim < MES_INICIO_RESULTADO) return `resultado (sem mês fechado/${ano})`
+    const iniLabel = MESES_EFICIENCIA[MES_INICIO_RESULTADO - 1]
+    const fimLabel = MESES_EFICIENCIA[fim - 1]
+    return fim === MES_INICIO_RESULTADO
+      ? `resultado (${iniLabel}/${ano})`
+      : `resultado (${iniLabel}–${fimLabel}/${ano})`
+  }
+  if (isMesesFiltro(mes) && mes.length === 1) {
+    return `${String(mes[0]).padStart(2, '0')}/${ano}`
+  }
+  if (isMesesFiltro(mes) && mes.length > 1) {
+    return `${mes.map((m) => MESES_EFICIENCIA[m - 1]).join('+')}/${ano}`
+  }
   return String(ano)
 }
 
@@ -272,7 +344,10 @@ export async function fetchRacionalLinhasCompletas(
   return linhas
 }
 
-/** COUNT(DISTINCT ci) por fatal_apos18 — mesmos filtros do racional/KPI. */
+/**
+ * COUNT(DISTINCT ci) por fatal_apos18 — mesma base do KPI (Excludente fora da %).
+ * O racional lista Excludentes; o resumo/métrica os ignora.
+ */
 export async function fetchSlaProtocoloRacionalResumo(
   cfg: RacionalConfig,
   ano: number,
@@ -281,21 +356,34 @@ export async function fetchSlaProtocoloRacionalResumo(
 ): Promise<RacionalResultado['resumo']> {
   const d1Cis = new Set<string>()
   const fatalCis = new Set<string>()
+  const excludenteCis = new Set<string>()
   let offset = 0
 
   while (true) {
-    const query = buildRacionalBaseQuery(cfg, 'sla_protocolo', ano, area, mes, 'ci,fatal_apos18').range(
-      offset,
-      offset + RACIONAL_FETCH_PAGE - 1,
-    )
+    const query = buildRacionalBaseQuery(
+      cfg,
+      'sla_protocolo',
+      ano,
+      area,
+      mes,
+      'ci,fatal_apos18,excludente',
+    ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
 
     const { data, error } = await query
     if (error) throw error
 
-    const rows = (data ?? []) as Array<{ ci: string | null; fatal_apos18: string | null }>
+    const rows = (data ?? []) as Array<{
+      ci: string | null
+      fatal_apos18: string | null
+      excludente: string | null
+    }>
     for (const row of rows) {
       const ci = String(row.ci ?? '').trim()
       if (!ci) continue
+      if (row.excludente === 'Excludente') {
+        excludenteCis.add(ci)
+        continue
+      }
       if (row.fatal_apos18 === 'D-1') d1Cis.add(ci)
       if (row.fatal_apos18 === 'FATAL') fatalCis.add(ci)
     }
@@ -307,6 +395,7 @@ export async function fetchSlaProtocoloRacionalResumo(
   return {
     qtd_d1: d1Cis.size,
     qtd_fatal: fatalCis.size,
+    qtd_excludente: excludenteCis.size,
   }
 }
 

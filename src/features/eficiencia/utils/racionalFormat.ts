@@ -14,12 +14,22 @@ export function formatRacionalCell(value: unknown): string {
 export function formatRacionalResumoLabel(resumo: {
   qtd_d1?: number
   qtd_fatal?: number
+  qtd_excludente?: number
   qtd_eficiencia?: number
   qtd_inconsistencia?: number
   qtd_total?: number
 }): string | null {
   if (resumo.qtd_d1 != null && resumo.qtd_fatal != null) {
-    return `Total: ${resumo.qtd_d1} protocolo${resumo.qtd_d1 === 1 ? '' : 's'} em D-1 · ${resumo.qtd_fatal} protocolo${resumo.qtd_fatal === 1 ? '' : 's'} em FATAL`
+    const partes = [
+      `${resumo.qtd_d1} protocolo${resumo.qtd_d1 === 1 ? '' : 's'} em D-1`,
+      `${resumo.qtd_fatal} protocolo${resumo.qtd_fatal === 1 ? '' : 's'} em FATAL`,
+    ]
+    if (resumo.qtd_excludente != null) {
+      partes.push(
+        `${resumo.qtd_excludente} excludente${resumo.qtd_excludente === 1 ? '' : 's'} (fora da %)`,
+      )
+    }
+    return `Total: ${partes.join(' · ')}`
   }
 
   if (resumo.qtd_inconsistencia != null && resumo.qtd_eficiencia != null) {

@@ -19,14 +19,19 @@ export const AREA_DEPARA = {
 }
 
 /** Justificativas que tornam um FATAL "Excludente" (coluna Excludente do BI). */
-export const JUSTIFICATIVAS_EXCLUDENTES = new Set([
+export const JUSTIFICATIVAS_EXCLUDENTES = [
   'Prazo De 24/48Hrs',
   'Agendado Em 5 Dias Corridos - Quarta/Quinta',
   'Agendado Pelo Sistema Em Dia Anterior',
   'Atraso No Envio De Documentação Pelo Cliente',
   'EXCLUDENTE DE FATAL - VALIDADO POR OPS. LEGAIS',
   'Atraso No Pagamento De Guia Pelo Cliente',
-])
+]
+
+/** Match case-insensitive — SharePoint costuma gravar a justificativa em UPPERCASE. */
+const JUSTIFICATIVAS_EXCLUDENTES_UPPER = new Set(
+  JUSTIFICATIVAS_EXCLUDENTES.map((j) => j.trim().toLocaleUpperCase('pt-BR')),
+)
 
 export function mapAreaDePara(escritorioResponsavel) {
   if (!escritorioResponsavel) return null
@@ -34,7 +39,8 @@ export function mapAreaDePara(escritorioResponsavel) {
 }
 
 export function computeExcludente(justificativaFatal) {
-  return JUSTIFICATIVAS_EXCLUDENTES.has((justificativaFatal ?? '').trim()) ? 'Excludente' : 'Não'
+  const key = (justificativaFatal ?? '').trim().toLocaleUpperCase('pt-BR')
+  return key && JUSTIFICATIVAS_EXCLUDENTES_UPPER.has(key) ? 'Excludente' : 'Não'
 }
 
 /** Colunas "Fatal apos 18" / "Fatal sem 18" (tabela Nova): Fatal|Fatal Quebra -> FATAL; Pendente mantém; senão D-1. */
@@ -188,9 +194,14 @@ export function computeAdesaoApos18(status, dataPrazo, conclusaoCompleta) {
   return segundos <= 18 * 3600 ? 'D-1' : 'Fatal'
 }
 
-/** Nomes abreviados no CSV/VIOS → nome canônico no turnover. */
-const NOME_ALIASES_CHAVE = {
+/**
+ * Aliases de nome (chave normalizada → nome canônico no turnover).
+ * Inclui contas AD incompletas do SharePoint no formato "Membros de email@...".
+ */
+export const NOME_ALIASES_CHAVE = {
   'WAGNER ARMANI': 'WAGNER JOSE PENEREIRO ARMANI',
+  // Conta AD incompleta — lista de presença usa o e-mail do grupo, não o display name.
+  'MEMBROS DE CRISTIANA.COSTA@BISMARCHIPIRES.COM.BR': 'CRISTIANE PEREIRA DA COSTA',
 }
 
 /** Chave de match turnover: sem acento, caixa alta, espaços colapsados. */
@@ -204,6 +215,18 @@ export function normalizeNomeChave(nome) {
 }
 
 /**
+ * Resolve alias → nome canônico (para gravar em sp_* e casar com turnover).
+ * Sem alias, devolve o nome trimado original.
+ */
+export function resolveNomeCanonico(nome) {
+  if (nome == null) return null
+  const original = String(nome).trim()
+  if (!original) return null
+  const alias = NOME_ALIASES_CHAVE[normalizeNomeChave(original)]
+  return alias ?? original
+}
+
+/**
  * Área do usuário na data de conclusão (colunas "Área (na conclusão)"): busca em sp_turnover
  * o registro do usuário vigente na data (admissão <= data <= desligamento, ou sem desligamento);
  * fallback: registro ativo sem desligamento. Regra fixa do BI: "CAROLINE ABDALLA" -> Trabalhista.
@@ -212,9 +235,8 @@ export function normalizeNomeChave(nome) {
  * @param {Array<{nome:string, area:string|null, admissao:string|null, desligamento:string|null}>} turnover
  */
 export function areaNaConclusao(nome, dataConclusao, turnover) {
-  let alvo = normalizeNomeChave(nome)
+  let alvo = normalizeNomeChave(resolveNomeCanonico(nome) ?? nome)
   if (!alvo) return null
-  if (NOME_ALIASES_CHAVE[alvo]) alvo = NOME_ALIASES_CHAVE[alvo]
   if (alvo === normalizeNomeChave('CAROLINE ABDALLA')) return 'Trabalhista'
   const doUsuario = turnover.filter((t) => normalizeNomeChave(t.nome) === alvo)
   if (dataConclusao) {
@@ -232,9 +254,11 @@ export function toIsoDate(d) {
   if (!d) return null
   const date = d instanceof Date ? d : new Date(d)
   if (Number.isNaN(date.getTime())) return null
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+  // UTC: datas do Excel/SheetJS vêm como meia-noite UTC do dia civil;
+  // getDate() local (BRT) atrasava 1 dia (ex.: 19/10 → 18/10).
+  const y = date.getUTCFullYear()
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
@@ -243,4 +267,22 @@ export function toIsoDateTime(v) {
   if (v == null || v === '') return null
   const d = v instanceof Date ? v : new Date(v)
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+/**
+ * Coluna "Número" de Processos Lista.csv (VIOS).
+ * Exemplos: "CNJ: 0000000-00.0000.0.00.0000", "Outros: 1670653/2026", "ADI: …".
+ * Devolve o valor limpo (após o prefixo) para exibir no lugar do Nro CNJ quando este vier vazio.
+ */
+export function parseNumeroProcessoLista(valor) {
+  if (valor == null) return null
+  const raw = String(valor).trim()
+  if (!raw) return null
+  const m = raw.match(/^([^:]+):\s*(.+)$/)
+  if (m) {
+    const numero = m[2].trim()
+    if (!numero) return null
+    return { tipo: m[1].trim(), numero, raw }
+  }
+  return { tipo: null, numero: raw, raw }
 }

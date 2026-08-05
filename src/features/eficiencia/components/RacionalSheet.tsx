@@ -100,7 +100,9 @@ export function RacionalSheet({
               </SheetTitle>
               <SheetDescription className="space-y-1">
                 <span>
-                  Mesma base do KPI · {periodoLabel} · {areaLabel}
+                  {indicador === 'sla_protocolo'
+                    ? `Base do KPI + Excludentes (fora da %) · ${periodoLabel} · ${areaLabel}`
+                    : `Mesma base do KPI · ${periodoLabel} · ${areaLabel}`}
                 </span>
                 {(metaTexto != null || resultado != null) && (
                   <span className="flex flex-wrap items-center gap-2 pt-0.5">
@@ -119,6 +121,11 @@ export function RacionalSheet({
                         Resultado: {resultado.label}
                       </span>
                     )}
+                  </span>
+                )}
+                {resumoLabel != null && !isLoading && (
+                  <span className="block pt-0.5 text-xs font-medium text-slate-600">
+                    {resumoLabel}
                   </span>
                 )}
               </SheetDescription>
@@ -175,25 +182,26 @@ export function RacionalSheet({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {linhas.map((row, i) => (
-                    <tr key={i} className="text-slate-700">
-                      {colunas.map((c) => (
-                        <td key={c.key} className="whitespace-nowrap py-1.5 pr-4">
-                          {formatRacionalCell(row[c.key])}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                  {linhas.map((row, i) => {
+                    const isExcludente = row.excludente === 'Excludente'
+                    return (
+                      <tr
+                        key={i}
+                        className={cn(
+                          'text-slate-700',
+                          isExcludente && 'bg-amber-50/80 text-slate-500',
+                        )}
+                        title={isExcludente ? 'Excludente — não entra na % do KPI' : undefined}
+                      >
+                        {colunas.map((c) => (
+                          <td key={c.key} className="whitespace-nowrap py-1.5 pr-4">
+                            {formatRacionalCell(row[c.key])}
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })}
                 </tbody>
-                {resumoLabel != null && (
-                  <tfoot>
-                    <tr className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-900">
-                      <td colSpan={colunas.length} className="py-2 pr-4">
-                        {resumoLabel}
-                      </td>
-                    </tr>
-                  </tfoot>
-                )}
               </table>
             </>
           )}

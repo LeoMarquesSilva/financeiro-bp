@@ -12,6 +12,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useEficienciaOverview } from '../hooks/useEficiencia'
 import { EficienciaHeader } from '../components/EficienciaHeader'
+import { IndicadoresResultadoActions } from '../components/IndicadoresResultadoActions'
 import { OverviewTab } from '../components/OverviewTab'
 import { SlaVistagemTab } from '../components/SlaVistagemTab'
 import { SlaProtocoloTab } from '../components/SlaProtocoloTab'
@@ -37,6 +38,8 @@ export function EficienciaPage() {
         onAnoChange={setAno}
         ultimaAtualizacao={overview?.ultimaAtualizacao}
       />
+
+      <IndicadoresResultadoActions ano={ano} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap">

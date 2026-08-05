@@ -9,7 +9,12 @@ import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
 import { AreaFilterButtons } from './AreaFilterButtons'
 import { MesFilterButtons } from './MesFilterButtons'
 import { RacionalSheet } from './RacionalSheet'
-import { MES_INICIO_RESULTADO, EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL, type MesFiltroEficiencia } from '../constants'
+import {
+  EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
+  isMesesFiltro,
+  mesNoFiltro,
+  type MesFiltroEficiencia,
+} from '../constants'
 import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
 import type { EficienciaOverview, RacionalIndicador } from '../types/eficiencia.types'
 import {
@@ -78,7 +83,7 @@ function formatMinutos(min: number): string {
 export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
-  const mesDestaque = typeof mesFiltro === 'number' ? mesFiltro : null
+  const mesDestaque = isMesesFiltro(mesFiltro) ? mesFiltro : null
   const { data: receitaMensal, isLoading: loadingReceita } = useQuery({
     queryKey: ['eficiencia', 'overview-receita', ano],
     queryFn: () => receitaService.fetchTotaisMensais(ano),
@@ -91,13 +96,27 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
 
   const receitaMes = (() => {
     if (!receitaMensal || receitaMensal.size === 0) return null
-    if (typeof mesFiltro === 'number') {
-      const valores = receitaMensal.get(mesFiltro)
-      return valores ? { mes: mesFiltro, ...valores } : null
+    if (isMesesFiltro(mesFiltro)) {
+      const entradas = mesFiltro
+        .map((m) => {
+          const v = receitaMensal.get(m)
+          return v ? ([m, v] as const) : null
+        })
+        .filter((x): x is readonly [number, { recebido: number; previsto: number }] => x != null)
+      if (entradas.length === 0) return null
+      if (entradas.length === 1) {
+        const [mes, valores] = entradas[0]!
+        return { mes, ...valores }
+      }
+      return {
+        mes: Math.max(...entradas.map(([m]) => m)),
+        recebido: entradas.reduce((s, [, v]) => s + v.recebido, 0),
+        previsto: entradas.reduce((s, [, v]) => s + v.previsto, 0),
+      }
     }
     const entradas =
       mesFiltro === 'resultado'
-        ? [...receitaMensal.entries()].filter(([m]) => m >= MES_INICIO_RESULTADO)
+        ? [...receitaMensal.entries()].filter(([m]) => mesNoFiltro(m, 'resultado', ano))
         : [...receitaMensal.entries()]
     if (entradas.length === 0) return null
     const mesesComRecebido = entradas.filter(([, v]) => v.recebido > 0)
@@ -119,33 +138,28 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
     )
   }
 
-  const treinamentosCells: HeatCell[] = aplicarCelulasFiltro(
-    Array.from({ length: 12 }, (_, i) => {
-      const row = data.treinamentosMensal.find((r) => r.mes === i + 1)
-      if (!row) return { value: null, label: '-' }
-      return {
-        value: row.pct_atingimento,
-        label: `${formatMinutos(row.minutos_lancados)} (${row.pct_atingimento.toFixed(0)}%)`,
-      }
-    }),
-    mesFiltro,
-  )
+  // Indicadores anuais: Resultado NÃO apaga jan–mai nem recorta o Acum. (meta = ano todo).
+  const treinamentosCells: HeatCell[] = Array.from({ length: 12 }, (_, i) => {
+    const row = data.treinamentosMensal.find((r) => r.mes === i + 1)
+    if (!row) return { value: null, label: '-' }
+    return {
+      value: row.pct_atingimento,
+      label: `${formatMinutos(row.minutos_lancados)} (${formatPercent(row.pct_atingimento)})`,
+    }
+  })
   const treinamentosAcumulado: HeatCell = data.treinamentos
     ? {
         value: data.treinamentos.pct_atingimento,
-        label: `${formatMinutos(data.treinamentos.minutos_lancados)} (${data.treinamentos.pct_atingimento.toFixed(2)}%)`,
+        label: `${formatMinutos(data.treinamentos.minutos_lancados)} (${formatPercent(data.treinamentos.pct_atingimento)})`,
       }
     : { value: null, label: '-' }
 
   const retencaoCell: HeatCell = data.turnover
-    ? { value: data.turnover.pct_retencao, label: PCT0(data.turnover.pct_retencao) }
+    ? { value: data.turnover.pct_retencao, label: formatPercent(data.turnover.pct_retencao) }
     : { value: null, label: '-' }
 
-  const filterMensal = <T extends { mes: number }>(rows: T[]) => {
-    if (mesFiltro === 'resultado') return rows.filter((r) => r.mes >= MES_INICIO_RESULTADO)
-    if (typeof mesFiltro === 'number') return rows.filter((r) => r.mes === mesFiltro)
-    return rows
-  }
+  const filterMensal = <T extends { mes: number }>(rows: T[]) =>
+    rows.filter((r) => mesNoFiltro(r.mes, mesFiltro, ano))
 
   const acumuladoSlaProtocolo = (() => {
     const rows = filterMensal(data.slaProtocolo)
@@ -183,27 +197,24 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
     )
   })()
   const acumuladoTreinamentos: HeatCell =
-    mesFiltro == null
+    // Ano todo e Resultado: Acum. = atingimento anual (pessoas × 14h).
+    mesFiltro == null || mesFiltro === 'resultado'
       ? treinamentosAcumulado
       : (() => {
           const rows = filterMensal(data.treinamentosMensal)
           if (rows.length === 0) return { value: null, label: '-' }
-          if (typeof mesFiltro === 'number') {
-            const row = rows[0]
-            return {
-              value: row.pct_atingimento,
-              label: `${formatMinutos(row.minutos_lancados)} (${row.pct_atingimento.toFixed(2)}%)`,
-            }
-          }
           const minutos = rows.reduce((s, r) => s + r.minutos_lancados, 0)
-          const meta = rows.reduce((s, r) => s + r.meta_minutos, 0)
-          if (meta <= 0) return { value: null, label: '-' }
-          const pct = (minutos / meta) * 100
-          return { value: pct, label: `${formatMinutos(minutos)} (${pct.toFixed(2)}%)` }
+          const metaAno =
+            data.treinamentos?.meta_minutos ?? rows[0]?.meta_minutos ?? 0
+          const pct = metaAno > 0 ? (minutos / metaAno) * 100 : rows[0]!.pct_atingimento
+          return {
+            value: pct,
+            label: `${formatMinutos(minutos)} (${formatPercent(pct)})`,
+          }
         })()
 
   const slaProtocoloMetasPorMes = Array.from({ length: 12 }, (_, i) => {
-    if (mesFiltro === 'resultado' && i + 1 < MES_INICIO_RESULTADO) return null
+    if (mesFiltro === 'resultado' && !mesNoFiltro(i + 1, 'resultado', ano)) return null
     const row = data.slaProtocolo.find((r) => r.mes === i + 1)
     return row?.meta ?? null
   })
@@ -216,7 +227,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
   const vistagemNormalIndisponivel = area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
   const cellsVistagemNormal: HeatCell[] = vistagemNormalIndisponivel
     ? Array.from({ length: 12 }, () => ({ value: null, label: '-' }))
-    : aplicarCelulasFiltro(buildCells(data.slaVistagemComum, (r) => r.pct_d1), mesFiltro)
+    : aplicarCelulasFiltro(buildCells(data.slaVistagemComum, (r) => r.pct_d1), mesFiltro, ano)
   const acumuladoVistagemComumExibicao: HeatCell = vistagemNormalIndisponivel
     ? { value: null, label: '-' }
     : acumuladoVistagemComum
@@ -225,13 +236,14 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
     ? buildOverviewReceitaBruta(financeiroKpis.meses, financeiroKpis.rows, ano, mesFiltro)
     : null
   const inadimplenciaOverview = financeiroKpis
-    ? buildOverviewInadimplencia(financeiroKpis.meses, mesFiltro)
+    ? buildOverviewInadimplencia(financeiroKpis.meses, mesFiltro, ano)
     : null
 
   const cellsReceitaBruta = aplicarCelulasFiltro(
     receitaBruta?.cells ??
       Array.from({ length: 12 }, () => ({ value: null, label: '-' })),
     mesFiltro,
+    ano,
   )
   const acumuladoReceitaBruta: HeatCell =
     receitaBruta?.acumulado ?? { value: null, label: '-' }
@@ -240,6 +252,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
     inadimplenciaOverview?.cells ??
       Array.from({ length: 12 }, () => ({ value: null, label: '-' })),
     mesFiltro,
+    ano,
   )
   const acumuladoInadimplencia: HeatCell =
     inadimplenciaOverview?.acumulado ?? { value: null, label: '-' }
@@ -255,9 +268,13 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
   }
 
   const slaProtocoloMetasFiltradas = (() => {
-    if (typeof mesFiltro === 'number') return [slaProtocoloMetasPorMes[mesFiltro - 1] ?? null]
+    if (isMesesFiltro(mesFiltro)) {
+      return mesFiltro.map((m) => slaProtocoloMetasPorMes[m - 1] ?? null)
+    }
     if (mesFiltro === 'resultado') {
-      return slaProtocoloMetasPorMes.map((m, i) => (i + 1 >= MES_INICIO_RESULTADO ? m : null))
+      return slaProtocoloMetasPorMes.map((m, i) =>
+        mesNoFiltro(i + 1, 'resultado', ano) ? m : null,
+      )
     }
     return slaProtocoloMetasPorMes
   })()
@@ -294,6 +311,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           cells={aplicarCelulasFiltro(
             buildCells(data.slaProtocolo, (r) => r.pct_eficiencia),
             mesFiltro,
+            ano,
           )}
           acumulado={acumuladoSlaProtocolo}
           onRacionalClick={() => setRacionalAberto('sla_protocolo')}
@@ -305,6 +323,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           cells={aplicarCelulasFiltro(
             buildCells(data.eficienciaProtocolo, (r) => r.pct_eficiencia),
             mesFiltro,
+            ano,
           )}
           acumulado={acumuladoEficienciaProtocolo}
           onRacionalClick={() => setRacionalAberto('eficiencia_protocolo')}
@@ -316,6 +335,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           cells={aplicarCelulasFiltro(
             buildCells(data.agendamento, (r) => r.pct_dentro_prazo),
             mesFiltro,
+            ano,
           )}
           acumulado={acumuladoAgendamento}
           onRacionalClick={() => setRacionalAberto('sla_ciencia_agendamentos')}
@@ -327,6 +347,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           cells={aplicarCelulasFiltro(
             buildCells(data.slaVistagemRisco, (r) => r.pct_d1),
             mesFiltro,
+            ano,
           )}
           acumulado={acumuladoVistagemRisco}
           onRacionalClick={() => setRacionalAberto('sla_vistagem_risco')}
@@ -354,11 +375,9 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
         <OverviewKpiHeatRow
           title="Retenção de Talentos"
           meta={90}
-          mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(
-            Array.from({ length: 12 }, () => ({ value: null, label: '-' })),
-            mesFiltro,
-          )}
+          modoAnual
+          anoLabel={String(ano)}
+          cells={[]}
           acumulado={retencaoCell}
           onRacionalClick={() => setRacionalAberto('retencao_talentos')}
         />
@@ -368,9 +387,11 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           title="Gestão de PDI**"
           meta={100}
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(staticCells({ 6: 100 }), mesFiltro)}
+          cells={aplicarCelulasFiltro(staticCells({ 6: 100 }), mesFiltro, ano)}
           acumulado={
-            mesFiltro == null || mesFiltro === 'resultado' || mesFiltro === 6
+            mesFiltro == null ||
+            mesFiltro === 'resultado' ||
+            (isMesesFiltro(mesFiltro) && mesFiltro.includes(6))
               ? { value: 100, label: '100,00%' }
               : { value: null, label: '-' }
           }
@@ -380,7 +401,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           meta={Infinity}
           metaLabel="Meta 85%"
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(staticCells({}), mesFiltro)}
+          cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
           acumulado={{ value: null, label: '-' }}
         />
         <OverviewKpiHeatRow
@@ -403,7 +424,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           meta={Infinity}
           metaLabel="Meta x"
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(staticCells({}), mesFiltro)}
+          cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
           acumulado={{ value: null, label: '-' }}
         />
         <OverviewKpiHeatRow
@@ -411,7 +432,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           meta={Infinity}
           metaLabel="Meta x"
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(staticCells({}), mesFiltro)}
+          cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
           acumulado={{ value: null, label: '-' }}
         />
       </div>
@@ -422,11 +443,13 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <EficienciaKpiCard
             title={
-              typeof mesFiltro === 'number'
-                ? `Recebido em ${String(mesFiltro).padStart(2, '0')}/${ano}`
-                : mesFiltro === 'resultado'
-                  ? 'Recebido (resultado)'
-                  : 'Recebido no mês'
+              isMesesFiltro(mesFiltro) && mesFiltro.length === 1
+                ? `Recebido em ${String(mesFiltro[0]).padStart(2, '0')}/${ano}`
+                : isMesesFiltro(mesFiltro)
+                  ? 'Recebido (meses selecionados)'
+                  : mesFiltro === 'resultado'
+                    ? 'Recebido (resultado)'
+                    : 'Recebido no mês'
             }
             value={receitaMes ? formatCurrencyCompact(receitaMes.recebido) : '—'}
             hint={receitaMes ? `previsto ${formatCurrencyCompact(receitaMes.previsto)}` : undefined}
@@ -461,7 +484,14 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
         indicador={racionalAberto}
         titulo={racionalAberto ? RACIONAL_TITULOS[racionalAberto] : ''}
         ano={ano}
-        mes={mesFiltro}
+        mes={
+          // Desenvolvimento e Retenção são anuais: Resultado = ano todo no racional.
+          racionalAberto === 'desenvolvimento_equipe' || racionalAberto === 'retencao_talentos'
+            ? mesFiltro === 'resultado'
+              ? null
+              : mesFiltro
+            : mesFiltro
+        }
         area={area}
         resultado={racionalAberto ? resultadosRacional[racionalAberto] : null}
         metaAcumulado={racionalAberto ? metasRacional[racionalAberto].metaAcumulado : null}

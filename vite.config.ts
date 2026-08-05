@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Build browser-friendly (evita fs/stream do Node no Vite).
+      exceljs: path.resolve(__dirname, 'node_modules/exceljs/dist/exceljs.min.js'),
     },
   },
   optimizeDeps: {
@@ -20,6 +22,7 @@ export default defineConfig({
       'react-router-dom',
       '@tanstack/react-query',
       'sonner',
+      'exceljs',
     ],
   },
   server: {

@@ -129,9 +129,11 @@ export interface RacionalColuna {
 }
 
 export interface RacionalResumo {
-  /** SLA Protocolo — DISTINCT ci */
+  /** SLA Protocolo — DISTINCT ci (na métrica; Excludente fora) */
   qtd_d1?: number
   qtd_fatal?: number
+  /** SLA Protocolo — DISTINCT ci com Excludente (listados, fora da %) */
+  qtd_excludente?: number
   /** Eficiência Protocolo — COUNT(*) */
   qtd_eficiencia?: number
   qtd_inconsistencia?: number

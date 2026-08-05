@@ -14,13 +14,14 @@ npm run sync:sharepoint -- --dump-fields publicacoes   # inspecionar nomes inter
 | Fonte | Origem | Tabela | Estratégia |
 |---|---|---|---|
 | `feriados` | `Feriados.xlsx` (site Controladoria) | `sp_feriados` | replace |
-| `turnover` | `Gestão/Indicadores Juridico/2025/Turnover BP (1).xlsx` | `sp_turnover` | replace |
+| `turnover` | `Gestão/Indicadores Juridico/2025/Turnover BP (1).xlsx` (workbook **date1904**; sync corrige +1462 dias) | `sp_turnover` | replace |
 | `usuarios_area` | `Usuários x Área.xlsx` | `sp_usuarios_area` | replace |
 | `publicacoes` | Lista SharePoint `91e8ba11…` (CONTROLADORIAJURDICA) | `sp_publicacoes` | **acumulativo** (lista rotativa ~7 dias na origem; o histórico vive aqui) |
 | `protocolos` | Lista "CONTROLE DE PROTOCOLOS" `4e115aab…` | `sp_protocolos` | acumulativo |
 | `treinamentos` | Lista `30ea2880…` | `sp_treinamentos_presenca` | acumulativo |
-| `tarefas` | `Tarefas.csv` (Bases Atualizacoes) | `sp_tarefas` | acumulativo (só Status=Concluída) |
-| `tarefas_historico` | `Historico/*.csv` combinados | `sp_tarefas_historico` | acumulativo |
+| `processos_numero` | `Processos Lista.csv` (coluna Número) | `sp_processos_numero` | replace via upsert; backfill `nro_cnj` vazio nas tarefas |
+| `tarefas` | `Tarefas.csv` (Bases Atualizacoes) | `sp_tarefas` | acumulativo (só Status=Concluída); `nro_cnj` coalesce com Número do processo |
+| `tarefas_historico` | `Historico/*.csv` combinados | `sp_tarefas_historico` | acumulativo; mesmo coalesce de `nro_cnj` |
 | `decisoes` | `Decisoes Processuais.csv` | `sp_decisoes_processuais` | replace (dedupe por processo, decisão mais recente) |
 
 A **ordem importa**: `feriados` e `turnover` rodam primeiro porque são insumo das
@@ -66,14 +67,41 @@ npm run sync:sharepoint -- --dump-fields publicacoes
 
 e ajustar os aliases em `FIELD_ALIASES`/`pick(...)` no `sync-sharepoint.mjs`.
 
-### 4. Agendamento diário
+### 4. Agendamento online (GitHub Actions)
 
-No mesmo servidor que roda os syncs VIOS (Task Scheduler, ~06:00 — ver
-`README_VIOS_SYNC.md`), adicionar uma tarefa diária:
+O sync roda **na nuvem**, sem depender do Mac ligado:
 
+| Horário (Brasília) | Gatilho |
+|---|---|
+| **08:00** | cron do workflow |
+| **12:00** | cron do workflow |
+
+Workflow: `.github/workflows/sync-sharepoint.yml`
+
+#### Secrets no GitHub (Settings → Secrets and variables → Actions)
+
+| Secret | Valor |
+|---|---|
+| `MS_TENANT_ID` | Directory (tenant) ID do Azure AD |
+| `MS_CLIENT_ID` | Application (client) ID |
+| `MS_CLIENT_SECRET` | Client secret |
+| `VITE_SUPABASE_URL` | URL do projeto Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | service_role (nunca expor no frontend) |
+
+Também é possível disparar manualmente: **Actions → Sync SharePoint (Eficiência) → Run workflow**.
+
+Logs de cada execução ficam na aba Actions do repositório.
+
+#### Cron local (opcional / legado)
+
+Se preferir rodar na máquina local:
+
+```cron
+0 8 * * * /caminho/do/SIOE/scripts/sharepoint/run-sync-sharepoint.sh
+0 12 * * * /caminho/do/SIOE/scripts/sharepoint/run-sync-sharepoint.sh
 ```
-cmd /c "cd /d C:\caminho\do\SIOE && npm run sync:sharepoint >> logs\sync-sharepoint.log 2>&1"
-```
+
+Log local: `logs/sync-sharepoint.log`.
 
 ## Pendências conhecidas
 

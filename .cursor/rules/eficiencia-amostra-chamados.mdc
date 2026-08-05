@@ -1,0 +1,50 @@
+# Amostra de chamados — evidências FATAL (Indicadores Resultado)
+
+**Status: regra de negócio validada. Não reverter sem aprovação explícita.**
+
+Usada no Excel gerencial **Indicadores Resultado** e no modal **Amostra Chamados**
+para pedir evidências no Responsum dos protocolos FATAL com justificativa **Excludente**.
+
+---
+
+## População
+
+- `fatal_apos18 = 'FATAL'`
+- `excludente = 'Excludente'` (lista canônica em `JUSTIFICATIVAS_EXCLUDENTES` / sync SharePoint)
+- Período = **mês único** selecionado no modal (não o multi-filtro do Overview)
+
+---
+
+## Algoritmo de amostragem
+
+1. Estrato = **Área × Justificativa de Fatal**
+2. Em cada estrato: `max(1, round(n × 0,30))` casos
+3. Seleção **pela ordem da lista** (não por atraso em dias)
+4. Marcar `Amostra = SIM` em Detalhes1; aba **Chamados - Amostra** só com os sorteados
+
+Constantes: `EFICIENCIA_AMOSTRA_FRACAO`, `EFICIENCIA_EVIDENCIA_POR_JUSTIFICATIVA`
+em `src/features/eficiencia/constants.ts`.
+
+Implementação: `src/features/eficiencia/utils/amostraChamados.ts`.
+
+---
+
+## O que evitar
+
+```typescript
+// ❌ BAD — amostrar por atraso ou aleatório sem estrato
+rows.sort((a, b) => b.atraso - a.atraso).slice(0, n)
+
+// ❌ BAD — 30% só no total, sem Área × Justificativa
+Math.round(populacao * 0.3)
+
+// ✅ GOOD — estrato + min 1 + ordem da lista
+selecionarAmostraExcludentes(rows)
+```
+
+---
+
+## Escopo
+
+Export `indicadoresResultadoExport.ts`, modal `AmostraChamadosDialog`, e qualquer
+novo fluxo que abra chamados de evidência de SLA Protocolo.

@@ -40,6 +40,8 @@ import {
   computeConclusaoCompleta,
   computeAdesaoApos18,
   areaNaConclusao,
+  resolveNomeCanonico,
+  parseNumeroProcessoLista,
   toIsoDate,
   toIsoDateTime,
 } from './transforms.mjs'
@@ -155,27 +157,107 @@ async function loadTipoDePrazoMap(siteControladoria) {
   return mapa
 }
 
+/**
+ * Mapa CI do processo → número limpo (sem prefixo CNJ:/Outros:), a partir de sp_processos_numero.
+ * Usado para preencher nro_cnj vazio em tarefas (processos administrativos).
+ */
+async function loadProcessosNumeroMap() {
+  const mapa = new Map()
+  let from = 0
+  const page = 1000
+  for (;;) {
+    const { data, error } = await supabase
+      .from('sp_processos_numero')
+      .select('ci, numero')
+      .range(from, from + page - 1)
+    if (error) throw new Error(`ler sp_processos_numero: ${error.message}`)
+    const rows = data ?? []
+    for (const r of rows) {
+      if (r.ci != null && r.numero) mapa.set(Number(r.ci), String(r.numero))
+    }
+    if (rows.length < page) break
+    from += page
+  }
+  return mapa
+}
+
+function coalesceNroCnj(nroCnjCsv, ciProcesso, numeroMap) {
+  const cnj = strOrNull(nroCnjCsv)
+  if (cnj) return cnj
+  if (ciProcesso == null) return null
+  return numeroMap.get(Number(ciProcesso)) ?? null
+}
+
+/**
+ * TRIM obrigatório em Excel/CSV: remove espaços no início/fim de chaves e valores
+ * textuais (evita "GERENTE ", "Nome ", etc.). String vazia → null.
+ */
+function trimSpreadsheetRows(rows) {
+  return (rows ?? []).map((row) => {
+    const out = {}
+    for (const [key, value] of Object.entries(row ?? {})) {
+      const k = typeof key === 'string' ? key.trim() : key
+      let v = value
+      if (typeof v === 'string') {
+        v = v.trim()
+        if (v === '') v = null
+      }
+      if (out[k] == null || out[k] === '') out[k] = v
+    }
+    return out
+  })
+}
+
 function parseCsvBuffer(buffer, { delimiter = ';', codepage = 1252 } = {}) {
   const wb = XLSX.read(buffer, { type: 'buffer', codepage, FS: delimiter, raw: true })
   const sheet = wb.Sheets[wb.SheetNames[0]]
-  return XLSX.utils.sheet_to_json(sheet, { defval: null })
+  return trimSpreadsheetRows(XLSX.utils.sheet_to_json(sheet, { defval: null }))
 }
+
+/** Diff Excel 1904 vs 1900 (em ms). Workbooks Mac/BR com date1904=true chegam ~4 anos atrasados no SheetJS. */
+const EXCEL_1904_OFFSET_MS = 1462 * 24 * 60 * 60 * 1000
 
 function parseXlsxBuffer(buffer, sheetName = null) {
   const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
   const sheet = wb.Sheets[sheetName ?? wb.SheetNames[0]]
-  return XLSX.utils.sheet_to_json(sheet, { defval: null })
+  if (!sheet) {
+    throw new Error(
+      `Aba "${sheetName}" não encontrada. Abas: ${(wb.SheetNames ?? []).join(', ')}`,
+    )
+  }
+  const date1904 = Boolean(wb.Workbook?.WBProps?.date1904)
+  let rows = trimSpreadsheetRows(
+    XLSX.utils.sheet_to_json(sheet, { defval: null, raw: true }),
+  )
+  if (!date1904) return rows
+  return rows.map((row) => {
+    const out = { ...row }
+    for (const [key, value] of Object.entries(out)) {
+      if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        out[key] = new Date(value.getTime() + EXCEL_1904_OFFSET_MS)
+      }
+    }
+    return out
+  })
 }
 
 function parseDate(v) {
   if (v == null || v === '') return null
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v
+  const s = String(v).trim()
   // dd/MM/yyyy [HH:mm[:ss]]
-  const br = String(v).match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/)
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/)
   if (br) {
     return new Date(+br[3], +br[2] - 1, +br[1], +(br[4] ?? 0), +(br[5] ?? 0), +(br[6] ?? 0))
   }
-  const d = new Date(v)
+  // M/D/yy ou M/D/yyyy (formato de exibição do Turnover BP)
+  const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  if (us) {
+    let year = +us[3]
+    if (year < 100) year += year >= 70 ? 1900 : 2000
+    return new Date(year, +us[1] - 1, +us[2])
+  }
+  const d = new Date(s)
   return Number.isNaN(d.getTime()) ? null : d
 }
 
@@ -206,23 +288,45 @@ const FONTES = {
   turnover: {
     tabela: 'sp_turnover',
     async run(ctx) {
-      const buffer = await fetchDriveFile(
-        ctx.siteControladoria,
-        'Gestão/Indicadores Juridico/2025/Turnover BP (1).xlsx'
-      )
+      // Preferir pasta do ano corrente; fallback 2025 (arquivo histórico do BI).
+      const anoRef = new Date().getFullYear()
+      const candidatos = [
+        `Gestão/Indicadores Juridico/${anoRef}/Turnover BP (1).xlsx`,
+        `Gestão/Indicadores Juridico/${anoRef}/Turnover BP.xlsx`,
+        'Gestão/Indicadores Juridico/2025/Turnover BP (1).xlsx',
+      ]
+      let buffer = null
+      let usado = null
+      let lastErr = null
+      for (const path of candidatos) {
+        try {
+          buffer = await fetchDriveFile(ctx.siteControladoria, path)
+          usado = path
+          break
+        } catch (e) {
+          lastErr = e
+        }
+      }
+      if (!buffer) {
+        throw new Error(
+          `Turnover não encontrado em ${candidatos.join(' | ')}. Último erro: ${lastErr?.message ?? lastErr}`,
+        )
+      }
+      console.log(`[turnover] lendo ${usado}`)
       // 'TurnOver' era o nome de uma Tabela do Excel (Power Query), não da aba — a aba real
       // no arquivo de origem se chama 'Admissão - Demissão'.
       const raw = parseXlsxBuffer(buffer, 'Admissão - Demissão')
       const rows = raw
         .map((r) => ({
-          nome: String(r['Nome '] ?? r['Nome'] ?? '').trim(),
-          area: r['Área'] ?? null,
-          nucleo: r['Núcleo'] ?? null,
-          cargo: r['Cargo'] ?? null,
+          // Cabeçalhos/valores já vêm com TRIM do parseXlsxBuffer.
+          nome: strOrNull(r['Nome']),
+          area: strOrNull(r['Área']),
+          nucleo: strOrNull(r['Núcleo']),
+          cargo: strOrNull(r['Cargo']),
           admissao: toIsoDate(parseDate(r['Admissão'])),
-          desligamento: toIsoDate(parseDate(r['Desligamento '] ?? r['Desligamento'])),
-          tipo_desligamento: r['Tipo do desligamento'] ?? null,
-          obs: r['OBS'] ?? null,
+          desligamento: toIsoDate(parseDate(r['Desligamento'])),
+          tipo_desligamento: strOrNull(r['Tipo do desligamento']),
+          obs: strOrNull(r['OBS']),
         }))
         .filter((r) => r.nome)
       const upserted = await replaceAll(
@@ -397,7 +501,9 @@ const FONTES = {
           const sessao = sessaoPorId.get(sessaoId)
           return {
             sp_id: Number(pick(f, ['ID', 'id'])),
-            colaborador: strOrNull(expandUserField(pick(f, ['Colaborador']))),
+            colaborador: resolveNomeCanonico(
+              expandUserField(pick(f, ['Colaborador'])),
+            ),
             treinamento: sessao ? strOrNull(pick(sessao, ['NomedoTreinamento'])) : null,
             treinamento_id: sessaoId ? Number(sessaoId) : null,
             status: pick(f, ['Status']),
@@ -416,6 +522,43 @@ const FONTES = {
     },
   },
 
+  /**
+   * Processos Lista.csv — coluna Número (CNJ:/Outros:/…). Alimenta sp_processos_numero e
+   * faz backfill de nro_cnj vazio em sp_tarefas* (processos administrativos).
+   */
+  processos_numero: {
+    tabela: 'sp_processos_numero',
+    async run(ctx) {
+      const buffer = await fetchDriveFile(ctx.siteControladoria, `${BASES_DIR}/Processos Lista.csv`)
+      const raw = parseCsvBuffer(buffer)
+      const rows = raw
+        .map((r) => {
+          const ci = numOrNull(r['CI'])
+          const parsed = parseNumeroProcessoLista(r['Número'] ?? r['Numero'])
+          if (ci == null || !parsed) return null
+          return {
+            ci,
+            numero: parsed.numero,
+            numero_tipo: parsed.tipo,
+            numero_raw: parsed.raw,
+            updated_at: new Date().toISOString(),
+          }
+        })
+        .filter(Boolean)
+      const upserted = await upsertChunks(
+        'sp_processos_numero',
+        dedupeBy(rows, (r) => r.ci),
+        'ci',
+      )
+      const { data: backfill, error } = await supabase.rpc('eficiencia_backfill_nro_cnj_de_processo')
+      if (error) throw new Error(`backfill nro_cnj: ${error.message}`)
+      console.log(
+        `[Sync SharePoint] processos_numero backfill nro_cnj: ${JSON.stringify(backfill)}`,
+      )
+      return { upserted, deleted: 0 }
+    },
+  },
+
   tarefas: {
     tabela: 'sp_tarefas',
     async run(ctx) {
@@ -423,6 +566,7 @@ const FONTES = {
       const raw = parseCsvBuffer(buffer)
       const turnover = await loadTurnover()
       const feriados = await loadFeriadosSet()
+      const numeroMap = await loadProcessosNumeroMap()
       const rows = raw
         .filter((r) => r['Status'] === 'Concluída')
         .map((r) => {
@@ -431,10 +575,11 @@ const FONTES = {
           const conclusaoCompleta = computeConclusaoCompleta(dataConclusao, r['Hora da Conclusão'])
           const adesaoSem18 = computeAdesaoSem18(r['Status'], dataPrazo, dataConclusao, feriados)
           const adesaoApos18 = computeAdesaoApos18(r['Status'], dataPrazo, conclusaoCompleta)
+          const ciProcesso = numOrNull(r['CI do Processo'])
           return {
             ci: numOrNull(r['CI']),
-            ci_processo: numOrNull(r['CI do Processo']),
-            nro_cnj: strOrNull(r['Nro CNJ']),
+            ci_processo: ciProcesso,
+            nro_cnj: coalesceNroCnj(r['Nro CNJ'], ciProcesso, numeroMap),
             area_processo: strOrNull(r['Área do Processo']),
             grupo_cliente: strOrNull(r['Grupo Cliente']),
             cliente: strOrNull(r['Cliente']),
@@ -467,6 +612,7 @@ const FONTES = {
       const csvs = arquivos.filter((a) => a.name.toLowerCase().endsWith('.csv'))
       const turnover = await loadTurnover()
       const tipoDePrazo = await loadTipoDePrazoMap(ctx.siteControladoria)
+      const numeroMap = await loadProcessosNumeroMap()
       let upserted = 0
       for (const arq of csvs) {
         const buffer = await fetchDriveFile(ctx.siteControladoria, arq.path)
@@ -480,10 +626,11 @@ const FONTES = {
             const conclusaoCompleta = computeConclusaoCompleta(dataConclusao, r['Hora da Conclusão'])
             const adesaoApos18 = computeAdesaoApos18(r['Status'], dataPrazo, conclusaoCompleta)
             const tarefaNome = (r['Tarefa'] ?? '').trim().toUpperCase()
+            const ciProcesso = numOrNull(r['CI do Processo'])
             return {
               ci: numOrNull(r['CI']),
-              ci_processo: numOrNull(r['CI do Processo']),
-              nro_cnj: strOrNull(r['Nro CNJ']),
+              ci_processo: ciProcesso,
+              nro_cnj: coalesceNroCnj(r['Nro CNJ'], ciProcesso, numeroMap),
               grupo_cliente: strOrNull(r['Grupo Cliente']),
               cliente: strOrNull(r['Cliente']),
               tarefa: strOrNull(r['Tarefa']),
@@ -565,6 +712,7 @@ const ORDEM = [
   'publicacoes',
   'protocolos',
   'treinamentos',
+  'processos_numero', // antes das tarefas: mapa Número → nro_cnj (admin)
   'tarefas',
   'tarefas_historico',
   'decisoes',
