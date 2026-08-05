@@ -338,24 +338,6 @@ const FONTES = {
     },
   },
 
-  usuarios_area: {
-    tabela: 'sp_usuarios_area',
-    async run(ctx) {
-      // OBS: hoje este arquivo está no OneDrive pessoal — mover para o site Controladoria
-      // para que o app registration alcance (ver README).
-      const buffer = await fetchDriveFile(ctx.siteControladoria, `${BASES_DIR}/Usuários x Área.xlsx`)
-      const raw = parseXlsxBuffer(buffer)
-      const rows = raw
-        .map((r) => ({
-          nome: String(r['Responsável principal'] ?? '').trim(),
-          area: r['ÁREA'] ?? null,
-        }))
-        .filter((r) => r.nome)
-      const upserted = await replaceAll('sp_usuarios_area', dedupeBy(rows, (r) => r.nome), 'nome')
-      return { upserted, deleted: 0 }
-    },
-  },
-
   publicacoes: {
     tabela: 'sp_publicacoes',
     async run(ctx) {
@@ -708,7 +690,7 @@ const FONTES = {
 const ORDEM = [
   'feriados',
   'turnover',
-  'usuarios_area',
+  // usuarios_area (Usuários x Área.xlsx) removido: tabela legada do BI, não usada por RPC/KPI do SIOE.
   'publicacoes',
   'protocolos',
   'treinamentos',

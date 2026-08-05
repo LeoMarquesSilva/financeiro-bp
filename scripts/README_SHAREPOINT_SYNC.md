@@ -15,7 +15,6 @@ npm run sync:sharepoint -- --dump-fields publicacoes   # inspecionar nomes inter
 |---|---|---|---|
 | `feriados` | `Feriados.xlsx` (site Controladoria) | `sp_feriados` | replace |
 | `turnover` | `Gestão/Indicadores Juridico/2025/Turnover BP (1).xlsx` (workbook **date1904**; sync corrige +1462 dias) | `sp_turnover` | replace |
-| `usuarios_area` | `Usuários x Área.xlsx` | `sp_usuarios_area` | replace |
 | `publicacoes` | Lista SharePoint `91e8ba11…` (CONTROLADORIAJURDICA) | `sp_publicacoes` | **acumulativo** (lista rotativa ~7 dias na origem; o histórico vive aqui) |
 | `protocolos` | Lista "CONTROLE DE PROTOCOLOS" `4e115aab…` | `sp_protocolos` | acumulativo |
 | `treinamentos` | Lista `30ea2880…` | `sp_treinamentos_presenca` | acumulativo |
@@ -105,11 +104,10 @@ Log local: `logs/sync-sharepoint.log`.
 
 ## Pendências conhecidas
 
-- **`Usuários x Área.xlsx`** está no OneDrive **pessoal** (samuel_bpplaw_com_br);
-  o app registration não alcança OneDrive pessoal com `Sites.Read.All`. Mover o
-  arquivo para `Bases Atualizacoes` no site Controladoria (caminho já esperado
-  pelo sync) ou concedar `Files.Read.All` + ajustar a rota do drive.
-- A carga inicial das tabelas foi feita a partir dos dados embutidos no `.pbix`
+- **`sp_usuarios_area`** (planilha `Usuários x Área.xlsx` do BI) permanece no banco com
+  carga inicial do `.pbix`, mas **não entra no sync** — nenhum KPI/RPC do SIOE lê essa tabela;
+  área de tarefas/protocolos vem do **Turnover**, publicações do **De-Para de escritório**.
+- A carga inicial das demais tabelas foi feita a partir dos dados embutidos no `.pbix`
   (agosto/2026). O primeiro sync real apenas atualiza/acrescenta a partir daí.
 - O monitoramento fica em `sharepoint_sync_log` (o painel mostra "atualizado em"
   a partir da última entrada por fonte).
