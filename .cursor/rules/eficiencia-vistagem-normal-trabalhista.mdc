@@ -1,0 +1,88 @@
+---
+description: Eficiência Overview — Trabalhista não possui SLA Vistagem Normal (somente risco). Regra fixa de negócio e implementação.
+alwaysApply: true
+---
+
+# Trabalhista sem SLA Vistagem Normal
+
+**Status: regra de negócio validada. Não reverter sem aprovação explícita.**
+
+A área **Trabalhista** opera publicações **somente com demanda de risco**.
+Não existe indicador **SLA Vistagem Normal** para essa área — nem no BI, nem no SIOE.
+
+---
+
+## Comportamento obrigatório
+
+| Contexto | SLA Vistagem Normal |
+|----------|---------------------|
+| Filtro de área = **Trabalhista** | `-` em todos os meses e no **Acum.**; sem botão **Racional** |
+| Visão **consolidada** (sem filtro de área) | Trabalhista **fora** da população do KPI |
+| Filtro em outra área | cálculo normal da área |
+
+**SLA Vistagem Risco** em Trabalhista **continua existindo** e deve ser calculado normalmente.
+
+---
+
+## Constante canônica
+
+Use sempre a constante compartilhada — **não** duplique o literal `'Trabalhista'` em lógica de vistagem normal:
+
+```typescript
+import { EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL } from '@/features/eficiencia/constants'
+// valor: 'Trabalhista'
+```
+
+---
+
+## Onde a regra já está aplicada
+
+| Camada | Arquivo / função |
+|--------|------------------|
+| Constante | `src/features/eficiencia/constants.ts` |
+| Overview UI | `src/features/eficiencia/components/OverviewTab.tsx` |
+| Service | `eficienciaService.fetchSlaVistagemMensal` (retorna `[]` se área = Trabalhista e `risco = false`) |
+| Racional | `eficienciaService.fetchRacional` — vazio para `sla_vistagem_normal` + Trabalhista |
+| SQL | `eficiencia_sla_vistagem_mensal` — migração `20260805200000_eficiencia_vistagem_normal_sem_trabalhista.sql` |
+
+### SQL (`p_risco = FALSE`)
+
+- Consolidado: excluir `'Trabalhista'` junto com Distressd Deals, Ops Legais e Tributário.
+- Filtro `p_area = 'Trabalhista'`: série **vazia** (Overview exibe `-`).
+- Usar `COALESCE(p_area, '') = 'Trabalhista'` — **nunca** `p_area = 'Trabalhista'` puro num `NOT (...)`, senão `NULL` zera o consolidado.
+
+---
+
+## Vistagem — `vistado_por` nulo
+
+Publicações **sem** `vistado_por` **entram** no KPI (comum em Trabalhista e outras áreas).
+**Proibido** filtrar `vistado_por IS NOT NULL` na série mensal do Overview.
+
+O ranking por usuário (`eficiencia_sla_vistagem_por_usuario`) pode exigir usuário — lá faz sentido.
+
+---
+
+## O que evitar
+
+```typescript
+// ❌ BAD — calcular vistagem normal para Trabalhista
+buildCells(data.slaVistagemComum, ...)
+
+// ❌ BAD — incluir Trabalhista no consolidado de vistagem normal
+area NOT IN ('Distressd Deals', 'Operações Legais', 'Tributário') // sem Trabalhista
+
+// ✅ GOOD — constante + série vazia / UI com "-"
+area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
+  ? células com label '-'
+  : buildCells(data.slaVistagemComum, ...)
+```
+
+---
+
+## Escopo
+
+Overview (`OverviewTab`), RPCs `eficiencia_sla_vistagem_*`, drill-down **Racional** de **SLA Vistagem Normal**
+e qualquer novo painel/gráfico de eficiência que replique o KPI do BI.
+
+Ao criar indicador derivado de vistagem normal, **reutilizar** `EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL`
+e a mesma exclusão SQL.

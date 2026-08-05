@@ -51,7 +51,7 @@ if (parcelasCsv || itensCsv) {
 
 const env = {
   ...process.env,
-  VIOS_FIN_DATA_INICIO: process.env.VIOS_FIN_DATA_INICIO || '01/01/2020',
+  VIOS_FIN_DATA_INICIO: process.env.VIOS_FIN_DATA_INICIO || '01/01/1900',
   VIOS_FIN_DATA_FIM: process.env.VIOS_FIN_DATA_FIM || '31/12/2027',
   VIOS_HEADLESS: process.env.VIOS_HEADLESS ?? 'true',
 };

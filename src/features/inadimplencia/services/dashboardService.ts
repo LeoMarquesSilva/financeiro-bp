@@ -107,10 +107,24 @@ type ClientListRow = {
   pessoa_id: string | null
   resolvido_at: string | null
 }
-type RowValorPago = { valor_pago: number }
 type RowPagamentoClient = { client_id: string; valor_pago: number }
-type RowClientGestor = { id: string; gestor: string[] | string | null }
-type RowClientArea = { id: string; area: string[] | string | null }
+type RecuperacaoParcelaRow = {
+  pessoa_id: string | null
+  cliente: string
+  valor: number
+  valor_pago: number | null
+  data_vencimento: string
+  data_baixa: string
+}
+type RecuperacaoMesRaw = {
+  pagamentos: RowPagamentoClient[]
+  parcelas: RecuperacaoParcelaRow[]
+}
+type RecuperacaoMesMetrics = {
+  total: number
+  rankingGestores: RankingItem[]
+  rankingAreas: RankingItem[]
+}
 type RowResolvido = { created_at: string; resolvido_at: string | null }
 type ComiteGestorAreaRow = {
   razao_social: string
@@ -367,85 +381,112 @@ function getValorEmAbertoPorAreaRecorrentePontual(
   return rankingFromMap(byArea)
 }
 
-async function getTotalRecuperadoNoMes(): Promise<number> {
-  const start = startOfMonth(new Date()).toISOString().slice(0, 10)
-  const end = endOfMonth(new Date()).toISOString().slice(0, 10)
-  const { data, error } = await supabase
-    .from('inadimplencia_pagamentos')
-    .select('valor_pago')
-    .gte('data_pagamento', start)
-    .lte('data_pagamento', end)
-  if (error) return 0
-  const rows = (data ?? []) as RowValorPago[]
-  return rows.reduce((sum, r) => sum + Number(r.valor_pago), 0)
+function getIntervaloMesCorrente(): { start: string; end: string } {
+  return {
+    start: startOfMonth(new Date()).toISOString().slice(0, 10),
+    end: endOfMonth(new Date()).toISOString().slice(0, 10),
+  }
 }
 
-async function getRankingGestores(): Promise<RankingItem[]> {
-  const start = startOfMonth(new Date()).toISOString().slice(0, 10)
-  const end = endOfMonth(new Date()).toISOString().slice(0, 10)
-  const { data: pagamentos, error: errP } = await supabase
-    .from('inadimplencia_pagamentos')
-    .select('client_id, valor_pago')
-    .gte('data_pagamento', start)
-    .lte('data_pagamento', end)
-  const pagamentosRows = (pagamentos ?? []) as RowPagamentoClient[]
-  if (errP || !pagamentosRows.length) return []
+/** Pagamentos manuais do mês + parcelas VIOS baixadas no mês após o vencimento. */
+async function fetchRecuperacaoMesRawData(): Promise<RecuperacaoMesRaw> {
+  const { start, end } = getIntervaloMesCorrente()
 
-  const clientIds = [...new Set(pagamentosRows.map((p) => p.client_id))]
-  const { data: clients, error: errC } = await supabase
-    .from('clients_inadimplencia')
-    .select('id, gestor')
-    .in('id', clientIds)
-  const clientsRows = (clients ?? []) as RowClientGestor[]
-  if (errC || !clientsRows.length) return []
+  const [pagamentosRes, parcelas] = await Promise.all([
+    supabase
+      .from('inadimplencia_pagamentos')
+      .select('client_id, valor_pago')
+      .gte('data_pagamento', start)
+      .lte('data_pagamento', end),
+    collectPaginatedRows<RecuperacaoParcelaRow>(async (from, to) =>
+      supabase
+        .from('financeiro_parcelas')
+        .select('pessoa_id, cliente, valor, valor_pago, data_vencimento, data_baixa')
+        .or(FINANCEIRO_PARCELAS_SO_RECEBER_OR)
+        .not('data_baixa', 'is', null)
+        .gte('data_baixa', start)
+        .lte('data_baixa', end)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ),
+  ])
 
+  const pagamentos = pagamentosRes.error ? [] : ((pagamentosRes.data ?? []) as RowPagamentoClient[])
+  const parcelasRecuperadas = parcelas.filter(
+    (p) => p.data_baixa > p.data_vencimento,
+  )
+
+  return { pagamentos, parcelas: parcelasRecuperadas }
+}
+
+function buildPessoaGestorAreaMap(clients: ClientListRow[]): Map<string, GrupoGestorArea> {
+  const map = new Map<string, GrupoGestorArea>()
+  for (const c of clients) {
+    if (!c.pessoa_id) continue
+    map.set(c.pessoa_id, { gestor: normKey(c.gestor), area: normKey(c.area) })
+  }
+  return map
+}
+
+function resolveGestorAreaRecuperacaoParcela(
+  parcela: RecuperacaoParcelaRow,
+  pessoaMap: Map<string, GrupoGestorArea>,
+  historico: Map<string, GrupoGestorArea>,
+  processos: Map<string, GrupoGestorArea>,
+): GrupoGestorArea {
+  if (parcela.pessoa_id) {
+    const fromClient = pessoaMap.get(parcela.pessoa_id)
+    if (fromClient) return fromClient
+  }
+  const norm = normalizarNomeGrupo(parcela.cliente)
+  return historico.get(norm) ?? processos.get(norm) ?? { gestor: 'Não informado', area: 'Não informado' }
+}
+
+function buildRecuperacaoMesMetrics(
+  raw: RecuperacaoMesRaw,
+  clients: ClientListRow[],
+  historico: Map<string, GrupoGestorArea>,
+  processos: Map<string, GrupoGestorArea>,
+): RecuperacaoMesMetrics {
+  const pessoaMap = buildPessoaGestorAreaMap(clients)
+  const clientById = new Map(clients.map((c) => [c.id, c]))
   const byGestor = new Map<string, { valor: number; qty: number }>()
-  for (const p of pagamentosRows) {
-    const client = clientsRows.find((c) => c.id === p.client_id)
-    const gestorKey = normKey(client?.gestor)
-    const cur = byGestor.get(gestorKey) ?? { valor: 0, qty: 0 }
-    cur.valor += Number(p.valor_pago)
-    cur.qty += 1
-    byGestor.set(gestorKey, cur)
-  }
-
-  return Array.from(byGestor.entries())
-    .map(([nome, v]) => ({ nome, valor: v.valor, quantidade: v.qty }))
-    .sort((a, b) => b.valor - a.valor)
-}
-
-async function getRankingAreas(): Promise<RankingItem[]> {
-  const start = startOfMonth(new Date()).toISOString().slice(0, 10)
-  const end = endOfMonth(new Date()).toISOString().slice(0, 10)
-  const { data: pagamentos, error: errP } = await supabase
-    .from('inadimplencia_pagamentos')
-    .select('client_id, valor_pago')
-    .gte('data_pagamento', start)
-    .lte('data_pagamento', end)
-  const pagamentosRows = (pagamentos ?? []) as RowPagamentoClient[]
-  if (errP || !pagamentosRows.length) return []
-
-  const clientIds = [...new Set(pagamentosRows.map((p) => p.client_id))]
-  const { data: clients, error: errC } = await supabase
-    .from('clients_inadimplencia')
-    .select('id, area')
-    .in('id', clientIds)
-  const clientsRows = (clients ?? []) as RowClientArea[]
-  if (errC || !clientsRows.length) return []
-
   const byArea = new Map<string, { valor: number; qty: number }>()
-  for (const p of pagamentosRows) {
-    const client = clientsRows.find((c) => c.id === p.client_id)
-    const areaKey = normKey(client?.area)
-    const cur = byArea.get(areaKey) ?? { valor: 0, qty: 0 }
-    cur.valor += Number(p.valor_pago)
-    cur.qty += 1
-    byArea.set(areaKey, cur)
+  let total = 0
+
+  const addToRankings = (gestor: string, area: string, valor: number) => {
+    if (valor <= 0) return
+    total += valor
+    const g = byGestor.get(gestor) ?? { valor: 0, qty: 0 }
+    g.valor += valor
+    g.qty += 1
+    byGestor.set(gestor, g)
+    const a = byArea.get(area) ?? { valor: 0, qty: 0 }
+    a.valor += valor
+    a.qty += 1
+    byArea.set(area, a)
   }
 
-  return Array.from(byArea.entries())
-    .map(([nome, v]) => ({ nome, valor: v.valor, quantidade: v.qty }))
-    .sort((a, b) => b.valor - a.valor)
+  for (const p of raw.pagamentos) {
+    const client = clientById.get(p.client_id)
+    addToRankings(normKey(client?.gestor), normKey(client?.area), Number(p.valor_pago))
+  }
+
+  for (const p of raw.parcelas) {
+    const valor = Number(p.valor_pago ?? p.valor ?? 0)
+    const { gestor, area } = resolveGestorAreaRecuperacaoParcela(p, pessoaMap, historico, processos)
+    addToRankings(gestor, area, valor)
+  }
+
+  return {
+    total,
+    rankingGestores: Array.from(byGestor.entries())
+      .map(([nome, v]) => ({ nome, valor: v.valor, quantidade: v.qty }))
+      .sort((a, b) => b.valor - a.valor),
+    rankingAreas: Array.from(byArea.entries())
+      .map(([nome, v]) => ({ nome, valor: v.valor, quantidade: v.qty }))
+      .sort((a, b) => b.valor - a.valor),
+  }
 }
 
 async function getTempoMedioRecuperacao(): Promise<number | null> {
@@ -565,9 +606,7 @@ export const dashboardService = {
   async getDashboard(): Promise<DashboardData> {
     const [
       clientListRows,
-      recuperadoMes,
-      rankingGestores,
-      rankingAreas,
+      recuperacaoMesRaw,
       tempoMedio,
       followUpAlerts,
       seguimentoDashboard,
@@ -577,9 +616,7 @@ export const dashboardService = {
       gestorAreaProcessos,
     ] = await Promise.all([
       fetchClientListRows(),
-      getTotalRecuperadoNoMes(),
-      getRankingGestores(),
-      getRankingAreas(),
+      fetchRecuperacaoMesRawData(),
       getTempoMedioRecuperacao(),
       getFollowUpAlerts(),
       cobrancaSeguimentoService.fetchDashboard(),
@@ -588,6 +625,17 @@ export const dashboardService = {
       fetchGestorAreaHistoricoPorGrupo(),
       fetchGestorAreaProcessosPorGrupo(),
     ])
+
+    const {
+      total: recuperadoMes,
+      rankingGestores,
+      rankingAreas,
+    } = buildRecuperacaoMesMetrics(
+      recuperacaoMesRaw,
+      clientListRows,
+      gestorAreaHistorico,
+      gestorAreaProcessos,
+    )
 
     const pontualCarteira = calcularCarteiraPontual(seguimentoDashboard.grupos, gruposIndex)
     const pontualPorClasse = { A: pontualCarteira.classeA, B: pontualCarteira.classeB }

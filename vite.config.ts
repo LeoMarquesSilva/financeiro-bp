@@ -9,4 +9,22 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    entries: ['src/main.tsx'],
+    holdUntilCrawlEnd: true,
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react/jsx-dev-runtime',
+      'react-router-dom',
+      '@tanstack/react-query',
+      'sonner',
+    ],
+  },
+  server: {
+    host: true,
+    port: 3000,
+    strictPort: true,
+  },
 })

@@ -13,16 +13,19 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, RefreshCw, Scale, XCircle, RotateCcw } from 'lucide-react'
-import { formatCurrency, formatDate, formatDateTime } from '@/shared/utils/format'
+import { formatCurrency, formatDate, formatDateTime, formatCurrencyInput, formatNumberToCurrencyInput, parseCurrencyBr } from '@/shared/utils/format'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/AuthContext'
 import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
-import { useJudicializadaMutations } from '../hooks/useJudicializada'
+import { GrupoDevedorCombobox } from './GrupoDevedorCombobox'
+import { ProcessoViosCombobox } from './ProcessoViosCombobox'
+import { useJudicializadaMutations, useValorAutoGrupo } from '../hooks/useJudicializada'
 import { judicializadaService } from '../services/judicializadaService'
 import { normalizarNomeGrupo } from '@/features/escritorio/services/escritorioService'
 import type {
   InadimplenciaJudicializadaAndamentoRow,
   InadimplenciaJudicializadaRow,
+  ProcessoViosRow,
 } from '../types/judicializada.types'
 
 type Props = {
@@ -49,13 +52,19 @@ export function JudicializadaDetailSheet({
   const [dataJudicializacao, setDataJudicializacao] = useState('')
   const [observacoes, setObservacoes] = useState('')
   const [grupoEdit, setGrupoEdit] = useState('')
-  const [cnjRelink, setCnjRelink] = useState('')
   const [cnjRelinkLoading, setCnjRelinkLoading] = useState(false)
   const [confirmEncerrar, setConfirmEncerrar] = useState(false)
   const [saving, setSaving] = useState(false)
   const andamentosSectionRef = useRef<HTMLElement>(null)
 
   const rowId = row?.id
+  const grupoVios = (grupoEdit.trim() || row?.grupo_cliente || '').trim()
+
+  const { data: valorViosLive, isLoading: loadingValorVios } = useValorAutoGrupo(
+    grupoVios,
+    open && !!row && Boolean(grupoVios),
+  )
+  const valorLancamentoVios = valorViosLive ?? row?.valor_em_aberto_auto ?? 0
 
   const {
     data: andamentos = [],
@@ -70,12 +79,13 @@ export function JudicializadaDetailSheet({
   useEffect(() => {
     if (!row) return
     setValorAjuste(
-      row.valor_em_aberto_ajuste != null ? String(row.valor_em_aberto_ajuste) : '',
+      row.valor_em_aberto_ajuste != null
+        ? formatNumberToCurrencyInput(row.valor_em_aberto_ajuste)
+        : '',
     )
     setDataJudicializacao(row.data_judicializacao ?? '')
     setObservacoes(row.observacoes ?? '')
     setGrupoEdit(row.grupo_cliente)
-    setCnjRelink('')
   }, [row])
 
   useEffect(() => {
@@ -103,9 +113,9 @@ export function JudicializadaDetailSheet({
     }
 
     const ajusteParsed =
-      valorAjuste.trim() === '' ? null : Number(valorAjuste.replace(/\./g, '').replace(',', '.'))
+      valorAjuste.trim() === '' ? null : parseCurrencyBr(valorAjuste)
 
-    if (valorAjuste.trim() !== '' && (Number.isNaN(ajusteParsed) || ajusteParsed! < 0)) {
+    if (valorAjuste.trim() !== '' && ajusteParsed < 0) {
       toast.error('Valor de ajuste inválido.')
       return
     }
@@ -166,26 +176,15 @@ export function JudicializadaDetailSheet({
     }
   }
 
-  const handleRelinkCnj = async () => {
+  const handleVincularProcesso = async (processo: ProcessoViosRow) => {
     if (!row || !canEdit) return
-    const cnj = cnjRelink.trim()
-    if (!cnj) {
-      toast.error('Informe o CNJ.')
-      return
-    }
     setCnjRelinkLoading(true)
     try {
-      const processos = await judicializadaService.lookupProcessosPorCnj(cnj)
-      if (processos.length === 0) {
-        toast.error('CNJ não encontrado no VIOS.')
-        return
-      }
       await update.mutateAsync({
         id: row.id,
-        input: { processo_id: processos[0].id },
+        input: { processo_id: processo.id },
       })
       toast.success('Processo VIOS atualizado.')
-      setCnjRelink('')
       onUpdated()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao vincular processo.')
@@ -239,9 +238,9 @@ export function JudicializadaDetailSheet({
               <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <p className="text-[10px] font-medium uppercase text-slate-400">Lançamento VIOS</p>
                 <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {formatCurrency(row.valor_em_aberto_nominal)}
+                  {loadingValorVios ? '…' : formatCurrency(valorLancamentoVios)}
                 </p>
-                <p className="text-[10px] text-slate-400">Saldo do grupo devedor</p>
+                <p className="text-[10px] text-slate-400">Títulos em aberto (financeiro)</p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <p className="text-[10px] font-medium uppercase text-slate-400">Corrigido</p>
@@ -260,10 +259,11 @@ export function JudicializadaDetailSheet({
                 {canEdit && !encerrado ? (
                   <div className="space-y-1">
                     <Label htmlFor="grupo-devedor">Grupo devedor</Label>
-                    <Input
+                    <GrupoDevedorCombobox
                       id="grupo-devedor"
                       value={grupoEdit}
-                      onChange={(e) => setGrupoEdit(e.target.value)}
+                      onChange={setGrupoEdit}
+                      enabled={open && !!row}
                     />
                   </div>
                 ) : (
@@ -285,28 +285,13 @@ export function JudicializadaDetailSheet({
                 {canEdit && !encerrado && (
                   <div className="space-y-1">
                     <Label htmlFor="cnj-relink">Trocar processo por CNJ</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="cnj-relink"
-                        value={cnjRelink}
-                        onChange={(e) => setCnjRelink(e.target.value)}
-                        placeholder="CNJ do processo VIOS"
-                        className="font-mono text-xs"
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleRelinkCnj}
-                        disabled={cnjRelinkLoading}
-                      >
-                        {cnjRelinkLoading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          'Vincular'
-                        )}
-                      </Button>
-                    </div>
+                    <ProcessoViosCombobox
+                      id="cnj-relink"
+                      grupoCliente={grupoEdit.trim() || row.grupo_cliente}
+                      enabled={open && !!row}
+                      loading={cnjRelinkLoading}
+                      onSelect={handleVincularProcesso}
+                    />
                   </div>
                 )}
               </div>
@@ -482,7 +467,7 @@ export function JudicializadaDetailSheet({
                   </p>
                 )}
                 <p className="mt-2 text-xs text-slate-500">
-                  Automático (VIOS): {formatCurrency(row.valor_em_aberto_auto)}
+                  Automático (VIOS): {formatCurrency(valorLancamentoVios)}
                   {row.valor_em_aberto_ajuste != null && (
                     <> · Ajuste manual: {formatCurrency(row.valor_em_aberto_ajuste)}</>
                   )}
@@ -511,8 +496,9 @@ export function JudicializadaDetailSheet({
                   <Label htmlFor="ajuste-sheet">Ajuste manual (opcional)</Label>
                   <Input
                     id="ajuste-sheet"
+                    inputMode="decimal"
                     value={valorAjuste}
-                    onChange={(e) => setValorAjuste(e.target.value)}
+                    onChange={(e) => setValorAjuste(formatCurrencyInput(e.target.value))}
                     placeholder="Deixe vazio para usar o valor automático"
                   />
                 </div>

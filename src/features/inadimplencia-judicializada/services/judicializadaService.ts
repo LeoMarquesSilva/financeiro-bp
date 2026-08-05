@@ -171,7 +171,7 @@ export async function calcularValorAutoGrupo(grupoCliente: string): Promise<numb
 
   const { data, error } = await supabase
     .from('escritorio_grupos_resumo')
-    .select('valor_em_atraso, valor_em_atraso_ativos')
+    .select('valor_aberto, valor_em_atraso, valor_em_atraso_ativos')
     .eq('grupo_cliente', grupo)
     .maybeSingle()
 
@@ -181,28 +181,37 @@ export async function calcularValorAutoGrupo(grupoCliente: string): Promise<numb
   }
 
   if (data) {
-    const row = data as { valor_em_atraso: number; valor_em_atraso_ativos: number }
+    const row = data as {
+      valor_aberto: number
+      valor_em_atraso: number
+      valor_em_atraso_ativos: number
+    }
+    const aberto = Number(row.valor_aberto) || 0
+    if (aberto > 0) return aberto
     const ativos = Number(row.valor_em_atraso_ativos) || 0
-    const total = Number(row.valor_em_atraso) || 0
-    return ativos > 0 ? ativos : total
+    const atraso = Number(row.valor_em_atraso) || 0
+    return ativos > 0 ? ativos : atraso
   }
 
   const grupoNorm = buildGrupoChave(grupo)
   const { data: allRows, error: errAll } = await supabase
     .from('escritorio_grupos_resumo')
-    .select('grupo_cliente, valor_em_atraso, valor_em_atraso_ativos')
+    .select('grupo_cliente, valor_aberto, valor_em_atraso, valor_em_atraso_ativos')
 
   if (errAll) return 0
 
   for (const row of (allRows ?? []) as {
     grupo_cliente: string
+    valor_aberto: number
     valor_em_atraso: number
     valor_em_atraso_ativos: number
   }[]) {
     if (normalizarNomeGrupo(row.grupo_cliente) === grupoNorm) {
+      const aberto = Number(row.valor_aberto) || 0
+      if (aberto > 0) return aberto
       const ativos = Number(row.valor_em_atraso_ativos) || 0
-      const total = Number(row.valor_em_atraso) || 0
-      return ativos > 0 ? ativos : total
+      const atraso = Number(row.valor_em_atraso) || 0
+      return ativos > 0 ? ativos : atraso
     }
   }
 
@@ -347,7 +356,7 @@ export function calcularKpis(rows: InadimplenciaJudicializadaRow[]): Judicializa
   let totalLancamentoVios = 0
   for (const r of ativos) {
     totalEmAberto += r.valor_em_aberto
-    totalLancamentoVios += r.valor_em_aberto_nominal
+    totalLancamentoVios += r.valor_em_aberto_auto
     if (r.valor_causa != null && r.valor_causa > 0) {
       totalValorCausa += r.valor_causa
     }

@@ -16,6 +16,7 @@ import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesP
 import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
 import { OpexPage } from '@/features/opex/pages/OpexPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
+import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
 
 function ProtectedRoute({
   allowedRoles,
@@ -121,6 +122,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
                 <OpexPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="eficiencia"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <EficienciaPage />
               </ProtectedRoute>
             }
           />

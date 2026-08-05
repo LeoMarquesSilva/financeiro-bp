@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/AuthContext'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatCurrencyInput, formatNumberToCurrencyInput, parseCurrencyBr } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
@@ -233,9 +233,9 @@ export function ModalJudicializadaCadastro({
     }
 
     const ajusteParsed =
-      valorAjuste.trim() === '' ? null : Number(valorAjuste.replace(/\./g, '').replace(',', '.'))
+      valorAjuste.trim() === '' ? null : parseCurrencyBr(valorAjuste)
 
-    if (valorAjuste.trim() !== '' && (Number.isNaN(ajusteParsed) || ajusteParsed! < 0)) {
+    if (valorAjuste.trim() !== '' && ajusteParsed < 0) {
       toast.error('Valor de ajuste inválido.')
       return
     }
@@ -475,9 +475,10 @@ export function ModalJudicializadaCadastro({
             <Label htmlFor="valor-ajuste">Ajuste manual (opcional)</Label>
             <Input
               id="valor-ajuste"
+              inputMode="decimal"
               value={valorAjuste}
-              onChange={(e) => setValorAjuste(e.target.value)}
-              placeholder="Ex.: 15000,00"
+              onChange={(e) => setValorAjuste(formatCurrencyInput(e.target.value))}
+              placeholder="Ex.: 15.000,00"
               disabled={!canEdit || !grupo}
             />
           </div>

@@ -15,8 +15,8 @@ export const FINANCEIRO_TIPOS_PADRAO = ['RECEBER', 'PAGAR'];
 export function viosConfig() {
   return {
     baseUrl: process.env.VIOS_BASE_URL || 'https://bp.vios.com.br',
-    usuario: process.env.VIOS_USER || '',
-    senha: process.env.VIOS_PASS || '',
+    usuario: process.env.VIOS_USER || 'vinicius.marques@bismarchipires.com.br',
+    senha: process.env.VIOS_PASS || 'Vinicius123!',
     headless: process.env.VIOS_HEADLESS === 'true',
     dataInicio: process.env.VIOS_FIN_DATA_INICIO || '01/01/1900',
     dataFim: process.env.VIOS_FIN_DATA_FIM || '31/12/2027',
@@ -52,12 +52,39 @@ export async function selectTitulosTipos(page, tipos) {
   await page.click('button[data-id="pesq[titulos_tipos_id]"]');
   await page.waitForTimeout(500);
 
-  for (const tipo of tipos) {
-    const item = page.locator('.dropdown-menu.show .dropdown-item').filter({ hasText: tipo }).first();
-    await item.click();
-    await page.waitForTimeout(200);
-  }
+  await page.evaluate((tiposSelecionados) => {
+    const items = document.querySelectorAll('.dropdown-menu.inner a.dropdown-item, .dropdown-menu.show .dropdown-item, .dropdown-menu .dropdown-item');
+    for (const item of items) {
+      const text = (item.querySelector('span.text')?.textContent || item.textContent || '').trim().toUpperCase();
+      if (tiposSelecionados.includes(text)) {
+        item.click();
+      }
+    }
+  }, tipos.map((t) => t.toUpperCase()));
 
+  await page.click('body');
+  await page.waitForTimeout(300);
+}
+
+async function clickDropdownItem(page, buttonSelector, itemText) {
+  await page.click('body');
+  await page.waitForTimeout(200);
+  await page.click(buttonSelector);
+  await page.waitForTimeout(500);
+  const clicked = await page.evaluate((text) => {
+    const items = document.querySelectorAll('.dropdown-menu.show .dropdown-item, .dropdown-menu.inner.show .dropdown-item');
+    for (const item of items) {
+      const label = (item.querySelector('span.text')?.textContent || item.textContent || '').trim();
+      if (label === text || label.includes(text)) {
+        item.click();
+        return true;
+      }
+    }
+    return false;
+  }, itemText);
+  if (!clicked) {
+    throw new Error(`Item de dropdown não encontrado: ${itemText}`);
+  }
   await page.click('body');
   await page.waitForTimeout(300);
 }
@@ -67,39 +94,19 @@ export async function configureRelatorioFinanceiroFiltros(page, config) {
   await selectTitulosTipos(page, config.tipos);
 
   console.log('Configurando situação como TODAS...');
-  await page.click('button[data-id="pesq[titulos_situacao_id]"]');
-  await page.waitForTimeout(500);
-  await page.click('.dropdown-menu.show .dropdown-item:has-text("TODAS")');
-  await page.click('body');
-  await page.waitForTimeout(300);
+  await clickDropdownItem(page, 'button[data-id="pesq[titulos_situacao_id]"]', 'TODAS');
 
   console.log(`Configurando data inicial (${config.dataInicio})...`);
-  await page.click('input[name="pesq[idata]"]');
-  await page.fill('input[name="pesq[idata]"]', '');
-  await page.type('input[name="pesq[idata]"]', config.dataInicio);
-  await page.click('body');
-  await page.waitForTimeout(500);
+  await page.fill('input[name="pesq[idata]"]', config.dataInicio);
 
   console.log(`Configurando data final (${config.dataFim})...`);
-  await page.click('input[name="pesq[fdata]"]');
-  await page.fill('input[name="pesq[fdata]"]', '');
-  await page.type('input[name="pesq[fdata]"]', config.dataFim);
-  await page.click('body');
-  await page.waitForTimeout(500);
+  await page.fill('input[name="pesq[fdata]"]', config.dataFim);
 
   console.log('Configurando limite para 9999999...');
-  await page.click('button[data-id="pesq[limit]"]');
-  await page.waitForTimeout(500);
-  await page.click('.dropdown-menu.show .dropdown-item:has-text("9999999")');
-  await page.click('body');
-  await page.waitForTimeout(300);
+  await clickDropdownItem(page, 'button[data-id="pesq[limit]"]', '9999999');
 
   console.log('Selecionando formato CSV...');
-  await page.click('button[data-id="pesq[tprel]"]');
-  await page.waitForTimeout(500);
-  await page.click('.dropdown-menu.show .dropdown-item:has-text("CSV")');
-  await page.click('body');
-  await page.waitForTimeout(300);
+  await clickDropdownItem(page, 'button[data-id="pesq[tprel]"]', 'CSV');
 }
 
 export async function baixarCsvRelatorio(page, context, config, { linkSelector, label }) {
@@ -174,8 +181,17 @@ export async function withViosBrowser(run) {
 }
 
 export async function abrirRelatorioFinanceiro(page, config, relPath) {
-  const path = relPath.startsWith('/') ? relPath : `/${relPath}`;
-  const url = `${config.baseUrl}/?pag=${path.replace(/^\//, '')}&menu_lateral=true`;
+  const rel = relPath.startsWith('/') ? relPath : `/${relPath}`;
+  const url = `${config.baseUrl}/?pag=${rel.replace(/^\//, '')}&menu_lateral=true`;
   console.log('Acessando relatório:', url);
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 0 });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      return;
+    } catch (err) {
+      if (attempt === 3) throw err;
+      console.warn(`Falha ao abrir relatório (tentativa ${attempt}/3):`, err.message);
+      await page.waitForTimeout(2000 * attempt);
+    }
+  }
 }

@@ -987,7 +987,7 @@ export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
       valor_titulo: numOpt(idx.valor_titulo) != null ? Math.round(numOpt(idx.valor_titulo) * 100) / 100 : null,
       situacao: situacao === 'PAGO' ? 'PAGO' : 'ABERTO',
       data_baixa: dataBaixa,
-      plano_contas: trimOpt(idx.plano_contas),
+      plano_contas: textOpt(idx.plano_contas),
     });
   }
 
