@@ -1,10 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { TrendingUp, AlertTriangle } from 'lucide-react'
-import { formatCurrencyCompact, formatPercent } from '@/shared/utils/format'
-import { receitaService } from '@/features/receita/services/receitaService'
-import { dashboardService as inadimplenciaDashboardService } from '@/features/inadimplencia/services/dashboardService'
-import { EficienciaKpiCard } from './EficienciaKpiCard'
+import { formatPercent } from '@/shared/utils/format'
 import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
 import { AreaFilterButtons } from './AreaFilterButtons'
 import { MesFilterButtons } from './MesFilterButtons'
@@ -84,47 +79,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
   const mesDestaque = isMesesFiltro(mesFiltro) ? mesFiltro : null
-  const { data: receitaMensal, isLoading: loadingReceita } = useQuery({
-    queryKey: ['eficiencia', 'overview-receita', ano],
-    queryFn: () => receitaService.fetchTotaisMensais(ano),
-  })
-  const { data: inadimplencia, isLoading: loadingInadimplencia } = useQuery({
-    queryKey: ['eficiencia', 'overview-inadimplencia'],
-    queryFn: () => inadimplenciaDashboardService.getDashboard(),
-  })
   const { data: financeiroKpis, isLoading: loadingFinanceiroKpis } = useOverviewFinanceiroKpis(ano)
-
-  const receitaMes = (() => {
-    if (!receitaMensal || receitaMensal.size === 0) return null
-    if (isMesesFiltro(mesFiltro)) {
-      const entradas = mesFiltro
-        .map((m) => {
-          const v = receitaMensal.get(m)
-          return v ? ([m, v] as const) : null
-        })
-        .filter((x): x is readonly [number, { recebido: number; previsto: number }] => x != null)
-      if (entradas.length === 0) return null
-      if (entradas.length === 1) {
-        const [mes, valores] = entradas[0]!
-        return { mes, ...valores }
-      }
-      return {
-        mes: Math.max(...entradas.map(([m]) => m)),
-        recebido: entradas.reduce((s, [, v]) => s + v.recebido, 0),
-        previsto: entradas.reduce((s, [, v]) => s + v.previsto, 0),
-      }
-    }
-    const entradas =
-      mesFiltro === 'resultado'
-        ? [...receitaMensal.entries()].filter(([m]) => mesNoFiltro(m, 'resultado', ano))
-        : [...receitaMensal.entries()]
-    if (entradas.length === 0) return null
-    const mesesComRecebido = entradas.filter(([, v]) => v.recebido > 0)
-    const [mesRef, valores] = mesesComRecebido.length
-      ? mesesComRecebido.reduce((a, b) => (a[0] > b[0] ? a : b))
-      : entradas.reduce((a, b) => (a[0] > b[0] ? a : b))
-    return { mes: mesRef, ...valores }
-  })()
 
   if (loading || !data) {
     return (
@@ -435,49 +390,6 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
           acumulado={{ value: null, label: '-' }}
         />
-      </div>
-
-      {/* Bloco financeiro real do SIOE, com dados ao vivo do SIOE (adicional ao Overview do BI). */}
-      <div>
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">Financeiro (SIOE)</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <EficienciaKpiCard
-            title={
-              isMesesFiltro(mesFiltro) && mesFiltro.length === 1
-                ? `Recebido em ${String(mesFiltro[0]).padStart(2, '0')}/${ano}`
-                : isMesesFiltro(mesFiltro)
-                  ? 'Recebido (meses selecionados)'
-                  : mesFiltro === 'resultado'
-                    ? 'Recebido (resultado)'
-                    : 'Recebido no mês'
-            }
-            value={receitaMes ? formatCurrencyCompact(receitaMes.recebido) : '—'}
-            hint={receitaMes ? `previsto ${formatCurrencyCompact(receitaMes.previsto)}` : undefined}
-            icon={TrendingUp}
-            accentClass="bg-green-100 text-green-700"
-            loading={loadingReceita}
-          />
-          <EficienciaKpiCard
-            title="Inadimplência total em aberto"
-            value={inadimplencia ? formatCurrencyCompact(inadimplencia.totais.totalEmAberto) : '—'}
-            hint="carteiras comitê + pontual + judicializada"
-            icon={AlertTriangle}
-            accentClass="bg-orange-100 text-orange-700"
-            loading={loadingInadimplencia}
-          />
-          <EficienciaKpiCard
-            title="Recuperado no mês"
-            value={inadimplencia ? formatCurrencyCompact(inadimplencia.totais.totalRecuperadoMes) : '—'}
-            hint={
-              inadimplencia
-                ? `${formatPercent(inadimplencia.totais.percentualRecuperacao)} de recuperação`
-                : undefined
-            }
-            icon={TrendingUp}
-            accentClass="bg-slate-100 text-slate-700"
-            loading={loadingInadimplencia}
-          />
-        </div>
       </div>
 
       <RacionalSheet

@@ -215,6 +215,18 @@ export function normalizeNomeChave(nome) {
 }
 
 /**
+ * Remove prefixo de conta desativada no SharePoint ("Ex Func Nome" → "Nome").
+ * Contas desligadas não casam com o turnover se o prefixo permanecer.
+ */
+export function stripExFuncPrefix(nome) {
+  if (nome == null) return null
+  const trimmed = String(nome).trim()
+  if (!trimmed) return null
+  const stripped = trimmed.replace(/^ex\s+func\.?\s+/i, '').trim()
+  return stripped || null
+}
+
+/**
  * Resolve alias → nome canônico (para gravar em sp_* e casar com turnover).
  * Sem alias, devolve o nome trimado original.
  */
@@ -235,7 +247,8 @@ export function resolveNomeCanonico(nome) {
  * @param {Array<{nome:string, area:string|null, admissao:string|null, desligamento:string|null}>} turnover
  */
 export function areaNaConclusao(nome, dataConclusao, turnover) {
-  let alvo = normalizeNomeChave(resolveNomeCanonico(nome) ?? nome)
+  const nomeLookup = stripExFuncPrefix(nome) ?? nome
+  let alvo = normalizeNomeChave(resolveNomeCanonico(nomeLookup) ?? nomeLookup)
   if (!alvo) return null
   if (alvo === normalizeNomeChave('CAROLINE ABDALLA')) return 'Trabalhista'
   const doUsuario = turnover.filter((t) => normalizeNomeChave(t.nome) === alvo)

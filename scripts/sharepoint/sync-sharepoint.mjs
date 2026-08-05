@@ -63,6 +63,30 @@ const BASES_DIR = 'Núcleo de Cadastro/Bases Atualizacoes'
 
 const LISTA_PROTOCOLOS = '4e115aab-39c5-4aab-8d5a-e905f4efd65d'
 const LISTA_PUBLICACOES = '91e8ba11-8248-4a20-9fd9-b66466144ad1'
+/** Campos Pessoa (VISTADOPOR, AGENDADOPOR) exigem $select explícito no Graph — expand genérico não traz o nome. */
+const PUBLICACOES_FIELD_SELECT = [
+  'ID',
+  'Created',
+  'DISPONIBILIZADOPARAVISTAGEM',
+  'VISTADO_x0020_EM',
+  'VISTADOPOR',
+  'AGENDADOPOR',
+  'field_8',
+  'field_9',
+  'field_3',
+  'field_2',
+  'field_6',
+  'field_5',
+  'field_14',
+  'field_15',
+  'field_22',
+  'field_17',
+  'field_18',
+  'field_19',
+  'TIPODOAGENDAMENTO',
+  'PRIORIDADEDEAGENDAMENTO',
+  'STATUSDAPUBLICA_x00c7__x00c3_O',
+].join(',')
 const LISTA_TREINAMENTOS = '30ea2880-475e-489c-8600-ae541d29faf3'
 /**
  * Lista mestre de sessões de treinamento (não confundir com LISTA_TREINAMENTOS, que é a
@@ -341,7 +365,12 @@ const FONTES = {
   publicacoes: {
     tabela: 'sp_publicacoes',
     async run(ctx) {
-      const items = await fetchListItems(ctx.siteJuridica, LISTA_PUBLICACOES)
+      const items = await fetchListItems(
+        ctx.siteJuridica,
+        LISTA_PUBLICACOES,
+        null,
+        PUBLICACOES_FIELD_SELECT,
+      )
       if (ctx.dumpFields) return dumpFields(items)
       const feriados = await loadFeriadosSet()
       const rows = items
@@ -353,7 +382,9 @@ const FONTES = {
           const disponibilizado = parseDate(
             pick(f, ['DISPONIBILIZADO PARA VISTAGEM', 'DISPONIBILIZADOPARAVISTAGEM'])
           )
-          const vistadoEm = parseDate(pick(f, ['VISTADO EM', 'VISTADOEM']))
+          const vistadoEm = parseDate(
+            pick(f, ['VISTADO EM', 'VISTADOEM', 'VISTADO_x0020_EM']),
+          )
           // Nesta lista, várias colunas têm nome interno opaco (field_N) sem relação com o
           // nome de exibição — confirmado via schema real de colunas (Graph /lists/{id}/columns),
           // não recuperável por decodificação/normalização. Aliases exatos abaixo.
@@ -379,7 +410,11 @@ const FONTES = {
             vistado_em: toIsoDateTime(vistadoEm),
             vistado_d1: computeVistadoD1(disponibilizado, vistadoEm, feriados),
             demanda_risco: pick(f, ['Demanda de Risco', 'DemandadeRisco', 'field_22']),
-            status_publicacao: pick(f, ['STATUS DA PUBLICAÇÃO', 'STATUSDAPUBLICACAO']),
+            status_publicacao: pick(f, [
+              'STATUS DA PUBLICAÇÃO',
+              'STATUSDAPUBLICACAO',
+              'STATUSDAPUBLICA_x00c7__x00c3_O',
+            ]),
             natureza: pick(f, ['Natureza', 'field_17']),
             status: pick(f, ['Status', 'field_18']),
             acao: pick(f, ['Ação', 'Acao', 'field_19']),
