@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs'
 import {
+  EFICIENCIA_META_SLA_PROTOCOLO,
   MESES_EFICIENCIA,
   MESES_EFICIENCIA_ARQUIVO,
 } from '../constants'
@@ -71,7 +72,7 @@ function sortPivotRowsDesc(rows: CellValue[][], sortColIndex: number): CellValue
 }
 
 const METAS_INDICADORES = {
-  slaProtocolo: '90%',
+  slaProtocolo: `${EFICIENCIA_META_SLA_PROTOCOLO}%`,
   eficienciaProtocolo: '95%',
   agendamento: '95%',
   vistagem: '98%',

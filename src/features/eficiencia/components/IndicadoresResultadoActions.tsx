@@ -20,7 +20,7 @@ export function IndicadoresResultadoActions({ ano }: Props) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <Button
           type="button"
           variant="outline"

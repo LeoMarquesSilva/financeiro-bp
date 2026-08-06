@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { Check, Copy, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { formatPercent } from '@/shared/utils/format'
+import { copyOverviewKpiCardsToClipboard } from '@/shared/utils/copyChartImage'
+import { Button } from '@/components/ui/button'
 import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
 import { AreaFilterButtons } from './AreaFilterButtons'
 import { MesFilterButtons } from './MesFilterButtons'
 import { RacionalSheet } from './RacionalSheet'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
+  EFICIENCIA_META_SLA_PROTOCOLO,
   isMesesFiltro,
   mesNoFiltro,
   type MesFiltroEficiencia,
@@ -75,9 +80,19 @@ function formatMinutos(min: number): string {
   return `${h}:${String(m).padStart(2, '0')}`
 }
 
+/** Meta anual de treinamentos — ex.: `Meta: 588:00h (42 x 14h)`. */
+function formatMetaDesenvolvimentoEquipe(
+  treinamentos: EficienciaOverview['treinamentos'],
+): string {
+  if (!treinamentos || treinamentos.pessoas_ativas <= 0) return 'Meta 100%'
+  return `Meta: ${formatMinutos(treinamentos.meta_minutos)}h (${treinamentos.pessoas_ativas} x 14h)`
+}
+
 export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
+  const copyRef = useRef<HTMLDivElement>(null)
   const mesDestaque = isMesesFiltro(mesFiltro) ? mesFiltro : null
   const { data: financeiroKpis, isLoading: loadingFinanceiroKpis } = useOverviewFinanceiroKpis(ano)
 
@@ -176,7 +191,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
   const slaProtocoloMetaAcumulado = (() => {
     const rows = filterMensal(data.slaProtocolo)
     const metas = rows.map((r) => r.meta).filter((m): m is number => m != null)
-    return metas.length > 0 ? Math.min(...metas) : 90
+    return metas.length > 0 ? Math.min(...metas) : EFICIENCIA_META_SLA_PROTOCOLO
   })()
 
   const vistagemNormalIndisponivel = area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
@@ -234,32 +249,98 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
     return slaProtocoloMetasPorMes
   })()
 
+  const metaDesenvolvimentoEquipe = formatMetaDesenvolvimentoEquipe(data.treinamentos)
+
   const metasRacional: Record<RacionalIndicador, { metaAcumulado: number; metaLabel?: string }> =
     {
       sla_protocolo: {
         metaAcumulado: slaProtocoloMetaAcumulado,
-        metaLabel: resolveMetaTexto(90, undefined, slaProtocoloMetasFiltradas),
+        metaLabel: resolveMetaTexto(
+          EFICIENCIA_META_SLA_PROTOCOLO,
+          undefined,
+          slaProtocoloMetasFiltradas,
+        ),
       },
       eficiencia_protocolo: { metaAcumulado: 95 },
       sla_ciencia_agendamentos: { metaAcumulado: 95 },
       sla_vistagem_risco: { metaAcumulado: 98 },
       sla_vistagem_normal: { metaAcumulado: 98 },
-      desenvolvimento_equipe: { metaAcumulado: 100 },
+      desenvolvimento_equipe: {
+        metaAcumulado: 100,
+        metaLabel: metaDesenvolvimentoEquipe,
+      },
       retencao_talentos: {
         metaAcumulado: data.turnover?.meta_pct_retencao_minima ?? 90,
       },
     }
 
+  const handleCopiarOverview = async () => {
+    const container = copyRef.current
+    if (!container) {
+      toast.error('Conteúdo não disponível para cópia')
+      return
+    }
+
+    const cards = Array.from(container.querySelectorAll<HTMLElement>('[data-overview-copy-card]'))
+    if (cards.length === 0) {
+      toast.error('Conteúdo não disponível para cópia')
+      return
+    }
+
+    setCopyStatus('loading')
+    try {
+      await copyOverviewKpiCardsToClipboard(cards)
+      setCopyStatus('done')
+      toast.success('Conteúdo copiado — cole no PowerPoint com Ctrl+V')
+      window.setTimeout(() => setCopyStatus('idle'), 2000)
+    } catch (error) {
+      setCopyStatus('idle')
+      const message =
+        error instanceof Error ? error.message : 'Não foi possível copiar o conteúdo'
+      toast.error(message)
+    }
+  }
+
+  const CopyIcon =
+    copyStatus === 'loading' ? Loader2 : copyStatus === 'done' ? Check : Copy
+
+  const acumuladoGestaoPdi: HeatCell =
+    mesFiltro == null ||
+    mesFiltro === 'resultado' ||
+    (isMesesFiltro(mesFiltro) && mesFiltro.includes(6))
+      ? { value: 100, label: '100,00%' }
+      : { value: null, label: '-' }
+
   return (
     <div className="space-y-5">
       <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} />
-      <AreaFilterButtons value={area} onChange={onAreaChange} />
+
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <AreaFilterButtons value={area} onChange={onAreaChange} />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 shrink-0 gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700"
+          onClick={handleCopiarOverview}
+          disabled={copyStatus === 'loading' || loadingFinanceiroKpis}
+          aria-label="Copiar indicadores filtrados para PowerPoint"
+        >
+          <CopyIcon
+            className={copyStatus === 'loading' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'}
+            aria-hidden
+          />
+          COPIAR
+        </Button>
+      </div>
 
       {/* Réplica do Overview do BI: ordem e métricas idênticas às páginas KPI_HTML_*_MENSAL. */}
-      <div className="space-y-3">
+      <div ref={copyRef} className="space-y-3">
         <OverviewKpiHeatRow
           title="SLA Protocolo"
-          meta={90}
+          meta={EFICIENCIA_META_SLA_PROTOCOLO}
           metasPorMes={slaProtocoloMetasPorMes}
           metaAcumulado={slaProtocoloMetaAcumulado}
           mesDestaque={mesDestaque}
@@ -322,6 +403,7 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
         <OverviewKpiHeatRow
           title="Desenvolvimento Equipe"
           meta={100}
+          metaLabel={metaDesenvolvimentoEquipe}
           mesDestaque={mesDestaque}
           cells={treinamentosCells}
           acumulado={acumuladoTreinamentos}
@@ -336,34 +418,22 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           acumulado={retencaoCell}
           onRacionalClick={() => setRacionalAberto('retencao_talentos')}
         />
-
-        {/* Cartões do BI ainda sem fonte de dados própria (valores estáticos). */}
         <OverviewKpiHeatRow
           title="Gestão de PDI**"
           meta={100}
           mesDestaque={mesDestaque}
           cells={aplicarCelulasFiltro(staticCells({ 6: 100 }), mesFiltro, ano)}
-          acumulado={
-            mesFiltro == null ||
-            mesFiltro === 'resultado' ||
-            (isMesesFiltro(mesFiltro) && mesFiltro.includes(6))
-              ? { value: 100, label: '100,00%' }
-              : { value: null, label: '-' }
-          }
-        />
-        <OverviewKpiHeatRow
-          title="NPS**"
-          meta={Infinity}
-          metaLabel="Meta 85%"
-          mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
-          acumulado={{ value: null, label: '-' }}
+          acumulado={acumuladoGestaoPdi}
         />
         <OverviewKpiHeatRow
           title="Receita Bruta"
           meta={100}
           mesDestaque={mesDestaque}
-          cells={loadingFinanceiroKpis ? Array.from({ length: 12 }, () => ({ value: null, label: '…' })) : cellsReceitaBruta}
+          cells={
+            loadingFinanceiroKpis
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsReceitaBruta
+          }
           acumulado={loadingFinanceiroKpis ? { value: null, label: '…' } : acumuladoReceitaBruta}
         />
         <OverviewKpiHeatRow
@@ -371,8 +441,25 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           meta={Infinity}
           metaLabel="Meta x"
           mesDestaque={mesDestaque}
-          cells={loadingFinanceiroKpis ? Array.from({ length: 12 }, () => ({ value: null, label: '…' })) : cellsInadimplencia}
-          acumulado={loadingFinanceiroKpis ? { value: null, label: '…' } : acumuladoInadimplencia}
+          cells={
+            loadingFinanceiroKpis
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsInadimplencia
+          }
+          acumulado={
+            loadingFinanceiroKpis ? { value: null, label: '…' } : acumuladoInadimplencia
+          }
+        />
+      </div>
+
+      <div className="space-y-3">
+        <OverviewKpiHeatRow
+          title="NPS**"
+          meta={Infinity}
+          metaLabel="Meta 85%"
+          mesDestaque={mesDestaque}
+          cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
+          acumulado={{ value: null, label: '-' }}
         />
         <OverviewKpiHeatRow
           title="Reputação**"

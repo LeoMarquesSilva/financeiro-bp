@@ -14,6 +14,9 @@ export const AREAS_EFICIENCIA = [
 /** Trabalhista não possui SLA Vistagem Normal (somente demanda de risco). */
 export const EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL = 'Trabalhista' as const
 
+/** Meta D-1 do SLA Protocolo (Overview / Indicadores / sync meta_d1). */
+export const EFICIENCIA_META_SLA_PROTOCOLO = 85
+
 /**
  * Aliases de colaborador (chave normalizada → nome canônico no turnover).
  * Contas AD incompletas do SharePoint ("Membros de email@...") e abreviações.

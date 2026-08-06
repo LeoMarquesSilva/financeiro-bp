@@ -410,6 +410,7 @@ function applyExportLayoutFixes(root: HTMLElement): void {
   })
 
   root.querySelectorAll<HTMLElement>('td, th').forEach((cell) => {
+    if (cell.closest('[data-overview-copy-card]')) return
     cell.style.setProperty('vertical-align', 'top', 'important')
     cell.style.setProperty('padding-bottom', '10px', 'important')
   })
@@ -1641,6 +1642,31 @@ export async function copyElementImageToClipboard(
 ): Promise<void> {
   const blob = await htmlElementToPngBlob(element, scale, options)
   await copyPngBlobToClipboard(blob, 96 * scale)
+}
+
+/** Cards KPI do Overview — snapshot fiel (cores das células alinhadas ao card branco). */
+export async function copyOverviewKpiCardsToClipboard(
+  cards: HTMLElement[],
+  scale = DEFAULT_SCALE,
+): Promise<void> {
+  if (cards.length === 0) {
+    throw new Error('Conteúdo não disponível para cópia')
+  }
+
+  const gapPx = Math.round(12 * scale)
+  const parts = await Promise.all(
+    cards.map(async (card) => {
+      const rect = card.getBoundingClientRect()
+      const width = Math.max(1, Math.ceil(rect.width))
+      const height = Math.max(1, Math.ceil(rect.height))
+      const prepared = preparePrintSnapshotElement(card, { preserveBackground: true })
+      const blob = await renderPreparedElementToPngBlob(prepared, width, height, scale)
+      return measureBlobPart(blob)
+    }),
+  )
+
+  const stacked = await compositeColumnParts(parts, gapPx)
+  await copyPngBlobToClipboard(stacked.blob, 96 * scale)
 }
 
 export async function chartToPngBlob(

@@ -7,7 +7,27 @@ const COL_TITLE_WIDTH = 150
 const COL_MES_WIDTH = 60
 const COL_ACUM_WIDTH = 64
 const TABLE_MIN_WIDTH = COL_TITLE_WIDTH + MESES_EFICIENCIA.length * COL_MES_WIDTH + COL_ACUM_WIDTH
+export const OVERVIEW_RACIONAL_SLOT_WIDTH = 100
 const RACIONAL_SLOT_CLASS = 'flex w-[100px] shrink-0 self-center'
+
+export type OverviewKpiHeatCardProps = Omit<Props, 'onRacionalClick'>
+
+export function OverviewRacionalButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${RACIONAL_SLOT_CLASS} items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50`}
+    >
+      <FileSearch className="h-3.5 w-3.5" aria-hidden />
+      Racional
+    </button>
+  )
+}
+
+export function OverviewRacionalSpacer() {
+  return <div className={RACIONAL_SLOT_CLASS} aria-hidden />
+}
 
 export type HeatCell = {
   /** Valor numérico usado para comparar com a meta (mesma escala da meta). null = sem dados no mês. */
@@ -71,7 +91,7 @@ const thBase: CSSProperties = {
 }
 
 /** Réplica visual da tabela KPI_HTML_*_MENSAL do BI: título + 12 meses coloridos por meta + coluna Acum. */
-export function OverviewKpiHeatRow({
+export function OverviewKpiHeatCard({
   title,
   cells,
   acumulado,
@@ -82,8 +102,7 @@ export function OverviewKpiHeatRow({
   mesDestaque = null,
   modoAnual = false,
   anoLabel,
-  onRacionalClick,
-}: Props) {
+}: OverviewKpiHeatCardProps) {
   const metasDefinidas = (metasPorMes ?? []).filter((m): m is number => m != null)
   const metaFallbackAcum =
     metaAcumulado ??
@@ -96,18 +115,19 @@ export function OverviewKpiHeatRow({
   const colAnoWidth = MESES_EFICIENCIA.length * COL_MES_WIDTH
 
   return (
-    <div className="flex items-stretch gap-2">
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          background: '#FFFFFF',
-          border: '1px solid #E6E8EB',
-          borderRadius: 8,
-          padding: 8,
-          boxShadow: '0 2px 4px rgba(15,23,42,0.06)',
-        }}
-      >
+    <div
+      data-overview-copy-card
+      data-chart-export-preserve-bg
+      style={{
+        flex: 1,
+        minWidth: 0,
+        background: '#FFFFFF',
+        border: '1px solid #E6E8EB',
+        borderRadius: 8,
+        padding: 8,
+        boxShadow: '0 2px 4px rgba(15,23,42,0.06)',
+      }}
+    >
       <div className="overflow-x-auto">
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: TABLE_MIN_WIDTH }}>
           <colgroup>
@@ -232,19 +252,21 @@ export function OverviewKpiHeatRow({
           </tbody>
         </table>
       </div>
-      </div>
+    </div>
+  )
+}
 
+export function OverviewKpiHeatRow({
+  onRacionalClick,
+  ...cardProps
+}: Props) {
+  return (
+    <div className="flex items-stretch gap-2">
+      <OverviewKpiHeatCard {...cardProps} />
       {onRacionalClick ? (
-        <button
-          type="button"
-          onClick={onRacionalClick}
-          className={`${RACIONAL_SLOT_CLASS} items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50`}
-        >
-          <FileSearch className="h-3.5 w-3.5" aria-hidden />
-          Racional
-        </button>
+        <OverviewRacionalButton onClick={onRacionalClick} />
       ) : (
-        <div className={RACIONAL_SLOT_CLASS} aria-hidden />
+        <OverviewRacionalSpacer />
       )}
     </div>
   )

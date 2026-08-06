@@ -22,7 +22,7 @@ export function EficienciaHeader({ ano, anos, onAnoChange, ultimaAtualizacao }: 
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
           <Gauge className="h-6 w-6 text-slate-600" />
-          Eficiência Operacional
+          Resultado Metas Bismarchi Pires | Consolidado
         </h1>
         <p className="mt-0.5 text-sm text-slate-500">
           Indicadores operacionais do jurídico — SLA, protocolo, agendamento, turnover e treinamentos

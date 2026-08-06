@@ -74,11 +74,11 @@ export function metaD1PorData(data) {
   const d = data instanceof Date ? data : new Date(data)
   if (Number.isNaN(d.getTime())) return null
   const { year: ano, month: mes } = getDatePartsBrt(d)
-  if (ano >= 2026) return 90
+  if (ano >= 2026) return 85
   if (ano === 2025) {
     if (mes <= 3) return 70
     if (mes <= 6) return 80
-    return 90
+    return 85
   }
   return null
 }
