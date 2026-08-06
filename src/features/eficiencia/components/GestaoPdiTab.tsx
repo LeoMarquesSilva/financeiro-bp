@@ -1,16 +1,21 @@
 import { useState } from 'react'
 import { Download, Loader2, Target } from 'lucide-react'
 import { toast } from 'sonner'
+import { Avatar } from '@/shared/components/Avatar'
 import { formatPercent } from '@/shared/utils/format'
 import { Button } from '@/components/ui/button'
+import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import {
   filtrarMensalPorMesFiltro,
   MESES_EFICIENCIA,
   type MesFiltroEficiencia,
 } from '../constants'
 import { useGestaoPdi } from '../hooks/useEficiencia'
+import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { acumuladoGestaoPdi } from '../utils/gestaoPdiCalc'
 import { exportGestaoPdiDesviosExcel } from '../utils/gestaoPdiExport'
+import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
+import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { AreaFilterButtons } from './AreaFilterButtons'
@@ -24,6 +29,8 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
   const [area, setArea] = useState<string | null>(null)
   const [exportando, setExportando] = useState(false)
   const { mensal, detalhe, loading } = useGestaoPdi(ano, mesFiltro, area)
+  const { teamMembers } = useTeamMembers()
+  const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
   const acumulado = acumuladoGestaoPdi(mensal, mesFiltro, ano)
 
@@ -142,30 +149,51 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {desviosLista.map((d) => (
-                  <tr key={`${d.mes}-${d.colaborador}`} className="text-slate-700">
-                    <td className="px-2 py-2 align-middle">{MESES_EFICIENCIA[d.mes - 1]}</td>
-                    <td className="px-2 py-2 align-middle font-medium text-slate-900">
-                      {d.colaborador}
-                    </td>
-                    <td className="px-2 py-2 align-middle">{d.area ?? '—'}</td>
-                    <td className="px-2 py-2 align-middle tabular-nums">
-                      {d.progresso_anterior != null
-                        ? formatPercent(d.progresso_anterior)
-                        : '—'}
-                    </td>
-                    <td className="px-2 py-2 align-middle tabular-nums">
-                      {d.progresso != null ? formatPercent(d.progresso) : '—'}
-                    </td>
-                    <td className="px-2 py-2 align-middle">{d.evidencias_execucao ?? '—'}</td>
-                    <td className="px-2 py-2 align-middle tabular-nums">
-                      {d.one_a_one != null ? d.one_a_one : '—'}
-                    </td>
-                    <td className="max-w-md whitespace-pre-line px-2 py-2 align-middle text-xs text-slate-600">
-                      {d.desvio_criterio_apuracao?.trim() || '—'}
-                    </td>
-                  </tr>
-                ))}
+                {desviosLista.map((d) => {
+                  const nome = resolvePessoaDisplayNome(
+                    d.colaborador,
+                    teamMembers,
+                    avatarCatalog,
+                  )
+                  const avatarUrl = resolvePessoaAvatarUrl(
+                    d.colaborador,
+                    teamMembers,
+                    avatarCatalog,
+                  )
+                  return (
+                    <tr key={`${d.mes}-${d.colaborador}`} className="text-slate-700">
+                      <td className="px-2 py-2 align-middle">{MESES_EFICIENCIA[d.mes - 1]}</td>
+                      <td className="px-2 py-2 align-middle">
+                        <div className="flex items-center justify-center gap-2">
+                          <Avatar
+                            src={avatarUrl}
+                            fallbackSrc={avatarUrl?.replace(/\.jpg$/i, '.png')}
+                            fullName={nome}
+                            size="sm"
+                            className="h-8 w-8 shrink-0 text-[10px]"
+                          />
+                          <span className="font-medium text-slate-900">{nome}</span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-2 align-middle">{d.area ?? '—'}</td>
+                      <td className="px-2 py-2 align-middle tabular-nums">
+                        {d.progresso_anterior != null
+                          ? formatPercent(d.progresso_anterior)
+                          : '—'}
+                      </td>
+                      <td className="px-2 py-2 align-middle tabular-nums">
+                        {d.progresso != null ? formatPercent(d.progresso) : '—'}
+                      </td>
+                      <td className="px-2 py-2 align-middle">{d.evidencias_execucao ?? '—'}</td>
+                      <td className="px-2 py-2 align-middle tabular-nums">
+                        {d.one_a_one != null ? d.one_a_one : '—'}
+                      </td>
+                      <td className="max-w-md whitespace-pre-line px-2 py-2 align-middle text-xs text-slate-600">
+                        {d.desvio_criterio_apuracao?.trim() || '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

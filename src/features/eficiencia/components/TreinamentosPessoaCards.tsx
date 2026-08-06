@@ -2,9 +2,11 @@ import { useMemo } from 'react'
 import { Check, GraduationCap, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/shared/components/Avatar'
+import { formatDate } from '@/shared/utils/format'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
+import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import type { TreinamentoItemRow, TreinamentosPorPessoaRow } from '../types/eficiencia.types'
 
 const META_MINUTOS = 14 * 60
@@ -69,6 +71,11 @@ export function TreinamentosPessoaCards({ porPessoa, itens, loading }: Props) {
         const minutos = Number(p.minutos_lancados ?? 0)
         const atingiu = minutos >= META_MINUTOS
         const pct = Math.min(100, (minutos / META_MINUTOS) * 100)
+        const nomeExibicao = resolvePessoaDisplayNome(
+          p.colaborador,
+          teamMembers,
+          avatarCatalog,
+        )
         const avatarUrl = resolvePessoaAvatarUrl(p.colaborador, teamMembers, avatarCatalog)
         const lista = itensPorPessoa.get(normalizeNome(p.colaborador)) ?? []
 
@@ -81,15 +88,15 @@ export function TreinamentosPessoaCards({ porPessoa, itens, loading }: Props) {
               <Avatar
                 src={avatarUrl}
                 fallbackSrc={avatarUrl?.replace(/\.jpg$/i, '.png')}
-                fullName={p.colaborador}
+                fullName={nomeExibicao}
                 size="lg"
-                className="h-12 w-12 text-sm"
+                className="h-14 w-14 text-sm"
               />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-semibold text-slate-900">
-                      {p.colaborador}
+                      {nomeExibicao}
                     </h3>
                     <p className="mt-0.5 text-xs text-slate-500">
                       {formatHorasMinutos(minutos)}
@@ -133,7 +140,14 @@ export function TreinamentosPessoaCards({ porPessoa, itens, loading }: Props) {
                   >
                     <span className="flex min-w-0 items-start gap-2 text-slate-700">
                       <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-rose-500" aria-hidden />
-                      <span className="truncate">{item.treinamento || 'Treinamento'}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate">
+                          {item.treinamento || 'Treinamento'}
+                        </span>
+                        <span className="mt-0.5 block tabular-nums text-[11px] text-slate-400">
+                          {item.data ? formatDate(item.data) : '—'}
+                        </span>
+                      </span>
                     </span>
                     <span className="shrink-0 tabular-nums text-slate-500">
                       {formatHorasMinutos(item.duracao_minutos)}

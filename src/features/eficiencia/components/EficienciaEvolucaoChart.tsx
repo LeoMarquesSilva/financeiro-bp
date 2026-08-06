@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import {
   CartesianGrid,
+  LabelList,
   Line,
   LineChart,
   ReferenceLine,
@@ -67,6 +68,50 @@ function EvolucaoTooltip({
   )
 }
 
+function EvolucaoPointLabel(props: {
+  x?: number | string
+  y?: number | string
+  value?: number | string | null
+  index?: number
+  total?: number
+}) {
+  const { x, y, value, index, total } = props
+  if (value == null) return null
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num)) return null
+
+  const cx = Number(x ?? 0)
+  const cy = Number(y ?? 0)
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null
+
+  // Inverte para baixo se o ponto estiver alto demais (evita corte no topo)
+  const above = cy >= 22
+  const labelY = above ? cy - 12 : cy + 16
+  const anchor =
+    index == null || total == null || total <= 1
+      ? 'middle'
+      : index <= 0
+        ? 'start'
+        : index >= total - 1
+          ? 'end'
+          : 'middle'
+
+  return (
+    <text
+      x={cx}
+      y={labelY}
+      textAnchor={anchor}
+      dominantBaseline={above ? 'auto' : 'hanging'}
+      fill="#334155"
+      fontSize={11}
+      fontWeight={600}
+      className="tabular-nums"
+    >
+      {formatPercent(num)}
+    </text>
+  )
+}
+
 export function EficienciaEvolucaoChart({
   title,
   subtitle,
@@ -76,6 +121,7 @@ export function EficienciaEvolucaoChart({
   onRacionalClick,
 }: Props) {
   const chartExportRef = useRef<HTMLDivElement>(null)
+  const pointCount = data.length
 
   const chartData = data.map((d) => ({
     mesLabel: MESES_LABEL[d.mes - 1] ?? String(d.mes),
@@ -103,9 +149,9 @@ export function EficienciaEvolucaoChart({
 
       {/* ref no wrapper; data-chart-plot no filho — copyChartImage usa querySelector nos descendentes */}
       <div ref={chartExportRef} className="w-full">
-        <div data-chart-plot className="h-[280px] w-full">
-          <ResponsiveContainer width="100%" height="100%" minHeight={280}>
-            <LineChart data={chartData} margin={{ left: 4, right: 16, top: 16, bottom: 4 }}>
+        <div data-chart-plot className="h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+            <LineChart data={chartData} margin={{ left: 4, right: 20, top: 28, bottom: 4 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
               <XAxis dataKey="mesLabel" tick={AXIS_TICK} axisLine={false} tickLine={false} />
               <YAxis
@@ -113,8 +159,9 @@ export function EficienciaEvolucaoChart({
                 tick={AXIS_TICK}
                 axisLine={false}
                 tickLine={false}
-                width={48}
+                width={52}
                 domain={[0, 100]}
+                padding={{ top: 18 }}
               />
               <Tooltip content={<EvolucaoTooltip />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '4 4' }} />
               {metaFixa != null && (
@@ -131,9 +178,26 @@ export function EficienciaEvolucaoChart({
                 name={title}
                 stroke={color}
                 strokeWidth={2.5}
-                dot={{ r: 3, fill: color, strokeWidth: 0 }}
-                activeDot={{ r: 5, fill: color, stroke: '#fff', strokeWidth: 2 }}
-              />
+                dot={{ r: 4, fill: color, strokeWidth: 0 }}
+                activeDot={{ r: 6, fill: color, stroke: '#fff', strokeWidth: 2 }}
+              >
+                <LabelList
+                  dataKey="valor"
+                  content={(props) => (
+                    <EvolucaoPointLabel
+                      x={props.x}
+                      y={props.y}
+                      value={
+                        props.value == null || typeof props.value === 'boolean'
+                          ? null
+                          : (props.value as number | string)
+                      }
+                      index={typeof props.index === 'number' ? props.index : undefined}
+                      total={pointCount}
+                    />
+                  )}
+                />
+              </Line>
             </LineChart>
           </ResponsiveContainer>
         </div>

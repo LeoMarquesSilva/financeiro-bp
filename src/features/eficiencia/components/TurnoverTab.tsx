@@ -1,8 +1,13 @@
 import { useState } from 'react'
 import { UserMinus } from 'lucide-react'
+import { Avatar } from '@/shared/components/Avatar'
 import { formatDate, formatPercent } from '@/shared/utils/format'
+import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import type { MesFiltroEficiencia } from '../constants'
 import { useTurnover } from '../hooks/useEficiencia'
+import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
+import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
+import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { AreaFilterButtons } from './AreaFilterButtons'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
@@ -27,6 +32,8 @@ export function TurnoverTab({ ano, mesFiltro }: Props) {
   const [area, setArea] = useState<string | null>(null)
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { anual, desligamentos, top5, loading } = useTurnover(ano, area)
+  const { teamMembers } = useTeamMembers()
+  const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const mesRacional: MesFiltroEficiencia =
     mesFiltro === 'resultado' ? null : mesFiltro
   const desligamentosFiltrados = area ? desligamentos.filter((d) => d.area === area) : desligamentos
@@ -79,19 +86,32 @@ export function TurnoverTab({ ano, mesFiltro }: Props) {
           <p className="py-6 text-center text-sm text-slate-400">Sem dados de colaboradores ativos.</p>
         ) : (
           <ul className="divide-y divide-slate-50">
-            {top5Filtrado.map((p) => (
-              <li key={p.nome} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-slate-900">{p.nome}</p>
-                  <p className="text-xs text-slate-400">
-                    {p.cargo ?? '—'} · {p.area ?? '—'}
-                  </p>
-                </div>
-                <span className="shrink-0 font-semibold tabular-nums text-slate-700">
-                  {formatMeses(p.meses_casa)}
-                </span>
-              </li>
-            ))}
+            {top5Filtrado.map((p) => {
+              const nome = resolvePessoaDisplayNome(p.nome, teamMembers, avatarCatalog)
+              const avatarUrl = resolvePessoaAvatarUrl(p.nome, teamMembers, avatarCatalog)
+              return (
+                <li key={p.nome} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Avatar
+                      src={avatarUrl}
+                      fallbackSrc={avatarUrl?.replace(/\.jpg$/i, '.png')}
+                      fullName={nome}
+                      size="md"
+                      className="h-9 w-9 shrink-0 text-xs"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-900">{nome}</p>
+                      <p className="text-xs text-slate-400">
+                        {p.cargo ?? '—'} · {p.area ?? '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 font-semibold tabular-nums text-slate-700">
+                    {formatMeses(p.meses_casa)}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>
@@ -115,15 +135,30 @@ export function TurnoverTab({ ano, mesFiltro }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {desligamentosFiltrados.map((d, i) => (
-                  <tr key={i} className="text-slate-700">
-                    <td className="py-2 pr-3 font-medium text-slate-900">{d.nome}</td>
-                    <td className="py-2 pr-3">{d.area ?? '—'}</td>
-                    <td className="py-2 pr-3">{d.tipo_desligamento ?? '—'}</td>
-                    <td className="py-2 pr-3">{formatDate(d.desligamento)}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{formatMeses(d.meses_casa)}</td>
-                  </tr>
-                ))}
+                {desligamentosFiltrados.map((d, i) => {
+                  const nome = resolvePessoaDisplayNome(d.nome, teamMembers, avatarCatalog)
+                  const avatarUrl = resolvePessoaAvatarUrl(d.nome, teamMembers, avatarCatalog)
+                  return (
+                    <tr key={i} className="text-slate-700">
+                      <td className="py-2 pr-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <Avatar
+                            src={avatarUrl}
+                            fallbackSrc={avatarUrl?.replace(/\.jpg$/i, '.png')}
+                            fullName={nome}
+                            size="sm"
+                            className="h-8 w-8 shrink-0 text-[10px]"
+                          />
+                          <span className="truncate font-medium text-slate-900">{nome}</span>
+                        </div>
+                      </td>
+                      <td className="py-2 pr-3">{d.area ?? '—'}</td>
+                      <td className="py-2 pr-3">{d.tipo_desligamento ?? '—'}</td>
+                      <td className="py-2 pr-3">{formatDate(d.desligamento)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{formatMeses(d.meses_casa)}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

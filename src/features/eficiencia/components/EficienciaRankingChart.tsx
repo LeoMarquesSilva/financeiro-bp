@@ -15,6 +15,7 @@ import { formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
+import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 
@@ -65,18 +66,18 @@ function AvatarYTick({
 }) {
   const label = String(payload?.value ?? '')
   const url = avatarByLabel.get(label) ?? null
-  const size = compact ? 14 : 16
+  const size = compact ? 20 : 24
   const tx = Number(x ?? 0)
   const ty = Number(y ?? 0)
   return (
     <g transform={`translate(${Number.isFinite(tx) ? tx : 0},${Number.isFinite(ty) ? ty : 0})`}>
       <text
-        x={url ? -(size + 8) : -4}
+        x={url ? -(size + 10) : -4}
         y={0}
         dy="0.35em"
         textAnchor="end"
         fill="#1e293b"
-        fontSize={compact ? 10 : 11}
+        fontSize={compact ? 11 : 12}
         fontWeight={600}
       >
         {label}
@@ -214,17 +215,19 @@ export function EficienciaRankingChart({
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
 
-  // Compact ≈ +10% em relação à versão bem reduzida (17px / fonte 9)
-  const rowH = compact ? 19 : 28
-  const axisTick = { fontSize: compact ? 10 : 11, fill: '#64748b' }
+  const rowH = compact ? 26 : 34
+  const axisTick = { fontSize: compact ? 11 : 12, fill: '#64748b' }
 
   const chartData = useMemo(() => {
     return rows.slice(0, maxItems).map((row, i) => {
-      const full = String(row[labelKey] ?? '').trim()
+      const rawLabel = String(row[labelKey] ?? '').trim()
+      const full = showAvatars
+        ? resolvePessoaDisplayNome(rawLabel, teamMembers, avatarCatalog)
+        : rawLabel
       const raw = row[valueKey]
       const value = typeof raw === 'number' ? raw : Number(raw)
       const avatarUrl = showAvatars
-        ? resolvePessoaAvatarUrl(full, teamMembers, avatarCatalog)
+        ? resolvePessoaAvatarUrl(rawLabel, teamMembers, avatarCatalog)
         : null
       return {
         ...row,
@@ -259,10 +262,10 @@ export function EficienciaRankingChart({
         chartData.map((d) => d._label),
         truncateLabels,
         compact,
-      )) + (showAvatars ? 20 : 0)
+      )) + (showAvatars ? 30 : 0)
   const chartHeight = Math.max(
-    compact ? 110 : 160,
-    chartData.length * rowH + (compact ? 16 : 36),
+    compact ? 140 : 180,
+    chartData.length * rowH + (compact ? 20 : 40),
   )
   const truncated = rows.length > maxItems
 
@@ -339,7 +342,7 @@ export function EficienciaRankingChart({
       </div>
 
       {loading ? (
-        <div className={cn('animate-pulse rounded-lg bg-slate-100', compact ? 'h-28' : 'h-40')} />
+        <div className={cn('animate-pulse rounded-lg bg-slate-100', compact ? 'h-36' : 'h-44')} />
       ) : chartData.length === 0 ? (
         <p className={cn('text-center text-slate-400', compact ? 'py-4 text-xs' : 'py-6 text-sm')}>
           {emptyLabel}
@@ -351,18 +354,18 @@ export function EficienciaRankingChart({
             <ResponsiveContainer
               width="100%"
               height="100%"
-              minHeight={compact ? 110 : 160}
+              minHeight={compact ? 140 : 180}
             >
               <BarChart
                 data={chartData}
                 layout="vertical"
                 margin={{
                   left: 2,
-                  right: compact ? 40 : 52,
+                  right: compact ? 44 : 56,
                   top: 2,
                   bottom: 2,
                 }}
-                barCategoryGap={compact ? '14%' : '22%'}
+                barCategoryGap={compact ? '12%' : '18%'}
               >
                 <CartesianGrid
                   horizontal={false}
@@ -417,7 +420,7 @@ export function EficienciaRankingChart({
                   name={valueLabel}
                   fill={color}
                   radius={[0, 2, 2, 0]}
-                  maxBarSize={compact ? 9 : biStyle ? 12 : 14}
+                  maxBarSize={compact ? 14 : biStyle ? 18 : 20}
                 >
                   <LabelList
                     dataKey="_value"

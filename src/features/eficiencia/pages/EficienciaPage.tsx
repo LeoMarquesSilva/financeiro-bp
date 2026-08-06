@@ -19,8 +19,9 @@ import { ReceitaBrutaTab } from '../components/ReceitaBrutaTab'
 import { InadimplenciaTab } from '../components/InadimplenciaTab'
 import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab'
 
-const ANO_ATUAL = new Date().getFullYear()
-const ANOS = Array.from({ length: 4 }, (_, i) => ANO_ATUAL - i)
+/** Ano padrão da tela (sempre o corrente). 2025 fica disponível só para comparativo anual. */
+const ANO_PADRAO = 2026
+const ANOS_COMPARATIVO = [2026, 2025] as const
 
 function EficienciaTabPanel({
   tab,
@@ -82,7 +83,7 @@ function EficienciaTabPanel({
 }
 
 export function EficienciaPage() {
-  const [ano, setAno] = useState(ANO_ATUAL)
+  const [ano, setAno] = useState(ANO_PADRAO)
   const [tab, setTab] = useState<EficienciaTabId>('overview')
   const [areaOverview, setAreaOverview] = useState<string | null>(null)
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
@@ -92,7 +93,7 @@ export function EficienciaPage() {
     <div className="space-y-6">
       <EficienciaHeader
         ano={ano}
-        anos={ANOS}
+        anos={[...ANOS_COMPARATIVO]}
         onAnoChange={setAno}
         ultimaAtualizacao={overview?.ultimaAtualizacao}
       />

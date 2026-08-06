@@ -1,9 +1,7 @@
 import { Gauge, RefreshCcw } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/shared/utils/format'
 import type { UltimaAtualizacaoRow } from '../types/eficiencia.types'
-
-const SELECT_CLASS =
-  'flex h-8 min-w-[90px] rounded-lg border border-slate-200 bg-white px-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2'
 
 type Props = {
   ano: number
@@ -11,6 +9,11 @@ type Props = {
   onAnoChange: (ano: number) => void
   ultimaAtualizacao?: UltimaAtualizacaoRow[]
 }
+
+const BTN =
+  'inline-flex h-8 min-w-[4.5rem] items-center justify-center rounded-lg border px-3 text-sm font-semibold transition-all'
+const BTN_ON = 'border-slate-800 bg-slate-800 text-white shadow-sm'
+const BTN_OFF = 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
 
 export function EficienciaHeader({ ano, anos, onAnoChange, ultimaAtualizacao }: Props) {
   const maisRecente = ultimaAtualizacao?.length
@@ -29,25 +32,31 @@ export function EficienciaHeader({ ano, anos, onAnoChange, ultimaAtualizacao }: 
         </p>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {maisRecente && (
           <span className="flex items-center gap-1.5 text-xs text-slate-400" title={`Fonte: ${maisRecente.fonte}`}>
             <RefreshCcw className="h-3.5 w-3.5" />
             Atualizado em {formatDateTime(maisRecente.executado_em)}
           </span>
         )}
-        <select
-          value={ano}
-          onChange={(e) => onAnoChange(Number(e.target.value))}
-          className={SELECT_CLASS}
-          title="Ano de referência"
+        <div
+          className="flex items-center gap-1.5"
+          role="group"
+          aria-label="Ano de referência"
+          title="Use 2025 apenas para comparativo anual"
         >
           {anos.map((a) => (
-            <option key={a} value={a}>
+            <button
+              key={a}
+              type="button"
+              onClick={() => onAnoChange(a)}
+              className={cn(BTN, ano === a ? BTN_ON : BTN_OFF)}
+              aria-pressed={ano === a}
+            >
               {a}
-            </option>
+            </button>
           ))}
-        </select>
+        </div>
       </div>
     </header>
   )
