@@ -15,26 +15,25 @@ export const AREAS_EFICIENCIA = [
 export const EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL = 'Trabalhista' as const
 
 /**
- * Operações Legais não entra no filtro de área de Ciência Agendamentos nem SLAs de Vistagem —
- * esses indicadores permanecem na visão consolidada (mesma regra do BI).
+ * Slicer Operações Legais: Ciência Agendamentos e SLAs de Vistagem ficam sem dado (`-`),
+ * como Trabalhista em Vistagem Normal — não há KPI por área nesses indicadores.
  */
 export const EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM = 'Operações Legais' as const
 
-/** null quando o slicer de área não deve afetar Agendamento/Vistagem. */
-export function areaFiltroAgendamentoVistagem(area: string | null): string | null {
-  return area === EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM ? null : area
+export function isAgendamentoVistagemIndisponivelPorArea(area: string | null): boolean {
+  return area === EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM
 }
 
-const INDICADORES_SEM_FILTRO_OPS_LEGAIS = new Set([
+const INDICADORES_INDISPONIVEIS_OPS_LEGAIS = new Set([
   'sla_ciencia_agendamentos',
   'sla_vistagem_risco',
   'sla_vistagem_normal',
 ])
 
-/** Área efetiva por indicador (Overview, abas e Racional). */
+/** Área efetiva por indicador (Overview, abas e Racional). Ops Legais → sem série nesses KPIs. */
 export function areaFiltroParaIndicador(indicador: string, area: string | null): string | null {
-  if (INDICADORES_SEM_FILTRO_OPS_LEGAIS.has(indicador)) {
-    return areaFiltroAgendamentoVistagem(area)
+  if (INDICADORES_INDISPONIVEIS_OPS_LEGAIS.has(indicador) && isAgendamentoVistagemIndisponivelPorArea(area)) {
+    return null
   }
   return area
 }

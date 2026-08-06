@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
+import { isAgendamentoVistagemIndisponivelPorArea } from '../constants'
 import { useSlaVistagem, useSlaVistagemRanking } from '../hooks/useEficiencia'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
@@ -18,9 +19,11 @@ export function SlaVistagemTab({ ano, risco }: Props) {
   const { data: mensal, loading } = useSlaVistagem(ano, risco, area)
   const { data: ranking, loading: loadingRanking } = useSlaVistagemRanking(ano, mesFiltro, risco)
 
-  const totalPublicacoes = mensal.reduce((s, m) => s + m.total, 0)
-  const totalVistadoD1 = mensal.reduce((s, m) => s + m.vistado_d1, 0)
-  const pctGeral = totalPublicacoes > 0 ? (totalVistadoD1 / totalPublicacoes) * 100 : 0
+  const indisponivel = isAgendamentoVistagemIndisponivelPorArea(area)
+  const totalPublicacoes = indisponivel ? 0 : mensal.reduce((s, m) => s + m.total, 0)
+  const totalVistadoD1 = indisponivel ? 0 : mensal.reduce((s, m) => s + m.vistado_d1, 0)
+  const pctGeral =
+    !indisponivel && totalPublicacoes > 0 ? (totalVistadoD1 / totalPublicacoes) * 100 : null
 
   const mesAtual = new Date().getMonth() + 1
   const rowMesAtual = mensal.find((m) => m.mes === mesAtual)
@@ -32,8 +35,12 @@ export function SlaVistagemTab({ ano, risco }: Props) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title={`SLA D+1 no ano (${risco ? 'demanda de risco' : 'demanda comum'})`}
-          value={formatPercent(pctGeral)}
-          hint={`${totalVistadoD1} de ${totalPublicacoes} publicações`}
+          value={pctGeral != null ? formatPercent(pctGeral) : '—'}
+          hint={
+            indisponivel
+              ? 'Indicador não se aplica a Operações Legais'
+              : `${totalVistadoD1} de ${totalPublicacoes} publicações`
+          }
           icon={ShieldCheck}
           accentClass="bg-sky-100 text-sky-700"
           loading={loading}

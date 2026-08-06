@@ -2,8 +2,8 @@ import { supabase } from '@/lib/supabaseClient'
 import {
   EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO,
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
-  areaFiltroAgendamentoVistagem,
   areaFiltroParaIndicador,
+  isAgendamentoVistagemIndisponivelPorArea,
   type MesFiltroEficiencia,
 } from '../constants'
 import type {
@@ -232,11 +232,12 @@ export const eficienciaService = {
     risco: boolean | null,
     area: string | null = null,
   ): Promise<SlaVistagemMesRow[]> {
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
     if (risco === false && area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) return []
     return rpc('eficiencia_sla_vistagem_mensal', {
       p_ano: ano,
       p_risco: risco,
-      p_area: areaFiltroAgendamentoVistagem(area),
+      p_area: area,
     })
   },
 
@@ -274,9 +275,10 @@ export const eficienciaService = {
   },
 
   async fetchAgendamentoMensal(ano: number, area: string | null = null): Promise<AgendamentoMesRow[]> {
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
     return rpc('eficiencia_agendamento_mensal', {
       p_ano: ano,
-      p_area: areaFiltroAgendamentoVistagem(area),
+      p_area: area,
     })
   },
 
@@ -388,6 +390,15 @@ export const eficienciaService = {
         truncado: false,
       }
     }
+    if (
+      isAgendamentoVistagemIndisponivelPorArea(area) &&
+      (indicador === 'sla_ciencia_agendamentos' ||
+        indicador === 'sla_vistagem_risco' ||
+        indicador === 'sla_vistagem_normal')
+    ) {
+      const cfgVazio = RACIONAL_CONFIG[indicador]
+      return { colunas: cfgVazio.colunas, linhas: [], truncado: false }
+    }
     const cfg = RACIONAL_CONFIG[indicador]
 
     if (indicador === 'desenvolvimento_equipe') {
@@ -435,6 +446,15 @@ export const eficienciaService = {
         linhas: [],
         truncado: false,
       }
+    }
+    if (
+      isAgendamentoVistagemIndisponivelPorArea(area) &&
+      (indicador === 'sla_ciencia_agendamentos' ||
+        indicador === 'sla_vistagem_risco' ||
+        indicador === 'sla_vistagem_normal')
+    ) {
+      const cfgVazio = RACIONAL_CONFIG[indicador]
+      return { colunas: cfgVazio.colunas, linhas: [], truncado: false }
     }
 
     const cfg = RACIONAL_CONFIG[indicador]

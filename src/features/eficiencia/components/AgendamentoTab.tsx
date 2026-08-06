@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CalendarCheck2 } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
+import { isAgendamentoVistagemIndisponivelPorArea } from '../constants'
 import { useAgendamento, useAgendamentoRanking } from '../hooks/useEficiencia'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
@@ -13,10 +14,11 @@ export function AgendamentoTab({ ano }: { ano: number }) {
   const { data: mensal, loading } = useAgendamento(ano, area)
   const { data: ranking, loading: loadingRanking } = useAgendamentoRanking(ano, mesFiltro)
 
-  const dentroPrazo = mensal.reduce((s, m) => s + m.dentro_prazo, 0)
-  const foraPrazo = mensal.reduce((s, m) => s + m.fora_prazo, 0)
+  const indisponivel = isAgendamentoVistagemIndisponivelPorArea(area)
+  const dentroPrazo = indisponivel ? 0 : mensal.reduce((s, m) => s + m.dentro_prazo, 0)
+  const foraPrazo = indisponivel ? 0 : mensal.reduce((s, m) => s + m.fora_prazo, 0)
   const totalGeral = dentroPrazo + foraPrazo
-  const pctGeral = totalGeral > 0 ? (dentroPrazo / totalGeral) * 100 : 0
+  const pctGeral = !indisponivel && totalGeral > 0 ? (dentroPrazo / totalGeral) * 100 : null
 
   const mesAtual = new Date().getMonth() + 1
   const rowMesAtual = mensal.find((m) => m.mes === mesAtual)
@@ -28,8 +30,12 @@ export function AgendamentoTab({ ano }: { ano: number }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="Agendamento/Ciência D+1 no ano"
-          value={formatPercent(pctGeral)}
-          hint={`${dentroPrazo} de ${totalGeral} tarefas dentro do prazo`}
+          value={pctGeral != null ? formatPercent(pctGeral) : '—'}
+          hint={
+            indisponivel
+              ? 'Indicador não se aplica a Operações Legais'
+              : `${dentroPrazo} de ${totalGeral} tarefas dentro do prazo`
+          }
           icon={CalendarCheck2}
           accentClass="bg-amber-100 text-amber-700"
           loading={loading}

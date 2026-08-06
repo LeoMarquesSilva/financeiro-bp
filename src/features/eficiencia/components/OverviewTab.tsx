@@ -11,6 +11,7 @@ import { RacionalSheet } from './RacionalSheet'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
   EFICIENCIA_META_SLA_PROTOCOLO,
+  isAgendamentoVistagemIndisponivelPorArea,
   isMesesFiltro,
   mesNoFiltro,
   type MesFiltroEficiencia,
@@ -43,6 +44,12 @@ const RACIONAL_TITULOS: Record<RacionalIndicador, string> = {
 }
 
 const PCT0 = (v: number) => `${v.toFixed(2)}%`
+
+const CELULAS_VAZIAS: HeatCell[] = Array.from({ length: 12 }, () => ({
+  value: null,
+  label: '-',
+}))
+const ACUMULADO_VAZIO: HeatCell = { value: null, label: '-' }
 
 /** Monta as 12 células (Jan-Dez) de uma linha heat-strip a partir de um array mensal esparso. */
 function buildCells<T extends { mes: number }>(
@@ -194,13 +201,27 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
     return metas.length > 0 ? Math.min(...metas) : EFICIENCIA_META_SLA_PROTOCOLO
   })()
 
-  const vistagemNormalIndisponivel = area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
+  const vistagemNormalIndisponivel =
+    area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL || isAgendamentoVistagemIndisponivelPorArea(area)
+  const agendamentoVistagemOpsLegais = isAgendamentoVistagemIndisponivelPorArea(area)
   const cellsVistagemNormal: HeatCell[] = vistagemNormalIndisponivel
-    ? Array.from({ length: 12 }, () => ({ value: null, label: '-' }))
+    ? CELULAS_VAZIAS
     : aplicarCelulasFiltro(buildCells(data.slaVistagemComum, (r) => r.pct_d1), mesFiltro, ano)
   const acumuladoVistagemComumExibicao: HeatCell = vistagemNormalIndisponivel
-    ? { value: null, label: '-' }
+    ? ACUMULADO_VAZIO
     : acumuladoVistagemComum
+  const cellsAgendamento: HeatCell[] = agendamentoVistagemOpsLegais
+    ? CELULAS_VAZIAS
+    : aplicarCelulasFiltro(buildCells(data.agendamento, (r) => r.pct_dentro_prazo), mesFiltro, ano)
+  const acumuladoAgendamentoExibicao: HeatCell = agendamentoVistagemOpsLegais
+    ? ACUMULADO_VAZIO
+    : acumuladoAgendamento
+  const cellsVistagemRisco: HeatCell[] = agendamentoVistagemOpsLegais
+    ? CELULAS_VAZIAS
+    : aplicarCelulasFiltro(buildCells(data.slaVistagemRisco, (r) => r.pct_d1), mesFiltro, ano)
+  const acumuladoVistagemRiscoExibicao: HeatCell = agendamentoVistagemOpsLegais
+    ? ACUMULADO_VAZIO
+    : acumuladoVistagemRisco
 
   const receitaBruta = financeiroKpis
     ? buildOverviewReceitaBruta(financeiroKpis.meses, financeiroKpis.rows, ano, mesFiltro)
@@ -230,8 +251,8 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
   const resultadosRacional: Record<RacionalIndicador, HeatCell> = {
     sla_protocolo: acumuladoSlaProtocolo,
     eficiencia_protocolo: acumuladoEficienciaProtocolo,
-    sla_ciencia_agendamentos: acumuladoAgendamento,
-    sla_vistagem_risco: acumuladoVistagemRisco,
+    sla_ciencia_agendamentos: acumuladoAgendamentoExibicao,
+    sla_vistagem_risco: acumuladoVistagemRiscoExibicao,
     sla_vistagem_normal: acumuladoVistagemComumExibicao,
     desenvolvimento_equipe: acumuladoTreinamentos,
     retencao_talentos: retencaoCell,
@@ -368,25 +389,25 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           title="SLA Ciência Agendamentos"
           meta={95}
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(
-            buildCells(data.agendamento, (r) => r.pct_dentro_prazo),
-            mesFiltro,
-            ano,
-          )}
-          acumulado={acumuladoAgendamento}
-          onRacionalClick={() => setRacionalAberto('sla_ciencia_agendamentos')}
+          cells={cellsAgendamento}
+          acumulado={acumuladoAgendamentoExibicao}
+          onRacionalClick={
+            agendamentoVistagemOpsLegais
+              ? undefined
+              : () => setRacionalAberto('sla_ciencia_agendamentos')
+          }
         />
         <OverviewKpiHeatRow
           title="SLA Vistagem Risco"
           meta={98}
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(
-            buildCells(data.slaVistagemRisco, (r) => r.pct_d1),
-            mesFiltro,
-            ano,
-          )}
-          acumulado={acumuladoVistagemRisco}
-          onRacionalClick={() => setRacionalAberto('sla_vistagem_risco')}
+          cells={cellsVistagemRisco}
+          acumulado={acumuladoVistagemRiscoExibicao}
+          onRacionalClick={
+            agendamentoVistagemOpsLegais
+              ? undefined
+              : () => setRacionalAberto('sla_vistagem_risco')
+          }
         />
         <OverviewKpiHeatRow
           title="SLA Vistagem Normal"
