@@ -3,8 +3,10 @@ import { Smile, Award, Trophy } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useEficienciaOverview } from '../hooks/useEficiencia'
 import { EFICIENCIA_TABS, type EficienciaTabId } from '../config/eficienciaTabs'
+import type { MesFiltroEficiencia } from '../constants'
 import { EficienciaHeader } from '../components/EficienciaHeader'
 import { IndicadoresResultadoActions } from '../components/IndicadoresResultadoActions'
+import { MesFilterButtons } from '../components/MesFilterButtons'
 import { OverviewTab } from '../components/OverviewTab'
 import { SlaVistagemTab } from '../components/SlaVistagemTab'
 import { SlaProtocoloTab } from '../components/SlaProtocoloTab'
@@ -20,34 +22,42 @@ import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab
 const ANO_ATUAL = new Date().getFullYear()
 const ANOS = Array.from({ length: 4 }, (_, i) => ANO_ATUAL - i)
 
-function EficienciaTabPanel({ tab, ano }: { tab: EficienciaTabId; ano: number }) {
+function EficienciaTabPanel({
+  tab,
+  ano,
+  mesFiltro,
+}: {
+  tab: EficienciaTabId
+  ano: number
+  mesFiltro: MesFiltroEficiencia
+}) {
   switch (tab) {
     case 'overview':
       return null
     case 'sla-protocolo':
-      return <SlaProtocoloTab ano={ano} />
+      return <SlaProtocoloTab ano={ano} mesFiltro={mesFiltro} />
     case 'eficiencia-protocolo':
-      return <EficienciaProtocoloTab ano={ano} />
+      return <EficienciaProtocoloTab ano={ano} mesFiltro={mesFiltro} />
     case 'sla-ciencia-agendamentos':
-      return <AgendamentoTab ano={ano} />
+      return <AgendamentoTab ano={ano} mesFiltro={mesFiltro} />
     case 'sla-vistagem-risco':
-      return <SlaVistagemTab ano={ano} risco />
+      return <SlaVistagemTab ano={ano} risco mesFiltro={mesFiltro} />
     case 'sla-vistagem-normal':
-      return <SlaVistagemTab ano={ano} risco={false} />
+      return <SlaVistagemTab ano={ano} risco={false} mesFiltro={mesFiltro} />
     case 'desenvolvimento-equipe':
-      return <TreinamentosTab ano={ano} />
+      return <TreinamentosTab ano={ano} mesFiltro={mesFiltro} />
     case 'retencao-talentos':
-      return <TurnoverTab ano={ano} />
+      return <TurnoverTab ano={ano} mesFiltro={mesFiltro} />
     case 'gestao-pdi':
-      return <GestaoPdiTab />
+      return <GestaoPdiTab ano={ano} mesFiltro={mesFiltro} />
     case 'nps':
       return (
         <EficienciaPlaceholderTab title="NPS" icon={Smile} meta="Meta 85%" hint="Sem dado no Overview (BI)." />
       )
     case 'receita-bruta':
-      return <ReceitaBrutaTab ano={ano} />
+      return <ReceitaBrutaTab ano={ano} mesFiltro={mesFiltro} />
     case 'inadimplencia':
-      return <InadimplenciaTab ano={ano} />
+      return <InadimplenciaTab ano={ano} mesFiltro={mesFiltro} />
     case 'reputacao':
       return (
         <EficienciaPlaceholderTab
@@ -75,6 +85,7 @@ export function EficienciaPage() {
   const [ano, setAno] = useState(ANO_ATUAL)
   const [tab, setTab] = useState<EficienciaTabId>('overview')
   const [areaOverview, setAreaOverview] = useState<string | null>(null)
+  const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
   const { data: overview, loading: loadingOverview } = useEficienciaOverview(ano, areaOverview)
 
   return (
@@ -100,19 +111,24 @@ export function EficienciaPage() {
           </TabsList>
         </div>
 
-        <TabsContent value="overview" className="mt-6">
+        <div className="mt-6">
+          <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} />
+        </div>
+
+        <TabsContent value="overview" className="mt-5">
           <OverviewTab
             ano={ano}
             data={overview}
             loading={loadingOverview}
             area={areaOverview}
             onAreaChange={setAreaOverview}
+            mesFiltro={mesFiltro}
           />
         </TabsContent>
 
         {EFICIENCIA_TABS.filter((t) => t.id !== 'overview').map(({ id }) => (
-          <TabsContent key={id} value={id} className="mt-6">
-            <EficienciaTabPanel tab={id} ano={ano} />
+          <TabsContent key={id} value={id} className="mt-5">
+            <EficienciaTabPanel tab={id} ano={ano} mesFiltro={mesFiltro} />
           </TabsContent>
         ))}
       </Tabs>

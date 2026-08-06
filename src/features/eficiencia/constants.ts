@@ -179,3 +179,33 @@ export function toggleMesFiltro(current: MesFiltroEficiencia, mes: number): MesF
   }
   return [...current, mes].sort((a, b) => a - b)
 }
+
+/**
+ * Lista efetiva de meses para RPCs/ranking (`null` = ano inteiro).
+ * Resultado → jun…último mês fechado; array vazio = período sem mês elegível.
+ */
+export function mesesEfetivosFiltro(
+  filtro: MesFiltroEficiencia,
+  ano: number,
+  ref = new Date(),
+): number[] | null {
+  if (filtro == null) return null
+  if (filtro === 'resultado') {
+    const fim = mesFimResultado(ano, ref)
+    if (fim < MES_INICIO_RESULTADO) return []
+    return Array.from(
+      { length: fim - MES_INICIO_RESULTADO + 1 },
+      (_, i) => MES_INICIO_RESULTADO + i,
+    )
+  }
+  return filtro
+}
+
+/** Filtra série mensal pelo mesmo critério do Overview. */
+export function filtrarMensalPorMesFiltro<T extends { mes: number }>(
+  rows: T[],
+  filtro: MesFiltroEficiencia,
+  ano: number,
+): T[] {
+  return rows.filter((r) => mesNoFiltro(r.mes, filtro, ano))
+}

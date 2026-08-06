@@ -6,7 +6,6 @@ import { copyOverviewKpiCardsToClipboard } from '@/shared/utils/copyChartImage'
 import { Button } from '@/components/ui/button'
 import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
 import { AreaFilterButtons } from './AreaFilterButtons'
-import { MesFilterButtons } from './MesFilterButtons'
 import { RacionalSheet } from './RacionalSheet'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
@@ -23,6 +22,7 @@ import {
   buildOverviewInadimplencia,
   buildOverviewReceitaBruta,
 } from '../utils/overviewFinanceiroKpis'
+import { acumuladoGestaoPdi, buildGestaoPdiCells } from '../utils/gestaoPdiCalc'
 import { resolveMetaTexto } from '../utils/overviewKpiMeta'
 
 type Props = {
@@ -31,6 +31,7 @@ type Props = {
   loading: boolean
   area: string | null
   onAreaChange: (area: string | null) => void
+  mesFiltro: MesFiltroEficiencia
 }
 
 const RACIONAL_TITULOS: Record<RacionalIndicador, string> = {
@@ -95,8 +96,14 @@ function formatMetaDesenvolvimentoEquipe(
   return `Meta: ${formatMinutos(treinamentos.meta_minutos)}h (${treinamentos.pessoas_ativas} x 14h)`
 }
 
-export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
-  const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
+export function OverviewTab({
+  ano,
+  data,
+  loading,
+  area,
+  onAreaChange,
+  mesFiltro,
+}: Props) {
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const copyRef = useRef<HTMLDivElement>(null)
@@ -106,7 +113,6 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
   if (loading || !data) {
     return (
       <div className="space-y-3">
-        <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} />
         <AreaFilterButtons value={area} onChange={onAreaChange} />
         {Array.from({ length: 7 }, (_, i) => (
           <div key={i} className="h-16 animate-pulse rounded-lg bg-slate-100" />
@@ -325,17 +331,17 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
   const CopyIcon =
     copyStatus === 'loading' ? Loader2 : copyStatus === 'done' ? Check : Copy
 
-  const acumuladoGestaoPdi: HeatCell =
-    mesFiltro == null ||
-    mesFiltro === 'resultado' ||
-    (isMesesFiltro(mesFiltro) && mesFiltro.includes(6))
-      ? { value: 100, label: '100,00%' }
-      : { value: null, label: '-' }
+  const cellsGestaoPdi = aplicarCelulasFiltro(
+    data ? buildGestaoPdiCells(data.gestaoPdiMensal ?? []) : CELULAS_VAZIAS,
+    mesFiltro,
+    ano,
+  )
+  const acumuladoGestaoPdiCell: HeatCell = data
+    ? acumuladoGestaoPdi(data.gestaoPdiMensal ?? [], mesFiltro, ano)
+    : ACUMULADO_VAZIO
 
   return (
     <div className="space-y-5">
-      <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} />
-
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <AreaFilterButtons value={area} onChange={onAreaChange} />
@@ -440,11 +446,11 @@ export function OverviewTab({ ano, data, loading, area, onAreaChange }: Props) {
           onRacionalClick={() => setRacionalAberto('retencao_talentos')}
         />
         <OverviewKpiHeatRow
-          title="Gestão de PDI**"
+          title="Gestão de PDI"
           meta={100}
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(staticCells({ 6: 100 }), mesFiltro, ano)}
-          acumulado={acumuladoGestaoPdi}
+          cells={cellsGestaoPdi}
+          acumulado={acumuladoGestaoPdiCell}
         />
         <OverviewKpiHeatRow
           title="Receita Bruta"

@@ -106,6 +106,11 @@ export function formatRacionalResumoLabel(resumo: {
     return `Total: ${partes.join(' · ')}`
   }
 
+  // Escopo FATAL não-excludente (gráficos Justificativa / Responsáveis)
+  if (resumo.qtd_fatal != null && resumo.qtd_d1 == null) {
+    return `Total: ${resumo.qtd_fatal} FATAL não-excludente${resumo.qtd_fatal === 1 ? '' : 's'}`
+  }
+
   if (resumo.qtd_inconsistencia != null && resumo.qtd_eficiencia != null) {
     const total = resumo.qtd_total ?? resumo.qtd_inconsistencia + resumo.qtd_eficiencia
     return `Total: ${resumo.qtd_inconsistencia} inconsistência${resumo.qtd_inconsistencia === 1 ? '' : 's'} · ${resumo.qtd_eficiencia} eficiência · ${total} protocolo${total === 1 ? '' : 's'}`

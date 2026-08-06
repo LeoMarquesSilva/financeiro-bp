@@ -1,17 +1,23 @@
 import { useQuery } from '@tanstack/react-query'
+import type { MesFiltroEficiencia } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
 import type {
   AgendamentoMesRow,
   AgendamentoUsuarioRow,
   EficienciaProtocoloMesRow,
+  GestaoPdiDetalheRow,
+  GestaoPdiMesRow,
+  JustificativaFatalRow,
   RankingUsuarioRow,
   SlaProtocoloMesRow,
   SlaVistagemMesRow,
+  TreinamentoItemRow,
   TreinamentosAnualRow,
   TreinamentosPorPessoaRow,
   TurnoverAnualRow,
   TurnoverDesligamentoRow,
   TurnoverTopTempoCasaRow,
+  VistagemDesvioRankingRow,
 } from '../types/eficiencia.types'
 
 export function useEficienciaOverview(ano: number, area: string | null = null) {
@@ -31,13 +37,41 @@ export function useSlaVistagem(ano: number, risco: boolean | null, area: string 
   return { data: rows, loading: isLoading, error, refetch }
 }
 
-export function useSlaVistagemRanking(ano: number, mes: number | null, risco: boolean | null) {
+export function useSlaVistagemRanking(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  risco: boolean | null,
+  area: string | null = null,
+) {
   const { data, error, isLoading } = useQuery({
-    queryKey: ['eficiencia', 'sla-vistagem-ranking', ano, mes, risco],
-    queryFn: () => eficienciaService.fetchSlaVistagemPorUsuario(ano, mes, risco),
+    queryKey: ['eficiencia', 'sla-vistagem-ranking', ano, mesFiltro, risco, area],
+    queryFn: () => eficienciaService.fetchSlaVistagemPorUsuario(ano, mesFiltro, risco, area),
   })
   const rows: RankingUsuarioRow[] = data ?? []
   return { data: rows, loading: isLoading, error }
+}
+
+export function useSlaVistagemDesvioRankings(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  risco: boolean | null,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'sla-vistagem-desvio', ano, mesFiltro, risco, area],
+    queryFn: async () => {
+      const [porUsuario, porTipo, porGrupo] = await Promise.all([
+        eficienciaService.fetchSlaVistagemDesvioPorUsuario(ano, mesFiltro, risco, area),
+        eficienciaService.fetchSlaVistagemDesvioPorTipo(ano, mesFiltro, risco, area),
+        eficienciaService.fetchSlaVistagemDesvioPorGrupo(ano, mesFiltro, risco, area),
+      ])
+      return { porUsuario, porTipo, porGrupo }
+    },
+  })
+  const porUsuario: VistagemDesvioRankingRow[] = data?.porUsuario ?? []
+  const porTipo: VistagemDesvioRankingRow[] = data?.porTipo ?? []
+  const porGrupo: VistagemDesvioRankingRow[] = data?.porGrupo ?? []
+  return { porUsuario, porTipo, porGrupo, loading: isLoading, error }
 }
 
 export function useSlaProtocolo(ano: number, area: string | null = null) {
@@ -49,12 +83,29 @@ export function useSlaProtocolo(ano: number, area: string | null = null) {
   return { data: rows, loading: isLoading, error }
 }
 
-export function useSlaProtocoloRankingFatal(ano: number, mes: number | null) {
+export function useSlaProtocoloRankingFatal(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  area: string | null = null,
+) {
   const { data, error, isLoading } = useQuery({
-    queryKey: ['eficiencia', 'sla-protocolo-ranking', ano, mes],
-    queryFn: () => eficienciaService.fetchSlaProtocoloRankingFatal(ano, mes),
+    queryKey: ['eficiencia', 'sla-protocolo-ranking', ano, mesFiltro, area],
+    queryFn: () => eficienciaService.fetchSlaProtocoloRankingFatal(ano, mesFiltro, area),
   })
   const rows: RankingUsuarioRow[] = data ?? []
+  return { data: rows, loading: isLoading, error }
+}
+
+export function useSlaProtocoloJustificativaFatal(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'sla-protocolo-justificativa', ano, mesFiltro, area],
+    queryFn: () => eficienciaService.fetchSlaProtocoloJustificativaFatal(ano, mesFiltro, area),
+  })
+  const rows: JustificativaFatalRow[] = data ?? []
   return { data: rows, loading: isLoading, error }
 }
 
@@ -67,10 +118,14 @@ export function useEficienciaProtocolo(ano: number, area: string | null = null) 
   return { data: rows, loading: isLoading, error }
 }
 
-export function useEficienciaProtocoloRanking(ano: number, mes: number | null) {
+export function useEficienciaProtocoloRanking(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  area: string | null = null,
+) {
   const { data, error, isLoading } = useQuery({
-    queryKey: ['eficiencia', 'protocolo-ranking', ano, mes],
-    queryFn: () => eficienciaService.fetchEficienciaProtocoloRanking(ano, mes),
+    queryKey: ['eficiencia', 'protocolo-ranking', ano, mesFiltro, area],
+    queryFn: () => eficienciaService.fetchEficienciaProtocoloRanking(ano, mesFiltro, area),
   })
   const rows: RankingUsuarioRow[] = data ?? []
   return { data: rows, loading: isLoading, error }
@@ -85,10 +140,14 @@ export function useAgendamento(ano: number, area: string | null = null) {
   return { data: rows, loading: isLoading, error }
 }
 
-export function useAgendamentoRanking(ano: number, mes: number | null) {
+export function useAgendamentoRanking(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  area: string | null = null,
+) {
   const { data, error, isLoading } = useQuery({
-    queryKey: ['eficiencia', 'agendamento-ranking', ano, mes],
-    queryFn: () => eficienciaService.fetchAgendamentoPorUsuario(ano, mes),
+    queryKey: ['eficiencia', 'agendamento-ranking', ano, mesFiltro, area],
+    queryFn: () => eficienciaService.fetchAgendamentoPorUsuario(ano, mesFiltro, area),
   })
   const rows: AgendamentoUsuarioRow[] = data ?? []
   return { data: rows, loading: isLoading, error }
@@ -116,14 +175,32 @@ export function useTreinamentos(ano: number, area: string | null = null) {
   const { data, error, isLoading } = useQuery({
     queryKey: ['eficiencia', 'treinamentos', ano, area],
     queryFn: async () => {
-      const [anual, porPessoa] = await Promise.all([
+      const [anual, porPessoa, itens] = await Promise.all([
         eficienciaService.fetchTreinamentosAnual(ano, area),
-        eficienciaService.fetchTreinamentosPorPessoa(ano),
+        eficienciaService.fetchTreinamentosPorPessoa(ano, area),
+        eficienciaService.fetchTreinamentosItens(ano),
       ])
-      return { anual, porPessoa }
+      return { anual, porPessoa, itens }
     },
   })
   const anual: TreinamentosAnualRow | null = data?.anual ?? null
   const porPessoa: TreinamentosPorPessoaRow[] = data?.porPessoa ?? []
-  return { anual, porPessoa, loading: isLoading, error }
+  const itens: TreinamentoItemRow[] = data?.itens ?? []
+  return { anual, porPessoa, itens, loading: isLoading, error }
+}
+
+export function useGestaoPdi(ano: number, mesFiltro: MesFiltroEficiencia, area: string | null = null) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'gestao-pdi', ano, mesFiltro, area],
+    queryFn: async () => {
+      const [mensal, detalhe] = await Promise.all([
+        eficienciaService.fetchGestaoPdiMensal(ano, area),
+        eficienciaService.fetchGestaoPdiDetalhe(ano, mesFiltro, area),
+      ])
+      return { mensal, detalhe }
+    },
+  })
+  const mensal: GestaoPdiMesRow[] = data?.mensal ?? []
+  const detalhe: GestaoPdiDetalheRow[] = data?.detalhe ?? []
+  return { mensal, detalhe, loading: isLoading, error }
 }

@@ -5,7 +5,8 @@
  * Fontes (mesmas do BI "DASHBOARD - EFICIÊNCIA OPERACIONAL - GERAL"):
  *  - Listas SharePoint (site CONTROLADORIAJURDICA): protocolos, publicações, treinamentos
  *  - Arquivos em bibliotecas (site Controladoria): Tarefas.csv, Historico/*.csv,
- *    Turnover BP (1).xlsx, Feriados.xlsx, Decisoes Processuais.csv
+ *    Turnover BP (1).xlsx, Feriados.xlsx, Decisoes Processuais.csv,
+ *    Base de Gestão de PDI.xlsx (aba Elegíveis)
  *
  * Uso:
  *   node scripts/sharepoint/sync-sharepoint.mjs                 # todas as fontes
@@ -62,6 +63,25 @@ const SITE_JURIDICA = '/sites/CONTROLADORIAJURDICA'
 const DATA_CORTE_LISTAS_GRANDES = new Date('2025-01-01T00:00:00Z')
 const SITE_CONTROLADORIA = '/sites/Controladoria'
 const BASES_DIR = 'Núcleo de Cadastro/Bases Atualizacoes'
+/** Planilha de Gestão de PDI (aba Elegíveis) — path relativo à biblioteca Documentos Compartilhados. */
+const PDI_XLSX_PATH =
+  'Gestão/DASHBOARDS/FECHAMENTO - LEGAL OPS/Apresentações e Indicadores/Indicadores/Base de Gestão de PDI.xlsx'
+
+const MES_NOME_PARA_NUM = {
+  janeiro: 1,
+  fevereiro: 2,
+  marco: 3,
+  março: 3,
+  abril: 4,
+  maio: 5,
+  junho: 6,
+  julho: 7,
+  agosto: 8,
+  setembro: 9,
+  outubro: 10,
+  novembro: 11,
+  dezembro: 12,
+}
 
 const LISTA_PROTOCOLOS = '4e115aab-39c5-4aab-8d5a-e905f4efd65d'
 const LISTA_PUBLICACOES = '91e8ba11-8248-4a20-9fd9-b66466144ad1'
@@ -267,6 +287,166 @@ function parseXlsxBuffer(buffer, sheetName = null) {
   })
 }
 
+/** Normaliza área com quebras de linha da planilha ("Contratos e \\r\\nSocietário"). */
+function normalizeAreaLabel(v) {
+  const s = strOrNull(v)
+  if (!s) return null
+  return s.replace(/\s+/g, ' ')
+}
+
+/** Alinha rótulos da planilha PDI às áreas do filtro Eficiência (AREAS_EFICIENCIA). */
+function normalizePdiArea(v) {
+  const s = normalizeAreaLabel(v)
+  if (!s) return null
+  if (/^contratos/i.test(s)) return 'Contratos'
+  return s
+}
+
+/**
+ * Aba "Elegíveis" tem cabeçalho em 2 linhas:
+ *   R0: meses (Junho…Dezembro) a cada 3 colunas
+ *   R1: Área | Colaborador | Estrutura | Progresso | Evidências | 1:1 | …
+ * Dados a partir da R2. Normaliza para 1 linha por colaborador × mês.
+ */
+function parsePdiElegiveisBuffer(buffer, ano) {
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+  const sheet = wb.Sheets['Elegíveis']
+  if (!sheet) {
+    throw new Error(
+      `Aba "Elegíveis" não encontrada. Abas: ${(wb.SheetNames ?? []).join(', ')}`,
+    )
+  }
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true })
+  if (!matrix || matrix.length < 3) return []
+
+  const headerMeses = matrix[0] ?? []
+  const blocos = []
+  for (let c = 0; c < headerMeses.length; c++) {
+    const nomeMes = strOrNull(headerMeses[c])
+    if (!nomeMes) continue
+    const chave = nomeMes
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+    const mes = MES_NOME_PARA_NUM[chave] ?? MES_NOME_PARA_NUM[nomeMes.toLowerCase()]
+    if (!mes) continue
+    blocos.push({ mes, colProgresso: c, colEvidencias: c + 1, colOneAOne: c + 2 })
+  }
+  if (blocos.length === 0) {
+    throw new Error('Aba Elegíveis: nenhum mês reconhecido no cabeçalho (linha 1).')
+  }
+
+  const rows = []
+  for (let r = 2; r < matrix.length; r++) {
+    const line = matrix[r] ?? []
+    const colaborador = strOrNull(line[1])
+    if (!colaborador) continue
+    const area = normalizePdiArea(line[0])
+    const estrutura = strOrNull(line[2])
+    for (const b of blocos) {
+      const progresso = numOrNull(line[b.colProgresso])
+      const evidencias_execucao = strOrNull(line[b.colEvidencias])
+      const one_a_one = numOrNull(line[b.colOneAOne])
+      if (progresso == null && evidencias_execucao == null && one_a_one == null) continue
+      rows.push({
+        ano,
+        mes: b.mes,
+        area,
+        colaborador,
+        estrutura,
+        progresso,
+        evidencias_execucao,
+        one_a_one,
+      })
+    }
+  }
+  return rows
+}
+
+const MES_ABREV_PARA_NUM = {
+  jan: 1,
+  fev: 2,
+  mar: 3,
+  abr: 4,
+  mai: 5,
+  jun: 6,
+  jul: 7,
+  ago: 8,
+  set: 9,
+  out: 10,
+  nov: 11,
+  dez: 12,
+}
+
+/** "Jul-26", "Jul/2026", Date Excel → { ano, mes }. */
+function parsePeriodoAnalisadoPdi(v, anoFallback) {
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    return { ano: v.getFullYear(), mes: v.getMonth() + 1 }
+  }
+  const s = strOrNull(v)
+  if (!s) return null
+  const m = s.match(/^([A-Za-zÀ-ÿ]+)\s*[-/\s]\s*(\d{2,4})$/i)
+  if (!m) return null
+  const nome = m[1]
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+  const mes =
+    MES_NOME_PARA_NUM[nome] ??
+    MES_ABREV_PARA_NUM[nome.slice(0, 3)] ??
+    null
+  if (!mes) return null
+  let ano = Number(m[2])
+  if (!Number.isFinite(ano)) return null
+  if (ano < 100) ano += 2000
+  return { ano: ano || anoFallback, mes }
+}
+
+/**
+ * Abas "Desvio …" / "Análise Desvios":
+ * Período | Área | Colaborador | Estrutura | Progresso (ant) | Progresso | Evidências | 1:1 | Desvio Critério de Puração
+ */
+function parsePdiDesviosBuffer(buffer, anoFallback) {
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+  const sheetNames = (wb.SheetNames ?? []).filter(
+    (n) => /desvio/i.test(n) || /an[aá]lise\s*desvios/i.test(n),
+  )
+  if (sheetNames.length === 0) {
+    console.log('[gestao_pdi] nenhuma aba Desvio* / Análise Desvios encontrada')
+    return []
+  }
+
+  const rows = []
+  for (const sheetName of sheetNames) {
+    const sheet = wb.Sheets[sheetName]
+    if (!sheet) continue
+    const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true })
+    if (!matrix || matrix.length < 2) continue
+    console.log(`[gestao_pdi] lendo aba "${sheetName}" (${matrix.length - 1} linhas)`)
+
+    for (let r = 1; r < matrix.length; r++) {
+      const line = matrix[r] ?? []
+      const periodo = parsePeriodoAnalisadoPdi(line[0], anoFallback)
+      const colaborador = strOrNull(line[2])
+      if (!periodo || !colaborador) continue
+      const criterio = strOrNull(line[8])
+      rows.push({
+        ano: periodo.ano,
+        mes: periodo.mes,
+        area: normalizePdiArea(line[1]),
+        colaborador,
+        estrutura: strOrNull(line[3]),
+        progresso_anterior: numOrNull(line[4]),
+        progresso: numOrNull(line[5]),
+        evidencias_execucao: strOrNull(line[6]),
+        one_a_one: numOrNull(line[7]),
+        desvio_criterio_apuracao: criterio ? criterio.replace(/\r\n/g, '\n') : null,
+      })
+    }
+  }
+  return rows
+}
+
 function parseDate(v) {
   if (v == null || v === '') return null
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v
@@ -308,6 +488,39 @@ const FONTES = {
         .filter((r) => r.data)
       const upserted = await replaceAll('sp_feriados', dedupeBy(rows, (r) => r.data), 'data')
       return { upserted, deleted: 0 }
+    },
+  },
+
+  gestao_pdi: {
+    tabela: 'sp_gestao_pdi_elegiveis',
+    async run(ctx) {
+      const anoRef = new Date().getFullYear()
+      const buffer = await fetchDriveFile(ctx.siteControladoria, PDI_XLSX_PATH)
+      console.log(`[gestao_pdi] lendo ${PDI_XLSX_PATH} (ano=${anoRef})`)
+      const elegiveis = parsePdiElegiveisBuffer(buffer, anoRef)
+      const desvios = parsePdiDesviosBuffer(buffer, anoRef)
+      const upsertedElegiveis = await replaceAll(
+        'sp_gestao_pdi_elegiveis',
+        dedupeBy(elegiveis, (r) => `${r.ano}|${r.mes}|${r.colaborador}`),
+        'id',
+      )
+      let upsertedDesvios = 0
+      try {
+        upsertedDesvios = await replaceAll(
+          'sp_gestao_pdi_desvios',
+          dedupeBy(desvios, (r) => `${r.ano}|${r.mes}|${r.colaborador}`),
+          'id',
+        )
+      } catch (e) {
+        console.error(
+          `[gestao_pdi] sp_gestao_pdi_desvios falhou (aplique a migração): ${e.message}`,
+        )
+        throw e
+      }
+      console.log(
+        `[gestao_pdi] elegíveis=${upsertedElegiveis} desvios=${upsertedDesvios}`,
+      )
+      return { upserted: upsertedElegiveis + upsertedDesvios, deleted: 0 }
     },
   },
 
@@ -727,6 +940,7 @@ const FONTES = {
 const ORDEM = [
   'feriados',
   'turnover',
+  'gestao_pdi',
   // usuarios_area (Usuários x Área.xlsx) removido: tabela legada do BI, não usada por RPC/KPI do SIOE.
   'publicacoes',
   'protocolos',

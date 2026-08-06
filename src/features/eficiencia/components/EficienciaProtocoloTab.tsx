@@ -1,24 +1,45 @@
 import { useState } from 'react'
 import { ClipboardCheck } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
+import { filtrarMensalPorMesFiltro, type MesFiltroEficiencia } from '../constants'
 import { useEficienciaProtocolo, useEficienciaProtocoloRanking } from '../hooks/useEficiencia'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
-import { EficienciaRankingTable, pctColumn } from './EficienciaRankingTable'
+import { EficienciaRankingChart } from './EficienciaRankingChart'
 import { AreaFilterButtons } from './AreaFilterButtons'
+import { RacionalSheet } from './RacionalSheet'
+import type { HeatCell } from './OverviewKpiHeatRow'
 
-export function EficienciaProtocoloTab({ ano }: { ano: number }) {
-  const [mesFiltro, setMesFiltro] = useState<number | null>(null)
+const BI_BAR = '#94a3b8'
+
+type Props = {
+  ano: number
+  mesFiltro: MesFiltroEficiencia
+}
+
+export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
   const [area, setArea] = useState<string | null>(null)
+  const [racionalAberto, setRacionalAberto] = useState(false)
   const { data: mensal, loading } = useEficienciaProtocolo(ano, area)
-  const { data: ranking, loading: loadingRanking } = useEficienciaProtocoloRanking(ano, mesFiltro)
+  const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
+  const { data: ranking, loading: loadingRanking } = useEficienciaProtocoloRanking(
+    ano,
+    mesFiltro,
+    area,
+  )
 
-  const semInconsistencia = mensal.reduce((s, m) => s + m.sem_inconsistencia, 0)
-  const total = mensal.reduce((s, m) => s + m.total, 0)
+  const semInconsistencia = mensalFiltrado.reduce((s, m) => s + m.sem_inconsistencia, 0)
+  const total = mensalFiltrado.reduce((s, m) => s + m.total, 0)
   const pctGeral = total > 0 ? (semInconsistencia / total) * 100 : 0
 
   const mesAtual = new Date().getMonth() + 1
-  const rowMesAtual = mensal.find((m) => m.mes === mesAtual)
+  const rowMesAtual = mensalFiltrado.find((m) => m.mes === mesAtual)
+  const areaHint = area ? `Área ${area}` : undefined
+
+  const resultadoRacional: HeatCell = {
+    value: pctGeral,
+    label: formatPercent(pctGeral),
+  }
 
   return (
     <div className="space-y-5">
@@ -26,7 +47,7 @@ export function EficienciaProtocoloTab({ ano }: { ano: number }) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
-          title="Eficiência de Protocolo no ano"
+          title="Eficiência de Protocolo no período"
           value={formatPercent(pctGeral)}
           hint={`${semInconsistencia} de ${total} protocolos sem inconsistência`}
           icon={ClipboardCheck}
@@ -42,7 +63,7 @@ export function EficienciaProtocoloTab({ ano }: { ano: number }) {
           loading={loading}
         />
         <EficienciaKpiCard
-          title="Protocolos no ano"
+          title="Protocolos no período"
           value={String(total)}
           icon={ClipboardCheck}
           accentClass="bg-slate-100 text-slate-700"
@@ -53,34 +74,56 @@ export function EficienciaProtocoloTab({ ano }: { ano: number }) {
       <EficienciaEvolucaoChart
         title="Eficiência de Protocolo"
         subtitle="% de protocolos sem inconsistência jurídica"
-        data={mensal.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia }))}
+        data={mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia }))}
         color="#059669"
+        onRacionalClick={() => setRacionalAberto(true)}
       />
 
-      <div className="flex justify-end">
-        <select
-          value={mesFiltro ?? ''}
-          onChange={(e) => setMesFiltro(e.target.value ? Number(e.target.value) : null)}
-          className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-600 shadow-sm"
-        >
-          <option value="">Ranking: ano todo</option>
-          {mensal.map((m) => (
-            <option key={m.mes} value={m.mes}>
-              Ranking: mês {m.mes}
-            </option>
-          ))}
-        </select>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <EficienciaRankingChart
+          title="% Fatal Responsáveis"
+          subtitle={areaHint}
+          rows={ranking}
+          valueKey="pct_do_total"
+          valueLabel="% do total"
+          formatValue={(v) => formatPercent(v)}
+          pctKey={null}
+          color={BI_BAR}
+          truncateLabels={false}
+          biStyle
+          compact
+          showAvatars
+          loading={loadingRanking}
+          maxItems={9}
+          onRacionalClick={() => setRacionalAberto(true)}
+        />
+        <EficienciaRankingChart
+          title="Qtd Fatal Responsáveis"
+          subtitle={areaHint}
+          rows={ranking}
+          valueKey="qtd_inconsistencia"
+          valueLabel="Inconsistências"
+          pctKey={null}
+          color={BI_BAR}
+          truncateLabels={false}
+          biStyle
+          compact
+          showAvatars
+          loading={loadingRanking}
+          maxItems={9}
+          onRacionalClick={() => setRacionalAberto(true)}
+        />
       </div>
 
-      <EficienciaRankingTable
-        title="Ranking de inconsistência jurídica"
-        subtitle="Por usuário que criou o protocolo"
-        rows={ranking}
-        loading={loadingRanking}
-        columns={[
-          { key: 'qtd_inconsistencia', label: 'Inconsistências' },
-          pctColumn('pct_do_total', '% do total'),
-        ]}
+      <RacionalSheet
+        indicador={racionalAberto ? 'eficiencia_protocolo' : null}
+        titulo="Eficiência Protocolo"
+        ano={ano}
+        mes={mesFiltro}
+        area={area}
+        resultado={resultadoRacional}
+        metaAcumulado={95}
+        onClose={() => setRacionalAberto(false)}
       />
     </div>
   )

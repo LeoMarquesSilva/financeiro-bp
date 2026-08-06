@@ -1,23 +1,40 @@
 import { AlertTriangle } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import type { GestaoVistaMesRow } from '@/features/receita/types/receita.types'
-import { MES_INICIO_RESULTADO } from '../constants'
+import {
+  MES_INICIO_RESULTADO,
+  isMesesFiltro,
+  mesNoFiltro,
+  type MesFiltroEficiencia,
+} from '../constants'
 import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
 import { buildOverviewInadimplencia } from '../utils/overviewFinanceiroKpis'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 
-export function InadimplenciaTab({ ano }: { ano: number }) {
+type Props = {
+  ano: number
+  mesFiltro: MesFiltroEficiencia
+}
+
+export function InadimplenciaTab({ ano, mesFiltro }: Props) {
   const { data, isLoading } = useOverviewFinanceiroKpis(ano)
-  const overview = data ? buildOverviewInadimplencia(data.meses, null, ano) : null
+  const overview = data ? buildOverviewInadimplencia(data.meses, mesFiltro, ano) : null
 
-  const chartData =
-    data?.meses
-      .filter((m: GestaoVistaMesRow) => m.mes >= MES_INICIO_RESULTADO && m.inadimplenciaPct != null)
-      .map((m: GestaoVistaMesRow) => ({ mes: m.mes, valor: m.inadimplenciaPct! })) ?? []
+  const mesesEscopo = (data?.meses ?? []).filter(
+    (m: GestaoVistaMesRow) =>
+      m.mes >= MES_INICIO_RESULTADO && mesNoFiltro(m.mes, mesFiltro, ano),
+  )
 
-  const mesAtual = new Date().getMonth() + 1
-  const rowMesAtual = data?.meses.find((m: GestaoVistaMesRow) => m.mes === mesAtual)
+  const chartData = mesesEscopo
+    .filter((m: GestaoVistaMesRow) => m.inadimplenciaPct != null)
+    .map((m: GestaoVistaMesRow) => ({ mes: m.mes, valor: m.inadimplenciaPct! }))
+
+  const mesDestaque =
+    isMesesFiltro(mesFiltro) && mesFiltro.length === 1
+      ? mesFiltro[0]
+      : new Date().getMonth() + 1
+  const rowMesDestaque = data?.meses.find((m: GestaoVistaMesRow) => m.mes === mesDestaque)
 
   return (
     <div className="space-y-5">
@@ -35,10 +52,16 @@ export function InadimplenciaTab({ ano }: { ano: number }) {
           loading={isLoading}
         />
         <EficienciaKpiCard
-          title="Índice no mês atual"
+          title={
+            isMesesFiltro(mesFiltro) && mesFiltro.length === 1
+              ? 'Índice no mês'
+              : 'Índice no mês atual'
+          }
           value={
-            rowMesAtual?.inadimplenciaPct != null && rowMesAtual.mes >= MES_INICIO_RESULTADO
-              ? formatPercent(rowMesAtual.inadimplenciaPct)
+            rowMesDestaque?.inadimplenciaPct != null &&
+            rowMesDestaque.mes >= MES_INICIO_RESULTADO &&
+            mesNoFiltro(rowMesDestaque.mes, mesFiltro, ano)
+              ? formatPercent(rowMesDestaque.inadimplenciaPct)
               : '—'
           }
           icon={AlertTriangle}
@@ -46,7 +69,7 @@ export function InadimplenciaTab({ ano }: { ano: number }) {
           loading={isLoading}
         />
         <EficienciaKpiCard
-          title="Saldo inadimplência (Jun+)"
+          title="Saldo inadimplência (período)"
           value={
             data
               ? new Intl.NumberFormat('pt-BR', {
@@ -54,9 +77,10 @@ export function InadimplenciaTab({ ano }: { ano: number }) {
                   currency: 'BRL',
                   maximumFractionDigits: 0,
                 }).format(
-                  data.meses
-                    .filter((m: GestaoVistaMesRow) => m.mes >= MES_INICIO_RESULTADO)
-                    .reduce((s: number, m: GestaoVistaMesRow) => s + (m.inadimplencia ?? 0), 0),
+                  mesesEscopo.reduce(
+                    (s: number, m: GestaoVistaMesRow) => s + (m.inadimplencia ?? 0),
+                    0,
+                  ),
                 )
               : '—'
           }

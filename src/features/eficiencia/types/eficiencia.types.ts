@@ -21,6 +21,12 @@ export interface RankingUsuarioRow {
   [key: string]: string | number | undefined
 }
 
+export interface JustificativaFatalRow {
+  justificativa: string
+  qtd: number
+  pct_do_total: number
+}
+
 export interface SlaProtocoloMesRow {
   mes: number
   qtd_d1: number
@@ -98,6 +104,68 @@ export interface TreinamentosPorPessoaRow {
   horas_formatadas: string
 }
 
+export interface TreinamentoItemRow {
+  colaborador: string
+  treinamento: string | null
+  data: string | null
+  duracao_minutos: number
+}
+
+export interface VistagemDesvioRankingRow {
+  usuario?: string
+  tipo_publicacao?: string
+  grupo_cliente?: string
+  qtd_desvio: number
+  pct_do_total: number
+  [key: string]: string | number | undefined
+}
+
+/** Linha bruta de sp_gestao_pdi_elegiveis. */
+export interface GestaoPdiElegivelRow {
+  ano: number
+  mes: number
+  area: string | null
+  colaborador: string
+  estrutura: string | null
+  progresso: number | null
+  evidencias_execucao: string | null
+  one_a_one: number | null
+}
+
+export interface GestaoPdiMesRow {
+  mes: number
+  elegiveis: number
+  aptas: number
+  desvios: number
+  pct_aptas: number | null
+}
+
+export interface GestaoPdiDetalheRow {
+  mes: number
+  area: string | null
+  colaborador: string
+  estrutura: string | null
+  progresso: number | null
+  progresso_anterior: number | null
+  evidencias_execucao: string | null
+  one_a_one: number | null
+  mudou_progresso: boolean
+  tem_evidencia: boolean
+  tem_1a1: boolean
+  apta: boolean
+  status: 'Apta' | 'Desvio'
+  /** Texto da planilha (aba Desvio / Análise Desvios). */
+  desvio_criterio_apuracao?: string | null
+}
+
+/** Linha de sp_gestao_pdi_desvios (critério de apuração da planilha). */
+export interface GestaoPdiDesvioPlanilhaRow {
+  ano: number
+  mes: number
+  colaborador: string
+  desvio_criterio_apuracao: string | null
+}
+
 export interface BeneficioEconomicoRow {
   qtd_decisoes: number
   valor_acao: number
@@ -122,6 +190,13 @@ export type RacionalIndicador =
   | 'sla_vistagem_normal'
   | 'desenvolvimento_equipe'
   | 'retencao_talentos'
+
+/**
+ * Escopo opcional do Racional.
+ * `sla_protocolo_fatal` = só FATAL não-excludente (mesma base dos gráficos
+ * Justificativa / % / Qtd Fatal Responsáveis).
+ */
+export type RacionalEscopo = 'default' | 'sla_protocolo_fatal'
 
 export interface RacionalColuna {
   key: string
@@ -167,5 +242,6 @@ export interface EficienciaOverview {
   turnover: TurnoverAnualRow | null
   treinamentos: TreinamentosAnualRow | null
   treinamentosMensal: TreinamentosMesRow[]
+  gestaoPdiMensal: GestaoPdiMesRow[]
   ultimaAtualizacao: UltimaAtualizacaoRow[]
 }

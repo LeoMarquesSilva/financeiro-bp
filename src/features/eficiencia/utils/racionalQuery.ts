@@ -10,7 +10,12 @@ import {
   mesFimResultado,
   type MesFiltroEficiencia,
 } from '../constants'
-import type { RacionalColuna, RacionalIndicador, RacionalResultado } from '../types/eficiencia.types'
+import type {
+  RacionalColuna,
+  RacionalEscopo,
+  RacionalIndicador,
+  RacionalResultado,
+} from '../types/eficiencia.types'
 import { isVistadoD1Sim } from './racionalFormat'
 
 const RACIONAL_LIMITE = 500
@@ -230,6 +235,24 @@ export function applyRetencaoRacionalPeriodo(
   return query
 }
 
+/**
+ * Com área já aplicada via `.eq(areaColuna, area)`, filtros OR na mesma coluna
+ * (`excludeInAllowNull` / `distinctFrom`) conflitam no PostgREST e podem anular
+ * o filtro de área — o racional volta a mostrar todas as áreas.
+ */
+export function shouldSkipFiltroExclusaoAreaQuandoFiltrado(
+  filtro: RacionalFiltro,
+  area: string | null,
+  areaColuna: string | null,
+): boolean {
+  if (area == null || !areaColuna) return false
+  return (
+    (filtro.tipo === 'excludeInAllowNull' || filtro.tipo === 'distinctFrom') &&
+    filtro.coluna === areaColuna
+  )
+}
+
+/** @deprecated Prefer shouldSkipFiltroExclusaoAreaQuandoFiltrado */
 export function shouldSkipFiltroRetencaoArea(
   indicador: RacionalIndicador,
   filtro: RacionalFiltro,
@@ -237,9 +260,7 @@ export function shouldSkipFiltroRetencaoArea(
 ): boolean {
   return (
     indicador === 'retencao_talentos' &&
-    filtro.tipo === 'excludeInAllowNull' &&
-    filtro.coluna === 'area' &&
-    area != null
+    shouldSkipFiltroExclusaoAreaQuandoFiltrado(filtro, area, 'area')
   )
 }
 
@@ -262,6 +283,18 @@ export function formatRacionalPeriodoLabel(ano: number, mes: MesFiltroEficiencia
   return String(ano)
 }
 
+/** Aplica recorte extra (ex.: só FATAL não-excludente dos gráficos de ranking). */
+export function applyRacionalEscopo(
+  query: AnyQuery,
+  indicador: RacionalIndicador,
+  escopo: RacionalEscopo = 'default',
+): AnyQuery {
+  if (escopo === 'sla_protocolo_fatal' && indicador === 'sla_protocolo') {
+    return query.eq('fatal_apos18', 'FATAL').eq('excludente', 'Não')
+  }
+  return query
+}
+
 export function buildRacionalBaseQuery(
   cfg: RacionalConfig,
   indicador: RacionalIndicador,
@@ -269,6 +302,7 @@ export function buildRacionalBaseQuery(
   area: string | null,
   mes: MesFiltroEficiencia,
   select: string,
+  escopo: RacionalEscopo = 'default',
 ): AnyQuery {
   let query = supabase.from(cfg.tabela as never).select(select)
 
@@ -308,15 +342,24 @@ export function buildRacionalBaseQuery(
     query = applyRacionalPeriodo(query, cfg.dataColuna, ano, mes)
   }
 
-  query = applyRacionalArea(query, cfg.areaColuna, areaFiltroParaIndicador(indicador, area))
+  const areaEfetiva = areaFiltroParaIndicador(indicador, area)
+  query = applyRacionalArea(query, cfg.areaColuna, areaEfetiva)
 
   for (const f of cfg.filtros ?? []) {
+    // No escopo FATAL, o orEq D-1|FATAL é substituído pelo eq FATAL do escopo.
+    const skipOrEqFatal =
+      escopo === 'sla_protocolo_fatal' &&
+      f.tipo === 'orEq' &&
+      f.coluna === 'fatal_apos18'
     query = applyRacionalFiltroNativo(
       query,
       f,
-      shouldSkipFiltroRetencaoArea(indicador, f, area),
+      skipOrEqFatal ||
+        shouldSkipFiltroExclusaoAreaQuandoFiltrado(f, areaEfetiva, cfg.areaColuna),
     )
   }
+
+  query = applyRacionalEscopo(query, indicador, escopo)
 
   return query
 }
@@ -330,15 +373,21 @@ export async function fetchRacionalLinhasCompletas(
   area: string | null,
   mes: MesFiltroEficiencia,
   select: string,
+  escopo: RacionalEscopo = 'default',
 ): Promise<Array<Record<string, unknown>>> {
   const linhas: Array<Record<string, unknown>> = []
   let offset = 0
 
   while (true) {
-    const query = buildRacionalBaseQuery(cfg, indicador, ano, area, mes, select).range(
-      offset,
-      offset + RACIONAL_FETCH_PAGE - 1,
-    )
+    const query = buildRacionalBaseQuery(
+      cfg,
+      indicador,
+      ano,
+      area,
+      mes,
+      select,
+      escopo,
+    ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
 
     const { data, error } = await query
     if (error) throw error
@@ -362,11 +411,14 @@ export async function fetchSlaProtocoloRacionalResumo(
   ano: number,
   area: string | null,
   mes: MesFiltroEficiencia,
+  escopo: RacionalEscopo = 'default',
 ): Promise<RacionalResultado['resumo']> {
   const d1Cis = new Set<string>()
   const fatalCis = new Set<string>()
   const excludenteCis = new Set<string>()
   let offset = 0
+  /** Contagem de linhas (não DISTINCT) — alinha com os gráficos de Justificativa/Qtd. */
+  let fatalRows = 0
 
   while (true) {
     const query = buildRacionalBaseQuery(
@@ -376,6 +428,7 @@ export async function fetchSlaProtocoloRacionalResumo(
       area,
       mes,
       'ci,fatal_apos18,excludente',
+      escopo,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
 
     const { data, error } = await query
@@ -389,6 +442,12 @@ export async function fetchSlaProtocoloRacionalResumo(
     for (const row of rows) {
       const ci = String(row.ci ?? '').trim()
       if (!ci) continue
+      if (escopo === 'sla_protocolo_fatal') {
+        // Escopo já restringe a FATAL não-excludente.
+        fatalCis.add(ci)
+        fatalRows += 1
+        continue
+      }
       if (row.excludente === 'Excludente') {
         excludenteCis.add(ci)
         continue
@@ -399,6 +458,10 @@ export async function fetchSlaProtocoloRacionalResumo(
 
     if (rows.length < RACIONAL_FETCH_PAGE) break
     offset += RACIONAL_FETCH_PAGE
+  }
+
+  if (escopo === 'sla_protocolo_fatal') {
+    return { qtd_fatal: fatalRows }
   }
 
   return {

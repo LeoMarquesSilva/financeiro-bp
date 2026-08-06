@@ -1,31 +1,48 @@
 import { TrendingUp } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import type { GestaoVistaMesRow } from '@/features/receita/types/receita.types'
-import { MES_INICIO_RESULTADO } from '../constants'
+import {
+  MES_INICIO_RESULTADO,
+  isMesesFiltro,
+  mesNoFiltro,
+  type MesFiltroEficiencia,
+} from '../constants'
 import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
 import { buildOverviewReceitaBruta } from '../utils/overviewFinanceiroKpis'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 
-export function ReceitaBrutaTab({ ano }: { ano: number }) {
+type Props = {
+  ano: number
+  mesFiltro: MesFiltroEficiencia
+}
+
+export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
   const { data, isLoading } = useOverviewFinanceiroKpis(ano)
   const overview = data
-    ? buildOverviewReceitaBruta(data.meses, data.rows, ano, null)
+    ? buildOverviewReceitaBruta(data.meses, data.rows, ano, mesFiltro)
     : null
 
-  const chartData =
-    data?.meses
-      .filter((m: GestaoVistaMesRow) => m.mes >= MES_INICIO_RESULTADO && m.pctMeta != null)
-      .map((m: GestaoVistaMesRow) => ({ mes: m.mes, valor: m.pctMeta!, meta: 100 })) ?? []
+  const mesesEscopo = (data?.meses ?? []).filter(
+    (m: GestaoVistaMesRow) =>
+      m.mes >= MES_INICIO_RESULTADO && mesNoFiltro(m.mes, mesFiltro, ano),
+  )
 
-  const mesAtual = new Date().getMonth() + 1
-  const rowMesAtual = data?.meses.find((m: GestaoVistaMesRow) => m.mes === mesAtual)
+  const chartData = mesesEscopo
+    .filter((m: GestaoVistaMesRow) => m.pctMeta != null)
+    .map((m: GestaoVistaMesRow) => ({ mes: m.mes, valor: m.pctMeta!, meta: 100 }))
+
+  const mesDestaque =
+    isMesesFiltro(mesFiltro) && mesFiltro.length === 1
+      ? mesFiltro[0]
+      : new Date().getMonth() + 1
+  const rowMesDestaque = data?.meses.find((m: GestaoVistaMesRow) => m.mes === mesDestaque)
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
-          title="Receita Bruta no ano"
+          title="Receita Bruta no período"
           value={
             overview?.acumulado.value != null
               ? formatPercent(overview.acumulado.value)
@@ -41,10 +58,16 @@ export function ReceitaBrutaTab({ ano }: { ano: number }) {
           loading={isLoading}
         />
         <EficienciaKpiCard
-          title="Receita Bruta no mês atual"
+          title={
+            isMesesFiltro(mesFiltro) && mesFiltro.length === 1
+              ? 'Receita Bruta no mês'
+              : 'Receita Bruta no mês atual'
+          }
           value={
-            rowMesAtual?.pctMeta != null && rowMesAtual.mes >= MES_INICIO_RESULTADO
-              ? formatPercent(rowMesAtual.pctMeta)
+            rowMesDestaque?.pctMeta != null &&
+            rowMesDestaque.mes >= MES_INICIO_RESULTADO &&
+            mesNoFiltro(rowMesDestaque.mes, mesFiltro, ano)
+              ? formatPercent(rowMesDestaque.pctMeta)
               : '—'
           }
           icon={TrendingUp}
@@ -52,7 +75,7 @@ export function ReceitaBrutaTab({ ano }: { ano: number }) {
           loading={isLoading}
         />
         <EficienciaKpiCard
-          title="Recebido acumulado (Jun+)"
+          title="Recebido acumulado (período)"
           value={
             data
               ? new Intl.NumberFormat('pt-BR', {
@@ -60,9 +83,10 @@ export function ReceitaBrutaTab({ ano }: { ano: number }) {
                   currency: 'BRL',
                   maximumFractionDigits: 0,
                 }).format(
-                  data.meses
-                    .filter((m: GestaoVistaMesRow) => m.mes >= MES_INICIO_RESULTADO)
-                    .reduce((s: number, m: GestaoVistaMesRow) => s + (m.recebido ?? 0), 0),
+                  mesesEscopo.reduce(
+                    (s: number, m: GestaoVistaMesRow) => s + (m.recebido ?? 0),
+                    0,
+                  ),
                 )
               : '—'
           }

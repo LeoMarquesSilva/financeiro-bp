@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import { FileSearch } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { MESES_EFICIENCIA } from '../constants'
 import { atingiuMetaKpi, resolveMetaTexto } from '../utils/overviewKpiMeta'
 
@@ -12,14 +13,24 @@ const RACIONAL_SLOT_CLASS = 'flex w-[100px] shrink-0 self-center'
 
 export type OverviewKpiHeatCardProps = Omit<Props, 'onRacionalClick'>
 
-export function OverviewRacionalButton({ onClick }: { onClick: () => void }) {
+export function OverviewRacionalButton({
+  onClick,
+  className,
+}: {
+  onClick: () => void
+  className?: string
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`${RACIONAL_SLOT_CLASS} items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50`}
+      className={cn(
+        RACIONAL_SLOT_CLASS,
+        'items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50',
+        className,
+      )}
     >
-      <FileSearch className="h-3.5 w-3.5" aria-hidden />
+      <FileSearch className="h-3.5 w-3.5 shrink-0" aria-hidden />
       Racional
     </button>
   )

@@ -4,6 +4,7 @@ import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
   areaFiltroParaIndicador,
   isAgendamentoVistagemIndisponivelPorArea,
+  mesesEfetivosFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import type {
@@ -12,14 +13,22 @@ import type {
   BeneficioEconomicoRow,
   EficienciaOverview,
   EficienciaProtocoloMesRow,
+  RacionalEscopo,
   RacionalIndicador,
   RacionalResultado,
+  JustificativaFatalRow,
   RankingUsuarioRow,
   SlaProtocoloMesRow,
   SlaVistagemMesRow,
+  GestaoPdiDesvioPlanilhaRow,
+  GestaoPdiDetalheRow,
+  GestaoPdiElegivelRow,
+  GestaoPdiMesRow,
+  TreinamentoItemRow,
   TreinamentosAnualRow,
   TreinamentosMesRow,
   TreinamentosPorPessoaRow,
+  VistagemDesvioRankingRow,
   TurnoverAnualRow,
   TurnoverDesligamentoRow,
   TurnoverTopTempoCasaRow,
@@ -31,6 +40,7 @@ import {
   mapSlaRowToFatalExcludente,
   selecionarAmostraExcludentes,
 } from '../utils/amostraChamados'
+import { agregarGestaoPdiMensal, avaliarGestaoPdi } from '../utils/gestaoPdiCalc'
 
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.rpc(name as never, args as never)
@@ -61,9 +71,10 @@ async function fetchRacionalResumo(
   ano: number,
   area: string | null,
   mes: MesFiltroEficiencia,
+  escopo: RacionalEscopo = 'default',
 ): Promise<RacionalResultado['resumo']> {
   if (indicador === 'sla_protocolo') {
-    return fetchSlaProtocoloRacionalResumo(cfg, ano, area, mes)
+    return fetchSlaProtocoloRacionalResumo(cfg, ano, area, mes, escopo)
   }
   if (indicador === 'eficiencia_protocolo') {
     return fetchEficienciaProtocoloRacionalResumo(cfg, ano, area, mes)
@@ -243,10 +254,74 @@ export const eficienciaService = {
 
   async fetchSlaVistagemPorUsuario(
     ano: number,
-    mes: number | null,
-    risco: boolean | null,
+    mesFiltro: MesFiltroEficiencia = null,
+    risco: boolean | null = null,
+    area: string | null = null,
   ): Promise<RankingUsuarioRow[]> {
-    return rpc('eficiencia_sla_vistagem_por_usuario', { p_ano: ano, p_mes: mes, p_risco: risco })
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
+    if (risco === false && area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) return []
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_sla_vistagem_por_usuario', {
+      p_ano: ano,
+      p_meses: meses,
+      p_risco: risco,
+      p_area: area,
+    })
+  },
+
+  async fetchSlaVistagemDesvioPorUsuario(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+    risco: boolean | null = null,
+    area: string | null = null,
+  ): Promise<VistagemDesvioRankingRow[]> {
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
+    if (risco === false && area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) return []
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_sla_vistagem_desvio_por_usuario', {
+      p_ano: ano,
+      p_meses: meses,
+      p_risco: risco,
+      p_area: area,
+    })
+  },
+
+  async fetchSlaVistagemDesvioPorTipo(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+    risco: boolean | null = null,
+    area: string | null = null,
+  ): Promise<VistagemDesvioRankingRow[]> {
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
+    if (risco === false && area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) return []
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_sla_vistagem_desvio_por_tipo', {
+      p_ano: ano,
+      p_meses: meses,
+      p_risco: risco,
+      p_area: area,
+    })
+  },
+
+  async fetchSlaVistagemDesvioPorGrupo(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+    risco: boolean | null = null,
+    area: string | null = null,
+  ): Promise<VistagemDesvioRankingRow[]> {
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
+    if (risco === false && area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) return []
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_sla_vistagem_desvio_por_grupo', {
+      p_ano: ano,
+      p_meses: meses,
+      p_risco: risco,
+      p_area: area,
+    })
   },
 
   async fetchSlaProtocoloMensal(ano: number, area: string | null = null): Promise<SlaProtocoloMesRow[]> {
@@ -255,9 +330,30 @@ export const eficienciaService = {
 
   async fetchSlaProtocoloRankingFatal(
     ano: number,
-    mes: number | null,
+    mesFiltro: MesFiltroEficiencia = null,
+    area: string | null = null,
   ): Promise<RankingUsuarioRow[]> {
-    return rpc('eficiencia_sla_protocolo_ranking_fatal', { p_ano: ano, p_mes: mes })
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_sla_protocolo_ranking_fatal', {
+      p_ano: ano,
+      p_meses: meses,
+      p_area: area,
+    })
+  },
+
+  async fetchSlaProtocoloJustificativaFatal(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+    area: string | null = null,
+  ): Promise<JustificativaFatalRow[]> {
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_sla_protocolo_justificativa_fatal', {
+      p_ano: ano,
+      p_meses: meses,
+      p_area: area,
+    })
   },
 
   async fetchEficienciaProtocoloMensal(
@@ -269,9 +365,16 @@ export const eficienciaService = {
 
   async fetchEficienciaProtocoloRanking(
     ano: number,
-    mes: number | null,
+    mesFiltro: MesFiltroEficiencia = null,
+    area: string | null = null,
   ): Promise<RankingUsuarioRow[]> {
-    return rpc('eficiencia_protocolo_ranking_inconsistencia', { p_ano: ano, p_mes: mes })
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_protocolo_ranking_inconsistencia', {
+      p_ano: ano,
+      p_meses: meses,
+      p_area: area,
+    })
   },
 
   async fetchAgendamentoMensal(ano: number, area: string | null = null): Promise<AgendamentoMesRow[]> {
@@ -284,9 +387,17 @@ export const eficienciaService = {
 
   async fetchAgendamentoPorUsuario(
     ano: number,
-    mes: number | null,
+    mesFiltro: MesFiltroEficiencia = null,
+    area: string | null = null,
   ): Promise<AgendamentoUsuarioRow[]> {
-    return rpc('eficiencia_agendamento_por_usuario', { p_ano: ano, p_mes: mes })
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_agendamento_por_usuario', {
+      p_ano: ano,
+      p_meses: meses,
+      p_area: area,
+    })
   },
 
   async fetchTurnoverAnual(ano: number, area: string | null = null): Promise<TurnoverAnualRow | null> {
@@ -323,8 +434,109 @@ export const eficienciaService = {
     return rpc('eficiencia_treinamentos_mensal', { p_ano: ano, p_area: area })
   },
 
-  async fetchTreinamentosPorPessoa(ano: number): Promise<TreinamentosPorPessoaRow[]> {
-    return rpc('eficiencia_treinamentos_por_pessoa', { p_ano: ano })
+  async fetchTreinamentosPorPessoa(
+    ano: number,
+    area: string | null = null,
+  ): Promise<TreinamentosPorPessoaRow[]> {
+    return rpc('eficiencia_treinamentos_por_pessoa', { p_ano: ano, p_area: area })
+  },
+
+  /** Itens de presença no ano (para cards por colaborador). */
+  async fetchTreinamentosItens(ano: number): Promise<TreinamentoItemRow[]> {
+    const { data, error } = await supabase
+      .from('sp_treinamentos_presenca')
+      .select('colaborador, treinamento, data, duracao_minutos')
+      .gte('data', `${ano}-01-01`)
+      .lte('data', `${ano}-12-31`)
+      .order('data', { ascending: false })
+      .limit(5000)
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+      colaborador: String(r.colaborador ?? ''),
+      treinamento: r.treinamento == null ? null : String(r.treinamento),
+      data: r.data == null ? null : String(r.data),
+      duracao_minutos: Number(r.duracao_minutos ?? 0),
+    }))
+  },
+
+  async fetchGestaoPdiElegiveis(ano: number): Promise<GestaoPdiElegivelRow[]> {
+    const { data, error } = await supabase
+      .from('sp_gestao_pdi_elegiveis')
+      .select('ano, mes, area, colaborador, estrutura, progresso, evidencias_execucao, one_a_one')
+      .eq('ano', ano)
+      .order('mes')
+      .order('colaborador')
+    if (error) throw error
+    return (data ?? []) as GestaoPdiElegivelRow[]
+  },
+
+  async fetchGestaoPdiMensal(ano: number, area: string | null = null): Promise<GestaoPdiMesRow[]> {
+    // Preferir RPC quando disponível; fallback calcula no client a partir da tabela espelho.
+    const { data, error } = await supabase.rpc('eficiencia_gestao_pdi_mensal' as never, {
+      p_ano: ano,
+      p_area: area,
+    } as never)
+    if (!error && data) {
+      return (data as GestaoPdiMesRow[]).map((r) => ({
+        ...r,
+        pct_aptas: r.pct_aptas == null ? null : Number(r.pct_aptas),
+      }))
+    }
+    const elegiveis = await this.fetchGestaoPdiElegiveis(ano)
+    return agregarGestaoPdiMensal(avaliarGestaoPdi(elegiveis, area))
+  },
+
+  async fetchGestaoPdiDesviosPlanilha(ano: number): Promise<GestaoPdiDesvioPlanilhaRow[]> {
+    const { data, error } = await supabase
+      .from('sp_gestao_pdi_desvios')
+      .select('ano, mes, colaborador, desvio_criterio_apuracao')
+      .eq('ano', ano)
+    if (error) throw error
+    return (data ?? []) as GestaoPdiDesvioPlanilhaRow[]
+  },
+
+  async fetchGestaoPdiDetalhe(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+    area: string | null = null,
+  ): Promise<GestaoPdiDetalheRow[]> {
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+
+    const [elegiveis, desviosPlanilha, rpcDetalhe] = await Promise.all([
+      this.fetchGestaoPdiElegiveis(ano),
+      this.fetchGestaoPdiDesviosPlanilha(ano).catch(() => [] as GestaoPdiDesvioPlanilhaRow[]),
+      supabase
+        .rpc('eficiencia_gestao_pdi_detalhe' as never, {
+          p_ano: ano,
+          p_meses: meses,
+          p_area: area,
+        } as never)
+        .then(({ data, error }) => ({ data, error })),
+    ])
+
+    let detalhe: GestaoPdiDetalheRow[] =
+      !rpcDetalhe.error && rpcDetalhe.data
+        ? (rpcDetalhe.data as GestaoPdiDetalheRow[])
+        : (() => {
+            let rows = avaliarGestaoPdi(elegiveis, area)
+            if (meses) rows = rows.filter((r) => meses.includes(r.mes))
+            return rows
+          })()
+
+    const criterioPorChave = new Map(
+      desviosPlanilha.map((d) => [
+        `${d.mes}|${d.colaborador.trim().toLocaleLowerCase('pt-BR')}`,
+        d.desvio_criterio_apuracao,
+      ]),
+    )
+    return detalhe.map((d) => ({
+      ...d,
+      desvio_criterio_apuracao:
+        criterioPorChave.get(`${d.mes}|${d.colaborador.trim().toLocaleLowerCase('pt-BR')}`) ??
+        d.desvio_criterio_apuracao ??
+        null,
+    }))
   },
 
   async fetchBeneficioEconomicoAnual(ano: number): Promise<BeneficioEconomicoRow | null> {
@@ -348,6 +560,7 @@ export const eficienciaService = {
       turnover,
       treinamentos,
       treinamentosMensal,
+      gestaoPdiMensal,
       ultimaAtualizacao,
     ] = await Promise.all([
       this.fetchSlaVistagemMensal(ano, true, area),
@@ -358,6 +571,7 @@ export const eficienciaService = {
       this.fetchTurnoverAnual(ano, area),
       this.fetchTreinamentosAnual(ano, area),
       this.fetchTreinamentosMensal(ano, area),
+      this.fetchGestaoPdiMensal(ano, area),
       this.fetchUltimaAtualizacao(),
     ])
     return {
@@ -369,6 +583,7 @@ export const eficienciaService = {
       turnover,
       treinamentos,
       treinamentosMensal,
+      gestaoPdiMensal,
       ultimaAtualizacao,
     }
   },
@@ -379,6 +594,7 @@ export const eficienciaService = {
     ano: number,
     area: string | null = null,
     mes: MesFiltroEficiencia = null,
+    escopo: RacionalEscopo = 'default',
   ): Promise<RacionalResultado> {
     if (
       indicador === 'sla_vistagem_normal' &&
@@ -414,13 +630,14 @@ export const eficienciaService = {
       areaEfetiva,
       mes,
       cfg.colunas.map((c) => c.key).join(','),
+      escopo,
     ).limit(RACIONAL_LIMITE + 1)
 
     const { data, error } = await query
     if (error) throw error
     const linhas = (data ?? []) as unknown as Array<Record<string, unknown>>
 
-    const resumo = await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes)
+    const resumo = await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo)
 
     return {
       colunas: cfg.colunas,
@@ -436,6 +653,7 @@ export const eficienciaService = {
     ano: number,
     area: string | null = null,
     mes: MesFiltroEficiencia = null,
+    escopo: RacionalEscopo = 'default',
   ): Promise<RacionalResultado> {
     if (
       indicador === 'sla_vistagem_normal' &&
@@ -466,9 +684,17 @@ export const eficienciaService = {
     const areaEfetiva = areaFiltroParaIndicador(indicador, area)
 
     const select = cfg.colunas.map((c) => c.key).join(',')
-    const linhas = await fetchRacionalLinhasCompletas(cfg, indicador, ano, areaEfetiva, mes, select)
+    const linhas = await fetchRacionalLinhasCompletas(
+      cfg,
+      indicador,
+      ano,
+      areaEfetiva,
+      mes,
+      select,
+      escopo,
+    )
 
-    const resumo = await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes)
+    const resumo = await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo)
 
     return {
       colunas: cfg.colunas,

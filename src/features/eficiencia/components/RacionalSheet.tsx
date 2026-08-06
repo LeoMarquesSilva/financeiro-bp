@@ -20,7 +20,7 @@ import {
   resultadoKpiBadgeClass,
 } from '../utils/overviewKpiMeta'
 import type { MesFiltroEficiencia } from '../constants'
-import type { RacionalColuna, RacionalIndicador } from '../types/eficiencia.types'
+import type { RacionalColuna, RacionalEscopo, RacionalIndicador } from '../types/eficiencia.types'
 import type { HeatCell } from './OverviewKpiHeatRow'
 
 type Props = {
@@ -29,6 +29,8 @@ type Props = {
   ano: number
   mes?: MesFiltroEficiencia
   area: string | null
+  /** Recorte da base (ex.: só FATAL não-excludente dos gráficos de ranking). */
+  escopo?: RacionalEscopo
   /** Valor exibido na coluna Acum. da Overview (mesmos filtros). */
   resultado?: HeatCell | null
   /** Meta usada na coluna Acum. da Overview (mesmos filtros). */
@@ -43,16 +45,19 @@ export function RacionalSheet({
   ano,
   mes = null,
   area,
+  escopo = 'default',
   resultado = null,
   metaAcumulado = null,
   metaLabel,
   onClose,
 }: Props) {
   const [exportando, setExportando] = useState(false)
+  const fatalEscopo = escopo === 'sla_protocolo_fatal'
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['eficiencia', 'racional', indicador, ano, mes, area],
-    queryFn: () => eficienciaService.fetchRacional(indicador as RacionalIndicador, ano, area, mes),
+    queryKey: ['eficiencia', 'racional', indicador, ano, mes, area, escopo],
+    queryFn: () =>
+      eficienciaService.fetchRacional(indicador as RacionalIndicador, ano, area, mes, escopo),
     enabled: indicador != null,
   })
   const colunas: RacionalColuna[] = data?.colunas ?? []
@@ -63,9 +68,11 @@ export function RacionalSheet({
   const periodoLabel = formatRacionalPeriodoLabel(ano, mes)
   const areaLabel = area ?? 'todas as áreas'
   const metaTexto =
-    metaAcumulado != null ? resolveMetaTexto(metaAcumulado, metaLabel) : null
+    !fatalEscopo && metaAcumulado != null
+      ? resolveMetaTexto(metaAcumulado, metaLabel)
+      : null
   const atingiuMeta =
-    metaAcumulado != null && resultado != null
+    !fatalEscopo && metaAcumulado != null && resultado != null
       ? atingiuMetaKpi(resultado.value, metaAcumulado)
       : null
 
@@ -74,14 +81,20 @@ export function RacionalSheet({
 
     setExportando(true)
     try {
-      const exportData = await eficienciaService.fetchRacionalParaExport(indicador, ano, area, mes)
+      const exportData = await eficienciaService.fetchRacionalParaExport(
+        indicador,
+        ano,
+        area,
+        mes,
+        escopo,
+      )
       await exportRacionalExcel(exportData.colunas, exportData.linhas, exportData.resumo, {
         titulo,
         periodoLabel,
         ano,
         areaLabel,
         metaTexto: metaTexto ?? undefined,
-        resultadoLabel: resultado?.label,
+        resultadoLabel: !fatalEscopo ? resultado?.label : undefined,
       })
     } finally {
       setExportando(false)
@@ -100,11 +113,13 @@ export function RacionalSheet({
               </SheetTitle>
               <SheetDescription className="space-y-1">
                 <span>
-                  {indicador === 'sla_protocolo'
-                    ? `Base do KPI + Excludentes (fora da %) · ${periodoLabel} · ${areaLabel}`
-                    : `Mesma base do KPI · ${periodoLabel} · ${areaLabel}`}
+                  {fatalEscopo
+                    ? `FATAL não-excludente (mesma base do gráfico) · ${periodoLabel} · ${areaLabel}`
+                    : indicador === 'sla_protocolo'
+                      ? `Base do KPI + Excludentes (fora da %) · ${periodoLabel} · ${areaLabel}`
+                      : `Mesma base do KPI · ${periodoLabel} · ${areaLabel}`}
                 </span>
-                {(metaTexto != null || resultado != null) && (
+                {!fatalEscopo && (metaTexto != null || resultado != null) && (
                   <span className="flex flex-wrap items-center gap-2 pt-0.5">
                     {metaTexto != null && (
                       <span className="inline-flex rounded px-2 py-0.5 text-sm font-semibold text-emerald-600">

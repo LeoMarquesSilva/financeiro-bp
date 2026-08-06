@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { UserMinus } from 'lucide-react'
 import { formatDate, formatPercent } from '@/shared/utils/format'
+import type { MesFiltroEficiencia } from '../constants'
 import { useTurnover } from '../hooks/useEficiencia'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { AreaFilterButtons } from './AreaFilterButtons'
+import { OverviewRacionalButton } from './OverviewKpiHeatRow'
+import { RacionalSheet } from './RacionalSheet'
+import type { HeatCell } from './OverviewKpiHeatRow'
 
 function formatMeses(m: number | null): string {
   if (m == null) return '—'
@@ -13,15 +17,33 @@ function formatMeses(m: number | null): string {
   return `${anos}a ${meses}m`
 }
 
-export function TurnoverTab({ ano }: { ano: number }) {
+type Props = {
+  ano: number
+  /** Indicador anual: Resultado = ano todo (mesma regra do Overview). */
+  mesFiltro: MesFiltroEficiencia
+}
+
+export function TurnoverTab({ ano, mesFiltro }: Props) {
   const [area, setArea] = useState<string | null>(null)
+  const [racionalAberto, setRacionalAberto] = useState(false)
   const { anual, desligamentos, top5, loading } = useTurnover(ano, area)
+  const mesRacional: MesFiltroEficiencia =
+    mesFiltro === 'resultado' ? null : mesFiltro
   const desligamentosFiltrados = area ? desligamentos.filter((d) => d.area === area) : desligamentos
   const top5Filtrado = area ? top5.filter((p) => p.area === area) : top5
 
+  const resultadoRacional: HeatCell | null = anual
+    ? { value: anual.pct_retencao, label: formatPercent(anual.pct_retencao) }
+    : null
+
   return (
     <div className="space-y-5">
-      <AreaFilterButtons value={area} onChange={setArea} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <AreaFilterButtons value={area} onChange={setArea} />
+        </div>
+        <OverviewRacionalButton onClick={() => setRacionalAberto(true)} className="w-auto" />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
@@ -107,6 +129,17 @@ export function TurnoverTab({ ano }: { ano: number }) {
           </div>
         )}
       </section>
+
+      <RacionalSheet
+        indicador={racionalAberto ? 'retencao_talentos' : null}
+        titulo="Retenção de Talentos"
+        ano={ano}
+        mes={mesRacional}
+        area={area}
+        resultado={resultadoRacional}
+        metaAcumulado={anual?.meta_pct_retencao_minima ?? 90}
+        onClose={() => setRacionalAberto(false)}
+      />
     </div>
   )
 }

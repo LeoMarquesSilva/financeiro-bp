@@ -12,6 +12,7 @@ import {
 import { LineChart as LineChartIcon } from 'lucide-react'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import { formatPercent } from '@/shared/utils/format'
+import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 
 const MESES_LABEL = [
   'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
@@ -27,6 +28,8 @@ type Props = {
   data: EvolucaoPoint[]
   color?: string
   metaFixa?: number | null
+  /** Abre o sheet de Racional (mesma base do Overview). */
+  onRacionalClick?: () => void
 }
 
 function EvolucaoTooltip({
@@ -70,6 +73,7 @@ export function EficienciaEvolucaoChart({
   data,
   color = '#0ea5e9',
   metaFixa = null,
+  onRacionalClick,
 }: Props) {
   const chartExportRef = useRef<HTMLDivElement>(null)
 
@@ -91,42 +95,48 @@ export function EficienciaEvolucaoChart({
             {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
           </div>
         </div>
-        <ChartCopyButton containerRef={chartExportRef} />
+        <div className="flex flex-wrap items-center gap-2">
+          {onRacionalClick && <OverviewRacionalButton onClick={onRacionalClick} className="w-auto" />}
+          <ChartCopyButton containerRef={chartExportRef} />
+        </div>
       </div>
 
-      <div ref={chartExportRef} data-chart-plot className="h-[280px] w-full">
-        <ResponsiveContainer width="100%" height="100%" minHeight={280}>
-          <LineChart data={chartData} margin={{ left: 4, right: 16, top: 16, bottom: 4 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
-            <XAxis dataKey="mesLabel" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-            <YAxis
-              tickFormatter={(v: number) => formatPercent(v)}
-              tick={AXIS_TICK}
-              axisLine={false}
-              tickLine={false}
-              width={48}
-              domain={[0, 100]}
-            />
-            <Tooltip content={<EvolucaoTooltip />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '4 4' }} />
-            {metaFixa != null && (
-              <ReferenceLine
-                y={metaFixa}
-                stroke="#f59e0b"
-                strokeDasharray="6 4"
-                label={{ value: `Meta ${formatPercent(metaFixa)}`, position: 'insideTopRight', fontSize: 11, fill: '#b45309' }}
+      {/* ref no wrapper; data-chart-plot no filho — copyChartImage usa querySelector nos descendentes */}
+      <div ref={chartExportRef} className="w-full">
+        <div data-chart-plot className="h-[280px] w-full">
+          <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+            <LineChart data={chartData} margin={{ left: 4, right: 16, top: 16, bottom: 4 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
+              <XAxis dataKey="mesLabel" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+              <YAxis
+                tickFormatter={(v: number) => formatPercent(v)}
+                tick={AXIS_TICK}
+                axisLine={false}
+                tickLine={false}
+                width={48}
+                domain={[0, 100]}
               />
-            )}
-            <Line
-              type="monotone"
-              dataKey="valor"
-              name={title}
-              stroke={color}
-              strokeWidth={2.5}
-              dot={{ r: 3, fill: color, strokeWidth: 0 }}
-              activeDot={{ r: 5, fill: color, stroke: '#fff', strokeWidth: 2 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+              <Tooltip content={<EvolucaoTooltip />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '4 4' }} />
+              {metaFixa != null && (
+                <ReferenceLine
+                  y={metaFixa}
+                  stroke="#f59e0b"
+                  strokeDasharray="6 4"
+                  label={{ value: `Meta ${formatPercent(metaFixa)}`, position: 'insideTopRight', fontSize: 11, fill: '#b45309' }}
+                />
+              )}
+              <Line
+                type="monotone"
+                dataKey="valor"
+                name={title}
+                stroke={color}
+                strokeWidth={2.5}
+                dot={{ r: 3, fill: color, strokeWidth: 0 }}
+                activeDot={{ r: 5, fill: color, stroke: '#fff', strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </section>
   )

@@ -15,6 +15,7 @@ npm run sync:sharepoint -- --dump-fields publicacoes   # inspecionar nomes inter
 |---|---|---|---|
 | `feriados` | `Feriados.xlsx` (site Controladoria) | `sp_feriados` | replace |
 | `turnover` | `Gestão/Indicadores Juridico/2025/Turnover BP (1).xlsx` (workbook **date1904**; sync corrige +1462 dias) | `sp_turnover` | replace |
+| `gestao_pdi` | `…/Base de Gestão de PDI.xlsx` — abas **Elegíveis** + **Desvio…** / Análise Desvios | `sp_gestao_pdi_elegiveis`, `sp_gestao_pdi_desvios` | replace |
 | `publicacoes` | Lista SharePoint `91e8ba11…` (CONTROLADORIAJURDICA) | `sp_publicacoes` | **acumulativo** (lista rotativa ~7 dias na origem; o histórico vive aqui) |
 | `protocolos` | Lista "CONTROLE DE PROTOCOLOS" `4e115aab…` | `sp_protocolos` | acumulativo |
 | `treinamentos` | Lista `30ea2880…` | `sp_treinamentos_presenca` | acumulativo |
