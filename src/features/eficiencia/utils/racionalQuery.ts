@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabaseClient'
 import {
   EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO,
   EFICIENCIA_NOME_ALIASES_CHAVE,
+  areaFiltroParaIndicador,
   MESES_EFICIENCIA,
   isCargoExcluidoDesenvolvimento,
   isMesesFiltro,
@@ -307,7 +308,7 @@ export function buildRacionalBaseQuery(
     query = applyRacionalPeriodo(query, cfg.dataColuna, ano, mes)
   }
 
-  query = applyRacionalArea(query, cfg.areaColuna, area)
+  query = applyRacionalArea(query, cfg.areaColuna, areaFiltroParaIndicador(indicador, area))
 
   for (const f of cfg.filtros ?? []) {
     query = applyRacionalFiltroNativo(

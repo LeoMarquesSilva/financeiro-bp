@@ -14,6 +14,31 @@ export const AREAS_EFICIENCIA = [
 /** Trabalhista não possui SLA Vistagem Normal (somente demanda de risco). */
 export const EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL = 'Trabalhista' as const
 
+/**
+ * Operações Legais não entra no filtro de área de Ciência Agendamentos nem SLAs de Vistagem —
+ * esses indicadores permanecem na visão consolidada (mesma regra do BI).
+ */
+export const EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM = 'Operações Legais' as const
+
+/** null quando o slicer de área não deve afetar Agendamento/Vistagem. */
+export function areaFiltroAgendamentoVistagem(area: string | null): string | null {
+  return area === EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM ? null : area
+}
+
+const INDICADORES_SEM_FILTRO_OPS_LEGAIS = new Set([
+  'sla_ciencia_agendamentos',
+  'sla_vistagem_risco',
+  'sla_vistagem_normal',
+])
+
+/** Área efetiva por indicador (Overview, abas e Racional). */
+export function areaFiltroParaIndicador(indicador: string, area: string | null): string | null {
+  if (INDICADORES_SEM_FILTRO_OPS_LEGAIS.has(indicador)) {
+    return areaFiltroAgendamentoVistagem(area)
+  }
+  return area
+}
+
 /** Meta D-1 do SLA Protocolo (Overview / Indicadores / sync meta_d1). */
 export const EFICIENCIA_META_SLA_PROTOCOLO = 85
 

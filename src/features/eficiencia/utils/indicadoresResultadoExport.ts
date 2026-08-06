@@ -5,8 +5,12 @@ import {
   MESES_EFICIENCIA_ARQUIVO,
 } from '../constants'
 import type { IndicadoresResultadoMes } from '../types/indicadoresResultado.types'
-import type { RacionalColuna, RacionalResultado } from '../types/eficiencia.types'
-import { formatRacionalCell } from './racionalFormat'
+import type {
+  RacionalColuna,
+  RacionalResumo,
+  RacionalResultado,
+} from '../types/eficiencia.types'
+import { countVistagemD1, formatRacionalCell, isVistadoD1Sim } from './racionalFormat'
 
 /** Azul institucional do Excel de referência (#156082). */
 const BRAND = '156082'
@@ -343,13 +347,22 @@ function buildPctPivot(
   return { headers, rows: sortPivotRowsDesc(rows, 1) }
 }
 
+function vistagemCounts(
+  resumo: RacionalResumo | undefined,
+  linhas: Array<Record<string, unknown>>,
+): { sim: number; nao: number } {
+  if (resumo?.qtd_vistado_sim != null && resumo?.qtd_vistado_nao != null) {
+    return { sim: resumo.qtd_vistado_sim, nao: resumo.qtd_vistado_nao }
+  }
+  return countVistagemD1(linhas)
+}
+
 function buildVistagemPivot(linhas: Array<Record<string, unknown>>) {
   const byArea = new Map<string, { sim: number; nao: number }>()
   for (const row of linhas) {
     const area = String(row.area ?? '—')
     const acc = byArea.get(area) ?? { sim: 0, nao: 0 }
-    const v = String(row.vistado_d1 ?? '')
-    if (v === 'Sim' || v === 'SIM' || v === 'true') acc.sim += 1
+    if (isVistadoD1Sim(row.vistado_d1)) acc.sim += 1
     else acc.nao += 1
     byArea.set(area, acc)
   }
@@ -445,18 +458,8 @@ function writeResultadoSheet(wb: ExcelJS.Workbook, data: IndicadoresResultadoMes
     denAg && dentro / denAg >= 0.95 ? GREEN_SOFT : RED_SOFT,
   ])
 
-  const countVist = (linhas: Array<Record<string, unknown>>) => {
-    let sim = 0
-    let nao = 0
-    for (const row of linhas) {
-      const v = String(row.vistado_d1 ?? '')
-      if (v === 'Sim' || v === 'SIM' || v === 'true') sim += 1
-      else nao += 1
-    }
-    return { sim, nao }
-  }
-  const vr = countVist(data.vistagemRisco.linhas)
-  const vn = countVist(data.vistagemNormal.linhas)
+  const vr = vistagemCounts(data.vistagemRisco.resumo, data.vistagemRisco.linhas)
+  const vn = vistagemCounts(data.vistagemNormal.resumo, data.vistagemNormal.linhas)
   const denVr = vr.sim + vr.nao
   const denVn = vn.sim + vn.nao
   kpis.push([
@@ -526,18 +529,8 @@ export async function exportIndicadoresResultadoExcel(
   }
   const agResultado = formatPctExport(agDentro, agDentro + agFora)
 
-  const countVist = (linhas: Array<Record<string, unknown>>) => {
-    let sim = 0
-    let nao = 0
-    for (const row of linhas) {
-      const v = String(row.vistado_d1 ?? '')
-      if (v === 'Sim' || v === 'SIM' || v === 'true') sim += 1
-      else nao += 1
-    }
-    return { sim, nao }
-  }
-  const vr = countVist(data.vistagemRisco.linhas)
-  const vn = countVist(data.vistagemNormal.linhas)
+  const vr = vistagemCounts(data.vistagemRisco.resumo, data.vistagemRisco.linhas)
+  const vn = vistagemCounts(data.vistagemNormal.resumo, data.vistagemNormal.linhas)
   const vrResultado = formatPctExport(vr.sim, vr.sim + vr.nao)
   const vnResultado = formatPctExport(vn.sim, vn.sim + vn.nao)
 

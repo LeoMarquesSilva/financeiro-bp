@@ -34,6 +34,20 @@ export function isVistadoD1Sim(value: unknown): boolean {
   return s === 'sim' || s === 'true'
 }
 
+/** Contagem Sim/Não alinhada ao KPI e ao resumo do racional. */
+export function countVistagemD1(linhas: Array<Record<string, unknown>>): {
+  sim: number
+  nao: number
+} {
+  let sim = 0
+  let nao = 0
+  for (const row of linhas) {
+    if (isVistadoD1Sim(row.vistado_d1)) sim += 1
+    else nao += 1
+  }
+  return { sim, nao }
+}
+
 export function isRacionalLinhaForaMeta(
   indicador: string,
   row: Record<string, unknown>,

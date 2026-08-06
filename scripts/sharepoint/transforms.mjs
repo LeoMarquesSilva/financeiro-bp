@@ -83,31 +83,51 @@ export function metaD1PorData(data) {
   return null
 }
 
+/** Hora-limite no dia útil D+1 (horário de Brasília), alinhada ao BI. */
+const VISTADO_D1_LIMITE_HORA_BRT = 12
+
+/** Dia da semana (0=dom … 6=sáb) do dia civil em America/Sao_Paulo. */
+function weekdayBrt(year, month, day) {
+  const instant = dateFromCivilBrt(year, month, day, 12, 0, 0)
+  const label = new Intl.DateTimeFormat('en-US', {
+    timeZone: EFICIENCIA_TZ,
+    weekday: 'short',
+  }).format(instant)
+  return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[label] ?? 0
+}
+
 /**
- * Flag "Vistado em D+1": vistado até o próximo dia útil após a disponibilização + 12h
+ * Flag "Vistado em D+1": vistado até 12h do próximo dia útil após a disponibilização
  * (considera sábados, domingos e feriados). Retorna 'Sim' | 'Não' | null (não vistado).
+ * Sempre interpreta dias/horas em America/Sao_Paulo (sync no GitHub Actions roda em UTC).
  * @param {Date|null} disponibilizado  timestamp de disponibilização para vistagem
  * @param {Date|null} vistadoEm        timestamp da vistagem
  * @param {Set<string>} feriados       datas 'YYYY-MM-DD'
  */
 export function computeVistadoD1(disponibilizado, vistadoEm, feriados) {
   if (!vistadoEm || !disponibilizado) return null
-  const base = new Date(disponibilizado)
-  base.setHours(0, 0, 0, 0)
-  let proximo = null
+
+  const baseIso = toIsoDateBrt(disponibilizado)
+  if (!baseIso) return null
+  const [by, bm, bd] = baseIso.split('-').map(Number)
+  const baseNoon = dateFromCivilBrt(by, bm, bd, 12, 0, 0)
+
+  let proximoIso = null
   for (let i = 1; i <= 15; i++) {
-    const teste = new Date(base)
-    teste.setDate(teste.getDate() + i)
-    const dow = teste.getDay() // 0=dom ... 6=sáb
-    const iso = toIsoDate(teste)
+    const testInstant = new Date(baseNoon.getTime() + i * 86_400_000)
+    const iso = toIsoDateBrt(testInstant)
+    if (!iso) continue
+    const [y, m, d] = iso.split('-').map(Number)
+    const dow = weekdayBrt(y, m, d)
     if (dow >= 1 && dow <= 5 && !feriados.has(iso)) {
-      proximo = teste
+      proximoIso = iso
       break
     }
   }
-  if (!proximo) return null
-  const limite = new Date(proximo)
-  limite.setHours(12, 0, 0, 0)
+
+  if (!proximoIso) return null
+  const [py, pm, pd] = proximoIso.split('-').map(Number)
+  const limite = dateFromCivilBrt(py, pm, pd, VISTADO_D1_LIMITE_HORA_BRT, 0, 0)
   return vistadoEm <= limite ? 'Sim' : 'Não'
 }
 

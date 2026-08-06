@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabaseClient'
 import {
   EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO,
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
+  areaFiltroAgendamentoVistagem,
+  areaFiltroParaIndicador,
   type MesFiltroEficiencia,
 } from '../constants'
 import type {
@@ -67,7 +69,7 @@ async function fetchRacionalResumo(
     return fetchEficienciaProtocoloRacionalResumo(cfg, ano, area, mes)
   }
   if (indicador === 'sla_vistagem_risco' || indicador === 'sla_vistagem_normal') {
-    return fetchSlaVistagemRacionalResumo(cfg, indicador, ano, area, mes)
+    return fetchSlaVistagemRacionalResumo(cfg, indicador, ano, areaFiltroParaIndicador(indicador, area), mes)
   }
   return undefined
 }
@@ -231,7 +233,11 @@ export const eficienciaService = {
     area: string | null = null,
   ): Promise<SlaVistagemMesRow[]> {
     if (risco === false && area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) return []
-    return rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: risco, p_area: area })
+    return rpc('eficiencia_sla_vistagem_mensal', {
+      p_ano: ano,
+      p_risco: risco,
+      p_area: areaFiltroAgendamentoVistagem(area),
+    })
   },
 
   async fetchSlaVistagemPorUsuario(
@@ -268,7 +274,10 @@ export const eficienciaService = {
   },
 
   async fetchAgendamentoMensal(ano: number, area: string | null = null): Promise<AgendamentoMesRow[]> {
-    return rpc('eficiencia_agendamento_mensal', { p_ano: ano, p_area: area })
+    return rpc('eficiencia_agendamento_mensal', {
+      p_ano: ano,
+      p_area: areaFiltroAgendamentoVistagem(area),
+    })
   },
 
   async fetchAgendamentoPorUsuario(
@@ -385,11 +394,13 @@ export const eficienciaService = {
       return fetchDesenvolvimentoRacional(cfg, ano, area, mes)
     }
 
+    const areaEfetiva = areaFiltroParaIndicador(indicador, area)
+
     const query = buildRacionalBaseQuery(
       cfg,
       indicador,
       ano,
-      area,
+      areaEfetiva,
       mes,
       cfg.colunas.map((c) => c.key).join(','),
     ).limit(RACIONAL_LIMITE + 1)
@@ -398,7 +409,7 @@ export const eficienciaService = {
     if (error) throw error
     const linhas = (data ?? []) as unknown as Array<Record<string, unknown>>
 
-    const resumo = await fetchRacionalResumo(indicador, cfg, ano, area, mes)
+    const resumo = await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes)
 
     return {
       colunas: cfg.colunas,
@@ -432,10 +443,12 @@ export const eficienciaService = {
       return fetchDesenvolvimentoRacional(cfg, ano, area, mes)
     }
 
-    const select = cfg.colunas.map((c) => c.key).join(',')
-    const linhas = await fetchRacionalLinhasCompletas(cfg, indicador, ano, area, mes, select)
+    const areaEfetiva = areaFiltroParaIndicador(indicador, area)
 
-    const resumo = await fetchRacionalResumo(indicador, cfg, ano, area, mes)
+    const select = cfg.colunas.map((c) => c.key).join(',')
+    const linhas = await fetchRacionalLinhasCompletas(cfg, indicador, ano, areaEfetiva, mes, select)
+
+    const resumo = await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes)
 
     return {
       colunas: cfg.colunas,
