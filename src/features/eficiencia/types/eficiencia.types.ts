@@ -25,6 +25,8 @@ export interface JustificativaFatalRow {
   justificativa: string
   qtd: number
   pct_do_total: number
+  /** Compatível com EficienciaRankingChart (RankingChartRow). */
+  [key: string]: string | number | undefined
 }
 
 export interface SlaProtocoloMesRow {

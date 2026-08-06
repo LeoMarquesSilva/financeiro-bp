@@ -57,17 +57,19 @@ function AvatarYTick({
   avatarByLabel,
   compact,
 }: {
-  x?: number
-  y?: number
-  payload?: { value?: string }
+  x?: number | string
+  y?: number | string
+  payload?: { value?: string | number }
   avatarByLabel: Map<string, string | null>
   compact?: boolean
 }) {
   const label = String(payload?.value ?? '')
   const url = avatarByLabel.get(label) ?? null
   const size = compact ? 14 : 16
+  const tx = Number(x ?? 0)
+  const ty = Number(y ?? 0)
   return (
-    <g transform={`translate(${x ?? 0},${y ?? 0})`}>
+    <g transform={`translate(${Number.isFinite(tx) ? tx : 0},${Number.isFinite(ty) ? ty : 0})`}>
       <text
         x={url ? -(size + 8) : -4}
         y={0}
@@ -159,13 +161,14 @@ function BarValueLabel(props: {
   y?: number | string
   width?: number | string
   height?: number | string
-  value?: number | string
+  value?: number | string | null
   formatValue: (v: number) => string
   compact?: boolean
 }) {
   const { x = 0, y = 0, width = 0, height = 0, value, formatValue, compact } = props
+  if (value == null) return null
   const num = typeof value === 'number' ? value : Number(value)
-  if (value == null || Number.isNaN(num) || num <= 0) return null
+  if (Number.isNaN(num) || num <= 0) return null
   const nx = Number(x)
   const ny = Number(y)
   const nw = Number(width)
@@ -382,7 +385,9 @@ export function EficienciaRankingChart({
                     showAvatars
                       ? (props) => (
                           <AvatarYTick
-                            {...props}
+                            x={props.x}
+                            y={props.y}
+                            payload={props.payload as { value?: string | number }}
                             avatarByLabel={avatarByLabel}
                             compact={compact}
                           />
@@ -417,7 +422,19 @@ export function EficienciaRankingChart({
                   <LabelList
                     dataKey="_value"
                     content={(props) => (
-                      <BarValueLabel {...props} formatValue={formatValue} compact={compact} />
+                      <BarValueLabel
+                        x={props.x}
+                        y={props.y}
+                        width={props.width}
+                        height={props.height}
+                        value={
+                          props.value == null || typeof props.value === 'boolean'
+                            ? null
+                            : (props.value as number | string)
+                        }
+                        formatValue={formatValue}
+                        compact={compact}
+                      />
                     )}
                   />
                 </Bar>
