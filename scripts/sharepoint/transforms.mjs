@@ -72,8 +72,8 @@ export function mapFatalTarefas(adesao) {
 export function metaD1PorData(data) {
   if (!data) return null
   const d = data instanceof Date ? data : new Date(data)
-  const ano = d.getFullYear()
-  const mes = d.getMonth() + 1
+  if (Number.isNaN(d.getTime())) return null
+  const { year: ano, month: mes } = getDatePartsBrt(d)
   if (ano >= 2026) return 90
   if (ano === 2025) {
     if (mes <= 3) return 70
@@ -148,22 +148,88 @@ export function computeAdesaoSem18(status, dataPrazo, dataConclusao, feriados) {
   return conclusaoData <= proximo ? 'Dentro do prazo' : 'Fora do prazo'
 }
 
+/** Fuso dos CSVs de eficiência (SharePoint / BI) — corte das 18h é horário de Brasília. */
+export const EFICIENCIA_TZ = 'America/Sao_Paulo'
+
+/** BRT = UTC−3 (sem horário de verão desde 2019). */
+const BRT_UTC_OFFSET_HOURS = 3
+
+/**
+ * Instante UTC correspondente a uma data/hora civil em Brasília.
+ * Ex.: 31/07/2026 18:02:09 BRT → 2026-07-31T21:02:09.000Z
+ */
+export function dateFromCivilBrt(year, month, day, hour = 0, minute = 0, second = 0) {
+  return new Date(Date.UTC(year, month - 1, day, hour + BRT_UTC_OFFSET_HOURS, minute, second))
+}
+
+/** Partes de calendário/relógio em America/Sao_Paulo. */
+export function getDatePartsBrt(date) {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: EFICIENCIA_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  })
+  const parts = Object.fromEntries(fmt.formatToParts(date).map((p) => [p.type, p.value]))
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+  }
+}
+
+/** Dia civil YYYY-MM-DD em horário de Brasília. */
+export function toIsoDateBrt(d) {
+  if (!d) return null
+  const date = d instanceof Date ? d : new Date(d)
+  if (Number.isNaN(date.getTime())) return null
+  const p = getDatePartsBrt(date)
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
+}
+
+/**
+ * Data pura dd/MM/yyyy (ou Date do Excel) interpretada como dia civil em Brasília.
+ * Evita deslocamento quando o sync roda em UTC (GitHub Actions).
+ */
+export function parseDateOnlyBrt(v) {
+  if (v == null || v === '') return null
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) return null
+    const iso = toIsoDate(v)
+    if (!iso) return null
+    const [y, m, d] = iso.split('-').map(Number)
+    return dateFromCivilBrt(y, m, d, 0, 0, 0)
+  }
+  const s = String(v).trim()
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (br) return dateFromCivilBrt(+br[3], +br[2], +br[1], 0, 0, 0)
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 /**
  * "Conclusão Completa" (tabela Nova): combina as colunas cruas "Data da Conclusão" (data)
  * e "Hora da Conclusão" (hora) do Historico/*.csv num único datetime.
- * @param {Date|null} dataConclusao  data pura (meia-noite)
- * @param {string|null} horaConclusaoStr  "HH:mm" ou "HH:mm:ss"
+ * @param {Date|null} dataConclusao  data pura (meia-noite BRT)
+ * @param {string|null} horaConclusaoStr  "HH:mm" ou "HH:mm:ss" (horário de Brasília)
  */
 export function computeConclusaoCompleta(dataConclusao, horaConclusaoStr) {
   if (!dataConclusao) return null
-  const m = (horaConclusaoStr ?? '').match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/)
-  const resultado = new Date(dataConclusao)
-  if (m) {
-    resultado.setHours(Number(m[1]), Number(m[2]), Number(m[3] ?? 0), 0)
-  } else {
-    resultado.setHours(0, 0, 0, 0)
+  const isoDay = toIsoDateBrt(dataConclusao)
+  if (!isoDay) return null
+  const [y, m, d] = isoDay.split('-').map(Number)
+  const hm = (horaConclusaoStr ?? '').match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/)
+  if (hm) {
+    return dateFromCivilBrt(y, m, d, Number(hm[1]), Number(hm[2]), Number(hm[3] ?? 0))
   }
-  return resultado
+  return dateFromCivilBrt(y, m, d, 0, 0, 0)
 }
 
 /**
@@ -182,14 +248,12 @@ export function computeAdesaoApos18(status, dataPrazo, conclusaoCompleta) {
   if (status === 'Aberta') return 'Pendente'
   if (!dataPrazo || !conclusaoCompleta) return null
 
-  const diaPrazo = toIsoDate(dataPrazo)
-  const diaConclusao = toIsoDate(conclusaoCompleta)
+  const diaPrazo = toIsoDateBrt(dataPrazo)
+  const diaConclusao = toIsoDateBrt(conclusaoCompleta)
   if (diaConclusao > diaPrazo) return 'Fatal Quebra'
   if (diaConclusao < diaPrazo) return 'D-1'
-  const segundos =
-    conclusaoCompleta.getHours() * 3600 +
-    conclusaoCompleta.getMinutes() * 60 +
-    conclusaoCompleta.getSeconds()
+  const { hour, minute, second } = getDatePartsBrt(conclusaoCompleta)
+  const segundos = hour * 3600 + minute * 60 + second
   // Até 18:00:00 inclusive = D-1; 18:00:01+ = Fatal (BI considera segundos após o corte).
   return segundos <= 18 * 3600 ? 'D-1' : 'Fatal'
 }
@@ -253,7 +317,7 @@ export function areaNaConclusao(nome, dataConclusao, turnover) {
   if (alvo === normalizeNomeChave('CAROLINE ABDALLA')) return 'Trabalhista'
   const doUsuario = turnover.filter((t) => normalizeNomeChave(t.nome) === alvo)
   if (dataConclusao) {
-    const iso = toIsoDate(dataConclusao)
+    const iso = toIsoDateBrt(dataConclusao)
     const vigente = doUsuario.find(
       (t) => t.admissao && t.admissao <= iso && (!t.desligamento || t.desligamento >= iso),
     )

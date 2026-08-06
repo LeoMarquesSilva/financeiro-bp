@@ -43,7 +43,9 @@ import {
   resolveNomeCanonico,
   parseNumeroProcessoLista,
   toIsoDate,
+  toIsoDateBrt,
   toIsoDateTime,
+  parseDateOnlyBrt,
 } from './transforms.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -587,8 +589,8 @@ const FONTES = {
       const rows = raw
         .filter((r) => r['Status'] === 'Concluída')
         .map((r) => {
-          const dataConclusao = parseDate(r['Data da Conclusão'])
-          const dataPrazo = parseDate(r['Data para conclusão'])
+          const dataConclusao = parseDateOnlyBrt(r['Data da Conclusão'])
+          const dataPrazo = parseDateOnlyBrt(r['Data para conclusão'])
           const conclusaoCompleta = computeConclusaoCompleta(dataConclusao, r['Hora da Conclusão'])
           const adesaoSem18 = computeAdesaoSem18(r['Status'], dataPrazo, dataConclusao, feriados)
           const adesaoApos18 = computeAdesaoApos18(r['Status'], dataPrazo, conclusaoCompleta)
@@ -605,8 +607,8 @@ const FONTES = {
             etiquetas_tarefa: strOrNull(r['Etiquetas da Tarefa']),
             status: strOrNull(r['Status']),
             usuario_conclusao: strOrNull(r['Usuário que concluiu a tarefa']),
-            data_conclusao: toIsoDate(dataConclusao),
-            data_para_conclusao: toIsoDate(dataPrazo),
+            data_conclusao: toIsoDateBrt(dataConclusao),
+            data_para_conclusao: toIsoDateBrt(dataPrazo),
             data_limite: toIsoDate(parseDate(r['Data limite'])),
             justificativa_fatal: strOrNull(r['Justificativa de Fatal']),
             adesao_sem18: adesaoSem18,
@@ -638,8 +640,8 @@ const FONTES = {
           .map((r) => {
             // "Conclusão Completa", "Adesão Apos 18" e "Etiqueta da Tarefa" não existem crus no
             // CSV (mesma estrutura do Tarefas.csv) — são colunas calculadas no BI, replicadas aqui.
-            const dataConclusao = parseDate(r['Data da Conclusão'])
-            const dataPrazo = parseDate(r['Data para conclusão'])
+            const dataConclusao = parseDateOnlyBrt(r['Data da Conclusão'])
+            const dataPrazo = parseDateOnlyBrt(r['Data para conclusão'])
             const conclusaoCompleta = computeConclusaoCompleta(dataConclusao, r['Hora da Conclusão'])
             const adesaoApos18 = computeAdesaoApos18(r['Status'], dataPrazo, conclusaoCompleta)
             const tarefaNome = (r['Tarefa'] ?? '').trim().toUpperCase()
@@ -656,8 +658,8 @@ const FONTES = {
               status: strOrNull(r['Status']),
               usuario_conclusao: strOrNull(r['Usuário que concluiu a tarefa']),
               conclusao_completa: toIsoDateTime(conclusaoCompleta),
-              data_conclusao: toIsoDate(conclusaoCompleta),
-              data_para_conclusao: toIsoDate(dataPrazo),
+              data_conclusao: toIsoDateBrt(conclusaoCompleta),
+              data_para_conclusao: toIsoDateBrt(dataPrazo),
               justificativa_fatal: strOrNull(r['Justificativa de Fatal']),
               excludente: computeExcludente(r['Justificativa de Fatal']),
               adesao_apos18: adesaoApos18,

@@ -1,3 +1,6 @@
+/** Fuso dos CSVs SharePoint / BI — datas e corte das 18h são horário de Brasília. */
+export const EFICIENCIA_TZ = 'America/Sao_Paulo'
+
 /** Áreas do escritório (mesmo De-Para usado no sync SharePoint, scripts/sharepoint/transforms.mjs). */
 export const AREAS_EFICIENCIA = [
   'Cível',

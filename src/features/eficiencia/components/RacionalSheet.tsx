@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { eficienciaService } from '../services/eficienciaService'
 import { exportRacionalExcel } from '../utils/racionalExport'
-import { formatRacionalCell, formatRacionalResumoLabel } from '../utils/racionalFormat'
+import { formatRacionalCell, formatRacionalResumoLabel, isRacionalLinhaForaMeta, racionalLinhaForaMetaTitle } from '../utils/racionalFormat'
 import { formatRacionalPeriodoLabel } from '../utils/racionalQuery'
 import {
   atingiuMetaKpi,
@@ -183,15 +183,18 @@ export function RacionalSheet({
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {linhas.map((row, i) => {
-                    const isExcludente = row.excludente === 'Excludente'
+                    const foraMeta =
+                      indicador != null && isRacionalLinhaForaMeta(indicador, row)
+                    const foraMetaTitle =
+                      indicador != null ? racionalLinhaForaMetaTitle(indicador) : undefined
                     return (
                       <tr
                         key={i}
                         className={cn(
                           'text-slate-700',
-                          isExcludente && 'bg-amber-50/80 text-slate-500',
+                          foraMeta && 'bg-amber-50/80 text-slate-500',
                         )}
-                        title={isExcludente ? 'Excludente — não entra na % do KPI' : undefined}
+                        title={foraMeta ? foraMetaTitle : undefined}
                       >
                         {colunas.map((c) => (
                           <td key={c.key} className="whitespace-nowrap py-1.5 pr-4">

@@ -1,6 +1,7 @@
 import {
   EFICIENCIA_AMOSTRA_FRACAO,
   EFICIENCIA_EVIDENCIA_POR_JUSTIFICATIVA,
+  EFICIENCIA_TZ,
 } from '../constants'
 
 export type FatalExcludenteRow = {
@@ -66,13 +67,14 @@ function formatDateBr(value: string | null, withTime: boolean): string {
   if (!d) return '—'
   return withTime
     ? d.toLocaleString('pt-BR', {
+        timeZone: EFICIENCIA_TZ,
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
       })
-    : d.toLocaleDateString('pt-BR')
+    : d.toLocaleDateString('pt-BR', { timeZone: EFICIENCIA_TZ })
 }
 
 export function buildTextoChamado(row: FatalExcludenteRow, evidencia: string): string {

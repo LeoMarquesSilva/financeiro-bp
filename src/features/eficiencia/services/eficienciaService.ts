@@ -42,6 +42,7 @@ import {
   fetchEficienciaProtocoloRacionalResumo,
   fetchRacionalLinhasCompletas,
   fetchSlaProtocoloRacionalResumo,
+  fetchSlaVistagemRacionalResumo,
   RACIONAL_LIMITE,
   type RacionalConfig,
 } from '../utils/racionalQuery'
@@ -64,6 +65,9 @@ async function fetchRacionalResumo(
   }
   if (indicador === 'eficiencia_protocolo') {
     return fetchEficienciaProtocoloRacionalResumo(cfg, ano, area, mes)
+  }
+  if (indicador === 'sla_vistagem_risco' || indicador === 'sla_vistagem_normal') {
+    return fetchSlaVistagemRacionalResumo(cfg, indicador, ano, area, mes)
   }
   return undefined
 }
@@ -144,6 +148,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
     dataColuna: 'disponibilizado_vistagem',
     areaColuna: 'area',
     filtros: [
+      { tipo: 'notNull', coluna: 'vistado_por' },
       { tipo: 'distinctFrom', coluna: 'demanda_risco', valor: 'Não' },
       { tipo: 'excludeInAllowNull', coluna: 'area', valores: ['Operações Legais'] },
     ],
@@ -164,6 +169,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
     dataColuna: 'disponibilizado_vistagem',
     areaColuna: 'area',
     filtros: [
+      { tipo: 'notNull', coluna: 'vistado_por' },
       { tipo: 'orEq', coluna: 'demanda_risco', valores: ['Não', 'NAO'] },
       {
         tipo: 'excludeInAllowNull',

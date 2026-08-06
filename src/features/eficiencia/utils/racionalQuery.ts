@@ -10,6 +10,7 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import type { RacionalColuna, RacionalIndicador, RacionalResultado } from '../types/eficiencia.types'
+import { isVistadoD1Sim } from './racionalFormat'
 
 const RACIONAL_LIMITE = 500
 
@@ -289,6 +290,13 @@ export function buildRacionalBaseQuery(
         .order('fatal_sem18_d1', { ascending: false })
         .order(cfg.dataColuna, { ascending: false })
       break
+    case 'sla_vistagem_risco':
+    case 'sla_vistagem_normal':
+      // Não antes de Sim (asc) → falhas no topo; depois mais recentes.
+      query = query
+        .order('vistado_d1', { ascending: true })
+        .order(cfg.dataColuna, { ascending: false })
+      break
     default:
       query = query.order(cfg.dataColuna, { ascending: false })
   }
@@ -437,6 +445,48 @@ export async function fetchEficienciaProtocoloRacionalResumo(
     qtd_eficiencia,
     qtd_inconsistencia,
     qtd_total: qtd_eficiencia + qtd_inconsistencia,
+  }
+}
+
+/** COUNT(*) por vistado_d1 — mesmos filtros do KPI. */
+export async function fetchSlaVistagemRacionalResumo(
+  cfg: RacionalConfig,
+  indicador: 'sla_vistagem_risco' | 'sla_vistagem_normal',
+  ano: number,
+  area: string | null,
+  mes: MesFiltroEficiencia,
+): Promise<RacionalResultado['resumo']> {
+  let qtd_vistado_sim = 0
+  let qtd_vistado_nao = 0
+  let offset = 0
+
+  while (true) {
+    const query = buildRacionalBaseQuery(
+      cfg,
+      indicador,
+      ano,
+      area,
+      mes,
+      'vistado_d1',
+    ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const rows = (data ?? []) as Array<{ vistado_d1: string | null }>
+    for (const row of rows) {
+      if (isVistadoD1Sim(row.vistado_d1)) qtd_vistado_sim += 1
+      else qtd_vistado_nao += 1
+    }
+
+    if (rows.length < RACIONAL_FETCH_PAGE) break
+    offset += RACIONAL_FETCH_PAGE
+  }
+
+  return {
+    qtd_vistado_sim,
+    qtd_vistado_nao,
+    qtd_total: qtd_vistado_sim + qtd_vistado_nao,
   }
 }
 

@@ -137,6 +137,9 @@ export interface RacionalResumo {
   /** Eficiência Protocolo — COUNT(*) */
   qtd_eficiencia?: number
   qtd_inconsistencia?: number
+  /** SLA Vistagem — COUNT(*) por vistado_d1 */
+  qtd_vistado_sim?: number
+  qtd_vistado_nao?: number
   qtd_total?: number
 }
 

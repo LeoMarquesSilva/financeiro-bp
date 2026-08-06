@@ -1,6 +1,5 @@
 import ExcelJS from 'exceljs'
 import {
-  EFICIENCIA_EVIDENCIA_POR_JUSTIFICATIVA,
   MESES_EFICIENCIA,
   MESES_EFICIENCIA_ARQUIVO,
 } from '../constants'
@@ -46,10 +45,41 @@ function formatMinutosComoHoras(minutos: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-function setColWidths(ws: ExcelJS.Worksheet, widths: number[]) {
-  widths.forEach((w, i) => {
-    ws.getColumn(i + 1).width = w
-  })
+/** Ajusta largura das colunas ao conteúdo (texto formatado da célula). */
+function autoFitColumns(ws: ExcelJS.Worksheet, fromCol = 1, toCol?: number, maxWidth = 55) {
+  const lastCol = toCol ?? (ws.columnCount || 1)
+  for (let c = fromCol; c <= lastCol; c++) {
+    let maxLen = 8
+    ws.eachRow({ includeEmpty: false }, (row) => {
+      const text = row.getCell(c).text ?? ''
+      maxLen = Math.max(maxLen, text.length + 2)
+    })
+    ws.getColumn(c).width = Math.min(maxLen, maxWidth)
+  }
+}
+
+/** Ordena linhas do pivot pelo indicador principal (maior → menor); Total Geral no fim. */
+function sortPivotRowsDesc(rows: CellValue[][], sortColIndex: number): CellValue[][] {
+  const isTotal = (row: CellValue[]) => {
+    const label = String(row[0] ?? '').toLowerCase()
+    return label === 'total geral' || label === 'total'
+  }
+  const total = rows.find(isTotal)
+  const data = rows.filter((r) => !isTotal(r))
+  data.sort((a, b) => Number(b[sortColIndex] ?? 0) - Number(a[sortColIndex] ?? 0))
+  return total ? [...data, total] : data
+}
+
+const METAS_INDICADORES = {
+  slaProtocolo: '90%',
+  eficienciaProtocolo: '95%',
+  agendamento: '95%',
+  vistagem: '98%',
+} as const
+
+function formatPctExport(num: number, den: number): string | undefined {
+  if (den <= 0) return undefined
+  return `${((num / den) * 100).toFixed(2).replace('.', ',')}%`
 }
 
 function styleTitle(ws: ExcelJS.Worksheet, row: number, cols: number, text: string) {
@@ -193,14 +223,32 @@ function appendPivotAndDetail(
   pivotOpts: Parameters<typeof writeTable>[4],
   detail: { headers: string[]; rows: CellValue[][] },
   detailOpts: Parameters<typeof writeTable>[4],
-  widths: number[],
   extraPivot?: { headers: string[]; rows: CellValue[][]; startCol: number; opts?: Parameters<typeof writeTable>[4] },
+  kpi?: { metaLabel?: string; resultadoLabel?: string },
 ) {
   const ws = wb.addWorksheet(name.slice(0, 31))
-  setColWidths(ws, widths)
-  styleTitle(ws, 1, Math.max(widths.length, pivotHeaders.length + (extraPivot?.startCol ?? 0)), title)
+  const sheetCols = Math.max(
+    pivotHeaders.length + (extraPivot?.startCol ?? 0),
+    detail.headers.length,
+    4,
+  )
+  styleTitle(ws, 1, sheetCols, title)
 
-  let row = 3
+  let row = 2
+  if (kpi?.metaLabel || kpi?.resultadoLabel) {
+    ws.mergeCells(row, 1, row, sheetCols)
+    const cell = ws.getCell(row, 1)
+    const partes: string[] = []
+    if (kpi.metaLabel) partes.push(`Meta: ${kpi.metaLabel}`)
+    if (kpi.resultadoLabel) partes.push(`Resultado: ${kpi.resultadoLabel}`)
+    cell.value = partes.join(' · ')
+    cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: `FF${BRAND}` } }
+    cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
+    ws.getRow(row).height = 20
+    row += 1
+  }
+
+  row += 1
   styleSection(ws, row, 'Resumo por área', pivotHeaders.length)
   row += 1
   const afterPivot = writeTable(ws, row, pivotHeaders, pivotRows, {
@@ -225,6 +273,7 @@ function appendPivotAndDetail(
     to: { row: detailHeaderRow + detail.rows.length, column: detail.headers.length },
   }
   ws.views = [{ state: 'frozen', ySplit: detailHeaderRow, activeCell: 'A1', showGridLines: false }]
+  autoFitColumns(ws, 1, sheetCols)
 }
 
 function buildSlaPivot(linhas: Array<Record<string, unknown>>) {
@@ -243,7 +292,7 @@ function buildSlaPivot(linhas: Array<Record<string, unknown>>) {
     else if (row.fatal_apos18 === 'FATAL') acc.fatal += 1
     byArea.set(area, acc)
   }
-  const areas = [...byArea.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  const areas = [...byArea.keys()]
   let totD1 = 0
   let totFatal = 0
   const rows: CellValue[][] = areas.map((area) => {
@@ -262,7 +311,7 @@ function buildSlaPivot(linhas: Array<Record<string, unknown>>) {
   const justTotal = justRows.reduce((s, r) => s + Number(r[1] ?? 0), 0)
   justRows.push(['Total Geral', justTotal])
 
-  return { rows, justRows }
+  return { rows: sortPivotRowsDesc(rows, 1), justRows }
 }
 
 function buildPctPivot(
@@ -281,18 +330,16 @@ function buildPctPivot(
   }
   let totA = 0
   let totB = 0
-  const rows: CellValue[][] = [...byArea.keys()]
-    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
-    .map((area) => {
-      const acc = byArea.get(area)!
-      const den = acc.a + acc.b
-      totA += acc.a
-      totB += acc.b
-      return [area, pct(acc.a, den), pct(acc.b, den)]
-    })
+  const rows: CellValue[][] = [...byArea.keys()].map((area) => {
+    const acc = byArea.get(area)!
+    const den = acc.a + acc.b
+    totA += acc.a
+    totB += acc.b
+    return [area, pct(acc.a, den), pct(acc.b, den)]
+  })
   const den = totA + totB
   rows.push(['Total Geral', pct(totA, den), pct(totB, den)])
-  return { headers, rows }
+  return { headers, rows: sortPivotRowsDesc(rows, 1) }
 }
 
 function buildVistagemPivot(linhas: Array<Record<string, unknown>>) {
@@ -309,7 +356,7 @@ function buildVistagemPivot(linhas: Array<Record<string, unknown>>) {
   let totN = 0
   const pctRows: CellValue[][] = []
   const qtdRows: CellValue[][] = []
-  for (const area of [...byArea.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR'))) {
+  for (const area of [...byArea.keys()]) {
     const acc = byArea.get(area)!
     const den = acc.sim + acc.nao
     totS += acc.sim
@@ -320,7 +367,10 @@ function buildVistagemPivot(linhas: Array<Record<string, unknown>>) {
   const den = totS + totN
   pctRows.push(['Total Geral', pct(totS, den), pct(totN, den)])
   qtdRows.push(['Total Geral', totS, totN])
-  return { pctRows, qtdRows }
+  return {
+    pctRows: sortPivotRowsDesc(pctRows, 1),
+    qtdRows: sortPivotRowsDesc(qtdRows, 1),
+  }
 }
 
 export function indicadoresResultadoFilename(ano: number, mes: number): string {
@@ -346,7 +396,6 @@ async function downloadWorkbook(wb: ExcelJS.Workbook, filename: string) {
 
 function writeResultadoSheet(wb: ExcelJS.Workbook, data: IndicadoresResultadoMes) {
   const ws = wb.addWorksheet('RESULTADO')
-  setColWidths(ws, [36, 18, 55])
   const mesLabel = MESES_EFICIENCIA[data.mes - 1]
   styleTitle(ws, 1, 3, `INDICADORES RESULTADO — ${mesLabel}/${data.ano}`)
 
@@ -427,12 +476,6 @@ function writeResultadoSheet(wb: ExcelJS.Workbook, data: IndicadoresResultadoMes
     'Ver aba DESENVOLVIMENTO DE EQUIPE',
     BRAND_SOFT,
   ])
-  kpis.push([
-    'Amostra evidências FATAL',
-    `${data.amostraChamados.length} de ${data.detalhesExcludentes.length}`,
-    'Ver abas Metodologia e Chamados - Amostra',
-    AMBER_SOFT,
-  ])
 
   kpis.forEach((kpi, i) => {
     const row = 5 + i
@@ -448,145 +491,7 @@ function writeResultadoSheet(wb: ExcelJS.Workbook, data: IndicadoresResultadoMes
   })
 
   ws.views = [{ state: 'frozen', ySplit: 4, showGridLines: false }]
-}
-
-function writeMetodologia(wb: ExcelJS.Workbook, data: IndicadoresResultadoMes) {
-  const ws = wb.addWorksheet('Metodologia')
-  setColWidths(ws, [55, 55, 12, 12])
-  styleTitle(ws, 1, 4, 'Metodologia de Amostragem — Evidências de Protocolos FATAL')
-
-  const blocks: Array<{ title: string; body: string }> = [
-    {
-      title: '1. Objetivo',
-      body: 'Validar, por amostragem, a justificativa registrada em cada protocolo classificado como FATAL, mediante solicitação de evidência documental ao responsável, confirmando que o descumprimento do SLA decorreu do motivo informado (ex.: atraso do cliente) e não de falha interna.',
-    },
-    {
-      title: '2. População e escopo',
-      body: `População: ${data.detalhesExcludentes.length} protocolos FATAL excludentes do mês. Unidade de amostragem = 1 protocolo (CI). A amostragem não é censo: seleciona-se uma parte representativa e de maior risco.`,
-    },
-    {
-      title: '3. Critérios de estratificação',
-      body: 'Estratos = combinação Área × Justificativa de Fatal. Dessa forma a amostra preserva a participação (quantidade) de cada Área e de cada Justificativa observada na população.',
-    },
-    {
-      title: '4. Regra de seleção',
-      body: 'a) ~30% por estrato (arredondado).\nb) Mínimo 1 caso por estrato não vazio.\nc) Ordem da lista (não por atraso).\nd) Casos sorteados listados na aba Chamados - Amostra.',
-    },
-  ]
-
-  let row = 3
-  for (const block of blocks) {
-    styleSection(ws, row, block.title, 4)
-    row += 1
-    ws.mergeCells(row, 1, row, 4)
-    const cell = ws.getCell(row, 1)
-    cell.value = block.body
-    cell.font = { name: 'Calibri', size: 12, color: { argb: `FF${TEXT}` } }
-    cell.alignment = { wrapText: true, vertical: 'top' }
-    ws.getRow(row).height = block.body.length > 160 ? 48 : 32
-    row += 2
-  }
-
-  styleSection(ws, row, '5. Resumo da amostra por estrato', 4)
-  row += 1
-  const resumoRows = data.resumoAmostra.map((r) => [
-    r.justificativa,
-    r.populacao,
-    r.amostra,
-    r.pctAmostra,
-  ])
-  writeTable(ws, row, ['Justificativa de Fatal', 'População', 'Amostra', '% Amostra'], resumoRows, {
-    pctCols: [4],
-    numberCols: [2, 3],
-  })
-  row += resumoRows.length + 2
-
-  styleSection(ws, row, '6. Tipo de evidência a solicitar por justificativa', 4)
-  row += 1
-  const evidRows = Object.entries(EFICIENCIA_EVIDENCIA_POR_JUSTIFICATIVA).map(([j, e]) => [j, e])
-  writeTable(ws, row, ['Justificativa de Fatal', 'Evidência a solicitar'], evidRows, {
-    wrapCols: [1, 2],
-  })
-  row += evidRows.length + 2
-
-  styleSection(ws, row, '7. Prazo de resposta e tratamento', 4)
-  row += 1
-  ws.mergeCells(row, 1, row, 4)
-  ws.getCell(row, 1).value =
-    'Prazo sugerido de resposta ao chamado: 5 dias úteis. Sem evidência válida no prazo, o FATAL é mantido como falha interna. As evidências recebidas devem ser anexadas ao chamado e o resultado registrado (Confirmado / Não comprovado).'
-  ws.getCell(row, 1).alignment = { wrapText: true }
-  ws.getRow(row).height = 40
-  row += 2
-  ws.getCell(row, 1).value =
-    `Amostra gerada: ${data.amostraChamados.length} de ${data.detalhesExcludentes.length} excludentes.`
-  ws.getCell(row, 1).font = { name: 'Calibri', size: 12, bold: true, color: { argb: `FF${BRAND}` } }
-  ws.views = [{ showGridLines: false }]
-}
-
-function writeChamadosAmostra(wb: ExcelJS.Workbook, data: IndicadoresResultadoMes) {
-  const ws = wb.addWorksheet('Chamados - Amostra')
-  const headers = [
-    '#',
-    'CI',
-    'Área',
-    'Grupo Cliente',
-    'Tarefa Pai',
-    'Nº CNJ',
-    'Responsável',
-    'Prazo',
-    'Conclusão',
-    'Atraso (dias)',
-    'Justificativa de Fatal',
-    'Evidência solicitada',
-    'Texto do Chamado (pronto p/ copiar)',
-    'CHAMADO ABERTO?',
-    'RESPONSÁVEL PELO CHAMADO',
-    'RESPOSTA',
-    'DECISÃO',
-  ]
-  setColWidths(ws, [5, 10, 16, 22, 28, 24, 24, 12, 16, 12, 28, 36, 48, 14, 22, 16, 16])
-  styleTitle(ws, 1, headers.length, 'Chamados — Amostra de Evidências (Protocolos FATAL)')
-  styleHeaderRow(ws, 2, headers)
-
-  data.amostraChamados.forEach((row, i) => {
-    const r = 3 + i
-    const zebra = i % 2 === 1
-    const values: CellValue[] = [
-      i + 1,
-      row.ci,
-      row.area,
-      row.grupoCliente,
-      row.tarefaPai,
-      row.nroCnj,
-      row.responsavel,
-      formatRacionalCell(row.dataParaConclusao),
-      formatRacionalCell(row.conclusaoCompleta),
-      row.atrasoDias == null ? '' : Number(row.atrasoDias.toFixed(2)),
-      row.justificativa,
-      row.evidencia,
-      row.textoChamado,
-      '',
-      '',
-      '',
-      '',
-    ]
-    values.forEach((v, c) => {
-      styleDataCell(ws.getCell(r, c + 1), v, {
-        zebra,
-        wrap: c === 11 || c === 12,
-        numFmt: c === 9 && typeof v === 'number' ? '0.00' : undefined,
-        align: c === 0 || c === 9 ? 'center' : 'left',
-        fill: c >= 13 ? AMBER_SOFT : undefined,
-      })
-    })
-    ws.getRow(r).height = 48
-  })
-
-  ws.autoFilter = {
-    from: { row: 2, column: 1 },
-    to: { row: 2 + data.amostraChamados.length, column: headers.length },
-  }
-  ws.views = [{ state: 'frozen', ySplit: 2, showGridLines: false }]
+  autoFitColumns(ws, 1, 3)
 }
 
 export async function exportIndicadoresResultadoExcel(
@@ -599,7 +504,42 @@ export async function exportIndicadoresResultadoExcel(
 
   writeResultadoSheet(wb, data)
 
+  const r = data.slaProtocolo.resumo
+  const e = data.eficienciaProtocolo.resumo
+
   const slaPivot = buildSlaPivot(data.slaProtocolo.linhas)
+  const slaResultado =
+    r?.qtd_d1 != null && r.qtd_fatal != null
+      ? formatPctExport(r.qtd_d1, r.qtd_d1 + r.qtd_fatal)
+      : undefined
+  const efResultado =
+    e?.qtd_eficiencia != null && e.qtd_inconsistencia != null
+      ? formatPctExport(e.qtd_eficiencia, e.qtd_eficiencia + e.qtd_inconsistencia)
+      : undefined
+
+  let agDentro = 0
+  let agFora = 0
+  for (const row of data.agendamento.linhas) {
+    if (String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')) agFora += 1
+    else agDentro += 1
+  }
+  const agResultado = formatPctExport(agDentro, agDentro + agFora)
+
+  const countVist = (linhas: Array<Record<string, unknown>>) => {
+    let sim = 0
+    let nao = 0
+    for (const row of linhas) {
+      const v = String(row.vistado_d1 ?? '')
+      if (v === 'Sim' || v === 'SIM' || v === 'true') sim += 1
+      else nao += 1
+    }
+    return { sim, nao }
+  }
+  const vr = countVist(data.vistagemRisco.linhas)
+  const vn = countVist(data.vistagemNormal.linhas)
+  const vrResultado = formatPctExport(vr.sim, vr.sim + vr.nao)
+  const vnResultado = formatPctExport(vn.sim, vn.sim + vn.nao)
+
   const slaDetail = linhasTabela(data.slaProtocolo, [
     { key: 'ci', label: 'CI' },
     { key: 'area_conclusao', label: 'Área (na conclusão)' },
@@ -636,12 +576,12 @@ export async function exportIndicadoresResultadoExcel(
       },
       highlightCol: { col: 12, match: 'SIM', fill: AMBER_SOFT },
     },
-    [12, 18, 22, 14, 30, 22, 26, 14, 16, 12, 32, 12],
     {
       headers: ['Justificativa de Fatal', 'QTD'],
       rows: slaPivot.justRows,
       startCol: 5,
     },
+    { metaLabel: METAS_INDICADORES.slaProtocolo, resultadoLabel: slaResultado },
   )
 
   const efPivot = buildPctPivot(
@@ -665,7 +605,8 @@ export async function exportIndicadoresResultadoExcel(
         map: { INCONSISTÊNCIA: RED_SOFT, INCONSISTENCIA: RED_SOFT, EFICIÊNCIA: GREEN_SOFT, EFICIENCIA: GREEN_SOFT },
       },
     },
-    [10, 14, 22, 18, 16, 22, 14, 28],
+    undefined,
+    { metaLabel: METAS_INDICADORES.eficienciaProtocolo, resultadoLabel: efResultado },
   )
 
   const agPivot = buildPctPivot(
@@ -697,12 +638,13 @@ export async function exportIndicadoresResultadoExcel(
         map: { 'Fora do Prazo': RED_SOFT, 'Dentro do prazo': GREEN_SOFT },
       },
     },
-    [10, 22, 26, 18, 14, 14, 18],
+    undefined,
+    { metaLabel: METAS_INDICADORES.agendamento, resultadoLabel: agResultado },
   )
 
-  for (const [name, source, title] of [
-    ['SLA VISTAGEM DE RISCO', data.vistagemRisco, 'SLA Vistagem de Risco'],
-    ['SLA VISTAGEM NORMAL', data.vistagemNormal, 'SLA Vistagem Normal'],
+  for (const [name, source, title, resultadoLabel] of [
+    ['SLA VISTAGEM DE RISCO', data.vistagemRisco, 'SLA Vistagem de Risco', vrResultado],
+    ['SLA VISTAGEM NORMAL', data.vistagemNormal, 'SLA Vistagem Normal', vnResultado],
   ] as const) {
     const vp = buildVistagemPivot(source.linhas)
     appendPivotAndDetail(
@@ -719,19 +661,18 @@ export async function exportIndicadoresResultadoExcel(
           map: { Sim: GREEN_SOFT, Não: RED_SOFT, NAO: RED_SOFT },
         },
       },
-      [10, 16, 22, 22, 18, 20, 18, 16, 12],
       {
         headers: ['AREA', 'Sim', 'Não'],
         rows: vp.qtdRows,
         startCol: 5,
         opts: { numberCols: [6, 7] },
       },
+      { metaLabel: METAS_INDICADORES.vistagem, resultadoLabel },
     )
   }
 
   {
     const ws = wb.addWorksheet('DESENVOLVIMENTO DE EQUIPE'.slice(0, 31))
-    setColWidths(ws, [18, 36, 32, 10, 10])
     styleTitle(ws, 1, 5, `Relatório de Treinamentos — ${data.ano}`)
     const headers = ['Área', 'Treinamento', 'Participante', 'Mês', 'Horas']
     styleHeaderRow(ws, 3, headers)
@@ -759,10 +700,8 @@ export async function exportIndicadoresResultadoExcel(
       to: { row: 3 + data.desenvolvimento.linhas.length, column: 5 },
     }
     ws.views = [{ state: 'frozen', ySplit: 3, showGridLines: false }]
+    autoFitColumns(ws, 1, 5)
   }
-
-  writeMetodologia(wb, data)
-  writeChamadosAmostra(wb, data)
 
   await downloadWorkbook(wb, indicadoresResultadoFilename(data.ano, data.mes))
 }

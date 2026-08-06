@@ -53,28 +53,28 @@ import { EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL } from '@/features/eficiencia/const
 
 ---
 
-## Vistagem — `vistado_por` nulo
+## Vistagem — exige `vistado_por`
 
-Publicações **sem** `vistado_por` **entram** no KPI (comum em Trabalhista e outras áreas).
-**Proibido** filtrar `vistado_por IS NOT NULL` na série mensal do Overview.
+Publicações **sem** `vistado_por` **não entram** no KPI nem no racional (Risco e Normal).
 
-O ranking por usuário (`eficiencia_sla_vistagem_por_usuario`) pode exigir usuário — lá faz sentido.
+**Obrigatório** filtrar `NULLIF(trim(vistado_por), '') IS NOT NULL` na série mensal, no racional
+e em exports derivados.
+
+O ranking por usuário (`eficiencia_sla_vistagem_por_usuario`) já exige `vistado_por` — mesma população.
 
 ---
 
 ## O que evitar
 
 ```typescript
+// ❌ BAD — incluir publicação sem vistador no KPI ou racional
+// (sem filtro vistado_por IS NOT NULL)
+
 // ❌ BAD — calcular vistagem normal para Trabalhista
 buildCells(data.slaVistagemComum, ...)
 
-// ❌ BAD — incluir Trabalhista no consolidado de vistagem normal
-area NOT IN ('Distressd Deals', 'Operações Legais', 'Tributário') // sem Trabalhista
-
-// ✅ GOOD — constante + série vazia / UI com "-"
-area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
-  ? células com label '-'
-  : buildCells(data.slaVistagemComum, ...)
+// ✅ GOOD — filtro notNull em RACIONAL_CONFIG + SQL mensal
+{ tipo: 'notNull', coluna: 'vistado_por' }
 ```
 
 ---
