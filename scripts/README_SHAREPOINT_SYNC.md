@@ -72,10 +72,13 @@ O sync roda **na nuvem**, sem depender do Mac ligado:
 
 | Horário (Brasília) | Gatilho |
 |---|---|
-| **08:00** | cron do workflow |
-| **12:00** | cron do workflow |
+| **08:00** | cron (`timezone: America/Sao_Paulo`) |
+| **12:00** | cron (`timezone: America/Sao_Paulo`) |
 
 Workflow: `.github/workflows/sync-sharepoint.yml`
+
+O agendamento usa fuso IANA `America/Sao_Paulo` (não é necessário converter para UTC manualmente).
+Disparo manual opcional com filtro `--only` (ex.: `tarefas,tarefas_historico`).
 
 #### Secrets no GitHub (Settings → Secrets and variables → Actions)
 

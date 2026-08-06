@@ -2,19 +2,30 @@ name: Sync SharePoint (Eficiência)
 
 on:
   schedule:
-    # 08:00 e 12:00 America/Sao_Paulo (UTC-3, sem horário de verão)
-    - cron: '0 11 * * *'
-    - cron: '0 15 * * *'
+    # 08:00 e 12:00 horário de Brasília (IANA — sem conversão manual UTC)
+    - cron: '0 8 * * *'
+      timezone: America/Sao_Paulo
+    - cron: '0 12 * * *'
+      timezone: America/Sao_Paulo
   workflow_dispatch:
+    inputs:
+      only:
+        description: 'Fontes (vazio = todas). Ex.: tarefas,tarefas_historico'
+        required: false
+        default: ''
 
 concurrency:
   group: sync-sharepoint
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   sync:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,4 +46,10 @@ jobs:
           MS_CLIENT_SECRET: ${{ secrets.MS_CLIENT_SECRET }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: npm run sync:sharepoint
+        run: |
+          ONLY="${{ github.event.inputs.only }}"
+          if [ -n "$ONLY" ]; then
+            npm run sync:sharepoint -- --only "$ONLY"
+          else
+            npm run sync:sharepoint
+          fi
