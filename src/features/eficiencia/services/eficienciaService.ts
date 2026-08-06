@@ -39,7 +39,11 @@ import {
   buildResumoAmostra,
   mapSlaRowToFatalExcludente,
   selecionarAmostraExcludentes,
+  type AbrirChamadosResultado,
+  type AmostraChamadoItem,
+  type EvidenciaFatalDecisao,
 } from '../utils/amostraChamados'
+import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
 import { agregarGestaoPdiMensal, avaliarGestaoPdi } from '../utils/gestaoPdiCalc'
 
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
@@ -751,5 +755,55 @@ export const eficienciaService = {
       amostraChamados,
       resumoAmostra,
     }
+  },
+
+  /**
+   * Abre chamados de evidência FATAL Excludente na RESPONSUM via Edge Function
+   * `abrir-chamados-evidencia` (SIOE). created_by_email é o fallback quando a área não
+   * tiver coordenador/gerente/sócio mapeado com conta RESPONSUM (ver módulo Colaboradores).
+   */
+  async abrirChamadosEvidenciaResponsum(
+    itens: AmostraChamadoItem[],
+    createdByEmail: string | null,
+  ): Promise<AbrirChamadosResultado> {
+    const { data, error } = await supabase.functions.invoke('abrir-chamados-evidencia', {
+      body: {
+        itens: itens.map((i) => ({
+          ci: i.ci,
+          area: i.area,
+          responsavel: i.responsavel,
+          nroCnj: i.nroCnj,
+          grupoCliente: i.grupoCliente,
+          textoChamado: i.textoChamado,
+        })),
+        created_by_email: createdByEmail,
+      },
+    })
+    if (error) throw new Error(await parseEdgeFunctionError(error))
+    return data as AbrirChamadosResultado
+  },
+
+  /**
+   * Decisões de auditoria (RESPONSUM → SIOE) por CI.
+   * Se houver várias linhas para o mesmo CI, mantém a mais recente (`decidido_em`).
+   */
+  async fetchEvidenciaFatalDecisoesPorCi(cis: string[]): Promise<Map<string, EvidenciaFatalDecisao>> {
+    const unique = [...new Set(cis.map((c) => c.trim()).filter(Boolean))]
+    const map = new Map<string, EvidenciaFatalDecisao>()
+    if (unique.length === 0) return map
+
+    const { data, error } = await supabase
+      .from('eficiencia_evidencia_fatal_decisoes' as never)
+      .select(
+        'id, ci, ticket_id, evidencia_enviada, decisao, ano, mes, decidido_em, decidido_por_id, decidido_por_nome, category, subcategory',
+      )
+      .in('ci', unique)
+      .order('decidido_em', { ascending: false })
+    if (error) throw error
+
+    for (const row of (data ?? []) as unknown as EvidenciaFatalDecisao[]) {
+      if (!map.has(row.ci)) map.set(row.ci, row)
+    }
+    return map
   },
 }

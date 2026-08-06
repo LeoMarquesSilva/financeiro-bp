@@ -9,6 +9,7 @@ import {
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
 import type { AppRole, TeamMemberRow } from './database.types'
+import type { ModuleKey } from './moduleAccess'
 
 interface AuthState {
   user: User | null
@@ -18,6 +19,7 @@ interface AuthState {
   area: string | null
   avatarUrl: string | null
   passwordChanged: boolean
+  moduleAccess: ModuleKey[]
   loading: boolean
 }
 
@@ -28,17 +30,30 @@ interface AuthContextValue extends AuthState {
   markPasswordChanged: () => void
 }
 
-type TeamMemberProfile = Pick<TeamMemberRow, 'role' | 'full_name' | 'avatar_url' | 'is_active' | 'area'> & { password_changed?: boolean }
+type TeamMemberProfile = Pick<TeamMemberRow, 'id' | 'role' | 'full_name' | 'avatar_url' | 'is_active' | 'area'> & { password_changed?: boolean }
 
 async function fetchTeamMemberRole(email: string): Promise<TeamMemberProfile | null> {
   const { data } = await supabase
     .from('team_members')
-    .select('role, full_name, area, avatar_url, password_changed, is_active')
+    .select('id, role, full_name, area, avatar_url, password_changed, is_active')
     .eq('email', email)
     .returns<TeamMemberProfile>()
     .single()
 
   return data
+}
+
+/**
+ * team_member_module_access ainda não está em database.types.ts (tabela nova da Fase 2,
+ * ver 20260806260000_team_members_colaborador_e_acesso_modulo.sql) — mesmo padrão `as never`
+ * usado em colaboradoresService.ts para tabelas fora do schema gerado.
+ */
+async function fetchModuleAccess(teamMemberId: string): Promise<ModuleKey[]> {
+  const { data } = await supabase
+    .from('team_member_module_access' as never)
+    .select('module_key')
+    .eq('team_member_id', teamMemberId)
+  return ((data ?? []) as unknown as { module_key: ModuleKey }[]).map((r) => r.module_key)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -50,12 +65,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     area: null,
     avatarUrl: null,
     passwordChanged: true,
+    moduleAccess: [],
     loading: true,
   })
 
   const hydrateRole = useCallback(async (user: User | null, session: Session | null) => {
     if (!user?.email) {
-      setState({ user: null, session: null, role: null, fullName: null, area: null, avatarUrl: null, passwordChanged: true, loading: false })
+      setState({ user: null, session: null, role: null, fullName: null, area: null, avatarUrl: null, passwordChanged: true, moduleAccess: [], loading: false })
       return
     }
 
@@ -63,9 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (member && member.is_active === false) {
       await supabase.auth.signOut()
-      setState({ user: null, session: null, role: null, fullName: null, area: null, avatarUrl: null, passwordChanged: true, loading: false })
+      setState({ user: null, session: null, role: null, fullName: null, area: null, avatarUrl: null, passwordChanged: true, moduleAccess: [], loading: false })
       return
     }
+
+    const moduleAccess = member?.id ? await fetchModuleAccess(member.id) : []
 
     setState({
       user,
@@ -75,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       area: member?.area ?? null,
       avatarUrl: member?.avatar_url ?? user.user_metadata?.avatar_url ?? null,
       passwordChanged: member?.password_changed ?? false,
+      moduleAccess,
       loading: false,
     })
   }, [])
@@ -101,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     localStorage.removeItem('crm_auth')
-    setState({ user: null, session: null, role: null, fullName: null, area: null, avatarUrl: null, passwordChanged: true, loading: false })
+    setState({ user: null, session: null, role: null, fullName: null, area: null, avatarUrl: null, passwordChanged: true, moduleAccess: [], loading: false })
   }, [])
 
   const markPasswordChanged = useCallback(() => {

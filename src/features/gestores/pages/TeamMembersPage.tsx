@@ -1,14 +1,24 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { teamMembersService, type CreateTeamMemberInput } from '@/lib/teamMembersService'
+import {
+  teamMembersService,
+  teamMemberModuleAccessService,
+  type CreateTeamMemberInput,
+  type TeamMemberModuleAccessRow,
+} from '@/lib/teamMembersService'
 import type { TeamMember, AppRole } from '@/lib/database.types'
 import { getTeamMember, getAreaTags } from '@/lib/teamAvatars'
+import { colaboradoresService } from '@/features/colaboradores/services/colaboradoresService'
+import type { Colaborador } from '@/features/colaboradores/types'
+import { MODULE_KEY_OPTIONS, type ModuleKey } from '@/lib/moduleAccess'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import {
   Dialog,
   DialogContent,
@@ -28,6 +38,7 @@ import {
   UserCheck,
   UserPlus,
   Filter,
+  LayoutGrid,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -52,6 +63,7 @@ const initialForm = {
   area: '',
   avatar_url: '',
   role: '' as '' | AppRole,
+  colaborador_id: '' as '' | string,
 }
 
 function getRoleLabel(role: AppRole | null): string {
@@ -62,6 +74,53 @@ function getRoleLabel(role: AppRole | null): string {
 function getRoleBadgeClass(role: AppRole | null): string {
   if (!role) return 'border-slate-200 bg-slate-50 text-slate-500'
   return ROLE_OPTIONS.find((r) => r.value === role)?.badgeClass ?? 'border-slate-200 bg-slate-50 text-slate-600'
+}
+
+function ModuleAccessPopover({
+  teamMember,
+  grantedModules,
+  onToggle,
+  pending,
+}: {
+  teamMember: TeamMember
+  grantedModules: Set<ModuleKey>
+  onToggle: (moduleKey: ModuleKey, grant: boolean) => void
+  pending: boolean
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="gap-1.5">
+          <LayoutGrid className="h-3.5 w-3.5" />
+          {grantedModules.size > 0 ? `${grantedModules.size} módulo(s)` : 'Liberar módulo'}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64">
+        <p className="mb-3 text-xs font-medium text-slate-500">
+          Módulos extras para <span className="text-slate-700">{teamMember.full_name}</span>, além da
+          permissão selecionada.
+        </p>
+        <div className="space-y-2">
+          {MODULE_KEY_OPTIONS.map((m) => {
+            const checked = grantedModules.has(m.value)
+            return (
+              <label
+                key={m.value}
+                className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"
+              >
+                <Checkbox
+                  checked={checked}
+                  disabled={pending}
+                  onCheckedChange={(next) => onToggle(m.value, next)}
+                />
+                {m.label}
+              </label>
+            )
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 export function TeamMembersPage() {
@@ -79,6 +138,27 @@ export function TeamMembersPage() {
     queryFn: () => teamMembersService.list(),
   })
   const teamMembers: TeamMember[] = data ?? []
+
+  const { data: colaboradoresData } = useQuery({
+    queryKey: ['colaboradores'],
+    queryFn: () => colaboradoresService.list(),
+  })
+  const colaboradoresLista: Colaborador[] = colaboradoresData ?? []
+  const colaboradoresAtivos: Colaborador[] = colaboradoresLista.filter((c) => c.is_active)
+
+  const { data: moduleAccessData } = useQuery({
+    queryKey: ['team_member_module_access'],
+    queryFn: () => teamMemberModuleAccessService.listAll(),
+  })
+  const moduleAccessRows: TeamMemberModuleAccessRow[] = moduleAccessData ?? []
+  const moduleAccessByMember = useMemo(() => {
+    const map = new Map<string, Set<ModuleKey>>()
+    for (const row of moduleAccessRows) {
+      if (!map.has(row.team_member_id)) map.set(row.team_member_id, new Set())
+      map.get(row.team_member_id)!.add(row.module_key)
+    }
+    return map
+  }, [moduleAccessRows])
 
   const stats = useMemo(() => {
     const active = teamMembers.filter((m) => m.is_active !== false)
@@ -138,6 +218,31 @@ export function TeamMembersPage() {
     onError: (err: Error) => {
       setUpdatingRoleId(null)
       toast.error(err.message ?? 'Erro ao atualizar permissão')
+    },
+  })
+
+  const updateColaboradorMutation = useMutation({
+    mutationFn: ({ id, colaboradorId }: { id: string; colaboradorId: string | null }) =>
+      teamMembersService.updateColaborador(id, colaboradorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team_members'] })
+      toast.success('Colaborador vinculado atualizado')
+    },
+    onError: (err: Error) => {
+      toast.error(err.message ?? 'Erro ao vincular colaborador')
+    },
+  })
+
+  const toggleModuleMutation = useMutation({
+    mutationFn: ({ teamMemberId, moduleKey, grant }: { teamMemberId: string; moduleKey: ModuleKey; grant: boolean }) =>
+      grant
+        ? teamMemberModuleAccessService.grant(teamMemberId, moduleKey)
+        : teamMemberModuleAccessService.revoke(teamMemberId, moduleKey),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team_member_module_access'] })
+    },
+    onError: (err: Error) => {
+      toast.error(err.message ?? 'Erro ao atualizar módulo liberado')
     },
   })
 
@@ -203,6 +308,7 @@ export function TeamMembersPage() {
       area,
       avatar_url: form.avatar_url.trim() || null,
       role: form.role || null,
+      colaborador_id: form.colaborador_id || null,
     })
   }
 
@@ -295,6 +401,35 @@ export function TeamMembersPage() {
               {isUpdatingRole && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
             </div>
           )}
+        </td>
+        <td className="py-3 pr-4">
+          <div className="flex items-center gap-2">
+            <select
+              value={m.colaborador_id ?? ''}
+              onChange={(e) =>
+                updateColaboradorMutation.mutate({ id: m.id, colaboradorId: e.target.value || null })
+              }
+              disabled={updateColaboradorMutation.isPending}
+              className="max-w-[160px] rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20 disabled:opacity-50"
+            >
+              <option value="">Sem vínculo</option>
+              {colaboradoresAtivos.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </td>
+        <td className="py-3 pr-4">
+          <ModuleAccessPopover
+            teamMember={m}
+            grantedModules={moduleAccessByMember.get(m.id) ?? new Set()}
+            onToggle={(moduleKey, grant) =>
+              toggleModuleMutation.mutate({ teamMemberId: m.id, moduleKey, grant })
+            }
+            pending={toggleModuleMutation.isPending}
+          />
         </td>
         <td className="py-3 text-right">
           <div className="flex items-center justify-end gap-1">
@@ -429,7 +564,7 @@ export function TeamMembersPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 lg:gap-6">
+            <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6 lg:gap-6">
               <div className="space-y-2">
                 <Label htmlFor="tm-email">E-mail *</Label>
                 <Input
@@ -465,6 +600,22 @@ export function TeamMembersPage() {
                     <option key={a} value={a} />
                   ))}
                 </datalist>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tm-colaborador">Colaborador (ORQESTRAI)</Label>
+                <select
+                  id="tm-colaborador"
+                  value={form.colaborador_id}
+                  onChange={(e) => setForm((f) => ({ ...f, colaborador_id: e.target.value }))}
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Sem vínculo</option>
+                  {colaboradoresAtivos.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.full_name} · {c.area}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="tm-role">Permissão</Label>
@@ -572,6 +723,8 @@ export function TeamMembersPage() {
                     <th className="px-4 py-3 text-left font-medium text-slate-600">E-mail</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Área</th>
                     <th className="px-4 py-3 text-left font-medium text-slate-600">Permissão</th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">Colaborador</th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">Módulos extras</th>
                     <th className="px-4 py-3 text-right font-medium text-slate-600">Ações</th>
                   </tr>
                 </thead>

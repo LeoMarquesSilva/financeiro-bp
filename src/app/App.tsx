@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/AuthContext'
 import type { AppRole } from '@/lib/database.types'
+import type { ModuleKey } from '@/lib/moduleAccess'
 import { Login } from './Login'
 import { ResetPassword } from './ResetPassword'
 import { FinanceiroLayout } from './layouts/FinanceiroLayout'
@@ -12,6 +13,7 @@ import { EscritorioFinanceiroDetalhePage } from '@/features/escritorio/pages/Esc
 import { CobrancaPage } from '@/features/cobranca/pages/CobrancaPage'
 import { CobrancaSeguimentoPage } from '@/features/cobranca/pages/CobrancaSeguimentoPage'
 import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
+import { ColaboradoresPage } from '@/features/colaboradores/pages/ColaboradoresPage'
 import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesPage'
 import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
 import { OpexPage } from '@/features/opex/pages/OpexPage'
@@ -20,20 +22,25 @@ import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
 
 function ProtectedRoute({
   allowedRoles,
+  moduleKey,
   children,
 }: {
   allowedRoles: AppRole[]
+  /** Libera o acesso também para quem tem esse módulo concedido individualmente (Fase 2). */
+  moduleKey?: ModuleKey
   children: React.ReactNode
 }) {
-  const { role } = useAuth()
-  if (!role || !allowedRoles.includes(role)) {
+  const { role, moduleAccess } = useAuth()
+  const hasRoleAccess = !!role && allowedRoles.includes(role)
+  const hasModuleAccess = !!moduleKey && moduleAccess.includes(moduleKey)
+  if (!hasRoleAccess && !hasModuleAccess) {
     return <Navigate to="/financeiro/inadimplencia" replace />
   }
   return <>{children}</>
 }
 
 function AppRoutes() {
-  const { user, role, loading } = useAuth()
+  const { user, role, moduleAccess, loading } = useAuth()
 
   if (loading) {
     return (
@@ -43,7 +50,7 @@ function AppRoutes() {
     )
   }
 
-  if (!user || !role) {
+  if (!user || (!role && moduleAccess.length === 0)) {
     return (
       <BrowserRouter>
         <Routes>
@@ -72,7 +79,7 @@ function AppRoutes() {
           <Route
             path="escritorio"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
+              <ProtectedRoute allowedRoles={['admin', 'financeiro']} moduleKey="escritorio">
                 <EscritorioPage />
               </ProtectedRoute>
             }
@@ -80,7 +87,7 @@ function AppRoutes() {
           <Route
             path="escritorio/financeiro/:metrica"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
+              <ProtectedRoute allowedRoles={['admin', 'financeiro']} moduleKey="escritorio">
                 <EscritorioFinanceiroDetalhePage />
               </ProtectedRoute>
             }
@@ -88,7 +95,7 @@ function AppRoutes() {
           <Route
             path="cobranca"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
+              <ProtectedRoute allowedRoles={['admin', 'financeiro']} moduleKey="cobranca">
                 <CobrancaPage />
               </ProtectedRoute>
             }
@@ -96,7 +103,7 @@ function AppRoutes() {
           <Route
             path="cobranca/seguimento"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro', 'comite']}>
+              <ProtectedRoute allowedRoles={['admin', 'financeiro', 'comite']} moduleKey="cobranca">
                 <CobrancaSeguimentoPage />
               </ProtectedRoute>
             }
@@ -104,15 +111,23 @@ function AppRoutes() {
           <Route
             path="gestores"
             element={
-              <ProtectedRoute allowedRoles={['admin']}>
+              <ProtectedRoute allowedRoles={['admin']} moduleKey="gestores">
                 <TeamMembersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="colaboradores"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <ColaboradoresPage />
               </ProtectedRoute>
             }
           />
           <Route
             path="receita"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro', 'comite']}>
+              <ProtectedRoute allowedRoles={['admin', 'financeiro', 'comite']} moduleKey="receita">
                 <ReceitaPage />
               </ProtectedRoute>
             }
@@ -120,7 +135,7 @@ function AppRoutes() {
           <Route
             path="opex"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro']}>
+              <ProtectedRoute allowedRoles={['admin', 'financeiro']} moduleKey="opex">
                 <OpexPage />
               </ProtectedRoute>
             }
@@ -128,7 +143,7 @@ function AppRoutes() {
           <Route
             path="eficiencia"
             element={
-              <ProtectedRoute allowedRoles={['admin']}>
+              <ProtectedRoute allowedRoles={['admin']} moduleKey="eficiencia">
                 <EficienciaPage />
               </ProtectedRoute>
             }
@@ -136,7 +151,7 @@ function AppRoutes() {
           <Route
             path="configuracoes"
             element={
-              <ProtectedRoute allowedRoles={['admin']}>
+              <ProtectedRoute allowedRoles={['admin']} moduleKey="configuracoes">
                 <ConfiguracoesPage />
               </ProtectedRoute>
             }

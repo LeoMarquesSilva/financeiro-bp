@@ -22,6 +22,7 @@ export interface TeamMemberRow {
   role: AppRole | null
   password_changed: boolean
   is_active: boolean
+  colaborador_id: string | null
   created_at: string
   updated_at: string
 }
@@ -39,6 +40,7 @@ export interface Database {
           avatar_url?: string | null
           role?: AppRole | null
           is_active?: boolean
+          colaborador_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -49,6 +51,7 @@ export interface Database {
           avatar_url?: string | null
           role?: AppRole | null
           is_active?: boolean
+          colaborador_id?: string | null
           updated_at?: string
         }
       }

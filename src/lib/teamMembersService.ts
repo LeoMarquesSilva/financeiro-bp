@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import type { TeamMember, AppRole } from './database.types'
+import type { ModuleKey } from './moduleAccess'
 
 /** Slug do e-mail para nome de arquivo em public/team/ (ex.: gustavo@bismarchipires.com.br → gustavo) */
 export function getLocalAvatarSlug(email: string): string {
@@ -17,6 +18,7 @@ export interface CreateTeamMemberInput {
   area: string
   avatar_url?: string | null
   role?: AppRole | null
+  colaborador_id?: string | null
 }
 
 export const teamMembersService = {
@@ -36,6 +38,7 @@ export const teamMembersService = {
       area: input.area.trim(),
       avatar_url: input.avatar_url?.trim() || null,
       role: input.role ?? null,
+      colaborador_id: input.colaborador_id ?? null,
       is_active: true,
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client infers Insert as never for some schemas
@@ -53,6 +56,15 @@ export const teamMembersService = {
     if (error) throw error
   },
 
+  async updateColaborador(id: string, colaboradorId: string | null): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase-js infers Update as never for some schema versions
+    const query = supabase.from('team_members') as any
+    const { error } = await query
+      .update({ colaborador_id: colaboradorId, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) throw error
+  },
+
   async updateActive(id: string, isActive: boolean): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase-js infers Update as never for some schema versions
     const query = supabase.from('team_members') as any
@@ -64,6 +76,44 @@ export const teamMembersService = {
 
   async delete(id: string): Promise<void> {
     const { error } = await supabase.from('team_members').delete().eq('id', id)
+    if (error) throw error
+  },
+}
+
+/**
+ * team_member_module_access ainda não está em database.types.ts (tabela nova da Fase 2, ver
+ * 20260806260000_team_members_colaborador_e_acesso_modulo.sql) — mesmo padrão `as never`
+ * usado em colaboradoresService.ts para tabelas fora do schema gerado.
+ */
+export interface TeamMemberModuleAccessRow {
+  id: string
+  team_member_id: string
+  module_key: ModuleKey
+  granted_at: string
+}
+
+export const teamMemberModuleAccessService = {
+  async listAll(): Promise<TeamMemberModuleAccessRow[]> {
+    const { data, error } = await supabase
+      .from('team_member_module_access' as never)
+      .select('*')
+    if (error) throw error
+    return (data ?? []) as unknown as TeamMemberModuleAccessRow[]
+  },
+
+  async grant(teamMemberId: string, moduleKey: ModuleKey): Promise<void> {
+    const { error } = await supabase
+      .from('team_member_module_access' as never)
+      .insert({ team_member_id: teamMemberId, module_key: moduleKey } as never)
+    if (error) throw error
+  },
+
+  async revoke(teamMemberId: string, moduleKey: ModuleKey): Promise<void> {
+    const { error } = await supabase
+      .from('team_member_module_access' as never)
+      .delete()
+      .eq('team_member_id', teamMemberId)
+      .eq('module_key', moduleKey)
     if (error) throw error
   },
 }

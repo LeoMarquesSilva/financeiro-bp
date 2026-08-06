@@ -31,6 +31,40 @@ export type AmostraEstratoResumo = {
   pctAmostra: number
 }
 
+/** Resultado por item da Edge Function abrir-chamados-evidencia (RESPONSUM). */
+export type AbrirChamadosResultadoItem = {
+  ci: string
+  ok: boolean
+  ticket_id?: string
+  ja_existia?: boolean
+  erro?: string
+}
+
+export type AbrirChamadosResultado = {
+  criados: number
+  ja_existiam: number
+  total: number
+  resultados: AbrirChamadosResultadoItem[]
+}
+
+/** Decisão de auditoria recebida do RESPONSUM (Finalizar → Evidência enviada?). */
+export type EvidenciaFatalDecisaoCodigo = 'excludente_mantida' | 'incluido_no_fatal'
+
+export type EvidenciaFatalDecisao = {
+  id: string
+  ci: string
+  ticket_id: string
+  evidencia_enviada: boolean
+  decisao: EvidenciaFatalDecisaoCodigo
+  ano: number | null
+  mes: number | null
+  decidido_em: string
+  decidido_por_id: string | null
+  decidido_por_nome: string | null
+  category: string | null
+  subcategory: string | null
+}
+
 function justificativaKey(justificativa: string): string {
   return justificativa.trim().toLocaleUpperCase('pt-BR')
 }

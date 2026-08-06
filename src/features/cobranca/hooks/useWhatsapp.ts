@@ -209,6 +209,11 @@ export function useWhatsappChats(busca?: string) {
     staleTime: 30_000,
     retry: 1,
     refetchOnWindowFocus: false,
+    // Rede de segurança: o realtime (postgres_changes) pode cair silenciosamente
+    // (WebSocket fechado sem reconectar). O polling garante que a lista atualiza
+    // sozinha mesmo se o canal realtime não estiver entregando eventos.
+    // Pausa automaticamente com a aba em segundo plano (refetchIntervalInBackground: false por padrão).
+    refetchInterval: 25_000,
   })
 
   useEffect(() => {
@@ -226,7 +231,11 @@ export function useWhatsappChats(busca?: string) {
         { event: '*', schema: 'public', table: 'whatsapp_chats' },
         invalidate,
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[whatsapp] realtime whatsapp_chats desconectado:', status)
+        }
+      })
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       supabase.removeChannel(channel)
@@ -250,6 +259,9 @@ export function useWhatsappConversa(remoteJid: string | null) {
     enabled: !!remoteJid,
     staleTime: 20_000,
     refetchOnWindowFocus: false,
+    // Rede de segurança contra realtime silenciosamente desconectado — ver
+    // comentário equivalente em useWhatsappChats.
+    refetchInterval: 12_000,
   })
 
   useEffect(() => {
@@ -295,7 +307,11 @@ export function useWhatsappConversa(remoteJid: string | null) {
           if (matchesRow(payload.new as { remote_jid?: string })) invalidate()
         },
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[whatsapp] realtime conversa desconectado:', key, status)
+        }
+      })
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       supabase.removeChannel(channel)
