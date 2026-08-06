@@ -115,7 +115,7 @@ export function JudicializadaDetailSheet({
     const ajusteParsed =
       valorAjuste.trim() === '' ? null : parseCurrencyBr(valorAjuste)
 
-    if (valorAjuste.trim() !== '' && ajusteParsed < 0) {
+    if (valorAjuste.trim() !== '' && ajusteParsed != null && ajusteParsed < 0) {
       toast.error('Valor de ajuste inválido.')
       return
     }

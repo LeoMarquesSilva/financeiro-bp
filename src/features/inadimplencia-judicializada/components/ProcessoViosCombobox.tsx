@@ -89,7 +89,7 @@ export function ProcessoViosCombobox({
             </p>
           ) : (
             <ul className="list-none py-1">
-              {processos.map((p) => (
+              {processos.map((p: ProcessoViosRow) => (
                 <li key={p.id}>
                   <button
                     type="button"

@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/AuthContext'
-import { formatCurrency, formatCurrencyInput, formatNumberToCurrencyInput, parseCurrencyBr } from '@/shared/utils/format'
+import { formatCurrency, formatCurrencyInput, parseCurrencyBr } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
@@ -235,7 +235,7 @@ export function ModalJudicializadaCadastro({
     const ajusteParsed =
       valorAjuste.trim() === '' ? null : parseCurrencyBr(valorAjuste)
 
-    if (valorAjuste.trim() !== '' && ajusteParsed < 0) {
+    if (valorAjuste.trim() !== '' && ajusteParsed != null && ajusteParsed < 0) {
       toast.error('Valor de ajuste inválido.')
       return
     }
