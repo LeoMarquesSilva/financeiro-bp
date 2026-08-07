@@ -45,6 +45,11 @@ interface Payload {
   itens: CasoExcludente[]
   /** E-mail de quem disparou a ação no financeiro-bp — fallback quando a área não tem titular mapeado na RESPONSUM. */
   created_by_email?: string | null
+  /** Override manual por área (configuração do modal Amostra de chamados). */
+  titular_por_area?: Record<
+    string,
+    { responsum_user_id: string; full_name: string; area: string }
+  >
 }
 
 interface ColaboradorTitular {
@@ -179,7 +184,16 @@ Deno.serve(async (req: Request) => {
     const resultados: ResultadoItem[] = []
 
     for (const item of itens) {
-      const titular = titularPorArea.get(item.area)
+      const override = payload.titular_por_area?.[item.area]
+      const titularAuto = titularPorArea.get(item.area)
+      const titular = override
+        ? {
+            full_name: override.full_name,
+            area: override.area,
+            responsum_user_id: override.responsum_user_id,
+            nivel_hierarquico: 'override',
+          }
+        : titularAuto
       const createdById = titular?.responsum_user_id ?? fallbackUser?.id ?? null
       const createdByName = titular?.full_name ?? fallbackUser?.name ?? null
       const createdByDepartment = titular?.area ?? fallbackUser?.department ?? item.area ?? null

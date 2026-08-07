@@ -781,7 +781,13 @@ export const eficienciaService = {
   async abrirChamadosEvidenciaResponsum(
     itens: AmostraChamadoItem[],
     createdByEmail: string | null,
+    titularPorArea: Record<
+      string,
+      { responsum_user_id: string; full_name: string; area: string }
+    > = {},
   ): Promise<AbrirChamadosResultado> {
+    const overrides =
+      Object.keys(titularPorArea).length > 0 ? titularPorArea : undefined
     const { data, error } = await supabase.functions.invoke('abrir-chamados-evidencia', {
       body: {
         itens: itens.map((i) => ({
@@ -793,6 +799,7 @@ export const eficienciaService = {
           textoChamado: i.textoChamado,
         })),
         created_by_email: createdByEmail,
+        titular_por_area: overrides,
       },
     })
     if (error) throw new Error(await parseEdgeFunctionError(error))

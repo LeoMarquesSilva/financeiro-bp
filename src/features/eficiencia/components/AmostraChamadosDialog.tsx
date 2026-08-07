@@ -10,6 +10,7 @@ import {
   FileText,
   Loader2,
   Send,
+  Settings2,
   Ticket,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -41,6 +42,12 @@ import type {
   AmostraChamadoItem,
   EvidenciaFatalDecisao,
 } from '../utils/amostraChamados'
+import {
+  loadAmostraChamadosResponsumConfig,
+  resolveTitularResponsumPorArea,
+  type AmostraChamadosResponsumConfig,
+} from '../utils/amostraChamadosResponsumConfig'
+import { AmostraChamadosResponsumConfigDialog } from './AmostraChamadosResponsumConfigDialog'
 import { formatPercent } from '@/shared/utils/format'
 
 /** Gradiente oficial RESPONSUM (ticket-bp-2026 / design-tokens). */
@@ -280,6 +287,14 @@ export function AmostraChamadosDialog({
   const [decisoesPorCi, setDecisoesPorCi] = useState<Map<string, EvidenciaFatalDecisao>>(
     () => new Map(),
   )
+  const [configResponsumOpen, setConfigResponsumOpen] = useState(false)
+  const [responsumPorArea, setResponsumPorArea] = useState<AmostraChamadosResponsumConfig>(() =>
+    loadAmostraChamadosResponsumConfig(),
+  )
+
+  useEffect(() => {
+    if (open) setResponsumPorArea(loadAmostraChamadosResponsumConfig())
+  }, [open])
 
   const { data: colaboradoresData } = useQuery({
     queryKey: ['colaboradores'],
@@ -448,6 +463,7 @@ export function AmostraChamadosDialog({
       const resultado = await eficienciaService.abrirChamadosEvidenciaResponsum(
         alvo,
         user?.email ?? null,
+        responsumPorArea,
       )
       setResultadoAbertura((prev) => {
         if (!prev) return resultado
@@ -484,15 +500,30 @@ export function AmostraChamadosDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] w-[min(1120px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Ticket className="h-5 w-5 text-slate-500" />
-            Amostra de chamados — evidências FATAL
-          </DialogTitle>
-          <DialogDescription>
-            Marque os casos desejados (um ou vários) e envie no RESPONSUM — ou copie o texto
-            como fallback.
-          </DialogDescription>
+        <DialogHeader className="shrink-0 border-b border-slate-200 px-6 pr-12 py-4 text-left">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1.5">
+              <DialogTitle className="flex items-center gap-2">
+                <Ticket className="h-5 w-5 shrink-0 text-slate-500" />
+                Amostra de chamados — evidências FATAL
+              </DialogTitle>
+              <DialogDescription>
+                Marque os casos desejados (um ou vários) e envie no RESPONSUM — ou copie o texto
+                como fallback.
+              </DialogDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              title="Configurar titular RESPONSUM por área"
+              onClick={() => setConfigResponsumOpen(true)}
+            >
+              <Settings2 className="h-4 w-4" />
+              <span className="sr-only">Configurar abertura por área</span>
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 py-4">
@@ -687,6 +718,22 @@ export function AmostraChamadosDialog({
                                 <span className="rounded-md bg-slate-200/70 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
                                   {item.area || 'Sem área'}
                                 </span>
+                                {(() => {
+                                  const titular = resolveTitularResponsumPorArea(
+                                    item.area,
+                                    colaboradores,
+                                    responsumPorArea,
+                                  )
+                                  if (!titular) return null
+                                  return (
+                                    <span
+                                      className="rounded-md bg-orange-100/80 px-1.5 py-0.5 text-[10px] font-medium text-orange-900"
+                                      title="Titular do chamado no RESPONSUM (created_by)"
+                                    >
+                                      RESPONSUM: {titular.full_name}
+                                    </span>
+                                  )
+                                })()}
                                 <span
                                   className="truncate text-[11px] text-slate-500"
                                   title={item.justificativa}
@@ -891,6 +938,14 @@ export function AmostraChamadosDialog({
                 : 'Enviar no RESPONSUM'}
           </Button>
         </DialogFooter>
+
+        <AmostraChamadosResponsumConfigDialog
+          open={configResponsumOpen}
+          onOpenChange={setConfigResponsumOpen}
+          colaboradores={colaboradores}
+          areasAmostra={areas}
+          onSaved={setResponsumPorArea}
+        />
       </DialogContent>
     </Dialog>
   )
