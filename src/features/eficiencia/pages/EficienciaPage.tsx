@@ -4,7 +4,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useAuth } from '@/lib/AuthContext'
 import { useEficienciaOverview } from '../hooks/useEficiencia'
 import { useEficienciaAccess } from '../hooks/useEficienciaAccess'
-import { EFICIENCIA_TABS, type EficienciaTabId } from '../config/eficienciaTabs'
+import {
+  visibleEficienciaTabs,
+  type EficienciaTabId,
+} from '../config/eficienciaTabs'
 import type { MesFiltroEficiencia } from '../constants'
 import { EficienciaHeader } from '../components/EficienciaHeader'
 import { IndicadoresResultadoActions } from '../components/IndicadoresResultadoActions'
@@ -95,15 +98,22 @@ export function EficienciaPage() {
   const [areaOverview, setAreaOverview] = useState<string | null>(null)
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
 
-  const areaEfetiva = access.canFilterAreas ? areaOverview : access.lockedArea
-  const { data: overview, loading: loadingOverview } = useEficienciaOverview(ano, areaEfetiva)
+  // Overview: coordenador vê consolidado (Todas as áreas), sem slicer.
+  // Abas de detalhe / Ops Legais RG: ainda usam lockedArea do coordenador.
+  const areaOverviewData = access.canFilterAreas ? areaOverview : null
+  const areaParaAbasEspeciais = access.canFilterAreas ? areaOverview : access.lockedArea
+  const tabsVisiveis = visibleEficienciaTabs(areaParaAbasEspeciais)
+  const { data: overview, loading: loadingOverview } = useEficienciaOverview(
+    ano,
+    areaOverviewData,
+  )
 
+  // Sai da aba Ops Legais (RG) se outra área (≠ Ops Legais / Todas) for selecionada.
   useEffect(() => {
-    if (authLoading) return
-    if (!access.canFilterAreas) {
-      setAreaOverview(access.lockedArea)
+    if (tab === 'ops-legais-rg' && !tabsVisiveis.some((t) => t.id === 'ops-legais-rg')) {
+      setTab('overview')
     }
-  }, [authLoading, access.canFilterAreas, access.lockedArea])
+  }, [tab, tabsVisiveis])
 
   const handleAreaChange = (area: string | null) => {
     if (!access.canFilterAreas) return
@@ -133,7 +143,7 @@ export function EficienciaPage() {
       <Tabs value={tab} onValueChange={(v) => setTab(v as EficienciaTabId)}>
         <div className="flex justify-center">
           <TabsList className="flex-wrap">
-            {EFICIENCIA_TABS.map(({ id, label, icon: Icon }) => (
+            {tabsVisiveis.map(({ id, label, icon: Icon }) => (
               <TabsTrigger key={id} value={id}>
                 <Icon className="h-4 w-4" />
                 {label}
@@ -151,21 +161,21 @@ export function EficienciaPage() {
             ano={ano}
             data={overview}
             loading={loadingOverview}
-            area={areaEfetiva}
+            area={areaOverviewData}
             onAreaChange={handleAreaChange}
             mesFiltro={mesFiltro}
-            allowedAreas={
-              access.canFilterAreas ? null : access.lockedArea ? [access.lockedArea] : []
-            }
+            showAreaFilter={access.canFilterAreas}
             allowTodasAreas={access.canFilterAreas}
           />
         </TabsContent>
 
-        {EFICIENCIA_TABS.filter((t) => t.id !== 'overview').map(({ id }) => (
-          <TabsContent key={id} value={id} className="mt-5">
-            <EficienciaTabPanel tab={id} ano={ano} mesFiltro={mesFiltro} />
-          </TabsContent>
-        ))}
+        {tabsVisiveis
+          .filter((t) => t.id !== 'overview')
+          .map(({ id }) => (
+            <TabsContent key={id} value={id} className="mt-5">
+              <EficienciaTabPanel tab={id} ano={ano} mesFiltro={mesFiltro} />
+            </TabsContent>
+          ))}
       </Tabs>
     </div>
   )

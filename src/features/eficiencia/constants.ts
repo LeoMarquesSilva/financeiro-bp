@@ -17,11 +17,12 @@ export const EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL = 'Trabalhista' as const
 /**
  * Slicer Operações Legais: Ciência Agendamentos e SLAs de Vistagem ficam sem dado (`-`),
  * como Trabalhista em Vistagem Normal — não há KPI por área nesses indicadores.
- * A aba **Ops Legais (RG)** espelha o PBIX e, por ora, **não filtra por área**.
+ * A aba **Ops Legais (RG)** aparece no consolidado e no slicer Operações Legais
+ * (oculta quando outra área está selecionada).
  */
 export const EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM = 'Operações Legais' as const
 
-/** Label da aba / PBIX — a RG não usa isso como filtro de população. */
+/** Área canônica do slicer / aba Ops Legais (RG). */
 export const EFICIENCIA_AREA_OPS_LEGAIS = 'Operações Legais' as const
 
 export function isAgendamentoVistagemIndisponivelPorArea(area: string | null): boolean {

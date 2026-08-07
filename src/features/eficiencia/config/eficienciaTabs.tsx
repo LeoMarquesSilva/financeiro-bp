@@ -16,6 +16,7 @@ import {
   Trophy,
   Scale,
 } from 'lucide-react'
+import { EFICIENCIA_AREA_OPS_LEGAIS } from '../constants'
 
 /** IDs das abas de detalhe — mesma ordem das linhas do Overview (após Overview). */
 export type EficienciaTabId =
@@ -59,3 +60,15 @@ export const EFICIENCIA_TABS: EficienciaTabDef[] = [
   { id: 'reputacao', label: 'Reputação', icon: Award },
   { id: 'exito', label: 'Êxito', icon: Trophy },
 ]
+
+/** Visível no consolidado (Todas) e no slicer Operações Legais; oculta nas demais áreas. */
+export function isOpsLegaisRgTabVisible(area: string | null): boolean {
+  return area == null || area === EFICIENCIA_AREA_OPS_LEGAIS
+}
+
+/** Abas visíveis conforme área efetiva do dashboard. */
+export function visibleEficienciaTabs(area: string | null): EficienciaTabDef[] {
+  return EFICIENCIA_TABS.filter(
+    (t) => t.id !== 'ops-legais-rg' || isOpsLegaisRgTabVisible(area),
+  )
+}
