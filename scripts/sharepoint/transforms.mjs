@@ -68,6 +68,77 @@ export function mapFatalTarefas(adesao) {
   return mapa[a] ?? null
 }
 
+/**
+ * Coluna "EFICIÊNCIA" do BI Ops Legais (Power Query em BASE-PROTOCOLOS /
+ * CONTROLE DE PROTOCOLOS) — renomeada de "Status do SLA Final".
+ *
+ * Regras (mesma ordem do M):
+ * 1) DATA DO FATAL ou PROTOCOLADO EM nulos → "Dados Incompletos"
+ * 2) Criado no dia anterior ao FATAL após 18h BRT → "ENVIADO NO FATAL"
+ * 3) Criado >= DATA DO FATAL → "ENVIADO NO FATAL"
+ * 4) DATA DO FATAL <= PROTOCOLADO EM (date = meia-noite BRT) → "PROTOCOLADO NO FATAL"
+ * 5) Criado e PROTOCOLADO EM antes do FATAL → "D1"
+ * 6) senão → "D1"
+ *
+ * % D1 do BI = COUNTROWS(EFICIÊNCIA="D1") / COUNTROWS(BASE-PROTOCOLOS)
+ *
+ * @param {Date|null} criado
+ * @param {Date|null} dataDoFatal
+ * @param {Date|null} protocoladoEm  data pura (meia-noite BRT) ou datetime
+ */
+export function computeEficienciaSlaProtocolo(criado, dataDoFatal, protocoladoEm) {
+  if (!dataDoFatal || !protocoladoEm || !criado) return 'Dados Incompletos'
+  if (
+    Number.isNaN(criado.getTime()) ||
+    Number.isNaN(dataDoFatal.getTime()) ||
+    Number.isNaN(protocoladoEm.getTime())
+  ) {
+    return 'Dados Incompletos'
+  }
+
+  const criadoP = getDatePartsBrt(criado)
+  const fatalP = getDatePartsBrt(dataDoFatal)
+  const protP = getDatePartsBrt(protocoladoEm)
+
+  const fatalDayStart = dateFromCivilBrt(fatalP.year, fatalP.month, fatalP.day, 0, 0, 0)
+  const dayBeforeFatal = new Date(fatalDayStart.getTime() - 24 * 60 * 60 * 1000)
+  const beforeP = getDatePartsBrt(dayBeforeFatal)
+  const criadoNoDiaAnterior =
+    criadoP.year === beforeP.year &&
+    criadoP.month === beforeP.month &&
+    criadoP.day === beforeP.day
+
+  if (criadoNoDiaAnterior && criadoP.hour >= 18) return 'ENVIADO NO FATAL'
+  if (criado.getTime() >= dataDoFatal.getTime()) return 'ENVIADO NO FATAL'
+
+  // PROTOCOLADO EM no PQ é Date → meia-noite do dia civil (BRT).
+  const protocoladoStart = dateFromCivilBrt(protP.year, protP.month, protP.day, 0, 0, 0)
+  if (dataDoFatal.getTime() <= protocoladoStart.getTime()) return 'PROTOCOLADO NO FATAL'
+
+  if (
+    criado.getTime() < dataDoFatal.getTime() &&
+    protocoladoStart.getTime() < dataDoFatal.getTime()
+  ) {
+    return 'D1'
+  }
+  return 'D1'
+}
+
+/**
+ * Coluna "EFICIÊNCIA" do BI Ops Legais (BASE-PUBLICAÇÕES-BKP).
+ * Sem INCONSISTÊNCIAS - TIPO e sem INCONSISTÊNCIA - SUBTIPO → "EFICIÊNCIA DE PUBLICAÇÃO";
+ * caso contrário → "DESVIO".
+ *
+ * @param {string|null|undefined} inconsistenciasTipo
+ * @param {string|null|undefined} inconsistenciaSubtipo
+ */
+export function computeEficienciaPublicacao(inconsistenciasTipo, inconsistenciaSubtipo) {
+  const tipo = (inconsistenciasTipo ?? '').trim()
+  const subtipo = (inconsistenciaSubtipo ?? '').trim()
+  if (!tipo && !subtipo) return 'EFICIÊNCIA DE PUBLICAÇÃO'
+  return 'DESVIO'
+}
+
 /** Meta de SLA de protocolo vigente na data de conclusão (coluna "Meta D-1 Por Linha"). */
 export function metaD1PorData(data) {
   if (!data) return null

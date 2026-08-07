@@ -14,11 +14,13 @@ import {
   AlertTriangle,
   Award,
   Trophy,
+  Scale,
 } from 'lucide-react'
 
 /** IDs das abas de detalhe — mesma ordem das linhas do Overview (após Overview). */
 export type EficienciaTabId =
   | 'overview'
+  | 'ops-legais-rg'
   | 'sla-protocolo'
   | 'eficiencia-protocolo'
   | 'sla-ciencia-agendamentos'
@@ -42,6 +44,7 @@ export type EficienciaTabDef = {
 /** Ordem canônica = Overview KPI_HTML (BI) + abas de detalhe correspondentes. */
 export const EFICIENCIA_TABS: EficienciaTabDef[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'ops-legais-rg', label: 'Ops Legais (RG)', icon: Scale },
   { id: 'sla-protocolo', label: 'SLA Protocolo', icon: FileCheck2 },
   { id: 'eficiencia-protocolo', label: 'Eficiência Protocolo', icon: ClipboardCheck },
   { id: 'sla-ciencia-agendamentos', label: 'SLA Ciência Agendamentos', icon: CalendarCheck2 },

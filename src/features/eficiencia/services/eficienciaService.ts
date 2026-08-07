@@ -5,6 +5,7 @@ import {
   areaFiltroParaIndicador,
   isAgendamentoVistagemIndisponivelPorArea,
   mesesEfetivosFiltro,
+  rangePeriodoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import type {
@@ -13,6 +14,13 @@ import type {
   BeneficioEconomicoRow,
   EficienciaOverview,
   EficienciaProtocoloMesRow,
+  OpsLegaisProtocoloMesRow,
+  OpsLegaisProtocoloRankingRow,
+  OpsLegaisPublicacoesEficMesRow,
+  OpsLegaisPublicacoesMesRow,
+  OpsLegaisPublicacoesTipoRow,
+  OpsLegaisResponsumDashboard,
+  OpsLegaisTarefasRankingRow,
   RacionalEscopo,
   RacionalIndicador,
   RacionalResultado,
@@ -56,6 +64,9 @@ import {
   buildRacionalBaseQuery,
   fetchDesenvolvimentoRacional,
   fetchEficienciaProtocoloRacionalResumo,
+  fetchOpsLegaisEficienciaProtocoloRacionalResumo,
+  fetchOpsLegaisPublicacoesRacionalResumo,
+  fetchOpsLegaisSlaProtocoloRacionalResumo,
   fetchRacionalLinhasCompletas,
   fetchSlaProtocoloRacionalResumo,
   fetchSlaVistagemRacionalResumo,
@@ -82,6 +93,15 @@ async function fetchRacionalResumo(
   }
   if (indicador === 'eficiencia_protocolo') {
     return fetchEficienciaProtocoloRacionalResumo(cfg, ano, area, mes)
+  }
+  if (indicador === 'ops_legais_sla_protocolo') {
+    return fetchOpsLegaisSlaProtocoloRacionalResumo(cfg, ano, area, mes)
+  }
+  if (indicador === 'ops_legais_eficiencia_protocolo') {
+    return fetchOpsLegaisEficienciaProtocoloRacionalResumo(cfg, ano, area, mes)
+  }
+  if (indicador === 'ops_legais_pub_analise' || indicador === 'ops_legais_pub_agendamento') {
+    return fetchOpsLegaisPublicacoesRacionalResumo(cfg, indicador, ano, area, mes)
   }
   if (indicador === 'sla_vistagem_risco' || indicador === 'sla_vistagem_normal') {
     return fetchSlaVistagemRacionalResumo(cfg, indicador, ano, areaFiltroParaIndicador(indicador, area), mes)
@@ -138,6 +158,95 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'protocolado_em', label: 'Protocolado em' },
       { key: 'status_inconsistencia', label: 'Status' },
       { key: 'inconsistencia_juridico_motivo', label: 'Motivo Inconsistência' },
+    ],
+  },
+  /**
+   * BI SLA PROTOCOLOS — HTML_Historico_D1 / KPI_HTML_D1_FATAL.
+   * EFICIÊNCIA OPERACIONAL = SIM e EFICIÊNCIA ∈ {D1, PROTOCOLADO NO FATAL}.
+   */
+  ops_legais_sla_protocolo: {
+    tabela: 'sp_protocolos',
+    dataColuna: 'protocolado_em',
+    areaColuna: null,
+    filtros: [
+      { tipo: 'notNull', coluna: 'protocolado_em' },
+      { tipo: 'distinctFrom', coluna: 'status', valor: 'Cancelado' },
+      { tipo: 'eq', coluna: 'eficiencia_operacional', valor: 'SIM' },
+      { tipo: 'orEq', coluna: 'eficiencia_sla', valores: ['D1', 'PROTOCOLADO NO FATAL'] },
+    ],
+    colunas: [
+      { key: 'sp_id', label: 'ID' },
+      { key: 'eficiencia_sla', label: 'EFICIÊNCIA' },
+      { key: 'protocolado_em', label: 'PROTOCOLADO EM' },
+      { key: 'protocolado_por', label: 'PROTOCOLADO POR' },
+      { key: 'protocolo_nos_autos', label: 'PROTOCOLO NOS AUTOS' },
+      { key: 'data_do_fatal', label: 'Data do Fatal' },
+      { key: 'data_criada', label: 'Criado' },
+      { key: 'eficiencia_operacional', label: 'EFICIÊNCIA OPERACIONAL' },
+      { key: 'area', label: 'Área' },
+      { key: 'status', label: 'STATUS' },
+    ],
+  },
+  /** BI SLA PROTOCOLOS — Eficiência Protocolo (INCONSISTÊNCIA - CONTROLADORIA vazia). */
+  ops_legais_eficiencia_protocolo: {
+    tabela: 'sp_protocolos',
+    dataColuna: 'protocolado_em',
+    areaColuna: null,
+    filtros: [
+      { tipo: 'notNull', coluna: 'protocolado_em' },
+      { tipo: 'distinctFrom', coluna: 'status', valor: 'Cancelado' },
+    ],
+    colunas: [
+      { key: 'sp_id', label: 'ID' },
+      { key: 'protocolado_em', label: 'PROTOCOLADO EM' },
+      { key: 'protocolado_por', label: 'PROTOCOLADO POR' },
+      { key: 'protocolo_nos_autos', label: 'PROTOCOLO NOS AUTOS' },
+      { key: 'inconsistencia_controladoria', label: 'INCONSISTÊNCIA - CONTROLADORIA' },
+      { key: 'inconsistencia_controladoria_motivo', label: 'INCONSISTÊNCIA - CONTROLADORIA - MOTIVO' },
+      { key: 'status', label: 'STATUS' },
+      { key: 'eficiencia_operacional', label: 'EFICIÊNCIA OPERACIONAL' },
+    ],
+  },
+  /** BI SLA PUBLICAÇÕES — Análise (INCONSISTÊNCIAS - TIPO em branco ou ANÁLISE). */
+  ops_legais_pub_analise: {
+    tabela: 'sp_publicacoes',
+    dataColuna: 'data_recebimento_kurier',
+    areaColuna: null,
+    filtros: [
+      { tipo: 'notNull', coluna: 'data_recebimento_kurier' },
+      { tipo: 'nullOrIn', coluna: 'inconsistencias_tipo', valores: ['ANÁLISE', 'ANALISE'] },
+    ],
+    colunas: [
+      { key: 'sp_id', label: 'ID' },
+      { key: 'eficiencia', label: 'EFICIÊNCIA' },
+      { key: 'data_recebimento_kurier', label: 'DATA RECEBIMENTO KURIER' },
+      { key: 'inconsistencias_tipo', label: 'INCONSISTÊNCIAS - TIPO' },
+      { key: 'inconsistencia_subtipo', label: 'INCONSISTÊNCIA - SUBTIPO' },
+      { key: 'numero_processo', label: 'NÚMERO DO PROCESSO' },
+      { key: 'agendado_por', label: 'AGENDADO POR' },
+      { key: 'area', label: 'Área' },
+      { key: 'tipo_agendamento', label: 'TIPO DO AGENDAMENTO' },
+    ],
+  },
+  /** BI SLA PUBLICAÇÕES — Agendamento (INCONSISTÊNCIAS - TIPO em branco ou AGENDAMENTO). */
+  ops_legais_pub_agendamento: {
+    tabela: 'sp_publicacoes',
+    dataColuna: 'data_recebimento_kurier',
+    areaColuna: null,
+    filtros: [
+      { tipo: 'notNull', coluna: 'data_recebimento_kurier' },
+      { tipo: 'nullOrIn', coluna: 'inconsistencias_tipo', valores: ['AGENDAMENTO'] },
+    ],
+    colunas: [
+      { key: 'sp_id', label: 'ID' },
+      { key: 'eficiencia', label: 'EFICIÊNCIA' },
+      { key: 'data_recebimento_kurier', label: 'DATA RECEBIMENTO KURIER' },
+      { key: 'inconsistencias_tipo', label: 'INCONSISTÊNCIAS - TIPO' },
+      { key: 'inconsistencia_subtipo', label: 'INCONSISTÊNCIA - SUBTIPO' },
+      { key: 'numero_processo', label: 'NÚMERO DO PROCESSO' },
+      { key: 'agendado_por', label: 'AGENDADO POR' },
+      { key: 'area', label: 'Área' },
+      { key: 'tipo_agendamento', label: 'TIPO DO AGENDAMENTO' },
     ],
   },
   sla_ciencia_agendamentos: {
@@ -404,6 +513,103 @@ export const eficienciaService = {
     })
   },
 
+  // --- Operações Legais (RG) — RPCs isoladas do consolidado ---
+
+  async fetchOpsLegaisProtocoloMensal(ano: number): Promise<OpsLegaisProtocoloMesRow[]> {
+    return rpc('eficiencia_ops_legais_protocolo_mensal', { p_ano: ano })
+  },
+
+  async fetchOpsLegaisProtocoloRanking(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+  ): Promise<OpsLegaisProtocoloRankingRow[]> {
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_ops_legais_protocolo_ranking', { p_ano: ano, p_meses: meses })
+  },
+
+  async fetchOpsLegaisAgendamentoMensal(ano: number): Promise<AgendamentoMesRow[]> {
+    return rpc('eficiencia_ops_legais_agendamento_mensal', { p_ano: ano })
+  },
+
+  async fetchOpsLegaisAgendamentoPorUsuario(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+  ): Promise<AgendamentoUsuarioRow[]> {
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_ops_legais_agendamento_por_usuario', {
+      p_ano: ano,
+      p_meses: meses,
+    })
+  },
+
+  async fetchOpsLegaisCadastroMensal(ano: number): Promise<AgendamentoMesRow[]> {
+    return rpc('eficiencia_ops_legais_cadastro_mensal', { p_ano: ano })
+  },
+
+  async fetchOpsLegaisCadastroPorUsuario(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+  ): Promise<AgendamentoUsuarioRow[]> {
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_ops_legais_cadastro_por_usuario', {
+      p_ano: ano,
+      p_meses: meses,
+    })
+  },
+
+  async fetchOpsLegaisTarefasRanking(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+  ): Promise<OpsLegaisTarefasRankingRow[]> {
+    const { inicio, fimExclusivo } = rangePeriodoFiltro(ano, mesFiltro)
+    return rpc('eficiencia_ops_legais_tarefas_ranking', {
+      p_inicio: inicio,
+      p_fim: fimExclusivo,
+    })
+  },
+
+  async fetchOpsLegaisResponsum(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+  ): Promise<OpsLegaisResponsumDashboard> {
+    const { inicio, fimExclusivo } = rangePeriodoFiltro(ano, mesFiltro)
+    const { data, error } = await supabase.functions.invoke('ops-legais-responsum', {
+      body: { inicio, fim: fimExclusivo },
+    })
+    if (error) throw error
+    if (data?.error) throw new Error(String(data.error))
+    return data as OpsLegaisResponsumDashboard
+  },
+
+  async fetchOpsLegaisPublicacoesMensal(ano: number): Promise<OpsLegaisPublicacoesMesRow[]> {
+    return rpc('eficiencia_ops_legais_publicacoes_mensal', { p_ano: ano })
+  },
+
+  async fetchOpsLegaisPublicacoesEficMensal(
+    ano: number,
+    escopo: 'analise' | 'agendamento',
+  ): Promise<OpsLegaisPublicacoesEficMesRow[]> {
+    return rpc('eficiencia_ops_legais_publicacoes_efic_mensal', {
+      p_ano: ano,
+      p_escopo: escopo,
+    })
+  },
+
+  async fetchOpsLegaisPublicacoesPorTipo(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+  ): Promise<OpsLegaisPublicacoesTipoRow[]> {
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_ops_legais_publicacoes_por_tipo', {
+      p_ano: ano,
+      p_meses: meses,
+    })
+  },
+
   async fetchTurnoverAnual(ano: number, area: string | null = null): Promise<TurnoverAnualRow | null> {
     const rows = await rpc<TurnoverAnualRow[]>('eficiencia_turnover_anual', {
       p_ano: ano,
@@ -590,6 +796,19 @@ export const eficienciaService = {
       gestaoPdiMensal,
       ultimaAtualizacao,
     }
+  },
+
+  /** Só o resumo numérico (cards Eficiência × Desvio / semana). */
+  async fetchRacionalResumoOnly(
+    indicador: RacionalIndicador,
+    ano: number,
+    area: string | null = null,
+    mes: MesFiltroEficiencia = null,
+    escopo: RacionalEscopo = 'default',
+  ): Promise<RacionalResultado['resumo']> {
+    const cfg = RACIONAL_CONFIG[indicador]
+    const areaEfetiva = areaFiltroParaIndicador(indicador, area)
+    return fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo)
   },
 
   /** Linhas brutas que compõem o cálculo de um indicador (drill-down "Racional"). */

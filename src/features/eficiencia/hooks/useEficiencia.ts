@@ -8,6 +8,10 @@ import type {
   GestaoPdiDetalheRow,
   GestaoPdiMesRow,
   JustificativaFatalRow,
+  OpsLegaisProtocoloMesRow,
+  OpsLegaisPublicacoesEficMesRow,
+  OpsLegaisResponsumDashboard,
+  OpsLegaisTarefasRankingRow,
   RankingUsuarioRow,
   SlaProtocoloMesRow,
   SlaVistagemMesRow,
@@ -187,6 +191,68 @@ export function useTreinamentos(ano: number, area: string | null = null) {
   const porPessoa: TreinamentosPorPessoaRow[] = data?.porPessoa ?? []
   const itens: TreinamentoItemRow[] = data?.itens ?? []
   return { anual, porPessoa, itens, loading: isLoading, error }
+}
+
+export function useOpsLegaisRg(ano: number, mesFiltro: MesFiltroEficiencia) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'ops-legais-rg', ano, mesFiltro],
+    queryFn: async () => {
+      const [
+        protocoloMensal,
+        cadastroMensal,
+        cadastroRanking,
+        publicacoesAnalise,
+        publicacoesAgendamento,
+      ] = await Promise.all([
+        eficienciaService.fetchOpsLegaisProtocoloMensal(ano),
+        eficienciaService.fetchOpsLegaisCadastroMensal(ano),
+        eficienciaService.fetchOpsLegaisCadastroPorUsuario(ano, mesFiltro),
+        eficienciaService.fetchOpsLegaisPublicacoesEficMensal(ano, 'analise'),
+        eficienciaService.fetchOpsLegaisPublicacoesEficMensal(ano, 'agendamento'),
+      ])
+      return {
+        protocoloMensal,
+        cadastroMensal,
+        cadastroRanking,
+        publicacoesAnalise,
+        publicacoesAgendamento,
+      }
+    },
+  })
+  return {
+    protocoloMensal: (data?.protocoloMensal ?? []) as OpsLegaisProtocoloMesRow[],
+    cadastroMensal: (data?.cadastroMensal ?? []) as AgendamentoMesRow[],
+    cadastroRanking: (data?.cadastroRanking ?? []) as AgendamentoUsuarioRow[],
+    publicacoesAnalise: (data?.publicacoesAnalise ?? []) as OpsLegaisPublicacoesEficMesRow[],
+    publicacoesAgendamento: (data?.publicacoesAgendamento ??
+      []) as OpsLegaisPublicacoesEficMesRow[],
+    loading: isLoading,
+    error,
+  }
+}
+
+export function useOpsLegaisTarefas(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  enabled = true,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'ops-legais-tarefas', ano, mesFiltro],
+    enabled,
+    queryFn: async () => {
+      const [ranking, responsum] = await Promise.all([
+        eficienciaService.fetchOpsLegaisTarefasRanking(ano, mesFiltro),
+        eficienciaService.fetchOpsLegaisResponsum(ano, mesFiltro),
+      ])
+      return { ranking, responsum }
+    },
+  })
+  return {
+    ranking: (data?.ranking ?? []) as OpsLegaisTarefasRankingRow[],
+    responsum: (data?.responsum ?? null) as OpsLegaisResponsumDashboard | null,
+    loading: isLoading,
+    error: error as Error | null,
+  }
 }
 
 export function useGestaoPdi(ano: number, mesFiltro: MesFiltroEficiencia, area: string | null = null) {

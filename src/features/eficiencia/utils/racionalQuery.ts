@@ -6,8 +6,10 @@ import {
   MESES_EFICIENCIA,
   isCargoExcluidoDesenvolvimento,
   isMesesFiltro,
+  isSemanaFiltro,
   MES_INICIO_RESULTADO,
   mesFimResultado,
+  rangeSemanaFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import type {
@@ -33,6 +35,8 @@ export type RacionalFiltro =
   | { tipo: 'orEq'; coluna: string; valores: string[] }
   /** NULL ou <> valor — replica `(col IS NULL OR col <> valor)`. */
   | { tipo: 'distinctFrom'; coluna: string; valor: string }
+  /** NULL, vazio ou IN valores — filtro Análise/Agendamento PUB. */
+  | { tipo: 'nullOrIn'; coluna: string; valores: string[] }
 
 export type RacionalConfig = {
   tabela: string
@@ -61,6 +65,10 @@ export function applyRacionalPeriodo(
   ano: number,
   mes: MesFiltroEficiencia,
 ): AnyQuery {
+  if (isSemanaFiltro(mes)) {
+    const { inicio, fimExclusivo } = rangeSemanaFiltro(mes)
+    return query.gte(dataColuna, inicio).lt(dataColuna, fimExclusivo)
+  }
   if (mes === 'resultado') {
     const inicio = `${ano}-${String(MES_INICIO_RESULTADO).padStart(2, '0')}-01`
     const fimMes = mesFimResultado(ano)
@@ -118,6 +126,10 @@ export function applyRacionalFiltroNativo(
       return query.in(filtro.coluna, filtro.valores)
     case 'distinctFrom':
       return query.or(`${filtro.coluna}.is.null,${filtro.coluna}.neq.${filtro.valor}`)
+    case 'nullOrIn':
+      return query.or(
+        `${filtro.coluna}.is.null,${filtro.coluna}.in.${quoteInList(filtro.valores)}`,
+      )
     default:
       return query
   }
@@ -223,7 +235,7 @@ export function applyRetencaoRacionalPeriodo(
     .lte('admissao', `${ano}-12-31`)
     .or(`desligamento.is.null,desligamento.gte.${ano}-01-01`)
 
-  if (mes === 'resultado' || mes == null) {
+  if (mes === 'resultado' || mes == null || isSemanaFiltro(mes)) {
     return query
   }
   if (isMesesFiltro(mes) && mes.length > 0) {
@@ -265,6 +277,7 @@ export function shouldSkipFiltroRetencaoArea(
 }
 
 export function formatRacionalPeriodoLabel(ano: number, mes: MesFiltroEficiencia): string {
+  if (isSemanaFiltro(mes)) return rangeSemanaFiltro(mes).label
   if (mes === 'resultado') {
     const fim = mesFimResultado(ano)
     if (fim < MES_INICIO_RESULTADO) return `resultado (sem mês fechado/${ano})`
@@ -317,6 +330,23 @@ export function buildRacionalBaseQuery(
       // I antes de E em ordem desc → INCONSISTÊNCIA, depois EFICIÊNCIA.
       query = query
         .order('status_inconsistencia', { ascending: false })
+        .order(cfg.dataColuna, { ascending: false })
+      break
+    case 'ops_legais_sla_protocolo':
+      // PROTOCOLADO NO FATAL antes de D1 (ordem desc).
+      query = query
+        .order('eficiencia_sla', { ascending: false })
+        .order(cfg.dataColuna, { ascending: false })
+      break
+    case 'ops_legais_eficiencia_protocolo':
+      query = query
+        .order('inconsistencia_controladoria', { ascending: false })
+        .order(cfg.dataColuna, { ascending: false })
+      break
+    case 'ops_legais_pub_analise':
+    case 'ops_legais_pub_agendamento':
+      query = query
+        .order('eficiencia', { ascending: true })
         .order(cfg.dataColuna, { ascending: false })
       break
     case 'sla_ciencia_agendamentos':
@@ -499,6 +529,135 @@ export async function fetchEficienciaProtocoloRacionalResumo(
     for (const row of rows) {
       if (row.status_inconsistencia === 'EFICIÊNCIA') qtd_eficiencia += 1
       else if (row.status_inconsistencia === 'INCONSISTÊNCIA') qtd_inconsistencia += 1
+    }
+
+    if (rows.length < RACIONAL_FETCH_PAGE) break
+    offset += RACIONAL_FETCH_PAGE
+  }
+
+  return {
+    qtd_eficiencia,
+    qtd_inconsistencia,
+    qtd_total: qtd_eficiencia + qtd_inconsistencia,
+  }
+}
+
+/** Ops Legais % D1 — COUNT(*) onde eficiencia_sla = 'D1'. */
+export async function fetchOpsLegaisSlaProtocoloRacionalResumo(
+  cfg: RacionalConfig,
+  ano: number,
+  area: string | null,
+  mes: MesFiltroEficiencia,
+): Promise<RacionalResultado['resumo']> {
+  let qtd_d1 = 0
+  let qtd_total = 0
+  let offset = 0
+
+  while (true) {
+    const query = buildRacionalBaseQuery(
+      cfg,
+      'ops_legais_sla_protocolo',
+      ano,
+      area,
+      mes,
+      'eficiencia_sla',
+    ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const rows = (data ?? []) as Array<{ eficiencia_sla: string | null }>
+    for (const row of rows) {
+      qtd_total += 1
+      if (row.eficiencia_sla === 'D1') qtd_d1 += 1
+    }
+
+    if (rows.length < RACIONAL_FETCH_PAGE) break
+    offset += RACIONAL_FETCH_PAGE
+  }
+
+  return { qtd_d1, qtd_total }
+}
+
+/** Ops Legais Eficiência Protocolo — controladoria vazia = eficiência. */
+export async function fetchOpsLegaisEficienciaProtocoloRacionalResumo(
+  cfg: RacionalConfig,
+  ano: number,
+  area: string | null,
+  mes: MesFiltroEficiencia,
+): Promise<RacionalResultado['resumo']> {
+  let qtd_eficiencia = 0
+  let qtd_inconsistencia = 0
+  let offset = 0
+
+  while (true) {
+    const query = buildRacionalBaseQuery(
+      cfg,
+      'ops_legais_eficiencia_protocolo',
+      ano,
+      area,
+      mes,
+      'inconsistencia_controladoria',
+    ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const rows = (data ?? []) as Array<{ inconsistencia_controladoria: string | null }>
+    for (const row of rows) {
+      if (String(row.inconsistencia_controladoria ?? '').trim()) qtd_inconsistencia += 1
+      else qtd_eficiencia += 1
+    }
+
+    if (rows.length < RACIONAL_FETCH_PAGE) break
+    offset += RACIONAL_FETCH_PAGE
+  }
+
+  return {
+    qtd_eficiencia,
+    qtd_inconsistencia,
+    qtd_total: qtd_eficiencia + qtd_inconsistencia,
+  }
+}
+
+/** Ops Legais SLA Publicações — EFICIÊNCIA DE PUBLICAÇÃO vs DESVIO. */
+export async function fetchOpsLegaisPublicacoesRacionalResumo(
+  cfg: RacionalConfig,
+  indicador: 'ops_legais_pub_analise' | 'ops_legais_pub_agendamento',
+  ano: number,
+  area: string | null,
+  mes: MesFiltroEficiencia,
+): Promise<RacionalResultado['resumo']> {
+  let qtd_eficiencia = 0
+  let qtd_inconsistencia = 0
+  let offset = 0
+
+  while (true) {
+    const query = buildRacionalBaseQuery(
+      cfg,
+      indicador,
+      ano,
+      area,
+      mes,
+      'eficiencia,inconsistencias_tipo,inconsistencia_subtipo',
+    ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const rows = (data ?? []) as Array<{
+      eficiencia: string | null
+      inconsistencias_tipo: string | null
+      inconsistencia_subtipo: string | null
+    }>
+    for (const row of rows) {
+      const tipo = String(row.inconsistencias_tipo ?? '').trim()
+      const subtipo = String(row.inconsistencia_subtipo ?? '').trim()
+      const efic =
+        row.eficiencia?.trim() ||
+        (!tipo && !subtipo ? 'EFICIÊNCIA DE PUBLICAÇÃO' : 'DESVIO')
+      if (efic === 'EFICIÊNCIA DE PUBLICAÇÃO') qtd_eficiencia += 1
+      else qtd_inconsistencia += 1
     }
 
     if (rows.length < RACIONAL_FETCH_PAGE) break

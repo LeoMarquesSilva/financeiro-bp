@@ -37,6 +37,8 @@ import {
   mapFatalTarefas,
   metaD1PorData,
   computeVistadoD1,
+  computeEficienciaSlaProtocolo,
+  computeEficienciaPublicacao,
   computeAdesaoSem18,
   computeConclusaoCompleta,
   computeAdesaoApos18,
@@ -108,6 +110,9 @@ const PUBLICACOES_FIELD_SELECT = [
   'TIPODOAGENDAMENTO',
   'PRIORIDADEDEAGENDAMENTO',
   'STATUSDAPUBLICA_x00c7__x00c3_O',
+  'DATARECEBIMENTOKURIER',
+  'INCONSIST_x00ca_NCIAS_x002d_TIPO',
+  'INCONSIST_x00ca_NCIA_x002d_SUBTI',
 ].join(',')
 const LISTA_TREINAMENTOS = '30ea2880-475e-489c-8600-ae541d29faf3'
 /**
@@ -604,11 +609,27 @@ const FONTES = {
           // nome de exibição — confirmado via schema real de colunas (Graph /lists/{id}/columns),
           // não recuperável por decodificação/normalização. Aliases exatos abaixo.
           const escritorio = pick(f, ['Escritório responsável', 'Escritorioresponsavel', 'field_9'])
+          const inconsistenciasTipo =
+            pick(f, [
+              'INCONSISTÊNCIAS - TIPO',
+              'INCONSISTENCIASTIPO',
+              'INCONSIST_x00ca_NCIAS_x002d_TIPO',
+            ]) ?? ''
+          const inconsistenciaSubtipo =
+            pick(f, [
+              'INCONSISTÊNCIA - SUBTIPO',
+              'INCONSISTENCIASUBTIPO',
+              'INCONSIST_x00ca_NCIA_x002d_SUBTI',
+            ]) ?? ''
+          const dataRecebimentoKurier = parseDate(
+            pick(f, ['DATA RECEBIMENTO KURIER', 'DATARECEBIMENTOKURIER']),
+          )
           return {
             sp_id: Number(pick(f, ['ID', 'id'])),
             criado: toIsoDateTime(parseDate(pick(f, ['Criado', 'Created']))),
             data_publicacao: toIsoDate(parseDate(pick(f, ['DATA DE PUBLICAÇÃO', 'DATADEPUBLICACAO', 'field_3']))),
             data_divulgacao: toIsoDate(parseDate(pick(f, ['DATA DE DIVULGAÇÃO', 'DATADEDIVULGACAO', 'field_2']))),
+            data_recebimento_kurier: toIsoDateBrt(dataRecebimentoKurier),
             numero_processo: pick(f, ['NÚMERO DO PROCESSO', 'NUMERODOPROCESSO', 'field_6']),
             pasta: pick(f, ['Pasta', 'field_5']),
             cliente_principal: pick(f, ['Cliente principal', 'Clienteprincipal', 'field_14']),
@@ -633,7 +654,10 @@ const FONTES = {
             natureza: pick(f, ['Natureza', 'field_17']),
             status: pick(f, ['Status', 'field_18']),
             acao: pick(f, ['Ação', 'Acao', 'field_19']),
-            eficiencia: pick(f, ['EFICIÊNCIA', 'EFICIENCIA']),
+            inconsistencias_tipo: String(inconsistenciasTipo).trim() || null,
+            inconsistencia_subtipo: String(inconsistenciaSubtipo).trim() || null,
+            // Coluna calculada do BI (não existe no SharePoint)
+            eficiencia: computeEficienciaPublicacao(inconsistenciasTipo, inconsistenciaSubtipo),
           }
         })
         .filter((r) => Number.isFinite(r.sp_id))
@@ -664,16 +688,32 @@ const FONTES = {
           // confirmado via schema real de colunas (Graph /lists/{id}/columns).
           const inconsistencia =
             pick(f, ['INCONSISTÊNCIA - JURÍDICO', 'INCONSISTENCIAJURIDICO', 'INCONSIST_x00ca_NCIA_x002d_JUR_x']) ?? ''
+          // Nome interno truncado (Graph): INCONSIST_x00ca_NCIA_x002d_CONTR0
+          const inconsistenciaControladoria =
+            pick(f, [
+              'INCONSISTÊNCIA - CONTROLADORIA',
+              'INCONSISTENCIACONTROLADORIA',
+              'INCONSIST_x00ca_NCIA_x002d_CONTR0',
+            ]) ?? ''
+          const protocoladoEm = parseDate(pick(f, ['PROTOCOLADO EM', 'PROTOCOLADOEM']))
+          const dataDoFatal = parseDate(
+            pick(f, ['DATA DO FATAL', 'DATADOFATAL', 'DATA_DO_FATAL', 'Data do Fatal']),
+          )
+          // Coluna EFICIÊNCIA do BI Ops Legais (Power Query) — não é o campo SharePoint "EFICIÊNCIA OPERACIONAL".
+          const eficienciaSla = computeEficienciaSlaProtocolo(criado, dataDoFatal, protocoladoEm)
           return {
             sp_id: Number(pick(f, ['ID', 'id'])),
             criado: toIsoDateTime(criado),
-            data_criada: toIsoDate(criado),
+            // Dia civil em BRT — toIsoDate (UTC) deslocava PROTOCOLADO EM após ~21h BRT (ex.: 31/03 23:17 → 01/04).
+            data_criada: toIsoDateBrt(criado),
             criado_por: criadoPor,
             nome_limpo: normalizeNome(criadoPor),
             // Área_no_Protocolo_Final no BI é uma coluna calculada (lookup em BASE-TURNOVER por
             // nome+vigência) — mesma lógica de areaNaConclusao usada em tarefas/tarefas_historico.
             area: pick(f, ['Área_no_Protocolo_Final', 'AREA', 'Área']) ?? areaNaConclusao(criadoPor, criado, turnover),
-            protocolado_em: toIsoDate(parseDate(pick(f, ['PROTOCOLADO EM', 'PROTOCOLADOEM']))),
+            protocolado_em: toIsoDateBrt(protocoladoEm),
+            data_do_fatal: toIsoDateTime(dataDoFatal),
+            eficiencia_sla: eficienciaSla,
             protocolado_por: expandUserField(pick(f, ['PROTOCOLADO POR', 'PROTOCOLADOPOR'])),
             tipo_protocolo: pick(f, ['TIPO DE PROTOCOLO', 'TIPODEPROTOCOLO']),
             tipo_peca: pick(f, ['TIPO DA PEÇA', 'TIPODAPECA']),
@@ -699,6 +739,13 @@ const FONTES = {
               'INCONSISTÊNCIA - JURÍDICO - MOTIVO',
               'INCONSISTENCIAJURIDICOMOTIVO',
               'INCONSIST_x00ca_NCIA_x002d_JUR_x0',
+            ]),
+            inconsistencia_controladoria: inconsistenciaControladoria || null,
+            inconsistencia_controladoria_motivo: pick(f, [
+              'INCONSISTÊNCIA - CONTROLADORIA - MOTIVO',
+              'INCONSISTENCIACONTROLADORIAMOTIVO',
+              'INCONSIST_x00ca_NCIA_x002d_CONTR1',
+              'INCONSIST_x00ca_NCIA_x002d_CONTR00',
             ]),
             status_inconsistencia: inconsistencia.trim() === '' ? 'EFICIÊNCIA' : 'INCONSISTÊNCIA',
             urgente: pick(f, ['URGENTE?', 'URGENTE']),

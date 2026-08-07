@@ -21,7 +21,13 @@ const MESES_LABEL = [
 
 const AXIS_TICK = { fontSize: 11, fill: '#94a3b8' }
 
-export type EvolucaoPoint = { mes: number; valor: number; meta?: number | null }
+export type EvolucaoPoint = {
+  mes: number
+  valor: number
+  meta?: number | null
+  /** Rótulo do eixo X (ex.: filtro semana). Default = mês abreviado. */
+  label?: string
+}
 
 type Props = {
   title: string
@@ -124,7 +130,7 @@ export function EficienciaEvolucaoChart({
   const pointCount = data.length
 
   const chartData = data.map((d) => ({
-    mesLabel: MESES_LABEL[d.mes - 1] ?? String(d.mes),
+    mesLabel: d.label ?? MESES_LABEL[d.mes - 1] ?? String(d.mes),
     valor: d.valor,
     meta: metaFixa ?? d.meta ?? undefined,
   }))

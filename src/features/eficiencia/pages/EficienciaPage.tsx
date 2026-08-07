@@ -17,6 +17,7 @@ import { AgendamentoTab } from '../components/AgendamentoTab'
 import { TreinamentosTab } from '../components/TreinamentosTab'
 import { TurnoverTab } from '../components/TurnoverTab'
 import { GestaoPdiTab } from '../components/GestaoPdiTab'
+import { OperacoesLegaisRgTab } from '../components/OperacoesLegaisRgTab'
 import { ReceitaBrutaTab } from '../components/ReceitaBrutaTab'
 import { InadimplenciaTab } from '../components/InadimplenciaTab'
 import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab'
@@ -37,6 +38,8 @@ function EficienciaTabPanel({
   switch (tab) {
     case 'overview':
       return null
+    case 'ops-legais-rg':
+      return <OperacoesLegaisRgTab ano={ano} mesFiltro={mesFiltro} />
     case 'sla-protocolo':
       return <SlaProtocoloTab ano={ano} mesFiltro={mesFiltro} />
     case 'eficiencia-protocolo':

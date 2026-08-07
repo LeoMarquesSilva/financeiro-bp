@@ -38,8 +38,12 @@ type Props = {
 }
 
 const RACIONAL_TITULOS: Record<RacionalIndicador, string> = {
-  sla_protocolo: 'SLA Protocolo',
+  sla_protocolo: 'SLA PROTOCOLO',
   eficiencia_protocolo: 'Eficiência Protocolo',
+  ops_legais_sla_protocolo: 'SLA PROTOCOLO',
+  ops_legais_eficiencia_protocolo: 'Eficiência Protocolo',
+  ops_legais_pub_analise: 'ANÁLISE DE PUBLICAÇÃO',
+  ops_legais_pub_agendamento: 'AGENDAMENTO DE PUBLICAÇÃO',
   sla_ciencia_agendamentos: 'SLA Ciência Agendamentos',
   sla_vistagem_risco: 'SLA Vistagem Risco',
   sla_vistagem_normal: 'SLA Vistagem Normal',
@@ -267,6 +271,10 @@ export function OverviewTab({
   const resultadosRacional: Record<RacionalIndicador, HeatCell> = {
     sla_protocolo: acumuladoSlaProtocolo,
     eficiencia_protocolo: acumuladoEficienciaProtocolo,
+    ops_legais_sla_protocolo: ACUMULADO_VAZIO,
+    ops_legais_eficiencia_protocolo: ACUMULADO_VAZIO,
+    ops_legais_pub_analise: ACUMULADO_VAZIO,
+    ops_legais_pub_agendamento: ACUMULADO_VAZIO,
     sla_ciencia_agendamentos: acumuladoAgendamentoExibicao,
     sla_vistagem_risco: acumuladoVistagemRiscoExibicao,
     sla_vistagem_normal: acumuladoVistagemComumExibicao,
@@ -278,9 +286,9 @@ export function OverviewTab({
     if (isMesesFiltro(mesFiltro)) {
       return mesFiltro.map((m) => slaProtocoloMetasPorMes[m - 1] ?? null)
     }
-    if (mesFiltro === 'resultado') {
+    if (mesFiltro === 'resultado' || mesFiltro === 'semana_passada' || mesFiltro === 'semana_retrasada') {
       return slaProtocoloMetasPorMes.map((m, i) =>
-        mesNoFiltro(i + 1, 'resultado', ano) ? m : null,
+        mesNoFiltro(i + 1, mesFiltro, ano) ? m : null,
       )
     }
     return slaProtocoloMetasPorMes
@@ -299,6 +307,10 @@ export function OverviewTab({
         ),
       },
       eficiencia_protocolo: { metaAcumulado: 95 },
+      ops_legais_sla_protocolo: { metaAcumulado: 100 },
+      ops_legais_eficiencia_protocolo: { metaAcumulado: 95 },
+      ops_legais_pub_analise: { metaAcumulado: 95 },
+      ops_legais_pub_agendamento: { metaAcumulado: 95 },
       sla_ciencia_agendamentos: { metaAcumulado: 95 },
       sla_vistagem_risco: { metaAcumulado: 98 },
       sla_vistagem_normal: { metaAcumulado: 98 },

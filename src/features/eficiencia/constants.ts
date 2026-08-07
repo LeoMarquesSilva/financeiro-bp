@@ -17,8 +17,12 @@ export const EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL = 'Trabalhista' as const
 /**
  * Slicer Operações Legais: Ciência Agendamentos e SLAs de Vistagem ficam sem dado (`-`),
  * como Trabalhista em Vistagem Normal — não há KPI por área nesses indicadores.
+ * A aba **Ops Legais (RG)** espelha o PBIX e, por ora, **não filtra por área**.
  */
 export const EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM = 'Operações Legais' as const
+
+/** Label da aba / PBIX — a RG não usa isso como filtro de população. */
+export const EFICIENCIA_AREA_OPS_LEGAIS = 'Operações Legais' as const
 
 export function isAgendamentoVistagemIndisponivelPorArea(area: string | null): boolean {
   return area === EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM
@@ -131,14 +135,92 @@ export const EFICIENCIA_AMOSTRA_FRACAO = 0.3
  * - `null` — ano inteiro
  * - `number[]` — um ou mais meses (1..12), ordenados
  * - `'resultado'` — jun+ fechados (mês corrente fora; jan–mai em branco)
+ * - `'semana_passada'` / `'semana_retrasada'` — semana civil seg–dom (BRT)
  */
-export type MesFiltroEficiencia = number[] | null | 'resultado'
+export type MesFiltroEficiencia =
+  | number[]
+  | null
+  | 'resultado'
+  | 'semana_passada'
+  | 'semana_retrasada'
 
 /** Primeiro mês do período "Resultado" (junho). */
 export const MES_INICIO_RESULTADO = 6
 
 export function isMesesFiltro(filtro: MesFiltroEficiencia): filtro is number[] {
   return Array.isArray(filtro)
+}
+
+export function isSemanaFiltro(
+  filtro: MesFiltroEficiencia,
+): filtro is 'semana_passada' | 'semana_retrasada' {
+  return filtro === 'semana_passada' || filtro === 'semana_retrasada'
+}
+
+function civilPartsBrt(ref: Date): { year: number; month: number; day: number; weekday: number } {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: EFICIENCIA_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  })
+  const parts = Object.fromEntries(fmt.formatToParts(ref).map((p) => [p.type, p.value]))
+  const weekdayMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  }
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    weekday: weekdayMap[parts.weekday ?? 'Mon'] ?? 1,
+  }
+}
+
+function addCivilDays(year: number, month: number, day: number, delta: number) {
+  const dt = new Date(Date.UTC(year, month - 1, day + delta))
+  return {
+    year: dt.getUTCFullYear(),
+    month: dt.getUTCMonth() + 1,
+    day: dt.getUTCDate(),
+  }
+}
+
+function toIsoCivil(y: number, m: number, d: number): string {
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+/**
+ * Intervalo [inicio, fimExclusivo) da semana civil (segunda–domingo) em BRT.
+ * Semana passada = semana completa anterior à atual; retrasada = a anterior a essa.
+ */
+export function rangeSemanaFiltro(
+  filtro: 'semana_passada' | 'semana_retrasada',
+  ref = new Date(),
+): { inicio: string; fimExclusivo: string; label: string } {
+  const p = civilPartsBrt(ref)
+  const daysFromMonday = p.weekday === 0 ? 6 : p.weekday - 1
+  const thisMonday = addCivilDays(p.year, p.month, p.day, -daysFromMonday)
+  const weeksBack = filtro === 'semana_passada' ? 1 : 2
+  const start = addCivilDays(thisMonday.year, thisMonday.month, thisMonday.day, -7 * weeksBack)
+  const end = addCivilDays(start.year, start.month, start.day, 7)
+  const inicio = toIsoCivil(start.year, start.month, start.day)
+  const fimExclusivo = toIsoCivil(end.year, end.month, end.day)
+  const fimInclusivo = addCivilDays(end.year, end.month, end.day, -1)
+  const fmt = (m: number, d: number) =>
+    `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
+  const titulo = filtro === 'semana_passada' ? 'Semana passada' : 'Semana retrasada'
+  return {
+    inicio,
+    fimExclusivo,
+    label: `${titulo} (${fmt(start.month, start.day)}–${fmt(fimInclusivo.month, fimInclusivo.day)})`,
+  }
 }
 
 /**
@@ -167,12 +249,16 @@ export function mesNoFiltro(
     const fim = mesFimResultado(ano ?? ref.getFullYear(), ref)
     return mes <= fim
   }
+  if (isSemanaFiltro(filtro)) {
+    const meses = mesesEfetivosFiltro(filtro, ano ?? civilPartsBrt(ref).year, ref) ?? []
+    return meses.includes(mes)
+  }
   return filtro.includes(mes)
 }
 
 /** Alterna um mês no filtro (multi-seleção). Desmarcar o último volta para ano inteiro. */
 export function toggleMesFiltro(current: MesFiltroEficiencia, mes: number): MesFiltroEficiencia {
-  if (current == null || current === 'resultado') return [mes]
+  if (current == null || current === 'resultado' || isSemanaFiltro(current)) return [mes]
   if (current.includes(mes)) {
     const next = current.filter((m) => m !== mes)
     return next.length === 0 ? null : next
@@ -198,6 +284,31 @@ export function mesesEfetivosFiltro(
       (_, i) => MES_INICIO_RESULTADO + i,
     )
   }
+  if (isSemanaFiltro(filtro)) {
+    const { inicio, fimExclusivo } = rangeSemanaFiltro(filtro, ref)
+    const start = {
+      y: Number(inicio.slice(0, 4)),
+      m: Number(inicio.slice(5, 7)),
+    }
+    const endIncl = addCivilDays(
+      Number(fimExclusivo.slice(0, 4)),
+      Number(fimExclusivo.slice(5, 7)),
+      Number(fimExclusivo.slice(8, 10)),
+      -1,
+    )
+    const months = new Set<number>()
+    let y = start.y
+    let m = start.m
+    while (y < endIncl.year || (y === endIncl.year && m <= endIncl.month)) {
+      if (y === ano) months.add(m)
+      m += 1
+      if (m > 12) {
+        m = 1
+        y += 1
+      }
+    }
+    return [...months].sort((a, b) => a - b)
+  }
   return filtro
 }
 
@@ -208,4 +319,39 @@ export function filtrarMensalPorMesFiltro<T extends { mes: number }>(
   ano: number,
 ): T[] {
   return rows.filter((r) => mesNoFiltro(r.mes, filtro, ano))
+}
+
+/**
+ * Intervalo [inicio, fimExclusivo) YYYY-MM-DD para RPCs/edge (mês, resultado, semana ou ano).
+ */
+export function rangePeriodoFiltro(
+  ano: number,
+  filtro: MesFiltroEficiencia,
+  ref = new Date(),
+): { inicio: string; fimExclusivo: string } {
+  if (isSemanaFiltro(filtro)) {
+    const r = rangeSemanaFiltro(filtro, ref)
+    return { inicio: r.inicio, fimExclusivo: r.fimExclusivo }
+  }
+  if (filtro === 'resultado') {
+    const fimMes = mesFimResultado(ano, ref)
+    const inicio = `${ano}-${String(MES_INICIO_RESULTADO).padStart(2, '0')}-01`
+    if (fimMes < MES_INICIO_RESULTADO) return { inicio, fimExclusivo: inicio }
+    const fimExclusivo =
+      fimMes === 12
+        ? `${ano + 1}-01-01`
+        : `${ano}-${String(fimMes + 1).padStart(2, '0')}-01`
+    return { inicio, fimExclusivo }
+  }
+  if (isMesesFiltro(filtro) && filtro.length > 0) {
+    const min = Math.min(...filtro)
+    const max = Math.max(...filtro)
+    const inicio = `${ano}-${String(min).padStart(2, '0')}-01`
+    const fimExclusivo =
+      max === 12
+        ? `${ano + 1}-01-01`
+        : `${ano}-${String(max + 1).padStart(2, '0')}-01`
+    return { inicio, fimExclusivo }
+  }
+  return { inicio: `${ano}-01-01`, fimExclusivo: `${ano + 1}-01-01` }
 }

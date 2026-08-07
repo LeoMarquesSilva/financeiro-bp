@@ -168,7 +168,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
         titulo={
           racionalEscopo === 'sla_protocolo_fatal'
             ? 'FATAL não-excludente'
-            : 'SLA Protocolo'
+            : 'SLA PROTOCOLO'
         }
         ano={ano}
         mes={mesFiltro}

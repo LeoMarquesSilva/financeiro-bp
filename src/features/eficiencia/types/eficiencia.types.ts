@@ -61,6 +61,124 @@ export interface AgendamentoUsuarioRow {
   [key: string]: string | number
 }
 
+/** Série mensal do BI Ops Legais (RG) — protocolos. */
+export interface OpsLegaisProtocoloMesRow {
+  mes: number
+  /** População SLA PROTOCOLO: operacional=SIM e EFICIÊNCIA ∈ {D1, PROTOCOLADO NO FATAL}. */
+  total: number
+  qtd_d1: number
+  /** SLA PROTOCOLO % = D1 / (D1 + PROTOCOLADO NO FATAL). */
+  pct_d1: number
+  qtd_protocolado_fatal?: number
+  /** Base completa (controladoria) — distinta da população SLA. */
+  total_eficiencia?: number
+  sem_inconsistencia: number
+  pct_sem_inconsistencia: number
+  eficiencia_ok: number
+  eficiencia_nok: number
+  pct_eficiencia_operacional: number
+}
+
+export interface OpsLegaisProtocoloRankingRow {
+  usuario: string
+  qtd_inconsistencia: number
+  qtd_eficiencia_nok: number
+  pct_do_total: number
+  [key: string]: string | number
+}
+
+export interface OpsLegaisPublicacoesMesRow {
+  mes: number
+  total: number
+  com_vistador: number
+  vistado_d1: number
+  pct_d1: number
+}
+
+/** SLA Publicações — % Eficiência (Análise ou Agendamento). */
+export interface OpsLegaisPublicacoesEficMesRow {
+  mes: number
+  total: number
+  qtd_eficiencia: number
+  qtd_desvio: number
+  pct_eficiencia: number
+}
+
+export interface OpsLegaisPublicacoesTipoRow {
+  tipo_agendamento: string
+  qtd: number
+  pct_do_total: number
+  [key: string]: string | number
+}
+
+/** Ranking flip cards — Tarefas Ops Legais. */
+export interface OpsLegaisTarefasRankingRow {
+  pessoa: string
+  total_atividades: number
+  central_pub: number
+  central_agend: number
+  desvio_pub: number
+  desvio_agend: number
+  total_erros: number
+  pct_erros: number
+  rank_atividades: number
+  rank_excelencia: number
+}
+
+export interface OpsLegaisResponsumTicketsKpi {
+  total: number
+  em_atendimento: number
+  resolvidos: number
+  taxa_resolucao: number
+}
+
+export interface OpsLegaisResponsumNps {
+  nps: number
+  zona: string
+  promotores: number
+  neutros: number
+  detratores: number
+  total_avaliacoes: number
+  media_score: number
+  excelente: number
+  bom: number
+  regular: number
+  ruim: number
+}
+
+export interface OpsLegaisResponsumTicketItem {
+  title: string
+  status: string
+  created_at: string | null
+}
+
+export interface OpsLegaisResponsumConcluido {
+  nome: string
+  qtd: number
+  is_sla_fatal: boolean
+}
+
+export interface OpsLegaisResponsumPendente {
+  nome: string
+  qtd_aberto: number
+  qtd_andamento: number
+  is_sla_fatal: boolean
+  tickets: OpsLegaisResponsumTicketItem[]
+  pessoas_sla?: Array<{
+    nome: string
+    qtd: number
+    tickets: OpsLegaisResponsumTicketItem[]
+  }>
+}
+
+export interface OpsLegaisResponsumDashboard {
+  periodo: { inicio: string; fim: string }
+  tickets: OpsLegaisResponsumTicketsKpi
+  nps: OpsLegaisResponsumNps
+  concluidos: OpsLegaisResponsumConcluido[]
+  pendentes: OpsLegaisResponsumPendente[]
+}
+
 export interface TurnoverAnualRow {
   funcionarios_ativos: number
   saidas_voluntarias: number
@@ -187,6 +305,10 @@ export interface UltimaAtualizacaoRow {
 export type RacionalIndicador =
   | 'sla_protocolo'
   | 'eficiencia_protocolo'
+  | 'ops_legais_sla_protocolo'
+  | 'ops_legais_eficiencia_protocolo'
+  | 'ops_legais_pub_analise'
+  | 'ops_legais_pub_agendamento'
   | 'sla_ciencia_agendamentos'
   | 'sla_vistagem_risco'
   | 'sla_vistagem_normal'

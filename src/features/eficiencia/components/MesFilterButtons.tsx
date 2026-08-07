@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import {
   MESES_EFICIENCIA,
   isMesesFiltro,
+  rangeSemanaFiltro,
   toggleMesFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -37,6 +38,24 @@ export function MesFilterButtons({ value, onChange }: Props) {
         title="Junho até o último mês fechado — exclui o mês corrente"
       >
         Resultado
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('semana_passada')}
+        className={cn(BTN, value === 'semana_passada' ? BTN_ON : BTN_OFF)}
+        aria-pressed={value === 'semana_passada'}
+        title={rangeSemanaFiltro('semana_passada').label}
+      >
+        Semana passada
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('semana_retrasada')}
+        className={cn(BTN, value === 'semana_retrasada' ? BTN_ON : BTN_OFF)}
+        aria-pressed={value === 'semana_retrasada'}
+        title={rangeSemanaFiltro('semana_retrasada').label}
+      >
+        Semana retrasada
       </button>
       {MESES_EFICIENCIA.map((label, idx) => {
         const mes = idx + 1

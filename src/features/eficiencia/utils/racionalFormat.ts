@@ -57,6 +57,17 @@ export function isRacionalLinhaForaMeta(
       return row.excludente === 'Excludente'
     case 'eficiencia_protocolo':
       return String(row.status_inconsistencia ?? '').toUpperCase().includes('INCONSIST')
+    case 'ops_legais_sla_protocolo':
+      return String(row.eficiencia_sla ?? '').trim() === 'PROTOCOLADO NO FATAL'
+    case 'ops_legais_eficiencia_protocolo':
+      return Boolean(String(row.inconsistencia_controladoria ?? '').trim())
+    case 'ops_legais_pub_analise':
+    case 'ops_legais_pub_agendamento':
+      return (
+        String(row.eficiencia ?? '').trim() === 'DESVIO' ||
+        Boolean(String(row.inconsistencias_tipo ?? '').trim()) ||
+        Boolean(String(row.inconsistencia_subtipo ?? '').trim())
+      )
     case 'sla_ciencia_agendamentos':
       return String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')
     case 'sla_vistagem_risco':
@@ -73,6 +84,13 @@ export function racionalLinhaForaMetaTitle(indicador: string): string | undefine
       return 'Excludente — não entra na % do KPI'
     case 'eficiencia_protocolo':
       return 'Inconsistência — fora da meta'
+    case 'ops_legais_sla_protocolo':
+      return 'PROTOCOLADO NO FATAL — fora do SLA PROTOCOLO'
+    case 'ops_legais_eficiencia_protocolo':
+      return 'Inconsistência Controladoria — fora da meta'
+    case 'ops_legais_pub_analise':
+    case 'ops_legais_pub_agendamento':
+      return 'DESVIO — fora da eficiência de publicação'
     case 'sla_ciencia_agendamentos':
       return 'Fora do prazo — fora da meta'
     case 'sla_vistagem_risco':
@@ -106,6 +124,12 @@ export function formatRacionalResumoLabel(resumo: {
     return `Total: ${partes.join(' · ')}`
   }
 
+  // Ops Legais RG — SLA PROTOCOLO (D1 vs PROTOCOLADO NO FATAL)
+  if (resumo.qtd_d1 != null && resumo.qtd_total != null && resumo.qtd_fatal == null) {
+    const fatal = resumo.qtd_total - resumo.qtd_d1
+    return `Total: ${resumo.qtd_d1} D1 · ${fatal} PROTOCOLADO NO FATAL · ${resumo.qtd_total} protocolo${resumo.qtd_total === 1 ? '' : 's'}`
+  }
+
   // Escopo FATAL não-excludente (gráficos Justificativa / Responsáveis)
   if (resumo.qtd_fatal != null && resumo.qtd_d1 == null) {
     return `Total: ${resumo.qtd_fatal} FATAL não-excludente${resumo.qtd_fatal === 1 ? '' : 's'}`
@@ -113,7 +137,7 @@ export function formatRacionalResumoLabel(resumo: {
 
   if (resumo.qtd_inconsistencia != null && resumo.qtd_eficiencia != null) {
     const total = resumo.qtd_total ?? resumo.qtd_inconsistencia + resumo.qtd_eficiencia
-    return `Total: ${resumo.qtd_inconsistencia} inconsistência${resumo.qtd_inconsistencia === 1 ? '' : 's'} · ${resumo.qtd_eficiencia} eficiência · ${total} protocolo${total === 1 ? '' : 's'}`
+    return `Total: ${resumo.qtd_eficiencia} eficiência · ${resumo.qtd_inconsistencia} fora da meta · ${total} registro${total === 1 ? '' : 's'}`
   }
 
   if (resumo.qtd_vistado_sim != null && resumo.qtd_vistado_nao != null) {
