@@ -10,11 +10,11 @@ export type NavAccessItem = {
 }
 
 /** Mesma regra da sidebar: role OU módulo liberado. */
-export function filterNavItemsForAccess(
-  items: NavAccessItem[],
+export function filterNavItemsForAccess<T extends NavAccessItem>(
+  items: T[],
   role: AppRole | null,
   moduleAccess: ModuleKey[],
-): NavAccessItem[] {
+): T[] {
   return items.filter(
     (item) =>
       (role != null && item.roles.includes(role)) ||
