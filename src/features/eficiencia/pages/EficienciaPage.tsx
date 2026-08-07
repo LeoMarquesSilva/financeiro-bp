@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Smile, Award, Trophy } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { useAuth } from '@/lib/AuthContext'
 import { useEficienciaOverview } from '../hooks/useEficiencia'
+import { useEficienciaAccess } from '../hooks/useEficienciaAccess'
 import { EFICIENCIA_TABS, type EficienciaTabId } from '../config/eficienciaTabs'
 import type { MesFiltroEficiencia } from '../constants'
 import { EficienciaHeader } from '../components/EficienciaHeader'
@@ -83,11 +85,47 @@ function EficienciaTabPanel({
 }
 
 export function EficienciaPage() {
+  const { loading: authLoading } = useAuth()
+  const access = useEficienciaAccess()
   const [ano, setAno] = useState(ANO_PADRAO)
   const [tab, setTab] = useState<EficienciaTabId>('overview')
   const [areaOverview, setAreaOverview] = useState<string | null>(null)
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
-  const { data: overview, loading: loadingOverview } = useEficienciaOverview(ano, areaOverview)
+
+  const areaEfetiva = access.canFilterAreas ? areaOverview : access.lockedArea
+  const { data: overview, loading: loadingOverview } = useEficienciaOverview(ano, areaEfetiva)
+
+  const visibleTabs = access.canSeeAllTabs
+    ? EFICIENCIA_TABS
+    : EFICIENCIA_TABS.filter((t) => t.id === 'overview')
+
+  // Coordenador: trava na área dele e no Overview.
+  useEffect(() => {
+    if (!access.canSeeAllTabs && tab !== 'overview') {
+      setTab('overview')
+    }
+  }, [access.canSeeAllTabs, tab])
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!access.canFilterAreas) {
+      setAreaOverview(access.lockedArea)
+    }
+  }, [authLoading, access.canFilterAreas, access.lockedArea])
+
+  const handleAreaChange = (area: string | null) => {
+    if (!access.canFilterAreas) return
+    setAreaOverview(area)
+  }
+
+  if (authLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-10 max-w-md animate-pulse rounded-lg bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-lg bg-slate-100" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -98,21 +136,29 @@ export function EficienciaPage() {
         ultimaAtualizacao={overview?.ultimaAtualizacao}
       />
 
-      <IndicadoresResultadoActions ano={ano} />
+      {access.canUseIndicadoresAdmin ? <IndicadoresResultadoActions ano={ano} /> : null}
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as EficienciaTabId)}>
-        <div className="flex justify-center">
-          <TabsList className="flex-wrap">
-            {EFICIENCIA_TABS.map(({ id, label, icon: Icon }) => (
-              <TabsTrigger key={id} value={id}>
-                <Icon className="h-4 w-4" />
-                {label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
+      <Tabs
+        value={tab}
+        onValueChange={(v) => {
+          if (!access.canSeeAllTabs && v !== 'overview') return
+          setTab(v as EficienciaTabId)
+        }}
+      >
+        {access.canSeeAllTabs ? (
+          <div className="flex justify-center">
+            <TabsList className="flex-wrap">
+              {visibleTabs.map(({ id, label, icon: Icon }) => (
+                <TabsTrigger key={id} value={id}>
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+        ) : null}
 
-        <div className="mt-6">
+        <div className={access.canSeeAllTabs ? 'mt-6' : 'mt-0'}>
           <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} />
         </div>
 
@@ -121,17 +167,23 @@ export function EficienciaPage() {
             ano={ano}
             data={overview}
             loading={loadingOverview}
-            area={areaOverview}
-            onAreaChange={setAreaOverview}
+            area={areaEfetiva}
+            onAreaChange={handleAreaChange}
             mesFiltro={mesFiltro}
+            allowedAreas={
+              access.canFilterAreas ? null : access.lockedArea ? [access.lockedArea] : []
+            }
+            allowTodasAreas={access.canFilterAreas}
           />
         </TabsContent>
 
-        {EFICIENCIA_TABS.filter((t) => t.id !== 'overview').map(({ id }) => (
-          <TabsContent key={id} value={id} className="mt-5">
-            <EficienciaTabPanel tab={id} ano={ano} mesFiltro={mesFiltro} />
-          </TabsContent>
-        ))}
+        {access.canSeeAllTabs
+          ? EFICIENCIA_TABS.filter((t) => t.id !== 'overview').map(({ id }) => (
+              <TabsContent key={id} value={id} className="mt-5">
+                <EficienciaTabPanel tab={id} ano={ano} mesFiltro={mesFiltro} />
+              </TabsContent>
+            ))
+          : null}
       </Tabs>
     </div>
   )

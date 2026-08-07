@@ -1,4 +1,4 @@
-export type AppRole = 'admin' | 'financeiro' | 'comite'
+export type AppRole = 'admin' | 'financeiro' | 'comite' | 'coordenador'
 
 export type InadimplenciaClasse = 'A' | 'B' | 'C'
 

@@ -21,7 +21,7 @@ export const MODULE_KEY_OPTIONS: { value: ModuleKey; label: string }[] = [
   { value: 'receita', label: 'Receita' },
   { value: 'opex', label: 'Opex' },
   { value: 'eficiencia', label: 'Resultado Metas Bismarchi Pires' },
-  { value: 'gestores', label: 'Gestores' },
+  { value: 'gestores', label: 'Usuários' },
   { value: 'configuracoes', label: 'Configurações' },
 ]
 

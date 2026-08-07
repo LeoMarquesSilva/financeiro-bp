@@ -776,7 +776,7 @@ export const eficienciaService = {
   /**
    * Abre chamados de evidência FATAL Excludente na RESPONSUM via Edge Function
    * `abrir-chamados-evidencia` (SIOE). created_by_email é o fallback quando a área não
-   * tiver coordenador/gerente/sócio mapeado com conta RESPONSUM (ver módulo Colaboradores).
+   * tiver coordenador/gerente/sócio mapeado com conta RESPONSUM (ver módulo Usuários).
    */
   async abrirChamadosEvidenciaResponsum(
     itens: AmostraChamadoItem[],

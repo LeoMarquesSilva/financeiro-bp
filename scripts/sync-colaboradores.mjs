@@ -64,13 +64,15 @@ const responsum = createClient(
  */
 const AREA_ORQESTRAI_TO_CANONICA = {
   'Insolvência': 'Reestruturação',
+  /** Comercial não existe no escritório — Leonardo/Marketing sob Operações Legais. */
+  'Comercial': 'Marketing',
 }
 
 /**
  * Área canônica -> nome do departamento na RESPONSUM (app_c009c0e4f1_departments).
- * Áreas não listadas aqui mantêm o mesmo nome na RESPONSUM. Áreas administrativas do
- * ORQESTRAI sem departamento próprio na RESPONSUM (Financeiro, Facilities, R.H., Limpeza,
- * Comercial, Sócio) caem em "Geral".
+ * Áreas não listadas aqui mantêm o mesmo nome na RESPONSUM. Braços administrativos
+ * sob Operações Legais (Marketing, Financeiro, Facilities, R.H., Limpeza, Sócio)
+ * caem em "Geral" na RESPONSUM.
  */
 const AREA_CANONICA_TO_RESPONSUM = {
   'Contratos': 'Societário e Contratos',
@@ -79,6 +81,7 @@ const AREA_CANONICA_TO_RESPONSUM = {
   'Facilities': 'Geral',
   'R.H.': 'Geral',
   'Limpeza': 'Geral',
+  'Marketing': 'Geral',
   'Comercial': 'Geral',
   'Sócio': 'Geral',
 }
@@ -99,6 +102,19 @@ function cargoToNivelHierarquico(cargo) {
   if (c.includes('GERENTE')) return 'gerente'
   if (c.includes('COORDENADOR')) return 'coordenador'
   return 'colaborador'
+}
+
+/**
+ * Sócios fundadores — donos do escritório. No ORQESTRAI às vezes entram como
+ * inativos (não são “folha” típica); no SIOE devem permanecer ativos como sócio.
+ * Chave = local-part do e-mail.
+ */
+const SOCIOS_FUNDADORES_FORCE_ACTIVE = new Set(['gustavo', 'ricardo'])
+
+function forceActiveSocioFundador(email, isActiveFromOrqestrai) {
+  const key = emailMatchKey(email)
+  if (key && SOCIOS_FUNDADORES_FORCE_ACTIVE.has(key)) return true
+  return Boolean(isActiveFromOrqestrai)
 }
 
 function normalizeEmail(email) {
@@ -169,8 +185,10 @@ async function main() {
     const key = emailMatchKey(emp.email)
     if (key) orqestraiKeys.add(key)
 
-    const areaCanonica = areaOrqestraiToCanonica(emp.department)
-    const nivelHierarquico = cargoToNivelHierarquico(emp.position)
+    const isSocioFundador = key != null && SOCIOS_FUNDADORES_FORCE_ACTIVE.has(key)
+    const areaCanonica = isSocioFundador ? 'Sócio' : areaOrqestraiToCanonica(emp.department)
+    const nivelHierarquico = isSocioFundador ? 'socio' : cargoToNivelHierarquico(emp.position)
+    const isActive = forceActiveSocioFundador(emp.email, emp.is_active)
     const responsumMatch = key ? responsumByKey.get(key) : undefined
 
     rows.push({
@@ -178,12 +196,12 @@ async function main() {
       full_name: emp.full_name,
       email: emp.email,
       area: areaCanonica,
-      area_orqestrai: emp.department,
-      cargo: emp.position,
+      area_orqestrai: isSocioFundador ? 'Sócio' : emp.department,
+      cargo: isSocioFundador ? 'Sócio' : emp.position,
       nivel_hierarquico: nivelHierarquico,
-      is_active: emp.is_active,
+      is_active: isActive,
       admission_date: emp.admission_date,
-      termination_date: emp.termination_date,
+      termination_date: isActive ? null : emp.termination_date,
       vios_ci: emp.vios_ci,
       responsum_user_id: responsumMatch?.id ?? null,
       responsum_email: responsumMatch?.email ?? null,
@@ -194,7 +212,7 @@ async function main() {
     if (!responsumMatch) {
       // Só vale reportar "falta conta" para quem está ativo hoje — ex-funcionário sem
       // conta na RESPONSUM não é uma pendência.
-      if (emp.is_active) {
+      if (isActive) {
         divergencias.push({
           tipo: 'sem_conta_responsum',
           full_name: emp.full_name,
@@ -207,18 +225,18 @@ async function main() {
 
     // Status precisa ser checado nos dois sentidos: colaborador desligado com conta ainda
     // ativa na RESPONSUM é tão relevante quanto colaborador ativo sem conta ativa lá.
-    if (emp.is_active !== (responsumMatch.is_active !== false)) {
+    if (isActive !== (responsumMatch.is_active !== false)) {
       divergencias.push({
         tipo: 'status_diferente',
         full_name: emp.full_name,
         email: emp.email,
-        detalhe: emp.is_active
+        detalhe: isActive
           ? 'Ativo no ORQESTRAI, mas a conta na RESPONSUM está inativa.'
           : 'Inativo/desligado no ORQESTRAI, mas a conta na RESPONSUM continua ativa.',
       })
     }
 
-    if (!emp.is_active) continue // área só é comparada para quem está ativo em algum dos dois lados
+    if (!isActive) continue // área só é comparada para quem está ativo em algum dos dois lados
 
     const areaResponsumEsperada = areaCanonicaToResponsum(areaCanonica)
     if (

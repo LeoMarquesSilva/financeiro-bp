@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
-import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock, Scale, Gauge, UserCog } from 'lucide-react'
+import { AlertTriangle, BarChart3, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock, Scale, Gauge } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -8,6 +8,8 @@ import { useAuth } from '@/lib/AuthContext'
 import { useWhatsappNotifications } from '@/features/cobranca/notifications/WhatsappNotificationsProvider'
 import type { AppRole } from '@/lib/database.types'
 import type { ModuleKey } from '@/lib/moduleAccess'
+import { resolveHomePath } from '@/lib/homePath'
+import { NAV_ACCESS_ITEMS, filterNavItemsForAccess } from '@/lib/navAccess'
 
 const LOGO_FENIX = '/fenix.png'
 
@@ -16,24 +18,22 @@ interface NavItem {
   label: string
   icon: React.ElementType
   roles: AppRole[]
-  /** Além do role, libera o item para quem tem esse módulo liberado individualmente (Fase 2). */
   moduleKey?: ModuleKey
   end?: boolean
 }
 
 const navItems: NavItem[] = [
-  { to: '/financeiro/inadimplencia/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'financeiro', 'comite'], moduleKey: 'inadimplencia' },
-  { to: '/financeiro/inadimplencia', label: 'Inadimplência', icon: AlertTriangle, roles: ['admin', 'financeiro', 'comite'], moduleKey: 'inadimplencia', end: true },
-  { to: '/financeiro/cobranca/seguimento', label: 'Inadimplência Pontual', icon: Clock, roles: ['admin', 'financeiro', 'comite'], moduleKey: 'cobranca' },
-  { to: '/financeiro/inadimplencia/judicializada', label: 'Inad. Judicializada', icon: Scale, roles: ['admin', 'financeiro', 'comite'] },
-  { to: '/financeiro/escritorio', label: 'Escritório', icon: Building2, roles: ['admin', 'financeiro'], moduleKey: 'escritorio' },
-  { to: '/financeiro/cobranca', label: 'Cobrança', icon: BellRing, roles: ['admin', 'financeiro'], moduleKey: 'cobranca' },
-  { to: '/financeiro/receita', label: 'Receita', icon: TrendingUp, roles: ['admin', 'financeiro', 'comite'], moduleKey: 'receita' },
-  { to: '/financeiro/opex', label: 'OPEX', icon: Wallet, roles: ['admin', 'financeiro'], moduleKey: 'opex' },
-  { to: '/financeiro/eficiencia', label: 'Eficiência Operacional', icon: Gauge, roles: ['admin'], moduleKey: 'eficiencia' },
-  { to: '/financeiro/gestores', label: 'Gestores', icon: Users, roles: ['admin'], moduleKey: 'gestores' },
-  { to: '/financeiro/colaboradores', label: 'Colaboradores', icon: UserCog, roles: ['admin'] },
-  { to: '/financeiro/configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'], moduleKey: 'configuracoes' },
+  { ...NAV_ACCESS_ITEMS[0], icon: BarChart3 },
+  { ...NAV_ACCESS_ITEMS[1], icon: AlertTriangle },
+  { ...NAV_ACCESS_ITEMS[2], icon: Clock },
+  { ...NAV_ACCESS_ITEMS[3], icon: Scale },
+  { ...NAV_ACCESS_ITEMS[4], icon: Building2 },
+  { ...NAV_ACCESS_ITEMS[5], icon: BellRing },
+  { ...NAV_ACCESS_ITEMS[6], icon: TrendingUp },
+  { ...NAV_ACCESS_ITEMS[7], icon: Wallet },
+  { ...NAV_ACCESS_ITEMS[8], icon: Gauge },
+  { ...NAV_ACCESS_ITEMS[9], icon: Users },
+  { ...NAV_ACCESS_ITEMS[10], icon: Settings },
 ]
 
 function getInitials(name: string | null): string {
@@ -51,14 +51,10 @@ export function AppSidebar() {
   const { unreadChats } = useWhatsappNotifications()
   const location = useLocation()
   const navigate = useNavigate()
+  const homePath = resolveHomePath(role, moduleAccess)
 
   const visibleItems = useMemo(
-    () =>
-      navItems.filter(
-        (item) =>
-          (role && item.roles.includes(role)) ||
-          (item.moduleKey && moduleAccess.includes(item.moduleKey)),
-      ),
+    () => filterNavItemsForAccess(navItems, role, moduleAccess),
     [role, moduleAccess],
   )
 
@@ -68,7 +64,7 @@ export function AppSidebar() {
         {/* Logo */}
         <div className="flex h-14 shrink-0 items-center justify-center">
           <NavLink
-            to="/financeiro/inadimplencia"
+            to={homePath}
             className="flex items-center justify-center rounded-md p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
           >
             <img

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/AuthContext'
 import type { AppRole } from '@/lib/database.types'
 import type { ModuleKey } from '@/lib/moduleAccess'
+import { resolveHomePath } from '@/lib/homePath'
 import { Login } from './Login'
 import { ResetPassword } from './ResetPassword'
 import { FinanceiroLayout } from './layouts/FinanceiroLayout'
@@ -12,8 +13,7 @@ import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
 import { EscritorioFinanceiroDetalhePage } from '@/features/escritorio/pages/EscritorioFinanceiroDetalhePage'
 import { CobrancaPage } from '@/features/cobranca/pages/CobrancaPage'
 import { CobrancaSeguimentoPage } from '@/features/cobranca/pages/CobrancaSeguimentoPage'
-import { TeamMembersPage } from '@/features/gestores/pages/TeamMembersPage'
-import { ColaboradoresPage } from '@/features/colaboradores/pages/ColaboradoresPage'
+import { UsuariosPage } from '@/features/usuarios/pages/UsuariosPage'
 import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesPage'
 import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
 import { OpexPage } from '@/features/opex/pages/OpexPage'
@@ -34,13 +34,14 @@ function ProtectedRoute({
   const hasRoleAccess = !!role && allowedRoles.includes(role)
   const hasModuleAccess = !!moduleKey && moduleAccess.includes(moduleKey)
   if (!hasRoleAccess && !hasModuleAccess) {
-    return <Navigate to="/financeiro/inadimplencia" replace />
+    return <Navigate to={resolveHomePath(role, moduleAccess)} replace />
   }
   return <>{children}</>
 }
 
 function AppRoutes() {
   const { user, role, moduleAccess, loading } = useAuth()
+  const homePath = resolveHomePath(role, moduleAccess)
 
   if (loading) {
     return (
@@ -64,10 +65,31 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/financeiro/inadimplencia" replace />} />
+        <Route path="/" element={<Navigate to={homePath} replace />} />
         <Route path="/financeiro" element={<FinanceiroLayout />}>
-          <Route path="inadimplencia" element={<InadimplenciaPage />} />
-          <Route path="inadimplencia/dashboard" element={<InadimplenciaDashboardPage />} />
+          <Route index element={<Navigate to={homePath} replace />} />
+          <Route
+            path="inadimplencia"
+            element={
+              <ProtectedRoute
+                allowedRoles={['admin', 'financeiro', 'comite']}
+                moduleKey="inadimplencia"
+              >
+                <InadimplenciaPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="inadimplencia/dashboard"
+            element={
+              <ProtectedRoute
+                allowedRoles={['admin', 'financeiro', 'comite']}
+                moduleKey="inadimplencia"
+              >
+                <InadimplenciaDashboardPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="inadimplencia/judicializada"
             element={
@@ -109,21 +131,15 @@ function AppRoutes() {
             }
           />
           <Route
-            path="gestores"
+            path="usuarios"
             element={
               <ProtectedRoute allowedRoles={['admin']} moduleKey="gestores">
-                <TeamMembersPage />
+                <UsuariosPage />
               </ProtectedRoute>
             }
           />
-          <Route
-            path="colaboradores"
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <ColaboradoresPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="gestores" element={<Navigate to="/financeiro/usuarios" replace />} />
+          <Route path="colaboradores" element={<Navigate to="/financeiro/usuarios" replace />} />
           <Route
             path="receita"
             element={
@@ -143,7 +159,7 @@ function AppRoutes() {
           <Route
             path="eficiencia"
             element={
-              <ProtectedRoute allowedRoles={['admin']} moduleKey="eficiencia">
+              <ProtectedRoute allowedRoles={['admin', 'coordenador']} moduleKey="eficiencia">
                 <EficienciaPage />
               </ProtectedRoute>
             }
@@ -159,7 +175,7 @@ function AppRoutes() {
           <Route path="perfil" element={<PerfilPage />} />
         </Route>
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="*" element={<Navigate to="/financeiro/inadimplencia" replace />} />
+        <Route path="*" element={<Navigate to={homePath} replace />} />
       </Routes>
     </BrowserRouter>
   )

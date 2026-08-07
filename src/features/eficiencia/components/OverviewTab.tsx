@@ -32,6 +32,9 @@ type Props = {
   area: string | null
   onAreaChange: (area: string | null) => void
   mesFiltro: MesFiltroEficiencia
+  /** Áreas visíveis no filtro (coordenador = só a dele). */
+  allowedAreas?: readonly string[] | null
+  allowTodasAreas?: boolean
 }
 
 const RACIONAL_TITULOS: Record<RacionalIndicador, string> = {
@@ -103,6 +106,8 @@ export function OverviewTab({
   area,
   onAreaChange,
   mesFiltro,
+  allowedAreas,
+  allowTodasAreas = true,
 }: Props) {
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
@@ -113,7 +118,12 @@ export function OverviewTab({
   if (loading || !data) {
     return (
       <div className="space-y-3">
-        <AreaFilterButtons value={area} onChange={onAreaChange} />
+        <AreaFilterButtons
+          value={area}
+          onChange={onAreaChange}
+          allowedAreas={allowedAreas}
+          allowTodas={allowTodasAreas}
+        />
         {Array.from({ length: 7 }, (_, i) => (
           <div key={i} className="h-16 animate-pulse rounded-lg bg-slate-100" />
         ))}
@@ -344,7 +354,12 @@ export function OverviewTab({
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <AreaFilterButtons value={area} onChange={onAreaChange} />
+          <AreaFilterButtons
+            value={area}
+            onChange={onAreaChange}
+            allowedAreas={allowedAreas}
+            allowTodas={allowTodasAreas}
+          />
         </div>
         <Button
           type="button"
