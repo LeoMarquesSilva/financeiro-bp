@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import { formatPercent } from '@/shared/utils/format'
 import {
   EFICIENCIA_META_SLA_PROTOCOLO,
   MESES_EFICIENCIA,
@@ -6,6 +7,7 @@ import {
 } from '../constants'
 import type { IndicadoresResultadoMes } from '../types/indicadoresResultado.types'
 import type {
+  GestaoPdiDetalheRow,
   RacionalColuna,
   RacionalResumo,
   RacionalResultado,
@@ -80,6 +82,7 @@ const METAS_INDICADORES = {
   eficienciaProtocolo: '95%',
   agendamento: '95%',
   vistagem: '98%',
+  gestaoPdi: '100%',
 } as const
 
 function formatPctExport(num: number, den: number): string | undefined {
@@ -387,6 +390,58 @@ function buildVistagemPivot(linhas: Array<Record<string, unknown>>) {
   }
 }
 
+function buildGestaoPdiPivot(detalhe: GestaoPdiDetalheRow[]) {
+  const byArea = new Map<string, { elegiveis: number; aptas: number }>()
+  for (const row of detalhe) {
+    const area = row.area ?? '—'
+    const acc = byArea.get(area) ?? { elegiveis: 0, aptas: 0 }
+    acc.elegiveis += 1
+    if (row.apta) acc.aptas += 1
+    byArea.set(area, acc)
+  }
+  let totE = 0
+  let totA = 0
+  const rows: CellValue[][] = [...byArea.keys()].map((area) => {
+    const acc = byArea.get(area)!
+    totE += acc.elegiveis
+    totA += acc.aptas
+    const desvios = acc.elegiveis - acc.aptas
+    return [area, acc.elegiveis, acc.aptas, desvios, pct(acc.aptas, acc.elegiveis)]
+  })
+  const totD = totE - totA
+  rows.push(['Total Geral', totE, totA, totD, pct(totA, totE)])
+  return sortPivotRowsDesc(rows, 4)
+}
+
+function gestaoPdiDetailTable(detalhe: GestaoPdiDetalheRow[]): {
+  headers: string[]
+  rows: CellValue[][]
+} {
+  const headers = [
+    'Mês',
+    'Colaborador',
+    'Área',
+    'Progresso anterior',
+    'Progresso',
+    'Evidências de Execução',
+    '1:1',
+    'Status',
+    'Desvio Critério de Puração',
+  ]
+  const rows = detalhe.map((d) => [
+    MESES_EFICIENCIA[d.mes - 1] ?? String(d.mes),
+    d.colaborador,
+    d.area ?? '',
+    d.progresso_anterior != null ? formatPercent(d.progresso_anterior) : '',
+    d.progresso != null ? formatPercent(d.progresso) : '',
+    d.evidencias_execucao ?? '',
+    d.one_a_one != null ? d.one_a_one : '',
+    d.status,
+    d.desvio_criterio_apuracao?.trim() || '',
+  ])
+  return { headers, rows }
+}
+
 export function indicadoresResultadoFilename(ano: number, mes: number): string {
   const mesNome = MESES_EFICIENCIA_ARQUIVO[mes - 1] ?? String(mes)
   const aa = String(ano).slice(-2)
@@ -479,6 +534,22 @@ function writeResultadoSheet(wb: ExcelJS.Workbook, data: IndicadoresResultadoMes
     `${data.desenvolvimento.linhas.length} lançamentos`,
     'Ver aba DESENVOLVIMENTO DE EQUIPE',
     BRAND_SOFT,
+  ])
+
+  const gp = data.gestaoPdiMensal
+  const gpPct =
+    gp?.pct_aptas != null
+      ? `${gp.pct_aptas.toFixed(2).replace('.', ',')}%`
+      : gp && gp.elegiveis > 0
+        ? formatPercent(Math.round((gp.aptas / gp.elegiveis) * 10000) / 100)
+        : '—'
+  kpis.push([
+    'Gestão de PDI',
+    gpPct,
+    gp
+      ? `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`
+      : 'Ver aba GESTÃO DE PDI',
+    gp && gp.pct_aptas != null && gp.pct_aptas >= 100 ? GREEN_SOFT : gp ? RED_SOFT : BRAND_SOFT,
   ])
 
   kpis.forEach((kpi, i) => {
@@ -695,6 +766,36 @@ export async function exportIndicadoresResultadoExcel(
     }
     ws.views = [{ state: 'frozen', ySplit: 3, showGridLines: false }]
     autoFitColumns(ws, 1, 5)
+  }
+
+  {
+    const gp = data.gestaoPdiMensal
+    const gpResultado =
+      gp?.pct_aptas != null
+        ? `${gp.pct_aptas.toFixed(2).replace('.', ',')}%`
+        : gp && gp.elegiveis > 0
+          ? formatPctExport(gp.aptas, gp.elegiveis)
+          : undefined
+    const pivotRows = buildGestaoPdiPivot(data.gestaoPdiDetalhe)
+    const detail = gestaoPdiDetailTable(data.gestaoPdiDetalhe)
+    appendPivotAndDetail(
+      wb,
+      'GESTÃO DE PDI',
+      `Gestão de PDI — ${MESES_EFICIENCIA[data.mes - 1]}/${data.ano}`,
+      ['ÁREA', 'Elegíveis', 'Aptas', 'Desvios', '% Aptas'],
+      pivotRows,
+      { pctCols: [5], numberCols: [2, 3, 4] },
+      detail,
+      {
+        statusCol: {
+          col: 8,
+          map: { Apta: GREEN_SOFT, Desvio: RED_SOFT },
+        },
+        wrapCols: [9],
+      },
+      undefined,
+      { metaLabel: METAS_INDICADORES.gestaoPdi, resultadoLabel: gpResultado },
+    )
   }
 
   await downloadWorkbook(wb, indicadoresResultadoFilename(data.ano, data.mes))

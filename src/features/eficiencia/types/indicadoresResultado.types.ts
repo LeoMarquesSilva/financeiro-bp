@@ -1,4 +1,4 @@
-import type { RacionalResultado } from './eficiencia.types'
+import type { GestaoPdiDetalheRow, GestaoPdiMesRow, RacionalResultado } from './eficiencia.types'
 import type { AmostraChamadoItem, AmostraEstratoResumo } from '../utils/amostraChamados'
 
 export type IndicadoresResultadoMes = {
@@ -10,6 +10,8 @@ export type IndicadoresResultadoMes = {
   vistagemRisco: RacionalResultado
   vistagemNormal: RacionalResultado
   desenvolvimento: RacionalResultado
+  gestaoPdiMensal: GestaoPdiMesRow | null
+  gestaoPdiDetalhe: GestaoPdiDetalheRow[]
   /** FATAL excludentes com flag de amostra. */
   detalhesExcludentes: AmostraChamadoItem[]
   amostraChamados: AmostraChamadoItem[]

@@ -725,6 +725,8 @@ export const eficienciaService = {
       vistagemRisco,
       vistagemNormal,
       desenvolvimento,
+      gestaoPdiMensalRows,
+      gestaoPdiDetalhe,
     ] = await Promise.all([
       this.fetchRacionalParaExport('sla_protocolo', ano, null, mesFiltro),
       this.fetchRacionalParaExport('eficiencia_protocolo', ano, null, mesFiltro),
@@ -732,7 +734,10 @@ export const eficienciaService = {
       this.fetchRacionalParaExport('sla_vistagem_risco', ano, null, mesFiltro),
       this.fetchRacionalParaExport('sla_vistagem_normal', ano, null, mesFiltro),
       this.fetchRacionalParaExport('desenvolvimento_equipe', ano, null, mesFiltro),
+      this.fetchGestaoPdiMensal(ano, null),
+      this.fetchGestaoPdiDetalhe(ano, mesFiltro, null),
     ])
+    const gestaoPdiMensal = gestaoPdiMensalRows.find((r) => r.mes === mes) ?? null
 
     const fatalExcludentes = slaProtocolo.linhas
       .map((row) => mapSlaRowToFatalExcludente(row))
@@ -751,6 +756,8 @@ export const eficienciaService = {
       vistagemRisco,
       vistagemNormal,
       desenvolvimento,
+      gestaoPdiMensal,
+      gestaoPdiDetalhe,
       detalhesExcludentes,
       amostraChamados,
       resumoAmostra,
