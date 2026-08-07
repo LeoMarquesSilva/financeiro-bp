@@ -727,6 +727,9 @@ export const eficienciaService = {
       desenvolvimento,
       gestaoPdiMensalRows,
       gestaoPdiDetalhe,
+      retencaoAnual,
+      retencaoTalentos,
+      retencaoDesligamentos,
     ] = await Promise.all([
       this.fetchRacionalParaExport('sla_protocolo', ano, null, mesFiltro),
       this.fetchRacionalParaExport('eficiencia_protocolo', ano, null, mesFiltro),
@@ -736,6 +739,9 @@ export const eficienciaService = {
       this.fetchRacionalParaExport('desenvolvimento_equipe', ano, null, mesFiltro),
       this.fetchGestaoPdiMensal(ano, null),
       this.fetchGestaoPdiDetalhe(ano, mesFiltro, null),
+      this.fetchTurnoverAnual(ano, null),
+      this.fetchRacionalParaExport('retencao_talentos', ano, null, null),
+      this.fetchTurnoverDesligamentos(ano),
     ])
     const gestaoPdiMensal = gestaoPdiMensalRows.find((r) => r.mes === mes) ?? null
 
@@ -758,6 +764,9 @@ export const eficienciaService = {
       desenvolvimento,
       gestaoPdiMensal,
       gestaoPdiDetalhe,
+      retencaoAnual,
+      retencaoTalentos,
+      retencaoDesligamentos,
       detalhesExcludentes,
       amostraChamados,
       resumoAmostra,

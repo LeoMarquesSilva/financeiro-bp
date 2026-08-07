@@ -11,6 +11,7 @@ import type {
   RacionalColuna,
   RacionalResumo,
   RacionalResultado,
+  TurnoverDesligamentoRow,
 } from '../types/eficiencia.types'
 import { countVistagemD1, formatRacionalCell, isVistadoD1Sim } from './racionalFormat'
 
@@ -83,6 +84,7 @@ const METAS_INDICADORES = {
   agendamento: '95%',
   vistagem: '98%',
   gestaoPdi: '100%',
+  retencaoTalentos: '90%',
 } as const
 
 function formatPctExport(num: number, den: number): string | undefined {
@@ -442,6 +444,69 @@ function gestaoPdiDetailTable(detalhe: GestaoPdiDetalheRow[]): {
   return { headers, rows }
 }
 
+function anoDeDataIso(value: unknown): number | null {
+  const s = String(value ?? '').trim()
+  if (s.length < 4) return null
+  const y = Number(s.slice(0, 4))
+  return Number.isFinite(y) ? y : null
+}
+
+function formatMesesCasaExport(m: number | null | undefined): string {
+  if (m == null) return ''
+  const anos = Math.floor(m / 12)
+  const meses = m % 12
+  if (anos === 0) return `${meses}m`
+  return `${anos}a ${meses}m`
+}
+
+/** Mesma regra de eficiencia_turnover_anual (ativos + saídas voluntárias no ano). */
+function buildRetencaoPivot(linhas: Array<Record<string, unknown>>, ano: number) {
+  const byArea = new Map<string, { ativos: number; saidas: number }>()
+  for (const row of linhas) {
+    const area = String(row.area ?? '—')
+    const acc = byArea.get(area) ?? { ativos: 0, saidas: 0 }
+    const admAno = anoDeDataIso(row.admissao)
+    const desAno = anoDeDataIso(row.desligamento)
+    if (admAno != null && admAno <= ano && (desAno == null || desAno > ano)) {
+      acc.ativos += 1
+    }
+    if (
+      String(row.tipo_desligamento ?? '').trim() === 'Voluntário' &&
+      desAno === ano
+    ) {
+      acc.saidas += 1
+    }
+    byArea.set(area, acc)
+  }
+  let totA = 0
+  let totS = 0
+  const rows: CellValue[][] = [...byArea.keys()].map((area) => {
+    const acc = byArea.get(area)!
+    totA += acc.ativos
+    totS += acc.saidas
+    return [area, acc.ativos, acc.saidas, pct(acc.ativos - acc.saidas, acc.ativos)]
+  })
+  rows.push(['Total Geral', totA, totS, pct(totA - totS, totA)])
+  return sortPivotRowsDesc(rows, 3)
+}
+
+function retencaoDesligamentosTable(desligamentos: TurnoverDesligamentoRow[]): {
+  headers: string[]
+  rows: CellValue[][]
+} {
+  const headers = ['Nome', 'Área', 'Cargo', 'Admissão', 'Desligamento', 'Tipo', 'Tempo de casa']
+  const rows = desligamentos.map((d) => [
+    d.nome,
+    d.area ?? '',
+    d.cargo ?? '',
+    d.admissao ?? '',
+    d.desligamento ?? '',
+    d.tipo_desligamento ?? '',
+    formatMesesCasaExport(d.meses_casa),
+  ])
+  return { headers, rows }
+}
+
 export function indicadoresResultadoFilename(ano: number, mes: number): string {
   const mesNome = MESES_EFICIENCIA_ARQUIVO[mes - 1] ?? String(mes)
   const aa = String(ano).slice(-2)
@@ -550,6 +615,20 @@ function writeResultadoSheet(wb: ExcelJS.Workbook, data: IndicadoresResultadoMes
       ? `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`
       : 'Ver aba GESTÃO DE PDI',
     gp && gp.pct_aptas != null && gp.pct_aptas >= 100 ? GREEN_SOFT : gp ? RED_SOFT : BRAND_SOFT,
+  ])
+
+  const rt = data.retencaoAnual
+  const rtPct =
+    rt != null
+      ? `${rt.pct_retencao.toFixed(2).replace('.', ',')}%`
+      : '—'
+  kpis.push([
+    'Retenção de Talentos',
+    rtPct,
+    rt
+      ? `${rt.funcionarios_ativos} ativos · ${rt.saidas_voluntarias} saídas voluntárias`
+      : 'Ver aba RETENÇÃO DE TALENTOS',
+    rt && rt.pct_retencao >= rt.meta_pct_retencao_minima ? GREEN_SOFT : rt ? RED_SOFT : BRAND_SOFT,
   ])
 
   kpis.forEach((kpi, i) => {
@@ -795,6 +874,37 @@ export async function exportIndicadoresResultadoExcel(
       },
       undefined,
       { metaLabel: METAS_INDICADORES.gestaoPdi, resultadoLabel: gpResultado },
+    )
+  }
+
+  {
+    const rt = data.retencaoAnual
+    const rtResultado =
+      rt != null ? `${rt.pct_retencao.toFixed(2).replace('.', ',')}%` : undefined
+    const metaRetencao = rt
+      ? `mín. ${rt.meta_pct_retencao_minima.toFixed(2).replace('.', ',')}%`
+      : `mín. ${METAS_INDICADORES.retencaoTalentos}`
+    const pivotRows = buildRetencaoPivot(data.retencaoTalentos.linhas, data.ano)
+    const detail = retencaoDesligamentosTable(data.retencaoDesligamentos)
+    appendPivotAndDetail(
+      wb,
+      'RETENÇÃO DE TALENTOS',
+      `Retenção de Talentos — ${data.ano}`,
+      ['ÁREA', 'Ativos', 'Saídas voluntárias', '% Retenção'],
+      pivotRows,
+      { pctCols: [4], numberCols: [2, 3] },
+      detail,
+      {
+        statusCol: {
+          col: 6,
+          map: { Voluntário: RED_SOFT },
+        },
+      },
+      undefined,
+      {
+        metaLabel: metaRetencao,
+        resultadoLabel: rtResultado,
+      },
     )
   }
 
