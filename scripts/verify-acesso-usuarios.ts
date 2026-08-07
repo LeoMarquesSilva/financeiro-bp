@@ -150,7 +150,7 @@ const cases: Case[] = [
     expectEficiencia: {
       profile: 'coordenador',
       canUseIndicadoresAdmin: false,
-      canSeeAllTabs: false,
+      canSeeAllTabs: true,
       canFilterAreas: false,
       lockedArea: 'Cível',
     },
@@ -182,7 +182,7 @@ const cases: Case[] = [
     expectEficiencia: {
       profile: 'coordenador',
       canUseIndicadoresAdmin: false,
-      canSeeAllTabs: false,
+      canSeeAllTabs: true,
       canFilterAreas: false,
       lockedArea: 'Reestruturação',
     },
@@ -198,7 +198,7 @@ const cases: Case[] = [
     expectEficiencia: {
       profile: 'coordenador',
       canUseIndicadoresAdmin: false,
-      canSeeAllTabs: false,
+      canSeeAllTabs: true,
       canFilterAreas: false,
       lockedArea: 'Contratos',
     },

@@ -98,17 +98,6 @@ export function EficienciaPage() {
   const areaEfetiva = access.canFilterAreas ? areaOverview : access.lockedArea
   const { data: overview, loading: loadingOverview } = useEficienciaOverview(ano, areaEfetiva)
 
-  const visibleTabs = access.canSeeAllTabs
-    ? EFICIENCIA_TABS
-    : EFICIENCIA_TABS.filter((t) => t.id === 'overview')
-
-  // Coordenador: trava na área dele e no Overview.
-  useEffect(() => {
-    if (!access.canSeeAllTabs && tab !== 'overview') {
-      setTab('overview')
-    }
-  }, [access.canSeeAllTabs, tab])
-
   useEffect(() => {
     if (authLoading) return
     if (!access.canFilterAreas) {
@@ -141,27 +130,19 @@ export function EficienciaPage() {
 
       {access.canUseIndicadoresAdmin ? <IndicadoresResultadoActions ano={ano} /> : null}
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) => {
-          if (!access.canSeeAllTabs && v !== 'overview') return
-          setTab(v as EficienciaTabId)
-        }}
-      >
-        {access.canSeeAllTabs ? (
-          <div className="flex justify-center">
-            <TabsList className="flex-wrap">
-              {visibleTabs.map(({ id, label, icon: Icon }) => (
-                <TabsTrigger key={id} value={id}>
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
-        ) : null}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as EficienciaTabId)}>
+        <div className="flex justify-center">
+          <TabsList className="flex-wrap">
+            {EFICIENCIA_TABS.map(({ id, label, icon: Icon }) => (
+              <TabsTrigger key={id} value={id}>
+                <Icon className="h-4 w-4" />
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
-        <div className={access.canSeeAllTabs ? 'mt-6' : 'mt-0'}>
+        <div className="mt-6">
           <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} />
         </div>
 
@@ -180,13 +161,11 @@ export function EficienciaPage() {
           />
         </TabsContent>
 
-        {access.canSeeAllTabs
-          ? EFICIENCIA_TABS.filter((t) => t.id !== 'overview').map(({ id }) => (
-              <TabsContent key={id} value={id} className="mt-5">
-                <EficienciaTabPanel tab={id} ano={ano} mesFiltro={mesFiltro} />
-              </TabsContent>
-            ))
-          : null}
+        {EFICIENCIA_TABS.filter((t) => t.id !== 'overview').map(({ id }) => (
+          <TabsContent key={id} value={id} className="mt-5">
+            <EficienciaTabPanel tab={id} ano={ano} mesFiltro={mesFiltro} />
+          </TabsContent>
+        ))}
       </Tabs>
     </div>
   )

@@ -11,6 +11,7 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { useGestaoPdi } from '../hooks/useEficiencia'
+import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { acumuladoGestaoPdi } from '../utils/gestaoPdiCalc'
 import { exportGestaoPdiDesviosExcel } from '../utils/gestaoPdiExport'
@@ -26,7 +27,7 @@ type Props = {
 }
 
 export function GestaoPdiTab({ ano, mesFiltro }: Props) {
-  const [area, setArea] = useState<string | null>(null)
+  const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [exportando, setExportando] = useState(false)
   const { mensal, detalhe, loading } = useGestaoPdi(ano, mesFiltro, area)
   const { teamMembers } = useTeamMembers()
@@ -59,7 +60,12 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
-      <AreaFilterButtons value={area} onChange={setArea} />
+      <AreaFilterButtons
+        value={area}
+        onChange={setArea}
+        allowedAreas={allowedAreas}
+        allowTodas={allowTodas}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard

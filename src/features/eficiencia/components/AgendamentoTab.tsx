@@ -7,6 +7,7 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { useAgendamento, useAgendamentoRanking } from '../hooks/useEficiencia'
+import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
@@ -22,7 +23,7 @@ type Props = {
 }
 
 export function AgendamentoTab({ ano, mesFiltro }: Props) {
-  const [area, setArea] = useState<string | null>(null)
+  const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { data: mensal, loading } = useAgendamento(ano, area)
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
@@ -58,7 +59,12 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
-      <AreaFilterButtons value={area} onChange={setArea} />
+      <AreaFilterButtons
+        value={area}
+        onChange={setArea}
+        allowedAreas={allowedAreas}
+        allowTodas={allowTodas}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard

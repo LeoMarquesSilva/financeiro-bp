@@ -5,6 +5,7 @@ import { formatDate, formatPercent } from '@/shared/utils/format'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import type { MesFiltroEficiencia } from '../constants'
 import { useTurnover } from '../hooks/useEficiencia'
+import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
@@ -29,7 +30,7 @@ type Props = {
 }
 
 export function TurnoverTab({ ano, mesFiltro }: Props) {
-  const [area, setArea] = useState<string | null>(null)
+  const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { anual, desligamentos, top5, loading } = useTurnover(ano, area)
   const { teamMembers } = useTeamMembers()
@@ -47,7 +48,12 @@ export function TurnoverTab({ ano, mesFiltro }: Props) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <AreaFilterButtons value={area} onChange={setArea} />
+          <AreaFilterButtons
+            value={area}
+            onChange={setArea}
+            allowedAreas={allowedAreas}
+            allowTodas={allowTodas}
+          />
         </div>
         <OverviewRacionalButton onClick={() => setRacionalAberto(true)} className="w-auto" />
       </div>

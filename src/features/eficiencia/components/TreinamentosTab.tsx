@@ -3,6 +3,7 @@ import { GraduationCap } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import type { MesFiltroEficiencia } from '../constants'
 import { useTreinamentos } from '../hooks/useEficiencia'
+import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { AreaFilterButtons } from './AreaFilterButtons'
 import { RacionalSheet } from './RacionalSheet'
 import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
@@ -21,7 +22,7 @@ type Props = {
 }
 
 export function TreinamentosTab({ ano, mesFiltro }: Props) {
-  const [area, setArea] = useState<string | null>(null)
+  const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { anual, porPessoa, itens, loading } = useTreinamentos(ano, area)
   const mesRacional: MesFiltroEficiencia =
@@ -32,7 +33,12 @@ export function TreinamentosTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
-      <AreaFilterButtons value={area} onChange={setArea} />
+      <AreaFilterButtons
+        value={area}
+        onChange={setArea}
+        allowedAreas={allowedAreas}
+        allowTodas={allowTodas}
+      />
 
       <section className="mx-auto w-full max-w-md rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">

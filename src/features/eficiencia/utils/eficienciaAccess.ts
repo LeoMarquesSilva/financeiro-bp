@@ -92,7 +92,7 @@ export function isCoordenadorUsuario(input: {
  *
  * - Admin: tudo (abas, áreas, Indicadores Resultado / Amostra Chamados).
  * - Sócio de área (sócio/gerente RH): todas as abas e áreas; sem ações admin.
- * - Coordenador (lista + nivel_hierarquico): só Overview da própria área.
+ * - Coordenador: todas as abas, mas só a própria área; sem ações admin.
  */
 export function resolveEficienciaAccess(input: ResolveInput): EficienciaAccess {
   if (input.role === 'admin') {
@@ -114,7 +114,7 @@ export function resolveEficienciaAccess(input: ResolveInput): EficienciaAccess {
     return {
       profile: 'coordenador',
       canUseIndicadoresAdmin: false,
-      canSeeAllTabs: false,
+      canSeeAllTabs: true,
       canFilterAreas: false,
       lockedArea: resolveLockedArea(input),
     }

@@ -3,6 +3,7 @@ import { ClipboardCheck } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import { filtrarMensalPorMesFiltro, type MesFiltroEficiencia } from '../constants'
 import { useEficienciaProtocolo, useEficienciaProtocoloRanking } from '../hooks/useEficiencia'
+import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
@@ -18,7 +19,7 @@ type Props = {
 }
 
 export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
-  const [area, setArea] = useState<string | null>(null)
+  const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { data: mensal, loading } = useEficienciaProtocolo(ano, area)
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
@@ -43,7 +44,12 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
-      <AreaFilterButtons value={area} onChange={setArea} />
+      <AreaFilterButtons
+        value={area}
+        onChange={setArea}
+        allowedAreas={allowedAreas}
+        allowTodas={allowTodas}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
