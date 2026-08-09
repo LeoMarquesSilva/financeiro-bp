@@ -3,6 +3,7 @@ import { FileSearch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MESES_EFICIENCIA } from '../constants'
 import { atingiuMetaKpi, resolveMetaTexto } from '../utils/overviewKpiMeta'
+import { toPriMaiuscula } from '../utils/textFormat'
 
 const COL_TITLE_WIDTH = 150
 const COL_MES_WIDTH = 60
@@ -94,9 +95,9 @@ function cellStyle(cell: HeatCell, meta: number, bold: boolean): CSSProperties {
 const thBase: CSSProperties = {
   padding: 4,
   textAlign: 'center',
-  fontSize: 10,
-  fontWeight: 600,
-  color: '#6B7280',
+  fontSize: 12,
+  fontWeight: 700,
+  color: '#334155',
   borderBottom: '2px solid #E5E7EB',
   width: COL_MES_WIDTH,
 }
@@ -162,7 +163,7 @@ export function OverviewKpiHeatCard({
                   borderBottom: '2px solid #E5E7EB',
                 }}
               >
-                {title}
+                {toPriMaiuscula(title)}
               </th>
               {modoAnual ? (
                 <th

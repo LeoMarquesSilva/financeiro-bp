@@ -40,23 +40,7 @@ export function InadimplenciaTab({ ano, mesFiltro }: Props) {
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
-          title="Índice de Inadimplência"
-          value={
-            overview?.acumulado.value != null
-              ? formatPercent(overview.acumulado.value)
-              : '—'
-          }
-          hint="Saldo congelado ÷ previsto (Jun+)"
-          icon={AlertTriangle}
-          accentClass="bg-amber-100 text-amber-800"
-          loading={isLoading}
-        />
-        <EficienciaKpiCard
-          title={
-            isMesesFiltro(mesFiltro) && mesFiltro.length === 1
-              ? 'Índice no mês'
-              : 'Índice no mês atual'
-          }
+          title="Índice de Inadimplência Gestão a Vista"
           value={
             rowMesDestaque?.inadimplenciaPct != null &&
             rowMesDestaque.mes >= MES_INICIO_RESULTADO &&
@@ -69,7 +53,19 @@ export function InadimplenciaTab({ ano, mesFiltro }: Props) {
           loading={isLoading}
         />
         <EficienciaKpiCard
-          title="Saldo inadimplência (período)"
+          title="Índice de Inadimplência no período selecionado"
+          value={
+            overview?.acumulado.value != null
+              ? formatPercent(overview.acumulado.value)
+              : '—'
+          }
+          hint="Saldo congelado ÷ previsto (Jun+)"
+          icon={AlertTriangle}
+          accentClass="bg-amber-100 text-amber-800"
+          loading={isLoading}
+        />
+        <EficienciaKpiCard
+          title="Saldo inadimplência (período selecionado)"
           value={
             data
               ? new Intl.NumberFormat('pt-BR', {

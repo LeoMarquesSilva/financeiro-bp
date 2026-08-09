@@ -38,6 +38,8 @@ export function TreinamentosTab({ ano, mesFiltro }: Props) {
         onChange={setArea}
         allowedAreas={allowedAreas}
         allowTodas={allowTodas}
+        ano={ano}
+        mesFiltro={mesFiltro}
       />
 
       <section className="mx-auto w-full max-w-md rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm">

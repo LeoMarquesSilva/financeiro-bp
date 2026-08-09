@@ -75,6 +75,7 @@ const cases: Case[] = [
       'Receita',
       'OPEX',
       'Eficiência Operacional',
+      'Operações Legais',
       'Usuários',
       'Configurações',
     ],
@@ -101,12 +102,23 @@ const cases: Case[] = [
       'Receita',
       'OPEX',
     ],
-    expectNotNavLabels: ['Eficiência Operacional', 'Usuários', 'Configurações'],
+    expectNotNavLabels: [
+      'Eficiência Operacional',
+      'Operações Legais',
+      'Usuários',
+      'Configurações',
+    ],
     expectRoutes: [
       {
         label: 'eficiencia',
         allowedRoles: ['admin', 'coordenador'],
         moduleKey: 'eficiencia',
+        allowed: false,
+      },
+      {
+        label: 'operacoes-legais',
+        allowedRoles: ['admin', 'coordenador'],
+        moduleKey: 'operacoes-legais',
         allowed: false,
       },
       {
@@ -129,7 +141,14 @@ const cases: Case[] = [
       'Inad. Judicializada',
       'Receita',
     ],
-    expectNotNavLabels: ['Escritório', 'Cobrança', 'OPEX', 'Eficiência Operacional', 'Usuários'],
+    expectNotNavLabels: [
+      'Escritório',
+      'Cobrança',
+      'OPEX',
+      'Eficiência Operacional',
+      'Operações Legais',
+      'Usuários',
+    ],
   },
   {
     name: 'Coordenador (role) — Carol Thomé',
@@ -138,7 +157,7 @@ const cases: Case[] = [
     email: 'caroline.thome@bpplaw.com.br',
     colaboradorArea: 'Cível',
     expectHome: '/financeiro/eficiencia',
-    expectNavLabels: ['Eficiência Operacional'],
+    expectNavLabels: ['Eficiência Operacional', 'Operações Legais'],
     expectNotNavLabels: [
       'Dashboard',
       'Inadimplência',
@@ -167,6 +186,12 @@ const cases: Case[] = [
         moduleKey: 'eficiencia',
         allowed: true,
       },
+      {
+        label: 'operacoes-legais',
+        allowedRoles: ['admin', 'coordenador'],
+        moduleKey: 'operacoes-legais',
+        allowed: true,
+      },
     ],
   },
   {
@@ -178,7 +203,7 @@ const cases: Case[] = [
     nivel: 'colaborador',
     expectHome: '/financeiro/eficiencia',
     expectNavLabels: ['Eficiência Operacional'],
-    expectNotNavLabels: ['Inadimplência', 'Dashboard', 'Usuários'],
+    expectNotNavLabels: ['Inadimplência', 'Dashboard', 'Usuários', 'Operações Legais'],
     expectEficiencia: {
       profile: 'coordenador',
       canUseIndicadoresAdmin: false,

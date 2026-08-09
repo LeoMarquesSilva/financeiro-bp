@@ -1,5 +1,4 @@
 import type { TeamMember } from '@/lib/database.types'
-import { resolveTeamMember } from '@/lib/teamMembersService'
 import type { BpUsuarioAvatar } from '../hooks/useBpUsuariosAvatar'
 
 const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'di', 'du', 'del', 'van', 'von'])
@@ -33,7 +32,8 @@ export function formatPessoaNome(nome: string | null | undefined): string {
 }
 
 /**
- * Preferência: nome do catálogo ticket-bp → team_members → Title Case do texto bruto.
+ * Preferência: match exato no catálogo ticket-bp → match exato em team_members → Title Case do bruto.
+ * Não usa match só pelo primeiro nome (evita trocar Gustavo Ribeiro por Gustavo Bismarchi).
  */
 export function resolvePessoaDisplayNome(
   nome: string | null | undefined,
@@ -48,15 +48,19 @@ export function resolvePessoaDisplayNome(
   if (fromCatalog?.nome?.trim()) return formatPessoaNome(fromCatalog.nome)
 
   const tokens = chave.split(' ').filter((t) => t.length > 2)
-  if (tokens.length >= 2) {
-    const fuzzy = catalog.find(
-      (u) => u.nome?.trim() && tokens.every((t) => u.nome_chave.includes(t)),
-    )
+  const primeiro = tokens[0]
+  if (tokens.length >= 2 && primeiro) {
+    const fuzzy = catalog.find((u) => {
+      if (!u.nome?.trim()) return false
+      const catTokens = u.nome_chave.split(' ').filter((t) => t.length > 2)
+      if (catTokens[0] !== primeiro) return false
+      // Exige overlap forte nos dois sentidos (evita homônimos parciais).
+      const rawInCat = tokens.every((t) => u.nome_chave.includes(t))
+      const catInRaw = catTokens.every((t) => chave.includes(t))
+      return rawInCat || catInRaw
+    })
     if (fuzzy?.nome?.trim()) return formatPessoaNome(fuzzy.nome)
   }
-
-  const byMember = resolveTeamMember(raw, teamMembers)
-  if (byMember?.full_name?.trim()) return formatPessoaNome(byMember.full_name)
 
   const byFull = teamMembers.find((m) => normalizeNomeChave(m.full_name) === chave)
   if (byFull?.full_name?.trim()) return formatPessoaNome(byFull.full_name)

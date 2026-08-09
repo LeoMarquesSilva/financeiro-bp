@@ -6,6 +6,7 @@ import {
   filtrarMensalPorMesFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
+import { toPriMaiuscula } from '../utils/textFormat'
 import {
   useSlaProtocolo,
   useSlaProtocoloJustificativaFatal,
@@ -46,6 +47,8 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
 
   const qtdD1 = mensalFiltrado.reduce((s, m) => s + m.qtd_d1, 0)
   const qtdTotal = mensalFiltrado.reduce((s, m) => s + m.qtd_total, 0)
+  const qtdFatal = mensalFiltrado.reduce((s, m) => s + m.qtd_fatal, 0)
+  const qtdExcludente = mensalFiltrado.reduce((s, m) => s + (m.qtd_excludente ?? 0), 0)
   const pctGeral = qtdTotal > 0 ? (qtdD1 / qtdTotal) * 100 : 0
   const metaAtual = mensalFiltrado.length
     ? mensalFiltrado[mensalFiltrado.length - 1]!.meta
@@ -75,21 +78,13 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
         onChange={setArea}
         allowedAreas={allowedAreas}
         allowTodas={allowTodas}
+        ano={ano}
+        mesFiltro={mesFiltro}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
-          title="SLA de Protocolo no período"
-          value={formatPercent(pctGeral)}
-          hint={`${qtdD1} D-1 de ${qtdTotal} CIs`}
-          meta={metaAtual != null ? formatPercent(metaAtual) : undefined}
-          atingiuMeta={metaAtual != null ? pctGeral >= metaAtual : null}
-          icon={FileCheck2}
-          accentClass="bg-violet-100 text-violet-700"
-          loading={loading}
-        />
-        <EficienciaKpiCard
-          title="SLA de Protocolo no mês atual"
+          title="SLA de Protocolo Gestão a Vista"
           value={rowMesAtual ? formatPercent(rowMesAtual.pct_eficiencia) : '—'}
           hint={rowMesAtual ? `${rowMesAtual.qtd_d1} D-1 de ${rowMesAtual.qtd_total}` : 'sem dados'}
           meta={rowMesAtual?.meta != null ? formatPercent(rowMesAtual.meta) : undefined}
@@ -101,8 +96,19 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
           loading={loading}
         />
         <EficienciaKpiCard
-          title="FATAL no período"
-          value={String(mensalFiltrado.reduce((s, m) => s + m.qtd_fatal, 0))}
+          title="SLA de Protocolo no período selecionado"
+          value={formatPercent(pctGeral)}
+          hint={`${qtdD1} D-1 de ${qtdTotal} CIs`}
+          meta={metaAtual != null ? formatPercent(metaAtual) : undefined}
+          atingiuMeta={metaAtual != null ? pctGeral >= metaAtual : null}
+          icon={FileCheck2}
+          accentClass="bg-violet-100 text-violet-700"
+          loading={loading}
+        />
+        <EficienciaKpiCard
+          title="FATAL no período selecionado"
+          value={String(qtdFatal)}
+          hint={`${qtdExcludente} excludente${qtdExcludente === 1 ? '' : 's'}`}
           icon={FileCheck2}
           accentClass="bg-rose-100 text-rose-700"
           loading={loading}
@@ -114,6 +120,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
         subtitle="% de CIs concluídos dentro do prazo D-1, com meta vigente no período"
         data={mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia, meta: m.meta }))}
         color="#7c3aed"
+        metaFixa={metaRacional}
         onRacionalClick={() => openRacional('default')}
       />
 
@@ -121,7 +128,10 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
         <EficienciaRankingChart
           title="Justificativa de Fatal"
           subtitle={areaHint}
-          rows={justificativas}
+          rows={justificativas.map((j) => ({
+            ...j,
+            justificativa: toPriMaiuscula(String(j.justificativa ?? '')),
+          }))}
           labelKey="justificativa"
           valueKey="qtd"
           valueLabel="Qtd"
@@ -135,7 +145,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
         />
         <EficienciaRankingChart
-          title="% Fatal Responsáveis"
+          title="% Desvio Responsáveis"
           subtitle={areaHint}
           rows={ranking}
           valueKey="pct_do_total"
@@ -152,11 +162,11 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
         />
         <EficienciaRankingChart
-          title="Qtd Fatal Responsáveis"
+          title="Qtd Desvio Responsáveis"
           subtitle={areaHint}
           rows={ranking}
           valueKey="qtd_fatal"
-          valueLabel="FATAL"
+          valueLabel="Desvio"
           pctKey={null}
           color={BI_BAR}
           truncateLabels={false}

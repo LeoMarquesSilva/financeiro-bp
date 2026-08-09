@@ -21,6 +21,7 @@ import {
 } from '../utils/overviewKpiMeta'
 import type { MesFiltroEficiencia } from '../constants'
 import type { RacionalColuna, RacionalEscopo, RacionalIndicador } from '../types/eficiencia.types'
+import { toPriMaiuscula } from '../utils/textFormat'
 import type { HeatCell } from './OverviewKpiHeatRow'
 
 type Props = {
@@ -109,7 +110,7 @@ export function RacionalSheet({
             <div className="min-w-0 space-y-1.5">
               <SheetTitle className="flex items-center gap-2">
                 <FileSearch className="h-4 w-4 shrink-0" />
-                Racional — {titulo}
+                {toPriMaiuscula(`Racional — ${titulo}`)}
               </SheetTitle>
               <SheetDescription className="space-y-1">
                 <span>

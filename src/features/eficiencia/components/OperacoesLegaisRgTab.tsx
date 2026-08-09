@@ -7,13 +7,18 @@ import {
   Newspaper,
   GraduationCap,
   UserMinus,
-  Info,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPercent } from '@/shared/utils/format'
 import {
+  EFICIENCIA_AREA_OPS_LEGAIS,
+  EFICIENCIA_META_OPS_CADASTRO,
+  EFICIENCIA_META_OPS_EFICIENCIA,
+  EFICIENCIA_META_OPS_PUBLICACOES,
+  EFICIENCIA_META_OPS_SLA_PROTOCOLO,
   filtrarMensalPorMesFiltro,
   isSemanaFiltro,
+  mesNoFiltro,
   rangeSemanaFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -32,7 +37,8 @@ import { EficienciaRankingChart } from './EficienciaRankingChart'
 import { OpsLegaisTarefasRanking } from './OpsLegaisTarefasRanking'
 import { OpsLegaisResponsumPanel } from './OpsLegaisResponsumPanel'
 import { RacionalSheet } from './RacionalSheet'
-import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
+import { OpsLegaisTreinamentosSection } from './OpsLegaisTreinamentosSection'
+import { OpsLegaisInconsistenciasCard } from './OpsLegaisInconsistenciasCard'
 import { Avatar } from '@/shared/components/Avatar'
 import { formatDate } from '@/shared/utils/format'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
@@ -62,6 +68,9 @@ const SECOES: { id: SecaoId; label: string; icon: typeof FileCheck2 }[] = [
 type Props = {
   ano: number
   mesFiltro: MesFiltroEficiencia
+  /** Controla a seção quando a navegação está na página (tabs). */
+  secao?: SecaoId
+  hideSecaoNav?: boolean
 }
 
 function formatMeses(m: number | null): string {
@@ -72,8 +81,15 @@ function formatMeses(m: number | null): string {
   return `${anos}a ${meses}m`
 }
 
-export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
-  const [secao, setSecao] = useState<SecaoId>('protocolos')
+export function OperacoesLegaisRgTab({
+  ano,
+  mesFiltro,
+  secao: secaoProp,
+  hideSecaoNav = false,
+}: Props) {
+  const [secaoInterna, setSecaoInterna] = useState<SecaoId>('protocolos')
+  const secao = secaoProp ?? secaoInterna
+  const setSecao = setSecaoInterna
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
   const {
     protocoloMensal,
@@ -91,9 +107,63 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
     error: errorTarefas,
   } = useOpsLegaisTarefas(ano, mesFiltro, secao === 'tarefas')
 
-  // BI Ops Legais: por ora sem filtro de área (igual às páginas do PBIX sem slicer ativo).
-  const { anual: treinAnual, porPessoa, itens, loading: loadingTreino } = useTreinamentos(ano, null)
-  const { anual: turnAnual, desligamentos, top5, loading: loadingTurn } = useTurnover(ano, null)
+  const { itens, loading: loadingTreino } = useTreinamentos(ano, EFICIENCIA_AREA_OPS_LEGAIS)
+  const { anual: turnAnual, desligamentos, loading: loadingTurn } = useTurnover(
+    ano,
+    EFICIENCIA_AREA_OPS_LEGAIS,
+  )
+  const { data: ativosOps = [], isLoading: loadingAtivosOps } = useQuery({
+    queryKey: ['eficiencia', 'ops-turnover-ativos-detalhe', ano],
+    queryFn: () =>
+      eficienciaService.fetchTurnoverAtivosAreaDetalhe(ano, EFICIENCIA_AREA_OPS_LEGAIS),
+    enabled: secao === 'treinamentos' || secao === 'turnover',
+  })
+  const ativosTreino = useMemo(
+    () => ativosOps.map((a) => ({ nome: a.nome, cargo: a.cargo })),
+    [ativosOps],
+  )
+  const loadingAtivosTreino = loadingAtivosOps
+  // KPI anual conta só Voluntário; lista segue a mesma regra + área Ops + filtro de mês.
+  const desligamentosOps = useMemo(() => {
+    return desligamentos
+      .filter((d) => d.area === EFICIENCIA_AREA_OPS_LEGAIS)
+      .filter((d) => {
+        // Não usar includes('volunt'): "Involuntário" também contém "volunt".
+        const tipo = String(d.tipo_desligamento ?? '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLocaleLowerCase('pt-BR')
+          .trim()
+        return tipo === 'voluntario'
+      })
+      .filter((d) => {
+        if (!d.desligamento) return false
+        const iso = String(d.desligamento).slice(0, 10)
+        const mes = Number(iso.slice(5, 7))
+        if (!Number.isFinite(mes) || mes < 1 || mes > 12) return false
+        return mesNoFiltro(mes, mesFiltro, ano)
+      })
+  }, [desligamentos, mesFiltro, ano])
+  const top5Ops = useMemo(() => {
+    const ref = new Date(ano, 11, 31)
+    return [...ativosOps]
+      .map((p) => {
+        const adm = p.admissao ? new Date(`${String(p.admissao).slice(0, 10)}T12:00:00`) : null
+        const meses =
+          adm && !Number.isNaN(adm.getTime())
+            ? (ref.getFullYear() - adm.getFullYear()) * 12 + (ref.getMonth() - adm.getMonth())
+            : 0
+        return {
+          nome: p.nome,
+          area: EFICIENCIA_AREA_OPS_LEGAIS,
+          cargo: p.cargo,
+          admissao: p.admissao,
+          meses_casa: Math.max(0, meses),
+        }
+      })
+      .sort((a, b) => b.meses_casa - a.meses_casa)
+      .slice(0, 5)
+  }, [ativosOps, ano])
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
 
@@ -217,37 +287,27 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
-        <p className="flex items-start gap-2 font-semibold">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          Nova visualização — BI Operações Legais (RG)
-        </p>
-        <p className="mt-1 text-xs leading-relaxed text-amber-900/90">
-          Espelho do PBIX Ops Legais: <span className="font-medium">sem filtro de área</span> por
-          enquanto (mesma base das páginas do BI). Não altera o consolidado. Fase 1: Protocolos,
-          Publicações, Tarefas/Cadastro, Treinamentos e Turnover.
-        </p>
-      </div>
-
-      <div className="flex w-full flex-wrap items-center justify-center gap-2">
-        {SECOES.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setSecao(id)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-all',
-              secao === id
-                ? 'border-slate-800 bg-slate-800 text-white shadow-sm'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
-            )}
-            aria-pressed={secao === id}
-          >
-            <Icon className="h-3.5 w-3.5" aria-hidden />
-            {label}
-          </button>
-        ))}
-      </div>
+      {!hideSecaoNav ? (
+        <div className="flex w-full flex-wrap items-center justify-center gap-2">
+          {SECOES.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setSecao(id)}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-all',
+                secao === id
+                  ? 'border-slate-800 bg-slate-800 text-white shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+              )}
+              aria-pressed={secao === id}
+            >
+              <Icon className="h-3.5 w-3.5" aria-hidden />
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {secao === 'protocolos' && (
         <div className="space-y-5">
@@ -262,6 +322,13 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
                 qtdOk={protTotais.qtdD1}
                 qtdNok={protTotais.qtdFatal}
                 loading={loading || (semanaAtiva && loadingSemana)}
+              />
+              <OpsLegaisInconsistenciasCard
+                indicador="ops_legais_sla_protocolo"
+                ano={ano}
+                mesFiltro={mesFiltro}
+                title="Inconsistências — Protocolado no Fatal"
+                enabled={secao === 'protocolos'}
               />
               <EficienciaEvolucaoChart
                 title="SLA PROTOCOLO"
@@ -280,6 +347,7 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
                       }))
                 }
                 color="#7c3aed"
+                metaFixa={EFICIENCIA_META_OPS_SLA_PROTOCOLO}
                 onRacionalClick={() => setRacionalAberto('ops_legais_sla_protocolo')}
               />
             </div>
@@ -293,6 +361,13 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
                 qtdOk={protTotais.semInc}
                 qtdNok={protTotais.comInc}
                 loading={loading || (semanaAtiva && loadingSemana)}
+              />
+              <OpsLegaisInconsistenciasCard
+                indicador="ops_legais_eficiencia_protocolo"
+                ano={ano}
+                mesFiltro={mesFiltro}
+                title="Inconsistências — Controladoria"
+                enabled={secao === 'protocolos'}
               />
               <EficienciaEvolucaoChart
                 title="Eficiência Protocolo"
@@ -311,6 +386,7 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
                       }))
                 }
                 color="#059669"
+                metaFixa={EFICIENCIA_META_OPS_EFICIENCIA}
                 onRacionalClick={() => setRacionalAberto('ops_legais_eficiencia_protocolo')}
               />
             </div>
@@ -332,6 +408,13 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
                 qtdNok={pubAnaliseTotais.nok}
                 loading={loading || (semanaAtiva && loadingSemana)}
               />
+              <OpsLegaisInconsistenciasCard
+                indicador="ops_legais_pub_analise"
+                ano={ano}
+                mesFiltro={mesFiltro}
+                title="Inconsistências — Análise"
+                enabled={secao === 'publicacoes'}
+              />
               <EficienciaEvolucaoChart
                 title="ANÁLISE DE PUBLICAÇÃO"
                 data={
@@ -349,6 +432,7 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
                       }))
                 }
                 color="#0891b2"
+                metaFixa={EFICIENCIA_META_OPS_PUBLICACOES}
                 onRacionalClick={() => setRacionalAberto('ops_legais_pub_analise')}
               />
             </div>
@@ -362,6 +446,13 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
                 qtdOk={pubAgendaTotais.ok}
                 qtdNok={pubAgendaTotais.nok}
                 loading={loading || (semanaAtiva && loadingSemana)}
+              />
+              <OpsLegaisInconsistenciasCard
+                indicador="ops_legais_pub_agendamento"
+                ano={ano}
+                mesFiltro={mesFiltro}
+                title="Inconsistências — Agendamento"
+                enabled={secao === 'publicacoes'}
               />
               <EficienciaEvolucaoChart
                 title="AGENDAMENTO DE PUBLICAÇÃO"
@@ -380,6 +471,7 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
                       }))
                 }
                 color="#0e7490"
+                metaFixa={EFICIENCIA_META_OPS_PUBLICACOES}
                 onRacionalClick={() => setRacionalAberto('ops_legais_pub_agendamento')}
               />
             </div>
@@ -451,6 +543,7 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
               valor: Number(m.pct_dentro_prazo),
             }))}
             color="#4f46e5"
+            metaFixa={EFICIENCIA_META_OPS_CADASTRO}
           />
           <EficienciaRankingChart
             title="Fora do prazo por responsável"
@@ -467,30 +560,11 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
       )}
 
       {secao === 'treinamentos' && (
-        <div className="space-y-5">
-          <section className="mx-auto w-full max-w-md rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <GraduationCap className="h-4 w-4" aria-hidden />
-              Desenvolvimento (sem filtro de área)
-            </div>
-            {loadingTreino ? (
-              <div className="mt-4 h-28 animate-pulse rounded-lg bg-slate-100" />
-            ) : (
-              <p
-                className={`mt-3 text-center text-4xl font-bold tabular-nums ${
-                  (treinAnual?.pct_atingimento ?? 0) < 100 ? 'text-rose-600' : 'text-emerald-600'
-                }`}
-              >
-                {treinAnual ? formatPercent(treinAnual.pct_atingimento) : '—'}
-              </p>
-            )}
-          </section>
-          <TreinamentosPessoaCards
-            porPessoa={porPessoa}
-            itens={itens}
-            loading={loadingTreino}
-          />
-        </div>
+        <OpsLegaisTreinamentosSection
+          ativos={ativosTreino}
+          itens={itens}
+          loading={loadingTreino || loadingAtivosTreino}
+        />
       )}
 
       {secao === 'turnover' && (
@@ -531,13 +605,13 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
 
           <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
             <h2 className="mb-3 text-sm font-semibold text-slate-900">Top tempo de casa</h2>
-            {loadingTurn ? (
+            {loadingTurn || loadingAtivosOps ? (
               <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
-            ) : top5.length === 0 ? (
+            ) : top5Ops.length === 0 ? (
               <p className="py-4 text-center text-sm text-slate-400">Sem dados.</p>
             ) : (
               <ul className="divide-y divide-slate-50">
-                {top5.map((p) => {
+                {top5Ops.map((p) => {
                   const nome = resolvePessoaDisplayNome(p.nome, teamMembers, avatarCatalog)
                   const avatarUrl = resolvePessoaAvatarUrl(p.nome, teamMembers, avatarCatalog)
                   return (
@@ -569,7 +643,7 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
             <h2 className="mb-3 text-sm font-semibold text-slate-900">Desligamentos no ano</h2>
             {loadingTurn ? (
               <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
-            ) : desligamentos.length === 0 ? (
+            ) : desligamentosOps.length === 0 ? (
               <p className="py-4 text-center text-sm text-slate-400">Nenhum desligamento.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -583,7 +657,7 @@ export function OperacoesLegaisRgTab({ ano, mesFiltro }: Props) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {desligamentos.map((d, i) => {
+                    {desligamentosOps.map((d, i) => {
                       const nome = resolvePessoaDisplayNome(d.nome, teamMembers, avatarCatalog)
                       return (
                         <tr key={i} className="text-slate-700">

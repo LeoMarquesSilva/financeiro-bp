@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
+import { toPriMaiuscula } from '../utils/textFormat'
 
 type Props = {
   title: string
@@ -28,7 +29,9 @@ export function EficienciaKpiCard({
         <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', accentClass)}>
           <Icon className="h-4 w-4" />
         </span>
-        <h3 className="truncate text-xs font-medium text-slate-500">{title}</h3>
+        <h3 className="truncate text-xs font-medium text-slate-500">
+          {toPriMaiuscula(title)}
+        </h3>
       </div>
 
       {loading ? (

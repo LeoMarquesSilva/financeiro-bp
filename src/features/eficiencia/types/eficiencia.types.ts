@@ -29,10 +29,18 @@ export interface JustificativaFatalRow {
   [key: string]: string | number | undefined
 }
 
+export interface AreaParticipacaoRow {
+  area: string
+  qtd: number
+  pct_do_total: number
+}
+
 export interface SlaProtocoloMesRow {
   mes: number
   qtd_d1: number
   qtd_fatal: number
+  /** FATAL com flag Excludente (fora do denominador da %). */
+  qtd_excludente?: number
   qtd_total: number
   pct_eficiencia: number
   meta: number | null

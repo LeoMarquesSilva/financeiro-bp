@@ -1,11 +1,23 @@
 /** Fuso dos CSVs SharePoint / BI — datas e corte das 18h são horário de Brasília. */
 export const EFICIENCIA_TZ = 'America/Sao_Paulo'
 
-/** Áreas do escritório (mesmo De-Para usado no sync SharePoint, scripts/sharepoint/transforms.mjs). */
+/** Áreas do De-Para SharePoint (inclui Ops Legais para sync/mapeamento). */
 export const AREAS_EFICIENCIA = [
   'Cível',
   'Contratos',
   'Operações Legais',
+  'Recuperação de Crédito',
+  'Reestruturação',
+  'Trabalhista',
+] as const
+
+/**
+ * Áreas do painel Eficiência Operacional (jurídico).
+ * Operações Legais tem módulo próprio e não entra no slicer nem no % do escritório.
+ */
+export const AREAS_EFICIENCIA_JURIDICO = [
+  'Cível',
+  'Contratos',
   'Recuperação de Crédito',
   'Reestruturação',
   'Trabalhista',
@@ -17,12 +29,10 @@ export const EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL = 'Trabalhista' as const
 /**
  * Slicer Operações Legais: Ciência Agendamentos e SLAs de Vistagem ficam sem dado (`-`),
  * como Trabalhista em Vistagem Normal — não há KPI por área nesses indicadores.
- * A aba **Ops Legais (RG)** aparece no consolidado e no slicer Operações Legais
- * (oculta quando outra área está selecionada).
  */
 export const EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM = 'Operações Legais' as const
 
-/** Área canônica do slicer / aba Ops Legais (RG). */
+/** Área canônica do módulo Operações Legais. */
 export const EFICIENCIA_AREA_OPS_LEGAIS = 'Operações Legais' as const
 
 export function isAgendamentoVistagemIndisponivelPorArea(area: string | null): boolean {
@@ -45,6 +55,62 @@ export function areaFiltroParaIndicador(indicador: string, area: string | null):
 
 /** Meta D-1 do SLA Protocolo (Overview / Indicadores / sync meta_d1). */
 export const EFICIENCIA_META_SLA_PROTOCOLO = 85
+
+/** Metas de linha (gráficos de evolução) — alinhadas ao Overview / BI. */
+export const EFICIENCIA_META_EFICIENCIA_PROTOCOLO = 95
+export const EFICIENCIA_META_AGENDAMENTO = 95
+export const EFICIENCIA_META_VISTAGEM = 98
+/** Metas Ops Legais (BI Gestão a Vista / indicadores RG). */
+export const EFICIENCIA_META_OPS_SLA_PROTOCOLO = 98
+export const EFICIENCIA_META_OPS_EFICIENCIA = 98
+export const EFICIENCIA_META_OPS_PUBLICACOES = 98
+export const EFICIENCIA_META_OPS_CADASTRO = 95
+
+/** Meta individual de treinamentos (14h = 840 min) — Equipe e Liderança. */
+export const EFICIENCIA_META_TREINAMENTO_MINUTOS = 14 * 60
+
+/** Cargos → categoria BI Treinamentos Ops Legais. */
+export const OPS_TREINAMENTO_CARGOS_GERENTE = ['Gerente', 'Sócio de Área'] as const
+export const OPS_TREINAMENTO_CARGOS_LIDERANCA = [
+  'Coordenador Ops. Legais',
+  'Supervisor Ops. Legais',
+  'Supervisor',
+] as const
+
+export type OpsTreinamentoCategoria = 'Equipe' | 'Liderança' | 'Gerente'
+
+export function resolveOpsTreinamentoCategoria(
+  cargo: string | null | undefined,
+): OpsTreinamentoCategoria {
+  const c = String(cargo ?? '').trim().toLocaleUpperCase('pt-BR')
+  if (!c) return 'Equipe'
+  if (
+    OPS_TREINAMENTO_CARGOS_GERENTE.some((x) => x.toLocaleUpperCase('pt-BR') === c) ||
+    c.includes('SÓCIO') ||
+    c.includes('SOCIO')
+  ) {
+    return 'Gerente'
+  }
+  if (
+    OPS_TREINAMENTO_CARGOS_LIDERANCA.some((x) => x.toLocaleUpperCase('pt-BR') === c) ||
+    c.includes('COORDENADOR') ||
+    c.includes('SUPERVISOR')
+  ) {
+    return 'Liderança'
+  }
+  return 'Equipe'
+}
+
+/** Treinamento de Liderança (sem tabela ministrados — match por nome). */
+export function isTreinamentoLideranca(nome: string | null | undefined): boolean {
+  const n = String(nome ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+  return n.includes('lideranca')
+}
+export const EFICIENCIA_META_PDI = 100
+export const EFICIENCIA_META_RECEITA_BRUTA = 100
 
 /**
  * Aliases de colaborador (chave normalizada → nome canônico no turnover).

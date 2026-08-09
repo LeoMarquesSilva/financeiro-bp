@@ -1,6 +1,6 @@
 import type { TeamMember } from '@/lib/database.types'
 import { getTeamMember } from '@/lib/teamAvatars'
-import { getLocalAvatarPath, resolveTeamMember } from '@/lib/teamMembersService'
+import { getLocalAvatarPath } from '@/lib/teamMembersService'
 import {
   resolveAvatarFromCatalog,
   type BpUsuarioAvatar,
@@ -14,9 +14,18 @@ function normalizeNome(s: string): string {
     .toLocaleLowerCase('pt-BR')
 }
 
+function avatarFromMember(m: TeamMember): string | null {
+  return (
+    getTeamMember(m.email)?.avatar ??
+    m.avatar_url ??
+    getLocalAvatarPath(m.email)
+  )
+}
+
 /**
  * Resolve miniatura: 1) catálogo ticket-bp (bp_usuarios_avatar),
- * 2) team_members + TEAM_BY_EMAIL, 3) /team/{slug}.jpg.
+ * 2) team_members por nome completo (sem match só pelo 1º nome),
+ * 3) /team/{slug}.jpg.
  */
 export function resolvePessoaAvatarUrl(
   nome: string | null | undefined,
@@ -29,37 +38,22 @@ export function resolvePessoaAvatarUrl(
   const raw = typeof nome === 'string' ? nome.trim() : ''
   if (!raw) return null
 
-  const byMember = resolveTeamMember(raw, teamMembers)
-  if (byMember) {
-    const fromMap = getTeamMember(byMember.email)?.avatar
-    if (fromMap) return fromMap
-    if (byMember.avatar_url) return byMember.avatar_url
-    return getLocalAvatarPath(byMember.email)
-  }
-
   const alvo = normalizeNome(raw)
   const byFullName = teamMembers.find((m) => normalizeNome(m.full_name) === alvo)
-  if (byFullName) {
-    return (
-      getTeamMember(byFullName.email)?.avatar ??
-      byFullName.avatar_url ??
-      getLocalAvatarPath(byFullName.email)
-    )
-  }
+  if (byFullName) return avatarFromMember(byFullName)
 
   const tokens = alvo.split(/\s+/).filter((t) => t.length > 2)
-  if (tokens.length >= 2) {
+  const primeiro = tokens[0]
+  if (tokens.length >= 2 && primeiro) {
     const fuzzy = teamMembers.find((m) => {
       const n = normalizeNome(m.full_name)
-      return tokens.every((t) => n.includes(t))
+      const catTokens = n.split(/\s+/).filter((t) => t.length > 2)
+      if (catTokens[0] !== primeiro) return false
+      const rawInCat = tokens.every((t) => n.includes(t))
+      const catInRaw = catTokens.every((t) => alvo.includes(t))
+      return rawInCat || catInRaw
     })
-    if (fuzzy) {
-      return (
-        getTeamMember(fuzzy.email)?.avatar ??
-        fuzzy.avatar_url ??
-        getLocalAvatarPath(fuzzy.email)
-      )
-    }
+    if (fuzzy) return avatarFromMember(fuzzy)
   }
 
   return null

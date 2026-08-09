@@ -2,6 +2,7 @@ import { TrendingUp } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import type { GestaoVistaMesRow } from '@/features/receita/types/receita.types'
 import {
+  EFICIENCIA_META_RECEITA_BRUTA,
   MES_INICIO_RESULTADO,
   isMesesFiltro,
   mesNoFiltro,
@@ -30,7 +31,11 @@ export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
 
   const chartData = mesesEscopo
     .filter((m: GestaoVistaMesRow) => m.pctMeta != null)
-    .map((m: GestaoVistaMesRow) => ({ mes: m.mes, valor: m.pctMeta!, meta: 100 }))
+    .map((m: GestaoVistaMesRow) => ({
+      mes: m.mes,
+      valor: m.pctMeta!,
+      meta: EFICIENCIA_META_RECEITA_BRUTA,
+    }))
 
   const mesDestaque =
     isMesesFiltro(mesFiltro) && mesFiltro.length === 1
@@ -42,7 +47,20 @@ export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
-          title="Receita Bruta no período"
+          title="Receita Bruta Gestão a Vista"
+          value={
+            rowMesDestaque?.pctMeta != null &&
+            rowMesDestaque.mes >= MES_INICIO_RESULTADO &&
+            mesNoFiltro(rowMesDestaque.mes, mesFiltro, ano)
+              ? formatPercent(rowMesDestaque.pctMeta)
+              : '—'
+          }
+          icon={TrendingUp}
+          accentClass="bg-slate-100 text-slate-700"
+          loading={isLoading}
+        />
+        <EficienciaKpiCard
+          title="Receita Bruta no período selecionado"
           value={
             overview?.acumulado.value != null
               ? formatPercent(overview.acumulado.value)
@@ -58,24 +76,7 @@ export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
           loading={isLoading}
         />
         <EficienciaKpiCard
-          title={
-            isMesesFiltro(mesFiltro) && mesFiltro.length === 1
-              ? 'Receita Bruta no mês'
-              : 'Receita Bruta no mês atual'
-          }
-          value={
-            rowMesDestaque?.pctMeta != null &&
-            rowMesDestaque.mes >= MES_INICIO_RESULTADO &&
-            mesNoFiltro(rowMesDestaque.mes, mesFiltro, ano)
-              ? formatPercent(rowMesDestaque.pctMeta)
-              : '—'
-          }
-          icon={TrendingUp}
-          accentClass="bg-slate-100 text-slate-700"
-          loading={isLoading}
-        />
-        <EficienciaKpiCard
-          title="Recebido acumulado (período)"
+          title="Recebido acumulado (período selecionado)"
           value={
             data
               ? new Intl.NumberFormat('pt-BR', {
@@ -101,6 +102,7 @@ export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
         subtitle="% recebido ÷ meta mensal (a partir de junho)"
         data={chartData}
         color="#059669"
+        metaFixa={EFICIENCIA_META_RECEITA_BRUTA}
       />
     </div>
   )

@@ -1,6 +1,12 @@
+import { useEffect } from 'react'
 import { Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { AREAS_EFICIENCIA } from '../constants'
+import {
+  AREAS_EFICIENCIA_JURIDICO,
+  EFICIENCIA_AREA_OPS_LEGAIS,
+  type MesFiltroEficiencia,
+} from '../constants'
+import { toPriMaiuscula } from '../utils/textFormat'
 
 type Props = {
   value: string | null
@@ -9,6 +15,9 @@ type Props = {
   allowedAreas?: readonly string[] | null
   /** Exibir “Todas as áreas”. Default true. */
   allowTodas?: boolean
+  /** Mantidos por compatibilidade — % de participação removido da UI. */
+  ano?: number
+  mesFiltro?: MesFiltroEficiencia
 }
 
 export function AreaFilterButtons({
@@ -17,10 +26,15 @@ export function AreaFilterButtons({
   allowedAreas,
   allowTodas = true,
 }: Props) {
+  // Painel jurídico: Operações Legais fica de fora (módulo próprio).
   const areas =
     allowedAreas == null
-      ? [...AREAS_EFICIENCIA]
-      : AREAS_EFICIENCIA.filter((a) => allowedAreas.includes(a))
+      ? [...AREAS_EFICIENCIA_JURIDICO]
+      : AREAS_EFICIENCIA_JURIDICO.filter((a) => allowedAreas.includes(a))
+
+  useEffect(() => {
+    if (value === EFICIENCIA_AREA_OPS_LEGAIS) onChange(null)
+  }, [value, onChange])
 
   return (
     <div className="flex w-full flex-wrap items-center justify-center gap-2">
@@ -37,7 +51,7 @@ export function AreaFilterButtons({
           )}
           aria-pressed={value === null}
         >
-          Todas as áreas
+          {toPriMaiuscula('Todas as áreas')}
         </button>
       ) : null}
       {areas.map((area) => (
@@ -53,7 +67,7 @@ export function AreaFilterButtons({
           )}
           aria-pressed={value === area}
         >
-          {area}
+          {toPriMaiuscula(area)}
         </button>
       ))}
     </div>

@@ -17,6 +17,7 @@ import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
+import { toPriMaiuscula } from '../utils/textFormat'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 
 export type RankingChartRow = Record<string, unknown>
@@ -291,11 +292,11 @@ export function EficienciaRankingChart({
                 compact ? 'text-[13px]' : 'text-sm',
               )}
             >
-              {title}
+              {toPriMaiuscula(title)}
             </h2>
             {(subtitle || truncated) && (
               <p className={cn('text-slate-500', compact ? 'text-[10px]' : 'text-[11px]')}>
-                {subtitle}
+                {subtitle ? toPriMaiuscula(subtitle) : null}
                 {truncated && (
                   <span className="text-slate-400">
                     {subtitle ? ' · ' : ''}
@@ -311,9 +312,11 @@ export function EficienciaRankingChart({
               <BarChart3 className="h-3.5 w-3.5" aria-hidden />
             </span>
             <div className="min-w-0 leading-tight">
-              <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+              <h2 className="text-sm font-semibold text-slate-900">
+                {toPriMaiuscula(title)}
+              </h2>
               <p className="text-[11px] text-slate-500">
-                {subtitle}
+                {subtitle ? toPriMaiuscula(subtitle) : null}
                 {truncated && (
                   <span className="text-slate-400">
                     {subtitle ? ' · ' : ''}

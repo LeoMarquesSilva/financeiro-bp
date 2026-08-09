@@ -6,6 +6,7 @@ import { formatPercent } from '@/shared/utils/format'
 import { Button } from '@/components/ui/button'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import {
+  EFICIENCIA_META_PDI,
   filtrarMensalPorMesFiltro,
   MESES_EFICIENCIA,
   type MesFiltroEficiencia,
@@ -17,6 +18,7 @@ import { acumuladoGestaoPdi } from '../utils/gestaoPdiCalc'
 import { exportGestaoPdiDesviosExcel } from '../utils/gestaoPdiExport'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
+import { toPriMaiuscula } from '../utils/textFormat'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { AreaFilterButtons } from './AreaFilterButtons'
@@ -39,6 +41,8 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
   const aptas = mensalFiltrado.reduce((s, m) => s + m.aptas, 0)
   const desvios = mensalFiltrado.reduce((s, m) => s + m.desvios, 0)
   const desviosLista = detalhe.filter((d) => !d.apta)
+  const mesAtual = new Date().getMonth() + 1
+  const rowMesAtual = mensalFiltrado.find((m) => m.mes === mesAtual)
 
   const handleExportarExcel = async () => {
     if (desviosLista.length === 0) return
@@ -65,11 +69,27 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
         onChange={setArea}
         allowedAreas={allowedAreas}
         allowTodas={allowTodas}
+        ano={ano}
+        mesFiltro={mesFiltro}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <EficienciaKpiCard
-          title="Gestão de PDI no período"
+          title="Gestão de PDI Gestão a Vista"
+          value={
+            rowMesAtual?.pct_aptas != null ? formatPercent(rowMesAtual.pct_aptas) : '—'
+          }
+          hint={
+            rowMesAtual
+              ? `${rowMesAtual.aptas} aptas de ${rowMesAtual.elegiveis} elegíveis`
+              : 'sem dados'
+          }
+          icon={Target}
+          accentClass="bg-slate-100 text-slate-700"
+          loading={loading}
+        />
+        <EficienciaKpiCard
+          title="Gestão de PDI no período selecionado"
           value={acumulado.value != null ? formatPercent(acumulado.value) : '—'}
           hint={
             elegiveis > 0
@@ -105,14 +125,15 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
         subtitle="Junho = 100% (baseline). Julho+ = % aptas (3 requisitos)."
         data={mensalFiltrado
           .filter((m) => m.pct_aptas != null)
-          .map((m) => ({ mes: m.mes, valor: m.pct_aptas!, meta: 100 }))}
+          .map((m) => ({ mes: m.mes, valor: m.pct_aptas!, meta: EFICIENCIA_META_PDI }))}
         color="#059669"
+        metaFixa={EFICIENCIA_META_PDI}
       />
 
       <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
           <h2 className="text-center text-sm font-semibold text-slate-900">
-            Desvios no período
+            {toPriMaiuscula('Desvios no período selecionado')}
             {!loading && desviosLista.length > 0 ? (
               <span className="ml-2 font-normal text-slate-400">({desviosLista.length})</span>
             ) : null}
@@ -139,18 +160,30 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
           <p className="py-6 text-center text-sm text-slate-400">Nenhum desvio no período.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-center text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-500">
-                  <th className="px-2 py-2 font-medium">Mês</th>
-                  <th className="px-2 py-2 font-medium">Colaborador</th>
-                  <th className="px-2 py-2 font-medium">Área</th>
-                  <th className="px-2 py-2 font-medium">Progresso anterior</th>
-                  <th className="px-2 py-2 font-medium">Progresso</th>
-                  <th className="px-2 py-2 font-medium">Evidências de Execução</th>
-                  <th className="px-2 py-2 font-medium">1:1</th>
-                  <th className="min-w-[14rem] px-2 py-2 font-medium">
-                    Desvio Critério de Puração
+                  <th className="w-14 px-2 py-2 text-left font-medium">
+                    {toPriMaiuscula('Mês')}
+                  </th>
+                  <th className="min-w-[10rem] px-2 py-2 text-left font-medium">
+                    {toPriMaiuscula('Colaborador')}
+                  </th>
+                  <th className="min-w-[7rem] px-2 py-2 text-left font-medium">
+                    {toPriMaiuscula('Área')}
+                  </th>
+                  <th className="px-2 py-2 text-right font-medium">
+                    {toPriMaiuscula('Progresso anterior')}
+                  </th>
+                  <th className="px-2 py-2 text-right font-medium">
+                    {toPriMaiuscula('Progresso')}
+                  </th>
+                  <th className="px-2 py-2 text-center font-medium">
+                    {toPriMaiuscula('Evidências')}
+                  </th>
+                  <th className="w-12 px-2 py-2 text-center font-medium">1:1</th>
+                  <th className="min-w-[14rem] px-2 py-2 text-left font-medium">
+                    {toPriMaiuscula('Desvio Critério de Apuração')}
                   </th>
                 </tr>
               </thead>
@@ -168,9 +201,11 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
                   )
                   return (
                     <tr key={`${d.mes}-${d.colaborador}`} className="text-slate-700">
-                      <td className="px-2 py-2 align-middle">{MESES_EFICIENCIA[d.mes - 1]}</td>
+                      <td className="px-2 py-2 align-middle text-left tabular-nums">
+                        {MESES_EFICIENCIA[d.mes - 1]}
+                      </td>
                       <td className="px-2 py-2 align-middle">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center gap-2">
                           <Avatar
                             src={avatarUrl}
                             fallbackSrc={avatarUrl?.replace(/\.jpg$/i, '.png')}
@@ -181,20 +216,22 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
                           <span className="font-medium text-slate-900">{nome}</span>
                         </div>
                       </td>
-                      <td className="px-2 py-2 align-middle">{d.area ?? '—'}</td>
-                      <td className="px-2 py-2 align-middle tabular-nums">
+                      <td className="px-2 py-2 align-middle text-left">{d.area ?? '—'}</td>
+                      <td className="px-2 py-2 align-middle text-right tabular-nums">
                         {d.progresso_anterior != null
                           ? formatPercent(d.progresso_anterior)
                           : '—'}
                       </td>
-                      <td className="px-2 py-2 align-middle tabular-nums">
+                      <td className="px-2 py-2 align-middle text-right tabular-nums">
                         {d.progresso != null ? formatPercent(d.progresso) : '—'}
                       </td>
-                      <td className="px-2 py-2 align-middle">{d.evidencias_execucao ?? '—'}</td>
-                      <td className="px-2 py-2 align-middle tabular-nums">
+                      <td className="px-2 py-2 align-middle text-center">
+                        {d.evidencias_execucao ?? '—'}
+                      </td>
+                      <td className="px-2 py-2 align-middle text-center tabular-nums">
                         {d.one_a_one != null ? d.one_a_one : '—'}
                       </td>
-                      <td className="max-w-md whitespace-pre-line px-2 py-2 align-middle text-xs text-slate-600">
+                      <td className="max-w-md whitespace-pre-line px-2 py-2 align-middle text-left text-xs text-slate-600">
                         {d.desvio_criterio_apuracao?.trim() || '—'}
                       </td>
                     </tr>

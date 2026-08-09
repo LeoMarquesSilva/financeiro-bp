@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { ClipboardCheck } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
-import { filtrarMensalPorMesFiltro, type MesFiltroEficiencia } from '../constants'
+import {
+  EFICIENCIA_META_EFICIENCIA_PROTOCOLO,
+  filtrarMensalPorMesFiltro,
+  type MesFiltroEficiencia,
+} from '../constants'
 import { useEficienciaProtocolo, useEficienciaProtocoloRanking } from '../hooks/useEficiencia'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
@@ -49,19 +53,13 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
         onChange={setArea}
         allowedAreas={allowedAreas}
         allowTodas={allowTodas}
+        ano={ano}
+        mesFiltro={mesFiltro}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
-          title="Eficiência de Protocolo no período"
-          value={formatPercent(pctGeral)}
-          hint={`${semInconsistencia} de ${total} protocolos sem inconsistência`}
-          icon={ClipboardCheck}
-          accentClass="bg-emerald-100 text-emerald-700"
-          loading={loading}
-        />
-        <EficienciaKpiCard
-          title="Eficiência no mês atual"
+          title="Eficiência de Protocolo Gestão a Vista"
           value={rowMesAtual ? formatPercent(rowMesAtual.pct_eficiencia) : '—'}
           hint={rowMesAtual ? `${rowMesAtual.total} protocolos no mês` : 'sem dados'}
           icon={ClipboardCheck}
@@ -69,7 +67,15 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
           loading={loading}
         />
         <EficienciaKpiCard
-          title="Protocolos no período"
+          title="Eficiência de Protocolo no período selecionado"
+          value={formatPercent(pctGeral)}
+          hint={`${semInconsistencia} de ${total} protocolos sem inconsistência`}
+          icon={ClipboardCheck}
+          accentClass="bg-emerald-100 text-emerald-700"
+          loading={loading}
+        />
+        <EficienciaKpiCard
+          title="Protocolos no período selecionado"
           value={String(total)}
           icon={ClipboardCheck}
           accentClass="bg-slate-100 text-slate-700"
@@ -82,12 +88,13 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
         subtitle="% de protocolos sem inconsistência jurídica"
         data={mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia }))}
         color="#059669"
+        metaFixa={EFICIENCIA_META_EFICIENCIA_PROTOCOLO}
         onRacionalClick={() => setRacionalAberto(true)}
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <EficienciaRankingChart
-          title="% Fatal Responsáveis"
+          title="% Desvio Responsáveis"
           subtitle={areaHint}
           rows={ranking}
           valueKey="pct_do_total"
@@ -104,7 +111,7 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
           onRacionalClick={() => setRacionalAberto(true)}
         />
         <EficienciaRankingChart
-          title="Qtd Fatal Responsáveis"
+          title="Qtd Desvio Responsáveis"
           subtitle={areaHint}
           rows={ranking}
           valueKey="qtd_inconsistencia"

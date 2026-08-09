@@ -24,6 +24,7 @@ import type {
   RacionalEscopo,
   RacionalIndicador,
   RacionalResultado,
+  AreaParticipacaoRow,
   JustificativaFatalRow,
   RankingUsuarioRow,
   SlaProtocoloMesRow,
@@ -469,6 +470,17 @@ export const eficienciaService = {
     })
   },
 
+  async fetchAreaParticipacao(
+    ano: number,
+    meses: number[] | null = null,
+  ): Promise<AreaParticipacaoRow[]> {
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_area_participacao', {
+      p_ano: ano,
+      p_meses: meses,
+    })
+  },
+
   async fetchEficienciaProtocoloMensal(
     ano: number,
     area: string | null = null,
@@ -624,6 +636,61 @@ export const eficienciaService = {
 
   async fetchTurnoverTop5TempoCasa(ano: number): Promise<TurnoverTopTempoCasaRow[]> {
     return rpc('eficiencia_turnover_top5_tempo_casa', { p_ano: ano })
+  },
+
+  /** Headcount ativo no ano por área (com admissão — top tempo de casa / categorias). */
+  async fetchTurnoverAtivosAreaDetalhe(
+    ano: number,
+    area: string,
+  ): Promise<Array<{ nome: string; cargo: string | null; admissao: string | null }>> {
+    const { data, error } = await supabase
+      .from('sp_turnover')
+      .select('nome, cargo, admissao, desligamento')
+      .eq('area', area)
+      .limit(5000)
+    if (error) throw error
+
+    type Row = {
+      nome: string | null
+      cargo: string | null
+      admissao: string | null
+      desligamento: string | null
+    }
+    const rows = (data ?? []) as Row[]
+
+    const byKey = new Map<string, { nome: string; cargo: string | null; admissao: string | null }>()
+    for (const row of rows) {
+      const nome = String(row.nome ?? '').trim()
+      if (!nome) continue
+      const admYear = row.admissao ? Number(String(row.admissao).slice(0, 4)) : null
+      const deslYear = row.desligamento ? Number(String(row.desligamento).slice(0, 4)) : null
+      if (admYear != null && admYear > ano) continue
+      if (deslYear != null && deslYear <= ano) continue
+      const key = nome
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleUpperCase('pt-BR')
+        .replace(/\s+/g, ' ')
+      const prev = byKey.get(key)
+      const adm = row.admissao == null ? null : String(row.admissao)
+      if (!prev || (adm && (!prev.admissao || adm > prev.admissao))) {
+        byKey.set(key, {
+          nome,
+          cargo: row.cargo == null ? null : String(row.cargo),
+          admissao: adm,
+        })
+      }
+    }
+    return [...byKey.values()]
+  },
+
+  /** Headcount ativo no ano por área (para categorias de treinamento Ops Legais). */
+  async fetchTurnoverAtivosArea(
+    ano: number,
+    area: string,
+  ): Promise<Array<{ nome: string; cargo: string | null }>> {
+    const rows = await this.fetchTurnoverAtivosAreaDetalhe(ano, area)
+    return rows.map(({ nome, cargo }) => ({ nome, cargo }))
   },
 
   async fetchTreinamentosAnual(

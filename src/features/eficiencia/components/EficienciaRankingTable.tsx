@@ -1,5 +1,6 @@
 import { Users } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
+import { toPriMaiuscula } from '../utils/textFormat'
 
 export type RankingColumn = {
   key: string
@@ -55,8 +56,12 @@ export function EficienciaRankingTable({
           <Users className="h-3.5 w-3.5" aria-hidden />
         </span>
         <div className="min-w-0 leading-tight">
-          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-          {subtitle && <p className="text-[11px] text-slate-500">{subtitle}</p>}
+          <h2 className="text-sm font-semibold text-slate-900">
+            {toPriMaiuscula(title)}
+          </h2>
+          {subtitle && (
+            <p className="text-[11px] text-slate-500">{toPriMaiuscula(subtitle)}</p>
+          )}
         </div>
       </div>
 

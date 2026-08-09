@@ -13,13 +13,16 @@ import {
 import { LineChart as LineChartIcon } from 'lucide-react'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import { formatPercent } from '@/shared/utils/format'
+import { toPriMaiuscula } from '../utils/textFormat'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 
 const MESES_LABEL = [
   'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
 ]
 
-const AXIS_TICK = { fontSize: 11, fill: '#94a3b8' }
+const AXIS_TICK_Y = { fontSize: 11, fill: '#94a3b8' }
+/** Meses no eixo X — maiores e em negrito. */
+const AXIS_TICK_X = { fontSize: 13, fill: '#334155', fontWeight: 700 }
 
 export type EvolucaoPoint = {
   mes: number
@@ -129,10 +132,16 @@ export function EficienciaEvolucaoChart({
   const chartExportRef = useRef<HTMLDivElement>(null)
   const pointCount = data.length
 
+  const metaLinha =
+    metaFixa ??
+    data.map((d) => d.meta).find((m) => m != null && Number.isFinite(Number(m))) ??
+    null
+  const metaNum = metaLinha == null ? null : Number(metaLinha)
+
   const chartData = data.map((d) => ({
     mesLabel: d.label ?? MESES_LABEL[d.mes - 1] ?? String(d.mes),
     valor: d.valor,
-    meta: metaFixa ?? d.meta ?? undefined,
+    meta: metaNum ?? d.meta ?? undefined,
   }))
 
   return (
@@ -143,8 +152,12 @@ export function EficienciaEvolucaoChart({
             <LineChartIcon className="h-4 w-4" aria-hidden />
           </span>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-            {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+            <h2 className="text-sm font-semibold text-slate-900">
+              {toPriMaiuscula(title)}
+            </h2>
+            {subtitle && (
+              <p className="text-xs text-slate-500">{toPriMaiuscula(subtitle)}</p>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -157,12 +170,12 @@ export function EficienciaEvolucaoChart({
       <div ref={chartExportRef} className="w-full">
         <div data-chart-plot className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%" minHeight={300}>
-            <LineChart data={chartData} margin={{ left: 4, right: 20, top: 28, bottom: 4 }}>
+            <LineChart data={chartData} margin={{ left: 4, right: 20, top: 28, bottom: 8 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
-              <XAxis dataKey="mesLabel" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+              <XAxis dataKey="mesLabel" tick={AXIS_TICK_X} axisLine={false} tickLine={false} />
               <YAxis
                 tickFormatter={(v: number) => formatPercent(v)}
-                tick={AXIS_TICK}
+                tick={AXIS_TICK_Y}
                 axisLine={false}
                 tickLine={false}
                 width={52}
@@ -170,18 +183,23 @@ export function EficienciaEvolucaoChart({
                 padding={{ top: 18 }}
               />
               <Tooltip content={<EvolucaoTooltip />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '4 4' }} />
-              {metaFixa != null && (
+              {metaNum != null && Number.isFinite(metaNum) && (
                 <ReferenceLine
-                  y={metaFixa}
+                  y={metaNum}
                   stroke="#f59e0b"
                   strokeDasharray="6 4"
-                  label={{ value: `Meta ${formatPercent(metaFixa)}`, position: 'insideTopRight', fontSize: 11, fill: '#b45309' }}
+                  label={{
+                    value: `Meta ${formatPercent(metaNum)}`,
+                    position: 'insideTopRight',
+                    fontSize: 11,
+                    fill: '#b45309',
+                  }}
                 />
               )}
               <Line
                 type="monotone"
                 dataKey="valor"
-                name={title}
+                name={toPriMaiuscula(title)}
                 stroke={color}
                 strokeWidth={2.5}
                 dot={{ r: 4, fill: color, strokeWidth: 0 }}

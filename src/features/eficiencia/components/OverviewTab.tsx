@@ -9,6 +9,9 @@ import { AreaFilterButtons } from './AreaFilterButtons'
 import { RacionalSheet } from './RacionalSheet'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
+  EFICIENCIA_META_OPS_EFICIENCIA,
+  EFICIENCIA_META_OPS_PUBLICACOES,
+  EFICIENCIA_META_OPS_SLA_PROTOCOLO,
   EFICIENCIA_META_SLA_PROTOCOLO,
   isAgendamentoVistagemIndisponivelPorArea,
   isMesesFiltro,
@@ -131,6 +134,8 @@ export function OverviewTab({
             onChange={onAreaChange}
             allowedAreas={allowedAreas}
             allowTodas={allowTodasAreas}
+            ano={ano}
+            mesFiltro={mesFiltro}
           />
         ) : null}
         {Array.from({ length: 7 }, (_, i) => (
@@ -312,10 +317,10 @@ export function OverviewTab({
         ),
       },
       eficiencia_protocolo: { metaAcumulado: 95 },
-      ops_legais_sla_protocolo: { metaAcumulado: 100 },
-      ops_legais_eficiencia_protocolo: { metaAcumulado: 95 },
-      ops_legais_pub_analise: { metaAcumulado: 95 },
-      ops_legais_pub_agendamento: { metaAcumulado: 95 },
+      ops_legais_sla_protocolo: { metaAcumulado: EFICIENCIA_META_OPS_SLA_PROTOCOLO },
+      ops_legais_eficiencia_protocolo: { metaAcumulado: EFICIENCIA_META_OPS_EFICIENCIA },
+      ops_legais_pub_analise: { metaAcumulado: EFICIENCIA_META_OPS_PUBLICACOES },
+      ops_legais_pub_agendamento: { metaAcumulado: EFICIENCIA_META_OPS_PUBLICACOES },
       sla_ciencia_agendamentos: { metaAcumulado: 95 },
       sla_vistagem_risco: { metaAcumulado: 98 },
       sla_vistagem_normal: { metaAcumulado: 98 },
@@ -377,6 +382,8 @@ export function OverviewTab({
               onChange={onAreaChange}
               allowedAreas={allowedAreas}
               allowTodas={allowTodasAreas}
+              ano={ano}
+              mesFiltro={mesFiltro}
             />
           </div>
         ) : (

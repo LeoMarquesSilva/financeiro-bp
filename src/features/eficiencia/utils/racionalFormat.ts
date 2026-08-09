@@ -1,4 +1,5 @@
 import { EFICIENCIA_TZ } from '../constants'
+import { stripJsonArrayDecorators } from './textFormat'
 
 export function formatRacionalCell(value: unknown): string {
   if (value == null) return '—'
@@ -21,6 +22,10 @@ export function formatRacionalCell(value: unknown): string {
     return Number.isNaN(d.getTime())
       ? value
       : d.toLocaleDateString('pt-BR', { timeZone: EFICIENCIA_TZ })
+  }
+  if (typeof value === 'string' && (value.includes('[') || value.includes('"'))) {
+    const cleaned = stripJsonArrayDecorators(value)
+    if (cleaned !== value.trim()) return cleaned
   }
   return String(value)
 }

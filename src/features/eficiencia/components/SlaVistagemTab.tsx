@@ -3,10 +3,12 @@ import { ShieldCheck } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
+  EFICIENCIA_META_VISTAGEM,
   filtrarMensalPorMesFiltro,
   isAgendamentoVistagemIndisponivelPorArea,
   type MesFiltroEficiencia,
 } from '../constants'
+import { stripJsonArrayDecorators, toPriMaiuscula } from '../utils/textFormat'
 import { useSlaVistagem, useSlaVistagemDesvioRankings } from '../hooks/useEficiencia'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
@@ -68,11 +70,21 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
         onChange={setArea}
         allowedAreas={allowedAreas}
         allowTodas={allowTodas}
+        ano={ano}
+        mesFiltro={mesFiltro}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
-          title={`SLA D+1 no período (${risco ? 'demanda de risco' : 'demanda comum'})`}
+          title={`SLA Vistagem ${risco ? 'Risco' : 'Normal'} Gestão a Vista`}
+          value={rowMesAtual ? formatPercent(rowMesAtual.pct_d1) : '—'}
+          hint={rowMesAtual ? `${rowMesAtual.vistado_d1} de ${rowMesAtual.total}` : 'sem publicações'}
+          icon={ShieldCheck}
+          accentClass="bg-slate-100 text-slate-700"
+          loading={loading}
+        />
+        <EficienciaKpiCard
+          title={`SLA D+1 no período selecionado (${risco ? 'demanda de risco' : 'demanda comum'})`}
           value={pctGeral != null ? formatPercent(pctGeral) : '—'}
           hint={
             indisponivelOps
@@ -86,15 +98,7 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
           loading={loading}
         />
         <EficienciaKpiCard
-          title="SLA D+1 no mês atual"
-          value={rowMesAtual ? formatPercent(rowMesAtual.pct_d1) : '—'}
-          hint={rowMesAtual ? `${rowMesAtual.vistado_d1} de ${rowMesAtual.total}` : 'sem publicações'}
-          icon={ShieldCheck}
-          accentClass="bg-slate-100 text-slate-700"
-          loading={loading}
-        />
-        <EficienciaKpiCard
-          title="Publicações no período"
+          title="Publicações no período selecionado"
           value={String(totalPublicacoes)}
           icon={ShieldCheck}
           accentClass="bg-slate-100 text-slate-700"
@@ -107,6 +111,7 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
         subtitle="% de publicações vistadas até o próximo dia útil + 12h"
         data={mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_d1 }))}
         color={risco ? '#dc2626' : '#0ea5e9'}
+        metaFixa={EFICIENCIA_META_VISTAGEM}
         onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
       />
 
@@ -133,7 +138,12 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
         <EficienciaRankingChart
           title="Tipo Publicação"
           subtitle={areaHint}
-          rows={porTipo}
+          rows={porTipo.map((r) => ({
+            ...r,
+            tipo_publicacao: toPriMaiuscula(
+              stripJsonArrayDecorators(String(r.tipo_publicacao ?? '')),
+            ),
+          }))}
           labelKey="tipo_publicacao"
           valueKey="qtd_desvio"
           valueLabel="Desvios"

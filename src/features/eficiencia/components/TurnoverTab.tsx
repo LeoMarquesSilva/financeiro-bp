@@ -53,6 +53,8 @@ export function TurnoverTab({ ano, mesFiltro }: Props) {
             onChange={setArea}
             allowedAreas={allowedAreas}
             allowTodas={allowTodas}
+            ano={ano}
+            mesFiltro={mesFiltro}
           />
         </div>
         <OverviewRacionalButton onClick={() => setRacionalAberto(true)} className="w-auto" />

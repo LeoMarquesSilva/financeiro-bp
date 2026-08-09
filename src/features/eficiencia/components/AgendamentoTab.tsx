@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { CalendarCheck2 } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import {
+  EFICIENCIA_META_AGENDAMENTO,
   filtrarMensalPorMesFiltro,
   isAgendamentoVistagemIndisponivelPorArea,
   type MesFiltroEficiencia,
@@ -64,23 +65,13 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
         onChange={setArea}
         allowedAreas={allowedAreas}
         allowTodas={allowTodas}
+        ano={ano}
+        mesFiltro={mesFiltro}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
-          title="Agendamento/Ciência D+1 no período"
-          value={pctGeral != null ? formatPercent(pctGeral) : '—'}
-          hint={
-            indisponivel
-              ? 'Indicador não se aplica a Operações Legais'
-              : `${dentroPrazo} de ${totalGeral} tarefas dentro do prazo`
-          }
-          icon={CalendarCheck2}
-          accentClass="bg-amber-100 text-amber-700"
-          loading={loading}
-        />
-        <EficienciaKpiCard
-          title="Dentro do prazo no mês atual"
+          title="SLA Ciência Agendamentos Gestão a Vista"
           value={rowMesAtual ? formatPercent(rowMesAtual.pct_dentro_prazo) : '—'}
           hint={
             rowMesAtual
@@ -92,7 +83,19 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
           loading={loading}
         />
         <EficienciaKpiCard
-          title="Fora do prazo no período"
+          title="Agendamento/Ciência D+1 no período selecionado"
+          value={pctGeral != null ? formatPercent(pctGeral) : '—'}
+          hint={
+            indisponivel
+              ? 'Indicador não se aplica a Operações Legais'
+              : `${dentroPrazo} de ${totalGeral} tarefas dentro do prazo`
+          }
+          icon={CalendarCheck2}
+          accentClass="bg-amber-100 text-amber-700"
+          loading={loading}
+        />
+        <EficienciaKpiCard
+          title="Fora do prazo no período selecionado"
           value={String(foraPrazo)}
           icon={CalendarCheck2}
           accentClass="bg-rose-100 text-rose-700"
@@ -105,12 +108,13 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
         subtitle="% de tarefas concluídas dentro do prazo D+1"
         data={mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_dentro_prazo }))}
         color="#d97706"
+        metaFixa={EFICIENCIA_META_AGENDAMENTO}
         onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <EficienciaRankingChart
-          title="% Fatal Responsáveis"
+          title="% Desvio Responsáveis"
           subtitle={areaHint}
           rows={rankingFatal}
           valueKey="pct_do_total"
@@ -132,7 +136,7 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
         />
         <EficienciaRankingChart
-          title="Qtd Fatal Responsáveis"
+          title="Qtd Desvio Responsáveis"
           subtitle={areaHint}
           rows={rankingFatal}
           valueKey="qtd_fatal"

@@ -19,6 +19,7 @@ import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
 import { OpexPage } from '@/features/opex/pages/OpexPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
+import { OperacoesLegaisPage } from '@/features/operacoes-legais/pages/OperacoesLegaisPage'
 
 function ProtectedRoute({
   allowedRoles,
@@ -161,6 +162,17 @@ function AppRoutes() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'coordenador']} moduleKey="eficiencia">
                 <EficienciaPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="operacoes-legais"
+            element={
+              <ProtectedRoute
+                allowedRoles={['admin', 'coordenador']}
+                moduleKey="operacoes-legais"
+              >
+                <OperacoesLegaisPage />
               </ProtectedRoute>
             }
           />

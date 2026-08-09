@@ -79,6 +79,12 @@ export const NAV_ACCESS_ITEMS: NavAccessItem[] = [
     moduleKey: 'eficiencia',
   },
   {
+    to: '/financeiro/operacoes-legais',
+    label: 'Operações Legais',
+    roles: ['admin', 'coordenador'],
+    moduleKey: 'operacoes-legais',
+  },
+  {
     to: '/financeiro/usuarios',
     label: 'Usuários',
     roles: ['admin'],

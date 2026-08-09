@@ -6,9 +6,11 @@ import { useEficienciaOverview } from '../hooks/useEficiencia'
 import { useEficienciaAccess } from '../hooks/useEficienciaAccess'
 import {
   visibleEficienciaTabs,
+  type EficienciaTabDef,
   type EficienciaTabId,
 } from '../config/eficienciaTabs'
-import type { MesFiltroEficiencia } from '../constants'
+import { isSemanaFiltro, type MesFiltroEficiencia } from '../constants'
+import { toPriMaiuscula } from '../utils/textFormat'
 import { EficienciaHeader } from '../components/EficienciaHeader'
 import { IndicadoresResultadoActions } from '../components/IndicadoresResultadoActions'
 import { MesFilterButtons } from '../components/MesFilterButtons'
@@ -20,7 +22,6 @@ import { AgendamentoTab } from '../components/AgendamentoTab'
 import { TreinamentosTab } from '../components/TreinamentosTab'
 import { TurnoverTab } from '../components/TurnoverTab'
 import { GestaoPdiTab } from '../components/GestaoPdiTab'
-import { OperacoesLegaisRgTab } from '../components/OperacoesLegaisRgTab'
 import { ReceitaBrutaTab } from '../components/ReceitaBrutaTab'
 import { InadimplenciaTab } from '../components/InadimplenciaTab'
 import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab'
@@ -28,6 +29,9 @@ import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab
 /** Ano padrão da tela (sempre o corrente). 2025 fica disponível só para comparativo anual. */
 const ANO_PADRAO = 2026
 const ANOS_COMPARATIVO = [2026, 2025] as const
+
+/** Abas na 1ª linha após Overview (SLA…Desenvolvimento). Retenção começa na 2ª linha sob SLA. */
+const ROW1_AFTER_OVERVIEW = 6
 
 function EficienciaTabPanel({
   tab,
@@ -41,8 +45,6 @@ function EficienciaTabPanel({
   switch (tab) {
     case 'overview':
       return null
-    case 'ops-legais-rg':
-      return <OperacoesLegaisRgTab ano={ano} mesFiltro={mesFiltro} />
     case 'sla-protocolo':
       return <SlaProtocoloTab ano={ano} mesFiltro={mesFiltro} />
     case 'eficiencia-protocolo':
@@ -90,6 +92,16 @@ function EficienciaTabPanel({
   }
 }
 
+function TabTrigger({ tab }: { tab: EficienciaTabDef }) {
+  const Icon = tab.icon
+  return (
+    <TabsTrigger key={tab.id} value={tab.id} className="whitespace-nowrap">
+      <Icon className="h-4 w-4" />
+      {toPriMaiuscula(tab.label)}
+    </TabsTrigger>
+  )
+}
+
 export function EficienciaPage() {
   const { loading: authLoading } = useAuth()
   const access = useEficienciaAccess()
@@ -99,21 +111,22 @@ export function EficienciaPage() {
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
 
   // Overview: coordenador vê consolidado (Todas as áreas), sem slicer.
-  // Abas de detalhe / Ops Legais RG: ainda usam lockedArea do coordenador.
   const areaOverviewData = access.canFilterAreas ? areaOverview : null
-  const areaParaAbasEspeciais = access.canFilterAreas ? areaOverview : access.lockedArea
-  const tabsVisiveis = visibleEficienciaTabs(areaParaAbasEspeciais)
+  const tabsVisiveis = visibleEficienciaTabs(areaOverviewData)
   const { data: overview, loading: loadingOverview } = useEficienciaOverview(
     ano,
     areaOverviewData,
   )
 
-  // Sai da aba Ops Legais (RG) se outra área (≠ Ops Legais / Todas) for selecionada.
+  // Jurídico não usa filtro de semana — limpa se vier de outro contexto.
   useEffect(() => {
-    if (tab === 'ops-legais-rg' && !tabsVisiveis.some((t) => t.id === 'ops-legais-rg')) {
-      setTab('overview')
-    }
-  }, [tab, tabsVisiveis])
+    if (isSemanaFiltro(mesFiltro)) setMesFiltro(null)
+  }, [mesFiltro])
+
+  const overviewTab = tabsVisiveis.find((t) => t.id === 'overview')
+  const demais = tabsVisiveis.filter((t) => t.id !== 'overview')
+  const row1 = demais.slice(0, ROW1_AFTER_OVERVIEW)
+  const row2 = demais.slice(ROW1_AFTER_OVERVIEW)
 
   const handleAreaChange = (area: string | null) => {
     if (!access.canFilterAreas) return
@@ -141,19 +154,34 @@ export function EficienciaPage() {
       {access.canUseIndicadoresAdmin ? <IndicadoresResultadoActions ano={ano} /> : null}
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as EficienciaTabId)}>
-        <div className="flex justify-center">
-          <TabsList className="flex-wrap">
-            {tabsVisiveis.map(({ id, label, icon: Icon }) => (
-              <TabsTrigger key={id} value={id}>
-                <Icon className="h-4 w-4" />
-                {label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        <div className="flex justify-center overflow-x-auto pb-1">
+          <div className="inline-flex flex-col gap-1">
+            <TabsList className="h-auto flex-nowrap justify-start">
+              {overviewTab ? <TabTrigger tab={overviewTab} /> : null}
+              {row1.map((t) => (
+                <TabTrigger key={t.id} tab={t} />
+              ))}
+            </TabsList>
+            <TabsList className="h-auto flex-nowrap justify-start">
+              {/* Espaço sob Overview — 2ª linha começa alinhada ao SLA Protocolo */}
+              {overviewTab ? (
+                <span
+                  className="invisible inline-flex min-h-[36px] select-none items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium"
+                  aria-hidden
+                >
+                  <overviewTab.icon className="h-4 w-4" />
+                  {toPriMaiuscula(overviewTab.label)}
+                </span>
+              ) : null}
+              {row2.map((t) => (
+                <TabTrigger key={t.id} tab={t} />
+              ))}
+            </TabsList>
+          </div>
         </div>
 
         <div className="mt-6">
-          <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} />
+          <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} showSemanas={false} />
         </div>
 
         <TabsContent value="overview" className="mt-5">
