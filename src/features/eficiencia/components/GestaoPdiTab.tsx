@@ -43,7 +43,6 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
     ano,
   )
 
-  const elegiveis = mensalFiltrado.reduce((s, m) => s + m.elegiveis, 0)
   const aptas = mensalFiltrado.reduce((s, m) => s + m.aptas, 0)
   const desvios = mensalFiltrado.reduce((s, m) => s + m.desvios, 0)
   const desviosLista = detalhe.filter((d) => !d.apta)

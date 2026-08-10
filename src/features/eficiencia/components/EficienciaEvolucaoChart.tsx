@@ -254,10 +254,12 @@ export function EficienciaEvolucaoChart({
                 <LabelList
                   dataKey="valor"
                   content={(props) => {
-                    const payload = props.payload as { meta?: number | null } | undefined
+                    const idx = typeof props.index === 'number' ? props.index : undefined
                     const pointMeta =
-                      payload?.meta != null && Number.isFinite(Number(payload.meta))
-                        ? Number(payload.meta)
+                      idx != null &&
+                      chartData[idx]?.meta != null &&
+                      Number.isFinite(Number(chartData[idx]!.meta))
+                        ? Number(chartData[idx]!.meta)
                         : metaNum
                     return (
                       <EvolucaoPointLabel
@@ -268,7 +270,7 @@ export function EficienciaEvolucaoChart({
                             ? null
                             : (props.value as number | string)
                         }
-                        index={typeof props.index === 'number' ? props.index : undefined}
+                        index={idx}
                         total={pointCount}
                         meta={pointMeta}
                         metaAbaixoMelhor={metaAbaixoMelhor}
