@@ -19,6 +19,7 @@ import {
 } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
 import type {
+  OpsLegaisIniciativasDashboard,
   OpsLegaisIniciativasItemSemana,
   OpsLegaisIniciativasPainel,
   OpsLegaisIniciativasProjeto,
@@ -497,7 +498,8 @@ export function OpsLegaisIniciativasTab({ ano, mesFiltro }: Props) {
   /** KPIs do topo = acumulado do ano (ignora MesFilterButtons), como no BI. */
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['eficiencia', 'ops-legais-iniciativas', ano],
-    queryFn: () => eficienciaService.fetchOpsLegaisIniciativas(ano, null),
+    queryFn: (): Promise<OpsLegaisIniciativasDashboard> =>
+      eficienciaService.fetchOpsLegaisIniciativas(ano, null),
   })
 
   const d = data
@@ -508,7 +510,9 @@ export function OpsLegaisIniciativasTab({ ano, mesFiltro }: Props) {
     if (!painel) return undefined
     return {
       ...painel,
-      concluidos: painel.concluidos.filter((p) => projetoNoFiltro(p.data, mesFiltro, ano)),
+      concluidos: painel.concluidos.filter((p: OpsLegaisIniciativasProjeto) =>
+        projetoNoFiltro(p.data, mesFiltro, ano),
+      ),
     }
   }, [d?.painel, mesFiltro, ano])
 

@@ -23,7 +23,13 @@ import { buildOpsTreinamentosCategorias } from '../utils/opsTreinamentosCategori
 import { serieMensalEfetividade } from '../utils/opsEfetividadeCobranca'
 import { aplicarCelulasFiltro } from '../utils/overviewFinanceiroKpis'
 import { toPriMaiuscula } from '../utils/textFormat'
-import type { RacionalIndicador } from '../types/eficiencia.types'
+import type {
+  OpsLegaisAntecipacaoMesRow,
+  OpsLegaisIniciativasDashboard,
+  OpsLegaisIniciativasItem,
+  OpsLegaisIniciativasProjeto,
+  RacionalIndicador,
+} from '../types/eficiencia.types'
 import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
 import { RacionalSheet } from './RacionalSheet'
 
@@ -75,14 +81,16 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   })
   const { rows: cobrancaRows, loading: loadingEfetividade } = useCobrancaKpiRows()
 
-  const { data: antecipacaoMensal = [], isLoading: loadingAntecip } = useQuery({
+  const { data: antecipacaoData, isLoading: loadingAntecip } = useQuery({
     queryKey: ['eficiencia', 'ops-antecipacao-mensal', ano],
     queryFn: () => eficienciaService.fetchOpsLegaisAntecipacaoMensal(ano),
   })
+  const antecipacaoMensal: OpsLegaisAntecipacaoMesRow[] = antecipacaoData ?? []
 
   const { data: iniciativas, isLoading: loadingIniciativas } = useQuery({
     queryKey: ['eficiencia', 'ops-legais-iniciativas', ano],
-    queryFn: () => eficienciaService.fetchOpsLegaisIniciativas(ano, null),
+    queryFn: (): Promise<OpsLegaisIniciativasDashboard> =>
+      eficienciaService.fetchOpsLegaisIniciativas(ano, null),
   })
 
   const treinoResumos = useMemo(
@@ -173,10 +181,10 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   /** Iniciativas: % acumulado da meta anual (24) nos meses com conclusão. */
   const iniciativasPorMes = useMemo(() => {
     const counts = Array.from({ length: 12 }, () => 0)
-    const fontes =
+    const fontes: Array<string | null> =
       iniciativas?.painel?.concluidos?.length
-        ? iniciativas.painel.concluidos.map((p) => p.data)
-        : (iniciativas?.itens ?? []).map((p) => p.data)
+        ? iniciativas.painel.concluidos.map((p: OpsLegaisIniciativasProjeto) => p.data)
+        : (iniciativas?.itens ?? []).map((p: OpsLegaisIniciativasItem) => p.data)
     for (const data of fontes) {
       if (!data || !data.startsWith(`${ano}-`)) continue
       const mes = Number(data.slice(5, 7))

@@ -10,6 +10,7 @@ import {
 } from '../constants'
 import { useCobrancaKpiRows } from '@/features/cobranca/hooks/useWhatsapp'
 import { eficienciaService } from '../services/eficienciaService'
+import type { OpsLegaisAntecipacaoMesRow } from '../types/eficiencia.types'
 import {
   agregarEfetividade,
   filtrarPainelEfetividade,
@@ -24,10 +25,11 @@ type Props = {
 }
 
 export function OpsLegaisFinanceiroTab({ ano, mesFiltro }: Props) {
-  const { data: antecipacaoMensal = [], isLoading: loadingAntecip } = useQuery({
+  const { data: antecipacaoData, isLoading: loadingAntecip } = useQuery({
     queryKey: ['eficiencia', 'ops-antecipacao-mensal', ano],
     queryFn: () => eficienciaService.fetchOpsLegaisAntecipacaoMensal(ano),
   })
+  const antecipacaoMensal: OpsLegaisAntecipacaoMesRow[] = antecipacaoData ?? []
 
   const { rows: cobrancaRows, loading: loadingEfetividade } = useCobrancaKpiRows()
 
