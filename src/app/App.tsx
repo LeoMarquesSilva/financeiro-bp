@@ -160,7 +160,7 @@ function AppRoutes() {
           <Route
             path="eficiencia"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'coordenador']} moduleKey="eficiencia">
+              <ProtectedRoute allowedRoles={['admin']} moduleKey="eficiencia">
                 <EficienciaPage />
               </ProtectedRoute>
             }
@@ -168,10 +168,7 @@ function AppRoutes() {
           <Route
             path="operacoes-legais"
             element={
-              <ProtectedRoute
-                allowedRoles={['admin', 'coordenador']}
-                moduleKey="operacoes-legais"
-              >
+              <ProtectedRoute allowedRoles={['admin']} moduleKey="operacoes-legais">
                 <OperacoesLegaisPage />
               </ProtectedRoute>
             }

@@ -22,6 +22,7 @@ export const MODULE_KEY_OPTIONS: { value: ModuleKey; label: string }[] = [
   { value: 'receita', label: 'Receita' },
   { value: 'opex', label: 'Opex' },
   { value: 'eficiencia', label: 'Resultado Metas Bismarchi Pires' },
+  /** Sidebar/rota `/financeiro/operacoes-legais` (não filtra mais o Overview de Eficiência). */
   { value: 'operacoes-legais', label: 'Operações Legais' },
   { value: 'gestores', label: 'Usuários' },
   { value: 'configuracoes', label: 'Configurações' },

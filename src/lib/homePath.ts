@@ -6,7 +6,7 @@ const HOME_BY_ROLE: Partial<Record<AppRole, string>> = {
   admin: '/financeiro/inadimplencia',
   financeiro: '/financeiro/inadimplencia',
   comite: '/financeiro/inadimplencia',
-  coordenador: '/financeiro/eficiencia',
+  // Coordenador: home efetiva depende dos módulos (eficiencia / operacoes-legais).
 }
 
 /** Rota de entrada de cada módulo liberado individualmente. */
@@ -37,8 +37,8 @@ const MODULE_HOME_PRIORITY: ModuleKey[] = [
 
 /**
  * Primeira tela após login / rota inválida.
- * Coordenador → Eficiência; admin/financeiro/comite → Inadimplência;
- * só módulos → primeiro módulo liberado na ordem de prioridade.
+ * Admin/financeiro/comite → Inadimplência.
+ * Coordenador / só módulos → primeiro módulo liberado (Eficiência ou Ops Legais, etc.).
  */
 export function resolveHomePath(
   role: AppRole | null,

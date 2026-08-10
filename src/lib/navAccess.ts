@@ -75,13 +75,15 @@ export const NAV_ACCESS_ITEMS: NavAccessItem[] = [
   {
     to: '/financeiro/eficiencia',
     label: 'Eficiência Operacional',
-    roles: ['admin', 'coordenador'],
+    // Resultado Metas (jurídico). Coordenador precisa do checkbox — não herda via role.
+    roles: ['admin'],
     moduleKey: 'eficiencia',
   },
   {
     to: '/financeiro/operacoes-legais',
     label: 'Operações Legais',
-    roles: ['admin', 'coordenador'],
+    // Módulo próprio (não vive mais em Eficiência). Só admin ou checkbox "Operações Legais".
+    roles: ['admin'],
     moduleKey: 'operacoes-legais',
   },
   {

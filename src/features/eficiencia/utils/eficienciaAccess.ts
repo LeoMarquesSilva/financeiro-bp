@@ -1,6 +1,6 @@
 import type { AppRole } from '@/lib/database.types'
 import type { ColaboradorNivelHierarquico } from '@/features/colaboradores/types'
-import { AREAS_EFICIENCIA } from '../constants'
+import { AREAS_EFICIENCIA, EFICIENCIA_AREA_OPS_LEGAIS } from '../constants'
 
 export type EficienciaAccessProfile = 'admin' | 'socio_area' | 'coordenador'
 
@@ -36,7 +36,7 @@ const COORDENADORES_EFICIENCIA_POR_EMAIL: Record<string, string> = {
   'caroline.thome': 'Cível',
   carolineabdalla: 'Trabalhista',
   'henrique.nascimento': 'Contratos',
-  mariaponce: 'Operações Legais',
+  // Maria Heloiza (Ops Legais) usa o módulo próprio `/operacoes-legais` — não trava Eficiência.
 }
 
 const AREAS_SET = new Set<string>(AREAS_EFICIENCIA)
@@ -62,13 +62,17 @@ export function normalizeAreaEficiencia(area: string | null | undefined): string
 
 function resolveLockedArea(input: ResolveInput): string | null {
   const local = emailLocalPart(input.email)
-  if (local && COORDENADORES_EFICIENCIA_POR_EMAIL[local]) {
-    return COORDENADORES_EFICIENCIA_POR_EMAIL[local]
-  }
-  return (
+  const fromEmail =
+    local && COORDENADORES_EFICIENCIA_POR_EMAIL[local]
+      ? COORDENADORES_EFICIENCIA_POR_EMAIL[local]
+      : null
+  const area =
+    fromEmail ??
     normalizeAreaEficiencia(input.colaboradorArea) ??
     normalizeAreaEficiencia(input.teamMemberArea)
-  )
+  // Operações Legais tem dashboard próprio — não trava o slicer jurídico nela.
+  if (area === EFICIENCIA_AREA_OPS_LEGAIS) return null
+  return area
 }
 
 function isCoordenadorLista(email: string | null | undefined): boolean {
