@@ -7,6 +7,7 @@
     "dev": "npx vite",
     "build": "tsc -b && npx vite build",
     "lint": "eslint .",
+    "test:marketing": "node --test tests/instagram-marketing.test.ts tests/instagram-marketing-access.test.ts tests/instagram-meta-normalize.test.ts",
     "preview": "npx vite preview",
     "import:cdi": "node scripts/import-cdi-xlsx.cjs",
     "verify:cdi": "node scripts/verify-cdi-xlsx.cjs",
@@ -20,7 +21,8 @@
     "seed:auth": "node scripts/seed-auth-users.cjs",
     "import:orcamento": "node scripts/import-orcamento-xlsx.cjs",
     "verify:orcamento": "node scripts/verify-orcamento-xlsx.cjs",
-    "sync:colaboradores": "node scripts/sync-colaboradores.mjs"
+    "sync:colaboradores": "node scripts/sync-colaboradores.mjs",
+    "migrate:instagram": "node scripts/migrate-orqestrai-instagram.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",

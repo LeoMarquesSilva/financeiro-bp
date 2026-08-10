@@ -5,6 +5,7 @@ import {
   FileCheck2,
   FolderKanban,
   GraduationCap,
+  Instagram,
   LayoutDashboard,
   Lightbulb,
   Newspaper,
@@ -25,6 +26,7 @@ import type { MesFiltroEficiencia } from '@/features/eficiencia/constants'
 import type { UltimaAtualizacaoRow } from '@/features/eficiencia/types/eficiencia.types'
 import { toPriMaiuscula } from '@/features/eficiencia/utils/textFormat'
 import { formatDateTime } from '@/shared/utils/format'
+import { MarketingTab } from '@/features/operacoes-legais/marketing/MarketingTab'
 
 const ANO_PADRAO = 2026
 const ANOS_COMPARATIVO = [2026, 2025] as const
@@ -36,6 +38,7 @@ const BTN_OFF = 'border-slate-200 bg-white text-slate-600 hover:border-slate-300
 
 type TabId =
   | 'overview'
+  | 'marketing'
   | 'protocolos'
   | 'publicacoes'
   | 'tarefas'
@@ -47,6 +50,7 @@ type TabId =
 
 const TABS: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'marketing', label: 'Marketing', icon: Instagram },
   { id: 'protocolos', label: 'SLA Protocolos', icon: FileCheck2 },
   { id: 'publicacoes', label: 'SLA Publicações', icon: Newspaper },
   { id: 'tarefas', label: 'Tarefas', icon: CalendarCheck2 },
@@ -87,40 +91,42 @@ export function OperacoesLegaisPage() {
             Operações Legais
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
-            Dashboard BI Operações Legais — overview, protocolos, publicações, tarefas, cadastro,
-            financeiro, treinamentos, turnover e iniciativas
+            Dashboard BI Operações Legais — overview, marketing, protocolos, publicações, tarefas,
+            cadastro, financeiro, treinamentos, turnover e iniciativas
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {maisRecente && (
-            <span
-              className="flex items-center gap-1.5 text-xs text-slate-400"
-              title={`Fonte: ${maisRecente.fonte}`}
-            >
-              <RefreshCcw className="h-3.5 w-3.5" />
-              Atualizado em {formatDateTime(maisRecente.executado_em)}
-            </span>
-          )}
-          <div
-            className="flex items-center gap-1.5"
-            role="group"
-            aria-label="Ano de referência"
-            title="Use 2025 apenas para comparativo anual"
-          >
-            {ANOS_COMPARATIVO.map((a) => (
-              <button
-                key={a}
-                type="button"
-                onClick={() => setAno(a)}
-                className={cn(BTN, ano === a ? BTN_ON : BTN_OFF)}
-                aria-pressed={ano === a}
+        {tab !== 'marketing' && (
+          <div className="flex flex-wrap items-center gap-3">
+            {maisRecente && (
+              <span
+                className="flex items-center gap-1.5 text-xs text-slate-400"
+                title={`Fonte: ${maisRecente.fonte}`}
               >
-                {a}
-              </button>
-            ))}
+                <RefreshCcw className="h-3.5 w-3.5" />
+                Atualizado em {formatDateTime(maisRecente.executado_em)}
+              </span>
+            )}
+            <div
+              className="flex items-center gap-1.5"
+              role="group"
+              aria-label="Ano de referência"
+              title="Use 2025 apenas para comparativo anual"
+            >
+              {ANOS_COMPARATIVO.map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => setAno(a)}
+                  className={cn(BTN, ano === a ? BTN_ON : BTN_OFF)}
+                  aria-pressed={ano === a}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)}>
@@ -135,13 +141,15 @@ export function OperacoesLegaisPage() {
           </TabsList>
         </div>
 
-        <div className="mt-6">
-          <MesFilterButtons
-            value={mesFiltro}
-            onChange={setMesFiltro}
-            showResultado={false}
-          />
-        </div>
+        {tab !== 'marketing' && (
+          <div className="mt-6">
+            <MesFilterButtons
+              value={mesFiltro}
+              onChange={setMesFiltro}
+              showResultado={false}
+            />
+          </div>
+        )}
 
         <TabsContent value="overview" className="mt-5">
           <OperacoesLegaisOverviewTab ano={ano} mesFiltro={mesFiltro} />
@@ -153,6 +161,10 @@ export function OperacoesLegaisPage() {
 
         <TabsContent value="iniciativas" className="mt-5">
           <OpsLegaisIniciativasTab ano={ano} mesFiltro={mesFiltro} />
+        </TabsContent>
+
+        <TabsContent value="marketing" className="mt-5">
+          <MarketingTab />
         </TabsContent>
 
         {(
