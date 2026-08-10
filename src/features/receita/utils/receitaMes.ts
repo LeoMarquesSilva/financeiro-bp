@@ -26,6 +26,20 @@ export function isMesAtual(ano: number, mes: number, ref = new Date()): boolean 
 export type ReceitaGraficoMesOptions = {
   /** Oculta recebido/inadimplência do mês corrente (modo Resultado). */
   omitMesAtual?: boolean
+  /**
+   * Oculta meses anteriores ao início da meta institucional no eixo do gráfico
+   * (modo Resultado: jan–mai quando a meta começa em jun).
+   */
+  mesInicioExibicao?: number
+}
+
+/** true se o mês entra no eixo do gráfico comparativo (modo Resultado recorta pré-meta). */
+export function mesExibicaoGraficoComparativo(
+  mes: number,
+  options?: ReceitaGraficoMesOptions,
+): boolean {
+  if (options?.mesInicioExibicao != null && mes < options.mesInicioExibicao) return false
+  return true
 }
 
 /** Recebido: null em mês futuro (ainda não houve pagamento); zero mantém zero em mês passado/atual. */

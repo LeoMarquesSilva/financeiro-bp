@@ -46,7 +46,14 @@ import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
 import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
 import { ReceitaRecebidoClassificacaoSheet } from './ReceitaRecebidoClassificacaoSheet'
 import { ReceitaSemAreaDetalheSheet } from './ReceitaSemAreaDetalheSheet'
-import { isMesFuturo, valorRecebidoGrafico, inadimplenciaGraficoComparativo, isMesAtual, type ReceitaGraficoMesOptions } from '../utils/receitaMes'
+import {
+  isMesFuturo,
+  valorRecebidoGrafico,
+  inadimplenciaGraficoComparativo,
+  isMesAtual,
+  mesExibicaoGraficoComparativo,
+  type ReceitaGraficoMesOptions,
+} from '../utils/receitaMes'
 import { valorExibicaoEvolucao, aplicarSelecaoGrupos, type SelecaoGruposPorMes } from '../utils/receitaInadimplenciaCalc'
 import { buildAreaLinhaData, type AreaLinhaPoint } from '../utils/receitaGestaoVista'
 import {
@@ -750,6 +757,60 @@ function PctBadge({ pct }: { pct: number | null }) {
   )
 }
 
+/** Resumo da área (meta × recebido) abaixo da legenda do gráfico de linha por área. */
+function AreaLinhaResumoLegenda({ row }: { row: AreaGapRow }) {
+  return (
+    <div
+      className="mt-3 overflow-x-auto rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2.5"
+      data-chart-export-table
+      data-chart-export-expand-width
+    >
+      <div className="grid min-w-[640px] grid-cols-[minmax(7rem,1.2fr)_repeat(6,minmax(4.5rem,1fr))] items-center gap-x-2 gap-y-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <span>Área</span>
+        <span className="text-center">% meta</span>
+        <span className="text-right">Recebido</span>
+        <span className="text-right">Meta</span>
+        <span className="text-center">Gap</span>
+        <span className="text-center">Atingido</span>
+        <span className="text-center" title="Recebido ÷ meta anual da área">
+          % meta global
+        </span>
+      </div>
+      <div className="mt-1.5 grid min-w-[640px] grid-cols-[minmax(7rem,1.2fr)_repeat(6,minmax(4.5rem,1fr))] items-center gap-x-2 text-sm">
+        <span className="inline-flex min-w-0 items-center gap-1.5 font-medium text-slate-800">
+          <span
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: row.color }}
+            aria-hidden
+          />
+          <span className="truncate">{row.label}</span>
+        </span>
+        <span className="text-center tabular-nums text-slate-500">{formatPercentMeta(row.pct)}</span>
+        <span className="text-right tabular-nums font-semibold text-slate-900">
+          {formatCurrency(row.recebido)}
+        </span>
+        <span className="text-right tabular-nums font-medium text-slate-700">
+          {formatCurrency(row.meta)}
+        </span>
+        <span
+          className={cn(
+            'text-center tabular-nums font-semibold',
+            row.gap >= 0 ? 'text-emerald-700' : 'text-red-600',
+          )}
+        >
+          {formatGap(row.gap)}
+        </span>
+        <span className="flex justify-center">
+          <PctBadge pct={row.pctAtingido} />
+        </span>
+        <span className="flex justify-center">
+          <PctBadge pct={row.pctMetaGlobal} />
+        </span>
+      </div>
+    </div>
+  )
+}
+
 type TooltipEntry = {
   dataKey?: string | number
   value?: number
@@ -984,9 +1045,20 @@ export function ReceitaComparativoChart({
     return map
   }, [inadimplenciaEvolucaoExibicao])
 
+  const mesInicioResultado = useMemo(() => {
+    const mesesComMeta = rows.filter((r) => r.metaBase > 0).map((r) => r.mes)
+    return mesesComMeta.length > 0 ? Math.min(...mesesComMeta) : null
+  }, [rows])
+
+  const resultadoAtivo = resultadoMode && resultadoDisponivel
+
   const graficoOpts = useMemo<ReceitaGraficoMesOptions>(
-    () => ({ omitMesAtual: resultadoMode && resultadoDisponivel }),
-    [resultadoMode, resultadoDisponivel],
+    () => ({
+      omitMesAtual: resultadoAtivo,
+      mesInicioExibicao:
+        resultadoAtivo && mesInicioResultado != null ? mesInicioResultado : undefined,
+    }),
+    [resultadoAtivo, mesInicioResultado],
   )
 
   const togglePercentMode = () => {
@@ -1065,10 +1137,11 @@ export function ReceitaComparativoChart({
     [rows, ano, inadimplenciaCongeladaPorMes, graficoOpts],
   )
 
-  const chartData = useMemo(
-    () => (percentMode ? toComparativoPercentData(rawChartData) : rawChartData),
-    [percentMode, rawChartData],
-  )
+  const chartData = useMemo(() => {
+    const base = percentMode ? toComparativoPercentData(rawChartData) : rawChartData
+    if (graficoOpts.mesInicioExibicao == null) return base
+    return base.filter((d) => mesExibicaoGraficoComparativo(d.mes, graficoOpts))
+  }, [percentMode, rawChartData, graficoOpts])
 
   const visibleSeries = visible
 
@@ -1133,9 +1206,32 @@ export function ReceitaComparativoChart({
     [metaAreaSlices, areaLinhaSelecionada],
   )
 
+  /** Resumo acumulado da área no gráfico de linha (período = ano, igual à série mensal). */
+  const areaLinhaResumoGap = useMemo(() => {
+    if (!areaLinhaSelecionada || !deptRows?.length) return null
+    const data = buildAreaGapData(
+      rows,
+      rowsComDados,
+      deptRows,
+      null,
+      metaAreaSlices,
+      ano,
+      graficoOpts,
+    )
+    return data.find((a) => a.key === areaLinhaSelecionada) ?? null
+  }, [
+    areaLinhaSelecionada,
+    deptRows,
+    rows,
+    rowsComDados,
+    metaAreaSlices,
+    ano,
+    graficoOpts,
+  ])
+
   const areaLinhaData = useMemo(() => {
     if (!areaLinhaSelecionada || !areaLinhaAtual) return []
-    return buildAreaLinhaData(
+    const data = buildAreaLinhaData(
       rows,
       deptRows ?? [],
       previstoDeptRows ?? [],
@@ -1146,6 +1242,8 @@ export function ReceitaComparativoChart({
       ano,
       graficoOpts,
     )
+    if (graficoOpts.mesInicioExibicao == null) return data
+    return data.filter((d) => mesExibicaoGraficoComparativo(d.mes, graficoOpts))
   }, [
     rows,
     deptRows,
@@ -1257,13 +1355,15 @@ export function ReceitaComparativoChart({
                     : 'Meta vs. recebido por área'
                   : percentMode
                     ? 'Comparativo mensal (% da meta)'
-                    : resultadoMode && resultadoDisponivel
+                    : resultadoAtivo
                       ? 'Comparativo mensal — resultado'
                       : 'Comparativo mensal'}
               </h2>
-              {resultadoMode && resultadoDisponivel && (
+              {resultadoAtivo && (
                 <p className="text-[11px] text-amber-800">
-                  Recebido e inadimplência até o mês anterior · meta e previsto inalterados
+                  Período resultado (a partir de{' '}
+                  {rows.find((r) => r.mes === mesInicioResultado)?.mesLabel ?? 'jun'}) · recebido e
+                  inadimplência até o mês anterior · meta e previsto inalterados
                 </p>
               )}
             </div>
@@ -1276,16 +1376,16 @@ export function ReceitaComparativoChart({
               size="sm"
               className={cn(
                 'h-8 shrink-0 gap-1.5 text-xs',
-                resultadoMode && resultadoDisponivel
+                resultadoAtivo
                   ? 'border-amber-300 bg-amber-50 text-amber-900 shadow-sm'
                   : 'text-slate-600',
               )}
               onClick={() => setResultadoMode((v) => !v)}
               disabled={!resultadoDisponivel}
-              aria-pressed={resultadoMode && resultadoDisponivel}
+              aria-pressed={resultadoAtivo}
               title={
                 resultadoDisponivel
-                  ? 'Oculta recebido e inadimplência do mês corrente (não fechado)'
+                  ? 'Exibe só meses com meta (jun+); oculta recebido e inadimplência do mês corrente'
                   : 'Disponível apenas no ano corrente'
               }
             >
@@ -1586,6 +1686,9 @@ export function ReceitaComparativoChart({
               </span>
             ))}
           </div>
+          {areaLinhaResumoGap ? (
+            <AreaLinhaResumoLegenda row={areaLinhaResumoGap} />
+          ) : null}
           <p className="mt-2 text-center text-[11px] text-slate-400">
             Inadimplência por área: meses congelados, alocação VIOS (igual à aba Inadimplência com filtro de área).
           </p>
