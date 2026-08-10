@@ -7,8 +7,10 @@ import { copyOverviewKpiCardsToClipboard } from '@/shared/utils/copyChartImage'
 import { Button } from '@/components/ui/button'
 import {
   EFICIENCIA_AREA_OPS_LEGAIS,
+  EFICIENCIA_META_OPS_ANTECIPACAO,
   EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA,
   EFICIENCIA_META_OPS_EFICIENCIA,
+  EFICIENCIA_META_OPS_INICIATIVAS,
   EFICIENCIA_META_OPS_PUBLICACOES,
   EFICIENCIA_META_OPS_SLA_PROTOCOLO,
   filtrarMensalPorMesFiltro,
@@ -73,6 +75,16 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   })
   const { rows: cobrancaRows, loading: loadingEfetividade } = useCobrancaKpiRows()
 
+  const { data: antecipacaoMensal = [], isLoading: loadingAntecip } = useQuery({
+    queryKey: ['eficiencia', 'ops-antecipacao-mensal', ano],
+    queryFn: () => eficienciaService.fetchOpsLegaisAntecipacaoMensal(ano),
+  })
+
+  const { data: iniciativas, isLoading: loadingIniciativas } = useQuery({
+    queryKey: ['eficiencia', 'ops-legais-iniciativas', ano],
+    queryFn: () => eficienciaService.fetchOpsLegaisIniciativas(ano, null),
+  })
+
   const treinoResumos = useMemo(
     () => buildOpsTreinamentosCategorias(ativos, itens).resumos,
     [ativos, itens],
@@ -88,6 +100,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   const analiseFiltrado = filtrarMensalPorMesFiltro(publicacoesAnalise, mesFiltro, ano)
   const agendaFiltrado = filtrarMensalPorMesFiltro(publicacoesAgendamento, mesFiltro, ano)
   const efetividadeFiltrado = filtrarMensalPorMesFiltro(efetividadeMensal, mesFiltro, ano)
+  const antecipFiltrado = filtrarMensalPorMesFiltro(antecipacaoMensal, mesFiltro, ano)
 
   const cellsSla = aplicarCelulasFiltro(
     buildCells(protocoloMensal, (r) => Number(r.pct_d1 ?? 0)),
@@ -114,6 +127,11 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     mesFiltro,
     ano,
   )
+  const cellsAntecip = aplicarCelulasFiltro(
+    buildCells(antecipacaoMensal, (r) => Number(r.pct_antecipacao ?? 0)),
+    mesFiltro,
+    ano,
+  )
 
   const acumSla = somaRazaoPct(
     protFiltrado.map((m) => Number(m.qtd_d1 ?? 0)),
@@ -135,11 +153,11 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     efetividadeFiltrado.map((m) => Number(m.cobrados_d1 ?? 0)),
     efetividadeFiltrado.map((m) => Number(m.total ?? 0)),
   )
+  const acumAntecip = somaRazaoPct(
+    antecipFiltrado.map((m) => Number(m.qtd_dentro_prazo ?? 0)),
+    antecipFiltrado.map((m) => Number(m.total_faturavel ?? 0)),
+  )
 
-  const cellsAnual: HeatCell[] = Array.from({ length: 12 }, () => ({
-    value: null,
-    label: '-',
-  }))
   const acumTreino: HeatCell =
     equipeResumo?.pctAtingimento != null
       ? {
@@ -152,11 +170,66 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     ? { value: turnAnual.pct_retencao, label: formatPercent(turnAnual.pct_retencao) }
     : { value: null, label: '-' }
 
+  /** Iniciativas: % acumulado da meta anual (24) nos meses com conclusão. */
+  const iniciativasPorMes = useMemo(() => {
+    const counts = Array.from({ length: 12 }, () => 0)
+    const fontes =
+      iniciativas?.painel?.concluidos?.length
+        ? iniciativas.painel.concluidos.map((p) => p.data)
+        : (iniciativas?.itens ?? []).map((p) => p.data)
+    for (const data of fontes) {
+      if (!data || !data.startsWith(`${ano}-`)) continue
+      const mes = Number(data.slice(5, 7))
+      if (mes >= 1 && mes <= 12) counts[mes - 1]! += 1
+    }
+    let ytd = 0
+    return counts.map((qtd, i) => {
+      ytd += qtd
+      const pctYtd =
+        EFICIENCIA_META_OPS_INICIATIVAS > 0
+          ? (ytd / EFICIENCIA_META_OPS_INICIATIVAS) * 100
+          : 0
+      return { mes: i + 1, qtd, ytd, pctYtd }
+    })
+  }, [iniciativas?.painel?.concluidos, iniciativas?.itens, ano])
+
+  const cellsIniciativas = aplicarCelulasFiltro(
+    iniciativasPorMes.map((r) =>
+      r.qtd > 0
+        ? { value: r.pctYtd, label: formatPercent(r.pctYtd) }
+        : { value: null, label: '-' },
+    ),
+    mesFiltro,
+    ano,
+  )
+
+  const acumIniciativas: HeatCell = (() => {
+    if (loadingIniciativas) return { value: null, label: '…' }
+    if (mesFiltro == null) {
+      const pct = iniciativas?.pct_progresso
+      if (pct == null || (iniciativas?.projetos_concluidos ?? 0) <= 0) {
+        return { value: null, label: '-' }
+      }
+      return { value: pct, label: formatPercent(pct) }
+    }
+    const filtrados = filtrarMensalPorMesFiltro(iniciativasPorMes, mesFiltro, ano)
+    const qtd = filtrados.reduce((s, r) => s + r.qtd, 0)
+    if (qtd <= 0) return { value: null, label: '-' }
+    const pct = (qtd / EFICIENCIA_META_OPS_INICIATIVAS) * 100
+    return { value: pct, label: formatPercent(pct) }
+  })()
+
   const mesDestaque =
     Array.isArray(mesFiltro) && mesFiltro.length === 1 ? mesFiltro[0]! : null
 
   const busy =
-    loading || loadingTurn || loadingTreino || loadingAtivos || loadingEfetividade
+    loading ||
+    loadingTurn ||
+    loadingTreino ||
+    loadingAtivos ||
+    loadingEfetividade ||
+    loadingAntecip ||
+    loadingIniciativas
 
   const handleCopiar = async () => {
     const container = copyRef.current
@@ -260,6 +333,29 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           }
         />
         <OverviewKpiHeatRow
+          title="Antecipação de Faturamento de Honorários"
+          meta={EFICIENCIA_META_OPS_ANTECIPACAO}
+          mesDestaque={mesDestaque}
+          cells={
+            loadingAntecip
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsAntecip
+          }
+          acumulado={loadingAntecip ? { value: null, label: '…' } : acumAntecip}
+        />
+        <OverviewKpiHeatRow
+          title="Iniciativas Estratégicas"
+          meta={100}
+          metaLabel={`Meta: ${EFICIENCIA_META_OPS_INICIATIVAS} projetos`}
+          mesDestaque={mesDestaque}
+          cells={
+            loadingIniciativas
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsIniciativas
+          }
+          acumulado={acumIniciativas}
+        />
+        <OverviewKpiHeatRow
           title="Desenvolvimento Equipe"
           meta={100}
           metaLabel={
@@ -267,8 +363,9 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               ? `Meta: ${equipeResumo.qtdPessoas * 14}h (${equipeResumo.qtdPessoas} × 14h)`
               : 'Meta 100%'
           }
-          mesDestaque={mesDestaque}
-          cells={cellsAnual}
+          modoAnual
+          anoLabel={String(ano)}
+          cells={[]}
           acumulado={acumTreino}
         />
         <OverviewKpiHeatRow
@@ -283,7 +380,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
 
       <p className="text-center text-[11px] text-slate-400">
         {toPriMaiuscula(
-          'Operações Legais · metas 98% em protocolo/publicação · cobrança inicial meta 100%',
+          'Operações Legais · metas 98% em protocolo/publicação/antecipação · cobrança inicial meta 100%',
         )}
       </p>
 

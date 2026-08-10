@@ -6,10 +6,11 @@ import {
   FolderKanban,
   GraduationCap,
   LayoutDashboard,
-  MessageCircle,
+  Lightbulb,
   Newspaper,
   RefreshCcw,
   UserMinus,
+  Wallet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/AuthContext'
@@ -17,7 +18,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MesFilterButtons } from '@/features/eficiencia/components/MesFilterButtons'
 import { OperacoesLegaisOverviewTab } from '@/features/eficiencia/components/OperacoesLegaisOverviewTab'
 import { OperacoesLegaisRgTab } from '@/features/eficiencia/components/OperacoesLegaisRgTab'
-import { OpsLegaisEfetividadeCobrancaTab } from '@/features/eficiencia/components/OpsLegaisEfetividadeCobrancaTab'
+import { OpsLegaisFinanceiroTab } from '@/features/eficiencia/components/OpsLegaisFinanceiroTab'
+import { OpsLegaisIniciativasTab } from '@/features/eficiencia/components/OpsLegaisIniciativasTab'
 import { useEficienciaOverview } from '@/features/eficiencia/hooks/useEficiencia'
 import type { MesFiltroEficiencia } from '@/features/eficiencia/constants'
 import type { UltimaAtualizacaoRow } from '@/features/eficiencia/types/eficiencia.types'
@@ -38,9 +40,10 @@ type TabId =
   | 'publicacoes'
   | 'tarefas'
   | 'cadastro'
-  | 'cobranca'
+  | 'financeiro'
   | 'treinamentos'
   | 'turnover'
+  | 'iniciativas'
 
 const TABS: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -48,9 +51,10 @@ const TABS: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'publicacoes', label: 'SLA Publicações', icon: Newspaper },
   { id: 'tarefas', label: 'Tarefas', icon: CalendarCheck2 },
   { id: 'cadastro', label: 'Cadastro', icon: FolderKanban },
-  { id: 'cobranca', label: 'Cobrança', icon: MessageCircle },
+  { id: 'financeiro', label: 'Financeiro', icon: Wallet },
   { id: 'treinamentos', label: 'Treinamentos', icon: GraduationCap },
   { id: 'turnover', label: 'Turnover', icon: UserMinus },
+  { id: 'iniciativas', label: 'Iniciativas Estratégicas', icon: Lightbulb },
 ]
 
 export function OperacoesLegaisPage() {
@@ -84,7 +88,7 @@ export function OperacoesLegaisPage() {
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
             Dashboard BI Operações Legais — overview, protocolos, publicações, tarefas, cadastro,
-            cobrança, treinamentos e turnover
+            financeiro, treinamentos, turnover e iniciativas
           </p>
         </div>
 
@@ -143,8 +147,12 @@ export function OperacoesLegaisPage() {
           <OperacoesLegaisOverviewTab ano={ano} mesFiltro={mesFiltro} />
         </TabsContent>
 
-        <TabsContent value="cobranca" className="mt-5">
-          <OpsLegaisEfetividadeCobrancaTab ano={ano} mesFiltro={mesFiltro} />
+        <TabsContent value="financeiro" className="mt-5">
+          <OpsLegaisFinanceiroTab ano={ano} mesFiltro={mesFiltro} />
+        </TabsContent>
+
+        <TabsContent value="iniciativas" className="mt-5">
+          <OpsLegaisIniciativasTab ano={ano} mesFiltro={mesFiltro} />
         </TabsContent>
 
         {(

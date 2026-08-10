@@ -16,9 +16,11 @@ import type {
   EficienciaProtocoloMesRow,
   OpsLegaisProtocoloMesRow,
   OpsLegaisProtocoloRankingRow,
+  OpsLegaisAntecipacaoMesRow,
   OpsLegaisPublicacoesEficMesRow,
   OpsLegaisPublicacoesMesRow,
   OpsLegaisPublicacoesTipoRow,
+  OpsLegaisIniciativasDashboard,
   OpsLegaisResponsumDashboard,
   OpsLegaisTarefasRankingRow,
   RacionalEscopo,
@@ -218,6 +220,14 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
     filtros: [
       { tipo: 'notNull', coluna: 'data_recebimento_kurier' },
       { tipo: 'nullOrIn', coluna: 'inconsistencias_tipo', valores: ['ANÁLISE', 'ANALISE'] },
+      // Só Análise: fora Trabalhista com Demanda de Risco = Sim
+      {
+        tipo: 'notAllEq',
+        pares: [
+          { coluna: 'area', valor: 'Trabalhista' },
+          { coluna: 'demanda_risco', valor: 'Sim' },
+        ],
+      },
     ],
     colunas: [
       { key: 'sp_id', label: 'ID' },
@@ -598,6 +608,23 @@ export const eficienciaService = {
     if (error) throw error
     if (data?.error) throw new Error(String(data.error))
     return data as OpsLegaisResponsumDashboard
+  },
+
+  async fetchOpsLegaisIniciativas(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+  ): Promise<OpsLegaisIniciativasDashboard> {
+    const { inicio, fimExclusivo } = rangePeriodoFiltro(ano, mesFiltro)
+    const { data, error } = await supabase.functions.invoke('ops-legais-iniciativas', {
+      body: { inicio, fim: fimExclusivo },
+    })
+    if (error) throw error
+    if (data?.error) throw new Error(String(data.error))
+    return data as OpsLegaisIniciativasDashboard
+  },
+
+  async fetchOpsLegaisAntecipacaoMensal(ano: number): Promise<OpsLegaisAntecipacaoMesRow[]> {
+    return rpc('eficiencia_ops_legais_antecipacao_mensal', { p_ano: ano })
   },
 
   async fetchOpsLegaisPublicacoesMensal(ano: number): Promise<OpsLegaisPublicacoesMesRow[]> {

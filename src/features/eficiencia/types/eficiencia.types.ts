@@ -112,6 +112,15 @@ export interface OpsLegaisPublicacoesEficMesRow {
   pct_eficiencia: number
 }
 
+/** Financeiro — Antecipação de Faturamento de Honorários (BI AntecipacaoHonorarios). */
+export interface OpsLegaisAntecipacaoMesRow {
+  mes: number
+  total_faturavel: number
+  qtd_dentro_prazo: number
+  qtd_fora_prazo: number
+  pct_antecipacao: number
+}
+
 export interface OpsLegaisPublicacoesTipoRow {
   tipo_agendamento: string
   qtd: number
@@ -138,6 +147,78 @@ export interface OpsLegaisResponsumTicketsKpi {
   em_atendimento: number
   resolvidos: number
   taxa_resolucao: number
+}
+
+/** KPIs Iniciativas Estratégicas (ClickUp / BI KPI_HTML_PROJETOS_PARTE1). */
+export interface OpsLegaisIniciativasItem {
+  id: string
+  nome: string
+  url: string | null
+  tags: string[]
+  horas: number
+  data: string | null
+}
+
+export interface OpsLegaisIniciativasSubtarefa {
+  id: string
+  nome: string
+  responsavel: string
+  data: string | null
+  status: string
+}
+
+export interface OpsLegaisIniciativasProjeto {
+  id: string
+  nome: string
+  url: string | null
+  tipo: string
+  extensao: string
+  responsavel: string
+  data: string | null
+  subtarefas: OpsLegaisIniciativasSubtarefa[]
+  total_sub: number
+  sub_concluidas: number
+}
+
+export interface OpsLegaisIniciativasItemSemana {
+  id: string
+  nome: string
+  url: string | null
+  tipo: 'Projeto' | 'Subtarefa'
+  pai_titulo: string
+  responsavel: string
+  data: string | null
+}
+
+/** Painel Projetos Realizados (BI KPI_HTML_PROJETOS_PARTE2). */
+export interface OpsLegaisIniciativasPainel {
+  projetos_em_andamento: number
+  tarefas_sob_em_andamento: number
+  subtarefas_concluidas_periodo: number
+  semana_inicio: string
+  semana_fim: string
+  concluidos: OpsLegaisIniciativasProjeto[]
+  semana: OpsLegaisIniciativasItemSemana[]
+  andamento: OpsLegaisIniciativasProjeto[]
+}
+
+export interface OpsLegaisIniciativasDashboard {
+  meta_anual: number
+  projetos_concluidos: number
+  projetos_finalizados: number
+  melhorias_finalizadas: number
+  pct_progresso: number
+  pct_contribuicao_projetos: number
+  pct_contribuicao_melhorias: number
+  horas_ganhas: number
+  horas_formatadas: string
+  dias_uteis: number
+  dias_uteis_mensal: number
+  cor_progresso: string
+  inicio: string
+  fim: string
+  itens: OpsLegaisIniciativasItem[]
+  painel?: OpsLegaisIniciativasPainel
 }
 
 export interface OpsLegaisResponsumNps {

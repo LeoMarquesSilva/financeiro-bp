@@ -84,6 +84,10 @@ export const EFICIENCIA_META_OPS_PUBLICACOES = 98
 export const EFICIENCIA_META_OPS_CADASTRO = 95
 /** Meta Efetividade na Cobrança Inicial (D+1) — módulo Cobrança / BI. */
 export const EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA = 100
+/** Meta Antecipação de Faturamento de Honorários (BI % Antecipação Honorários). */
+export const EFICIENCIA_META_OPS_ANTECIPACAO = 98
+/** Meta anual de iniciativas ClickUp (BI KPI_HTML_PROJETOS_PARTE1). */
+export const EFICIENCIA_META_OPS_INICIATIVAS = 24
 
 /** Meta individual de treinamentos (14h = 840 min) — Equipe e Liderança. */
 export const EFICIENCIA_META_TREINAMENTO_MINUTOS = 14 * 60

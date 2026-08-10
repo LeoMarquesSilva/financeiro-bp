@@ -37,6 +37,11 @@ export type RacionalFiltro =
   | { tipo: 'distinctFrom'; coluna: string; valor: string }
   /** NULL, vazio ou IN valores — filtro Análise/Agendamento PUB. */
   | { tipo: 'nullOrIn'; coluna: string; valores: string[] }
+  /**
+   * NOT (col1=v1 AND col2=v2 …) — De Morgan via OR de ≠ / NULL.
+   * Ex.: excluir Trabalhista + Demanda de Risco = Sim na Análise.
+   */
+  | { tipo: 'notAllEq'; pares: { coluna: string; valor: string }[] }
 
 export type RacionalConfig = {
   tabela: string
@@ -130,6 +135,14 @@ export function applyRacionalFiltroNativo(
       return query.or(
         `${filtro.coluna}.is.null,${filtro.coluna}.in.${quoteInList(filtro.valores)}`,
       )
+    case 'notAllEq': {
+      // NOT (a=x AND b=y) ≡ a IS NULL OR a≠x OR b IS NULL OR b≠y
+      const parts = filtro.pares.flatMap((p) => [
+        `${p.coluna}.is.null`,
+        `${p.coluna}.neq.${p.valor}`,
+      ])
+      return query.or(parts.join(','))
+    }
     default:
       return query
   }

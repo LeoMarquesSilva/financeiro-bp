@@ -3,7 +3,8 @@
  * Sync diário SharePoint -> Supabase para o painel Eficiência Operacional.
  *
  * Fontes (mesmas do BI "DASHBOARD - EFICIÊNCIA OPERACIONAL - GERAL"):
- *  - Listas SharePoint (site CONTROLADORIAJURDICA): protocolos, publicações, treinamentos
+ *  - Listas SharePoint (site CONTROLADORIAJURDICA): protocolos, publicações,
+ *    agendamento (solicitações), treinamentos
  *  - Arquivos em bibliotecas (site Controladoria): Tarefas.csv, Historico/*.csv,
  *    Turnover BP (1).xlsx, Feriados.xlsx, Decisoes Processuais.csv,
  *    Base de Gestão de PDI.xlsx (aba Elegíveis)
@@ -142,6 +143,24 @@ const PUBLICACOES_FIELD_SELECT = [
   'INCONSIST_x00ca_NCIA_x002d_SUBTI',
   // CHECK (displayName) — nome interno opaco confirmado via Graph /columns
   'field_13',
+].join(',')
+/**
+ * Lista "SOLICITAÇÃO DE AGENDAMENTOS E REAGENDAMENTOS" (BI: tabela Agendamento).
+ * Flip cards TAREFAS — Qtd_Agendamentos_Atual / QtdAgendaTotal.
+ */
+const LISTA_AGENDAMENTO = 'd586975b-1c50-49ed-84e3-2cbe94c1e974'
+/** AGENDADOPOR_x003a_ (AGENDADO POR:) exige $select — expand genérico só traz LookupId. */
+const AGENDAMENTO_FIELD_SELECT = [
+  'id',
+  'Created',
+  'DATAATUAL',
+  'AGENDADOPOR_x003a_',
+  'Tipo_x0020_de_x0020_Agendamento_',
+  'Tipo_x0020_do_x0020_Agendamento',
+  'Ades_x00e3_o_x0020_ao_x0020_Indi',
+  'INCONSIST_x00ca_NCIA_x002d_JUR_x',
+  'Status',
+  '_x00c1_REA_x0020__x002f__x0020_E',
 ].join(',')
 const LISTA_TREINAMENTOS = '30ea2880-475e-489c-8600-ae541d29faf3'
 /**
@@ -611,6 +630,67 @@ const FONTES = {
     },
   },
 
+  agendamento: {
+    tabela: 'sp_agendamento',
+    async run(ctx) {
+      const items = await fetchListItems(
+        ctx.siteJuridica,
+        LISTA_AGENDAMENTO,
+        null,
+        AGENDAMENTO_FIELD_SELECT,
+      )
+      if (ctx.dumpFields) return dumpFields(items)
+      const rows = items
+        .filter((f) => {
+          const solicitado = parseDate(pick(f, ['DATAATUAL', 'SOLICITADO EM', 'DATA ATUAL']))
+          const criado = parseDate(pick(f, ['Criado', 'Created']))
+          const ref = solicitado ?? criado
+          return ref && ref >= DATA_CORTE_LISTAS_GRANDES
+        })
+        .map((f) => {
+          const solicitado = parseDate(pick(f, ['DATAATUAL', 'SOLICITADO EM', 'DATA ATUAL']))
+          return {
+            sp_id: Number(pick(f, ['ID', 'id'])),
+            solicitado_em: toIsoDateBrt(solicitado),
+            criado: toIsoDateTime(parseDate(pick(f, ['Criado', 'Created']))),
+            agendado_por: expandUserField(
+              pick(f, ['AGENDADO POR:', 'AGENDADOPOR_x003a_', 'AGENDADOPOR:']),
+            ),
+            tipo_abertura_encerramento: strOrNull(
+              pick(f, [
+                'Tipo de Agendamento - Abertura/Encerramento',
+                'Tipo_x0020_de_x0020_Agendamento_',
+              ]),
+            ),
+            tipo_agendamento: strOrNull(
+              pick(f, ['Tipo do Agendamento', 'Tipo_x0020_do_x0020_Agendamento']),
+            ),
+            adesao_indicador: strOrNull(
+              pick(f, ['Adesão ao Indicador', 'Ades_x00e3_o_x0020_ao_x0020_Indi']),
+            ),
+            inconsistencia_juridico: strOrNull(
+              pick(f, [
+                'INCONSISTÊNCIA - JURÍDICO',
+                'INCONSIST_x00ca_NCIA_x002d_JUR_x',
+              ]),
+            ),
+            status: strOrNull(pick(f, ['Status'])),
+            area_equipe: strOrNull(
+              pick(f, ['ÁREA / EQUIPE', 'ÁREA', '_x00c1_REA_x0020__x002f__x0020_E']),
+            ),
+          }
+        })
+        .map((r) => ({
+          ...r,
+          // BI Agendamento[DePara] — Inconsistência se jurídico preenchido
+          de_para: r.inconsistencia_juridico ? 'Inconsistência' : 'Eficiência',
+        }))
+        .filter((r) => Number.isFinite(r.sp_id))
+      const upserted = await upsertChunks('sp_agendamento', dedupeBy(rows, (r) => r.sp_id), 'sp_id')
+      return { upserted, deleted: 0 }
+    },
+  },
+
   publicacoes: {
     tabela: 'sp_publicacoes',
     async run(ctx) {
@@ -1031,6 +1111,7 @@ const ORDEM = [
   'gestao_pdi',
   // usuarios_area (Usuários x Área.xlsx) removido: tabela legada do BI, não usada por RPC/KPI do SIOE.
   'publicacoes',
+  'agendamento',
   'protocolos',
   'treinamentos',
   'processos_numero', // antes das tarefas: mapa Número → nro_cnj (admin)
