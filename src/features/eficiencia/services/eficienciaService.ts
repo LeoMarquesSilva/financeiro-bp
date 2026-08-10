@@ -298,6 +298,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'agendado_por', label: 'Agendado por' },
       { key: 'de_para', label: 'DePara' },
       { key: 'adesao_indicador', label: 'Adesão ao Indicador' },
+      { key: 'revisao_observacao', label: 'REVISÃO - OBSERVAÇÃO' },
       { key: 'inconsistencia_juridico', label: 'Inconsistência jurídico' },
       { key: 'tipo_agendamento', label: 'Tipo agendamento' },
       { key: 'tipo_abertura_encerramento', label: 'Abertura/Encerramento' },

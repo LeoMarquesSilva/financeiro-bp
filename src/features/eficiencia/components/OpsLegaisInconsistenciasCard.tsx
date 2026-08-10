@@ -114,7 +114,9 @@ function mapDesvio(
   }
   if (indicador === 'ops_legais_cadastro') {
     if (isOpsLegaisCadastroDeParaOk(row.adesao_indicador)) return null
-    const motivo = String(row.adesao_indicador ?? '').trim()
+    const motivo =
+      String(row.revisao_observacao ?? '').trim() ||
+      String(row.adesao_indicador ?? '').trim()
     const tipo =
       String(row.tipo_abertura_encerramento ?? '').trim() ||
       String(row.tipo_agendamento ?? '').trim() ||

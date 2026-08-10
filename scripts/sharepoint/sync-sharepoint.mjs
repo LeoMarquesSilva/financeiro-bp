@@ -159,6 +159,7 @@ const AGENDAMENTO_FIELD_SELECT = [
   'Tipo_x0020_do_x0020_Agendamento',
   'Ades_x00e3_o_x0020_ao_x0020_Indi',
   'INCONSIST_x00ca_NCIA_x002d_JUR_x',
+  'REVIS_x00c3_O_x0020__x002d__x002',
   'Status',
   '_x00c1_REA_x0020__x002f__x0020_E',
 ].join(',')
@@ -672,6 +673,12 @@ const FONTES = {
               pick(f, [
                 'INCONSISTÊNCIA - JURÍDICO',
                 'INCONSIST_x00ca_NCIA_x002d_JUR_x',
+              ]),
+            ),
+            revisao_observacao: strOrNull(
+              pick(f, [
+                'REVISÃO - OBSERVAÇÃO',
+                'REVIS_x00c3_O_x0020__x002d__x002',
               ]),
             ),
             status: strOrNull(pick(f, ['Status'])),
