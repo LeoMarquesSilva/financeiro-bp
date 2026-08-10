@@ -33,7 +33,6 @@ import { eficienciaService } from '../services/eficienciaService'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEficDesvioCard } from './EficienciaEficDesvioCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
-import { EficienciaRankingChart } from './EficienciaRankingChart'
 import { OpsLegaisTarefasRanking } from './OpsLegaisTarefasRanking'
 import { OpsLegaisResponsumPanel } from './OpsLegaisResponsumPanel'
 import { RacionalSheet } from './RacionalSheet'
@@ -45,8 +44,6 @@ import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
-
-const BI_BAR = '#94a3b8'
 
 type SecaoId =
   | 'protocolos'
@@ -94,7 +91,6 @@ export function OperacoesLegaisRgTab({
   const {
     protocoloMensal,
     cadastroMensal,
-    cadastroRanking,
     publicacoesAnalise,
     publicacoesAgendamento,
     loading,
@@ -274,18 +270,6 @@ export function OperacoesLegaisRgTab({
     const tot = dentro + fora
     return { dentro, fora, tot, pct: tot > 0 ? (dentro / tot) * 100 : null }
   }, [cadFiltrado])
-
-  const rankingFatalCad = useMemo(
-    () =>
-      cadastroRanking
-        .filter((r) => (r.fora_prazo ?? 0) > 0)
-        .map((r) => ({
-          usuario: r.usuario,
-          qtd_fatal: r.fora_prazo ?? 0,
-          pct_do_total: r.pct_do_total,
-        })),
-    [cadastroRanking],
-  )
 
   return (
     <div className="space-y-5">
@@ -505,59 +489,52 @@ export function OperacoesLegaisRgTab({
       {secao === 'cadastro' && (
         <div className="space-y-5">
           <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            Tarefas alinhadas ao BI CADASTRO (Abertura/Encerramento): Cadastro de Pasta/Cliente,
-            Atualização de Cadastro, Ciência da Abertura e Verificar Encerramento — % D+1 via
-            fatal_sem18_d1.
+            Controladoria da operação (Isadora, Maria Júlia, Marina, Natália) — % de conformidade
+            (DePara via Adesão ao Indicador: vazio/SEM ADESÃO = OK). População: Abertura de Pasta,
+            Abertura de Pasta Com Agendamentos e Serviço. Meta{' '}
+            {formatPercent(EFICIENCIA_META_OPS_CADASTRO)}.
           </p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <EficienciaKpiCard
-              title="Eficiência Cadastro D+1"
-              value={cadTotais.pct != null ? formatPercent(cadTotais.pct) : '—'}
-              hint={
-                cadTotais.tot > 0
-                  ? `${cadTotais.dentro} de ${cadTotais.tot} dentro do prazo`
-                  : 'Sem tarefas no período'
-              }
-              icon={FolderKanban}
-              accentClass="bg-indigo-100 text-indigo-700"
-              loading={loading}
-            />
-            <EficienciaKpiCard
-              title="Dentro do prazo"
-              value={String(cadTotais.dentro)}
-              icon={FolderKanban}
-              accentClass="bg-emerald-100 text-emerald-700"
-              loading={loading}
-            />
-            <EficienciaKpiCard
-              title="Fora do prazo"
-              value={String(cadTotais.fora)}
-              icon={FolderKanban}
-              accentClass="bg-rose-100 text-rose-700"
-              loading={loading}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="space-y-3">
+              <EficienciaKpiCard
+                title="Eficiência Cadastro"
+                value={cadTotais.pct != null ? formatPercent(cadTotais.pct) : '—'}
+                hint="Cadastrar processos sem erros de inconsistência no sistema"
+                meta={formatPercent(EFICIENCIA_META_OPS_CADASTRO)}
+                atingiuMeta={
+                  cadTotais.pct != null ? cadTotais.pct >= EFICIENCIA_META_OPS_CADASTRO : null
+                }
+                icon={FolderKanban}
+                accentClass="bg-emerald-100 text-emerald-700"
+                loading={loading}
+              />
+              <EficienciaEficDesvioCard
+                okLabel="Em conformidade"
+                nokLabel="Inconsistências"
+                qtdOk={cadTotais.dentro}
+                qtdNok={cadTotais.fora}
+                loading={loading}
+              />
+              <OpsLegaisInconsistenciasCard
+                indicador="ops_legais_cadastro"
+                ano={ano}
+                mesFiltro={mesFiltro}
+                title="Inconsistências — Cadastro"
+                enabled={secao === 'cadastro'}
+              />
+            </div>
+            <EficienciaEvolucaoChart
+              title="Eficiência Cadastro"
+              subtitle="BI · DePara · controladoria · Abertura/Serviço"
+              data={cadFiltrado.map((m) => ({
+                mes: m.mes,
+                valor: Number(m.pct_dentro_prazo),
+              }))}
+              color="#059669"
+              metaFixa={EFICIENCIA_META_OPS_CADASTRO}
+              onRacionalClick={() => setRacionalAberto('ops_legais_cadastro')}
             />
           </div>
-          <EficienciaEvolucaoChart
-            title="Cadastro / Abertura / Encerramento"
-            subtitle="Proxy do KPI_HTML_EFIC_CADASTRO · sem filtro de área"
-            data={cadFiltrado.map((m) => ({
-              mes: m.mes,
-              valor: Number(m.pct_dentro_prazo),
-            }))}
-            color="#4f46e5"
-            metaFixa={EFICIENCIA_META_OPS_CADASTRO}
-          />
-          <EficienciaRankingChart
-            title="Fora do prazo por responsável"
-            rows={rankingFatalCad}
-            labelKey="usuario"
-            valueKey="qtd_fatal"
-            valueLabel="Qtd fora"
-            color={BI_BAR}
-            loading={loading}
-            biStyle
-            showAvatars
-          />
         </div>
       )}
 
@@ -691,7 +668,9 @@ export function OperacoesLegaisRgTab({
                 ? 'ANÁLISE DE PUBLICAÇÃO'
                 : racionalAberto === 'ops_legais_pub_agendamento'
                   ? 'AGENDAMENTO DE PUBLICAÇÃO'
-                  : ''
+                  : racionalAberto === 'ops_legais_cadastro'
+                    ? 'Eficiência Cadastro'
+                    : ''
         }
         ano={ano}
         mes={mesFiltro}

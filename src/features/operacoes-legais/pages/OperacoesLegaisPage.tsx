@@ -10,19 +10,24 @@ import {
   Lightbulb,
   Newspaper,
   RefreshCcw,
+  Target,
   UserMinus,
   Wallet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/AuthContext'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { GestaoPdiTab } from '@/features/eficiencia/components/GestaoPdiTab'
 import { MesFilterButtons } from '@/features/eficiencia/components/MesFilterButtons'
 import { OperacoesLegaisOverviewTab } from '@/features/eficiencia/components/OperacoesLegaisOverviewTab'
 import { OperacoesLegaisRgTab } from '@/features/eficiencia/components/OperacoesLegaisRgTab'
 import { OpsLegaisFinanceiroTab } from '@/features/eficiencia/components/OpsLegaisFinanceiroTab'
 import { OpsLegaisIniciativasTab } from '@/features/eficiencia/components/OpsLegaisIniciativasTab'
 import { useEficienciaOverview } from '@/features/eficiencia/hooks/useEficiencia'
-import type { MesFiltroEficiencia } from '@/features/eficiencia/constants'
+import {
+  EFICIENCIA_AREA_OPS_LEGAIS,
+  type MesFiltroEficiencia,
+} from '@/features/eficiencia/constants'
 import type { UltimaAtualizacaoRow } from '@/features/eficiencia/types/eficiencia.types'
 import { toPriMaiuscula } from '@/features/eficiencia/utils/textFormat'
 import { formatDateTime } from '@/shared/utils/format'
@@ -31,6 +36,9 @@ import { MarketingTab } from '@/features/operacoes-legais/marketing/MarketingTab
 const ANO_PADRAO = 2026
 const ANOS_COMPARATIVO = [2026, 2025] as const
 
+/** Faixas à direita do Overview (linha 1 / linha 2), como no Jurídico. */
+const ROW1_AFTER_OVERVIEW = 5
+
 const BTN =
   'inline-flex h-8 min-w-[4.5rem] items-center justify-center rounded-lg border px-3 text-sm font-semibold transition-all'
 const BTN_ON = 'border-slate-800 bg-slate-800 text-white shadow-sm'
@@ -38,28 +46,46 @@ const BTN_OFF = 'border-slate-200 bg-white text-slate-600 hover:border-slate-300
 
 type TabId =
   | 'overview'
-  | 'marketing'
   | 'protocolos'
   | 'publicacoes'
-  | 'tarefas'
   | 'cadastro'
-  | 'financeiro'
   | 'treinamentos'
   | 'turnover'
+  | 'gestao-pdi'
+  | 'tarefas'
+  | 'financeiro'
+  | 'marketing'
   | 'iniciativas'
 
-const TABS: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
+type TabDef = { id: TabId; label: string; icon: typeof LayoutDashboard }
+
+/**
+ * Ordem alinhada ao Overview Ops Legais; extras (Tarefas/Financeiro/Marketing)
+ * antes de Iniciativas Estratégicas (última aba).
+ */
+const TABS: TabDef[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'marketing', label: 'Marketing', icon: Instagram },
-  { id: 'protocolos', label: 'SLA Protocolos', icon: FileCheck2 },
-  { id: 'publicacoes', label: 'SLA Publicações', icon: Newspaper },
+  { id: 'protocolos', label: 'SLA Protocolo', icon: FileCheck2 },
+  { id: 'publicacoes', label: 'Eficiência Publicações', icon: Newspaper },
+  { id: 'cadastro', label: 'Eficiência no Cadastro', icon: FolderKanban },
+  { id: 'treinamentos', label: 'Desenvolvimento Contínuo', icon: GraduationCap },
+  { id: 'turnover', label: 'Retenção de Talentos', icon: UserMinus },
+  { id: 'gestao-pdi', label: 'Gestão de PDI', icon: Target },
   { id: 'tarefas', label: 'Tarefas', icon: CalendarCheck2 },
-  { id: 'cadastro', label: 'Cadastro', icon: FolderKanban },
   { id: 'financeiro', label: 'Financeiro', icon: Wallet },
-  { id: 'treinamentos', label: 'Treinamentos', icon: GraduationCap },
-  { id: 'turnover', label: 'Turnover', icon: UserMinus },
+  { id: 'marketing', label: 'Marketing', icon: Instagram },
   { id: 'iniciativas', label: 'Iniciativas Estratégicas', icon: Lightbulb },
 ]
+
+function OpsLegaisTabTrigger({ tab }: { tab: TabDef }) {
+  const Icon = tab.icon
+  return (
+    <TabsTrigger value={tab.id} className="whitespace-nowrap">
+      <Icon className="h-4 w-4" />
+      {toPriMaiuscula(tab.label)}
+    </TabsTrigger>
+  )
+}
 
 export function OperacoesLegaisPage() {
   const { loading: authLoading } = useAuth()
@@ -72,6 +98,11 @@ export function OperacoesLegaisPage() {
   const maisRecente = atualizacoes.length
     ? atualizacoes.reduce((a, b) => (a.executado_em > b.executado_em ? a : b))
     : null
+
+  const overviewTab = TABS.find((t) => t.id === 'overview')
+  const demais = TABS.filter((t) => t.id !== 'overview')
+  const row1 = demais.slice(0, ROW1_AFTER_OVERVIEW)
+  const row2 = demais.slice(ROW1_AFTER_OVERVIEW)
 
   if (authLoading) {
     return (
@@ -91,8 +122,8 @@ export function OperacoesLegaisPage() {
             Operações Legais
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
-            Dashboard BI Operações Legais — overview, marketing, protocolos, publicações, tarefas,
-            cadastro, financeiro, treinamentos, turnover e iniciativas
+            Dashboard BI Operações Legais — protocolos, publicações, cadastro, desenvolvimento,
+            retenção, PDI, tarefas, financeiro, marketing e iniciativas
           </p>
         </div>
 
@@ -131,13 +162,24 @@ export function OperacoesLegaisPage() {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)}>
         <div className="flex justify-center overflow-x-auto pb-1">
-          <TabsList className="h-auto flex-nowrap justify-start">
-            {TABS.map(({ id, label, icon: Icon }) => (
-              <TabsTrigger key={id} value={id} className="whitespace-nowrap">
-                <Icon className="h-4 w-4" />
-                {toPriMaiuscula(label)}
-              </TabsTrigger>
-            ))}
+          <TabsList className="inline-flex h-auto flex-row items-stretch gap-0.5 p-1">
+            {overviewTab ? (
+              <div className="flex shrink-0 items-center self-stretch pr-0.5">
+                <OpsLegaisTabTrigger tab={overviewTab} />
+              </div>
+            ) : null}
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="flex flex-nowrap justify-start gap-0.5">
+                {row1.map((t) => (
+                  <OpsLegaisTabTrigger key={t.id} tab={t} />
+                ))}
+              </div>
+              <div className="flex flex-nowrap justify-start gap-0.5">
+                {row2.map((t) => (
+                  <OpsLegaisTabTrigger key={t.id} tab={t} />
+                ))}
+              </div>
+            </div>
           </TabsList>
         </div>
 
@@ -153,6 +195,14 @@ export function OperacoesLegaisPage() {
 
         <TabsContent value="overview" className="mt-5">
           <OperacoesLegaisOverviewTab ano={ano} mesFiltro={mesFiltro} />
+        </TabsContent>
+
+        <TabsContent value="gestao-pdi" className="mt-5">
+          <GestaoPdiTab
+            ano={ano}
+            mesFiltro={mesFiltro}
+            areaFixa={EFICIENCIA_AREA_OPS_LEGAIS}
+          />
         </TabsContent>
 
         <TabsContent value="financeiro" className="mt-5">
@@ -171,10 +221,10 @@ export function OperacoesLegaisPage() {
           [
             'protocolos',
             'publicacoes',
-            'tarefas',
             'cadastro',
             'treinamentos',
             'turnover',
+            'tarefas',
           ] as const
         ).map((id) => (
           <TabsContent key={id} value={id} className="mt-5">

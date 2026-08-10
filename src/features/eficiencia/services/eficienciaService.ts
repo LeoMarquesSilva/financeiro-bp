@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabaseClient'
 import {
   EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO,
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
+  OPS_LEGAIS_CADASTRO_CONTROLADORIA,
+  OPS_LEGAIS_CADASTRO_TIPOS_ABERTURA,
   areaFiltroParaIndicador,
   isAgendamentoVistagemIndisponivelPorArea,
   mesesEfetivosFiltro,
@@ -67,6 +69,7 @@ import {
   buildRacionalBaseQuery,
   fetchDesenvolvimentoRacional,
   fetchEficienciaProtocoloRacionalResumo,
+  fetchOpsLegaisCadastroRacionalResumo,
   fetchOpsLegaisEficienciaProtocoloRacionalResumo,
   fetchOpsLegaisPublicacoesRacionalResumo,
   fetchOpsLegaisSlaProtocoloRacionalResumo,
@@ -105,6 +108,9 @@ async function fetchRacionalResumo(
   }
   if (indicador === 'ops_legais_pub_analise' || indicador === 'ops_legais_pub_agendamento') {
     return fetchOpsLegaisPublicacoesRacionalResumo(cfg, indicador, ano, area, mes)
+  }
+  if (indicador === 'ops_legais_cadastro') {
+    return fetchOpsLegaisCadastroRacionalResumo(cfg, ano, area, mes)
   }
   if (indicador === 'sla_vistagem_risco' || indicador === 'sla_vistagem_normal') {
     return fetchSlaVistagemRacionalResumo(cfg, indicador, ano, areaFiltroParaIndicador(indicador, area), mes)
@@ -262,6 +268,41 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'area', label: 'Área' },
       { key: 'tipo_agendamento', label: 'TIPO DO AGENDAMENTO' },
       { key: 'check_pub', label: 'CHECK' },
+    ],
+  },
+  /**
+   * BI CADASTRO — % Eficiência Cadastro Processos (Agendamento / DePara).
+   * População: controladoria ativa (Isadora, Maria Júlia, Marina, Natália).
+   */
+  ops_legais_cadastro: {
+    tabela: 'sp_agendamento',
+    dataColuna: 'solicitado_em',
+    areaColuna: null,
+    filtros: [
+      { tipo: 'notNull', coluna: 'solicitado_em' },
+      { tipo: 'notNull', coluna: 'agendado_por' },
+      {
+        tipo: 'orIlikeStarts',
+        coluna: 'agendado_por',
+        valores: [...OPS_LEGAIS_CADASTRO_CONTROLADORIA],
+      },
+      {
+        tipo: 'orEq',
+        coluna: 'tipo_abertura_encerramento',
+        valores: [...OPS_LEGAIS_CADASTRO_TIPOS_ABERTURA],
+      },
+    ],
+    colunas: [
+      { key: 'sp_id', label: 'ID' },
+      { key: 'solicitado_em', label: 'Solicitado em' },
+      { key: 'agendado_por', label: 'Agendado por' },
+      { key: 'de_para', label: 'DePara' },
+      { key: 'adesao_indicador', label: 'Adesão ao Indicador' },
+      { key: 'inconsistencia_juridico', label: 'Inconsistência jurídico' },
+      { key: 'tipo_agendamento', label: 'Tipo agendamento' },
+      { key: 'tipo_abertura_encerramento', label: 'Abertura/Encerramento' },
+      { key: 'area_equipe', label: 'Área / Equipe' },
+      { key: 'status', label: 'Status' },
     ],
   },
   sla_ciencia_agendamentos: {

@@ -9,6 +9,7 @@ import { AreaFilterButtons } from './AreaFilterButtons'
 import { RacionalSheet } from './RacionalSheet'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
+  EFICIENCIA_META_OPS_CADASTRO,
   EFICIENCIA_META_OPS_EFICIENCIA,
   EFICIENCIA_META_OPS_PUBLICACOES,
   EFICIENCIA_META_OPS_SLA_PROTOCOLO,
@@ -49,6 +50,7 @@ const RACIONAL_TITULOS: Record<RacionalIndicador, string> = {
   ops_legais_eficiencia_protocolo: 'Eficiência Protocolo',
   ops_legais_pub_analise: 'ANÁLISE DE PUBLICAÇÃO',
   ops_legais_pub_agendamento: 'AGENDAMENTO DE PUBLICAÇÃO',
+  ops_legais_cadastro: 'Eficiência Cadastro',
   sla_ciencia_agendamentos: 'SLA Ciência Agendamentos',
   sla_vistagem_risco: 'SLA Vistagem Risco',
   sla_vistagem_normal: 'SLA Vistagem Normal',
@@ -285,6 +287,7 @@ export function OverviewTab({
     ops_legais_eficiencia_protocolo: ACUMULADO_VAZIO,
     ops_legais_pub_analise: ACUMULADO_VAZIO,
     ops_legais_pub_agendamento: ACUMULADO_VAZIO,
+    ops_legais_cadastro: ACUMULADO_VAZIO,
     sla_ciencia_agendamentos: acumuladoAgendamentoExibicao,
     sla_vistagem_risco: acumuladoVistagemRiscoExibicao,
     sla_vistagem_normal: acumuladoVistagemComumExibicao,
@@ -321,6 +324,7 @@ export function OverviewTab({
       ops_legais_eficiencia_protocolo: { metaAcumulado: EFICIENCIA_META_OPS_EFICIENCIA },
       ops_legais_pub_analise: { metaAcumulado: EFICIENCIA_META_OPS_PUBLICACOES },
       ops_legais_pub_agendamento: { metaAcumulado: EFICIENCIA_META_OPS_PUBLICACOES },
+      ops_legais_cadastro: { metaAcumulado: EFICIENCIA_META_OPS_CADASTRO },
       sla_ciencia_agendamentos: { metaAcumulado: 95 },
       sla_vistagem_risco: { metaAcumulado: 98 },
       sla_vistagem_normal: { metaAcumulado: 98 },

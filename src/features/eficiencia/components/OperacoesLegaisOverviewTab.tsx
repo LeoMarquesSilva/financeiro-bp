@@ -7,24 +7,27 @@ import { copyOverviewKpiCardsToClipboard } from '@/shared/utils/copyChartImage'
 import { Button } from '@/components/ui/button'
 import {
   EFICIENCIA_AREA_OPS_LEGAIS,
-  EFICIENCIA_META_OPS_ANTECIPACAO,
-  EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA,
+  EFICIENCIA_META_OPS_CADASTRO,
   EFICIENCIA_META_OPS_EFICIENCIA,
   EFICIENCIA_META_OPS_INICIATIVAS,
   EFICIENCIA_META_OPS_PUBLICACOES,
   EFICIENCIA_META_OPS_SLA_PROTOCOLO,
+  EFICIENCIA_META_PDI,
   filtrarMensalPorMesFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
-import { useCobrancaKpiRows } from '@/features/cobranca/hooks/useWhatsapp'
-import { useOpsLegaisRg, useTreinamentos, useTurnover } from '../hooks/useEficiencia'
+import {
+  useGestaoPdi,
+  useOpsLegaisRg,
+  useTreinamentos,
+  useTurnover,
+} from '../hooks/useEficiencia'
 import { eficienciaService } from '../services/eficienciaService'
 import { buildOpsTreinamentosCategorias } from '../utils/opsTreinamentosCategorias'
-import { serieMensalEfetividade } from '../utils/opsEfetividadeCobranca'
+import { acumuladoGestaoPdi, buildGestaoPdiCells } from '../utils/gestaoPdiCalc'
 import { aplicarCelulasFiltro } from '../utils/overviewFinanceiroKpis'
 import { toPriMaiuscula } from '../utils/textFormat'
 import type {
-  OpsLegaisAntecipacaoMesRow,
   OpsLegaisIniciativasDashboard,
   OpsLegaisIniciativasItem,
   OpsLegaisIniciativasProjeto,
@@ -66,8 +69,13 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const copyRef = useRef<HTMLDivElement>(null)
 
-  const { protocoloMensal, publicacoesAnalise, publicacoesAgendamento, loading } =
-    useOpsLegaisRg(ano, mesFiltro)
+  const {
+    protocoloMensal,
+    cadastroMensal,
+    publicacoesAnalise,
+    publicacoesAgendamento,
+    loading,
+  } = useOpsLegaisRg(ano, mesFiltro)
 
   const { anual: turnAnual, loading: loadingTurn } = useTurnover(
     ano,
@@ -79,13 +87,12 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     queryKey: ['eficiencia', 'ops-turnover-ativos', ano],
     queryFn: () => eficienciaService.fetchTurnoverAtivosArea(ano, EFICIENCIA_AREA_OPS_LEGAIS),
   })
-  const { rows: cobrancaRows, loading: loadingEfetividade } = useCobrancaKpiRows()
 
-  const { data: antecipacaoData, isLoading: loadingAntecip } = useQuery({
-    queryKey: ['eficiencia', 'ops-antecipacao-mensal', ano],
-    queryFn: () => eficienciaService.fetchOpsLegaisAntecipacaoMensal(ano),
-  })
-  const antecipacaoMensal: OpsLegaisAntecipacaoMesRow[] = antecipacaoData ?? []
+  const { mensal: pdiMensal, loading: loadingPdi } = useGestaoPdi(
+    ano,
+    mesFiltro,
+    EFICIENCIA_AREA_OPS_LEGAIS,
+  )
 
   const { data: iniciativas, isLoading: loadingIniciativas } = useQuery({
     queryKey: ['eficiencia', 'ops-legais-iniciativas', ano],
@@ -99,16 +106,10 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   )
   const equipeResumo = treinoResumos.find((r) => r.categoria === 'Equipe')
 
-  const efetividadeMensal = useMemo(
-    () => serieMensalEfetividade(cobrancaRows, ano),
-    [cobrancaRows, ano],
-  )
-
   const protFiltrado = filtrarMensalPorMesFiltro(protocoloMensal, mesFiltro, ano)
   const analiseFiltrado = filtrarMensalPorMesFiltro(publicacoesAnalise, mesFiltro, ano)
   const agendaFiltrado = filtrarMensalPorMesFiltro(publicacoesAgendamento, mesFiltro, ano)
-  const efetividadeFiltrado = filtrarMensalPorMesFiltro(efetividadeMensal, mesFiltro, ano)
-  const antecipFiltrado = filtrarMensalPorMesFiltro(antecipacaoMensal, mesFiltro, ano)
+  const cadFiltrado = filtrarMensalPorMesFiltro(cadastroMensal, mesFiltro, ano)
 
   const cellsSla = aplicarCelulasFiltro(
     buildCells(protocoloMensal, (r) => Number(r.pct_d1 ?? 0)),
@@ -130,16 +131,12 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     mesFiltro,
     ano,
   )
-  const cellsEfetividade = aplicarCelulasFiltro(
-    buildCells(efetividadeMensal, (r) => Number(r.pct_efetividade ?? 0)),
+  const cellsCadastro = aplicarCelulasFiltro(
+    buildCells(cadastroMensal, (r) => Number(r.pct_dentro_prazo ?? 0)),
     mesFiltro,
     ano,
   )
-  const cellsAntecip = aplicarCelulasFiltro(
-    buildCells(antecipacaoMensal, (r) => Number(r.pct_antecipacao ?? 0)),
-    mesFiltro,
-    ano,
-  )
+  const cellsPdi = aplicarCelulasFiltro(buildGestaoPdiCells(pdiMensal), mesFiltro, ano)
 
   const acumSla = somaRazaoPct(
     protFiltrado.map((m) => Number(m.qtd_d1 ?? 0)),
@@ -157,14 +154,11 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     agendaFiltrado.map((m) => Number(m.qtd_eficiencia ?? 0)),
     agendaFiltrado.map((m) => Number(m.total ?? 0)),
   )
-  const acumEfetividade = somaRazaoPct(
-    efetividadeFiltrado.map((m) => Number(m.cobrados_d1 ?? 0)),
-    efetividadeFiltrado.map((m) => Number(m.total ?? 0)),
+  const acumCadastro = somaRazaoPct(
+    cadFiltrado.map((m) => Number(m.dentro_prazo ?? 0)),
+    cadFiltrado.map((m) => Number(m.dentro_prazo ?? 0) + Number(m.fora_prazo ?? 0)),
   )
-  const acumAntecip = somaRazaoPct(
-    antecipFiltrado.map((m) => Number(m.qtd_dentro_prazo ?? 0)),
-    antecipFiltrado.map((m) => Number(m.total_faturavel ?? 0)),
-  )
+  const acumPdi = acumuladoGestaoPdi(pdiMensal, mesFiltro, ano)
 
   const acumTreino: HeatCell =
     equipeResumo?.pctAtingimento != null
@@ -178,7 +172,6 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     ? { value: turnAnual.pct_retencao, label: formatPercent(turnAnual.pct_retencao) }
     : { value: null, label: '-' }
 
-  /** Iniciativas: % acumulado da meta anual (24) nos meses com conclusão. */
   const iniciativasPorMes = useMemo(() => {
     const counts = Array.from({ length: 12 }, () => 0)
     const fontes: Array<string | null> =
@@ -235,8 +228,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     loadingTurn ||
     loadingTreino ||
     loadingAtivos ||
-    loadingEfetividade ||
-    loadingAntecip ||
+    loadingPdi ||
     loadingIniciativas
 
   const handleCopiar = async () => {
@@ -312,7 +304,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           onRacionalClick={() => setRacionalAberto('ops_legais_eficiencia_protocolo')}
         />
         <OverviewKpiHeatRow
-          title="Análise de Publicação"
+          title="Eficiência Análise de Publicação"
           meta={EFICIENCIA_META_OPS_PUBLICACOES}
           mesDestaque={mesDestaque}
           cells={cellsAnalise}
@@ -320,7 +312,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           onRacionalClick={() => setRacionalAberto('ops_legais_pub_analise')}
         />
         <OverviewKpiHeatRow
-          title="Agendamento de Publicação"
+          title="Eficiência Agendamento"
           meta={EFICIENCIA_META_OPS_PUBLICACOES}
           mesDestaque={mesDestaque}
           cells={cellsAgenda}
@@ -328,43 +320,15 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           onRacionalClick={() => setRacionalAberto('ops_legais_pub_agendamento')}
         />
         <OverviewKpiHeatRow
-          title="Efetividade na Cobrança Inicial"
-          meta={EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA}
+          title="Eficiência no Cadastro de Processos"
+          meta={EFICIENCIA_META_OPS_CADASTRO}
           mesDestaque={mesDestaque}
-          cells={
-            loadingEfetividade
-              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
-              : cellsEfetividade
-          }
-          acumulado={
-            loadingEfetividade ? { value: null, label: '…' } : acumEfetividade
-          }
+          cells={cellsCadastro}
+          acumulado={acumCadastro}
+          onRacionalClick={() => setRacionalAberto('ops_legais_cadastro')}
         />
         <OverviewKpiHeatRow
-          title="Antecipação de Faturamento de Honorários"
-          meta={EFICIENCIA_META_OPS_ANTECIPACAO}
-          mesDestaque={mesDestaque}
-          cells={
-            loadingAntecip
-              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
-              : cellsAntecip
-          }
-          acumulado={loadingAntecip ? { value: null, label: '…' } : acumAntecip}
-        />
-        <OverviewKpiHeatRow
-          title="Iniciativas Estratégicas"
-          meta={100}
-          metaLabel={`Meta: ${EFICIENCIA_META_OPS_INICIATIVAS} projetos`}
-          mesDestaque={mesDestaque}
-          cells={
-            loadingIniciativas
-              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
-              : cellsIniciativas
-          }
-          acumulado={acumIniciativas}
-        />
-        <OverviewKpiHeatRow
-          title="Desenvolvimento Equipe"
+          title="Desenvolvimento Contínuo"
           meta={100}
           metaLabel={
             equipeResumo && equipeResumo.qtdPessoas > 0
@@ -384,11 +348,34 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={[]}
           acumulado={acumRetencao}
         />
+        <OverviewKpiHeatRow
+          title="Gestão de PDI"
+          meta={EFICIENCIA_META_PDI}
+          mesDestaque={mesDestaque}
+          cells={
+            loadingPdi
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsPdi
+          }
+          acumulado={loadingPdi ? { value: null, label: '…' } : acumPdi}
+        />
+        <OverviewKpiHeatRow
+          title="Iniciativas Estratégicas"
+          meta={100}
+          metaLabel={`Meta: ${EFICIENCIA_META_OPS_INICIATIVAS} projetos`}
+          mesDestaque={mesDestaque}
+          cells={
+            loadingIniciativas
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsIniciativas
+          }
+          acumulado={acumIniciativas}
+        />
       </div>
 
       <p className="text-center text-[11px] text-slate-400">
         {toPriMaiuscula(
-          'Operações Legais · metas 98% em protocolo/publicação/antecipação · cobrança inicial meta 100%',
+          'Operações Legais · metas 98% protocolo/publicação · cadastro 95% · PDI e iniciativas meta 100%',
         )}
       </p>
 
@@ -400,10 +387,12 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
             : racionalAberto === 'ops_legais_eficiencia_protocolo'
               ? 'Eficiência Protocolo'
               : racionalAberto === 'ops_legais_pub_analise'
-                ? 'Análise de Publicação'
+                ? 'Eficiência Análise de Publicação'
                 : racionalAberto === 'ops_legais_pub_agendamento'
-                  ? 'Agendamento de Publicação'
-                  : ''
+                  ? 'Eficiência Agendamento'
+                  : racionalAberto === 'ops_legais_cadastro'
+                    ? 'Eficiência Cadastro'
+                    : ''
         }
         ano={ano}
         mes={mesFiltro}
@@ -413,9 +402,11 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
             ? EFICIENCIA_META_OPS_SLA_PROTOCOLO
             : racionalAberto === 'ops_legais_eficiencia_protocolo'
               ? EFICIENCIA_META_OPS_EFICIENCIA
-              : racionalAberto != null
-                ? EFICIENCIA_META_OPS_PUBLICACOES
-                : null
+              : racionalAberto === 'ops_legais_cadastro'
+                ? EFICIENCIA_META_OPS_CADASTRO
+                : racionalAberto != null
+                  ? EFICIENCIA_META_OPS_PUBLICACOES
+                  : null
         }
         onClose={() => setRacionalAberto(null)}
       />

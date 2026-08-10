@@ -27,10 +27,17 @@ import { AreaFilterButtons } from './AreaFilterButtons'
 type Props = {
   ano: number
   mesFiltro: MesFiltroEficiencia
+  /**
+   * Trava a área (ex.: Operações Legais) e esconde o slicer —
+   * reaproveita a mesma base do módulo jurídico.
+   */
+  areaFixa?: string
 }
 
-export function GestaoPdiTab({ ano, mesFiltro }: Props) {
-  const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
+export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
+  const { area: areaSlicer, setArea, allowedAreas, allowTodas } =
+    useEficienciaAreaFilter()
+  const area = areaFixa ?? areaSlicer
   const [exportando, setExportando] = useState(false)
   const { mensal, detalhe, loading } = useGestaoPdi(ano, mesFiltro, area)
   const { teamMembers } = useTeamMembers()
@@ -67,14 +74,16 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
-      <AreaFilterButtons
-        value={area}
-        onChange={setArea}
-        allowedAreas={allowedAreas}
-        allowTodas={allowTodas}
-        ano={ano}
-        mesFiltro={mesFiltro}
-      />
+      {areaFixa == null ? (
+        <AreaFilterButtons
+          value={areaSlicer}
+          onChange={setArea}
+          allowedAreas={allowedAreas}
+          allowTodas={allowTodas}
+          ano={ano}
+          mesFiltro={mesFiltro}
+        />
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <EficienciaKpiCard

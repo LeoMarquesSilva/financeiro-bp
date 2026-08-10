@@ -9,6 +9,7 @@ import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { toPriMaiuscula } from '../utils/textFormat'
+import { isOpsLegaisCadastroDeParaOk } from '../utils/racionalFormat'
 import { resolveOpsLegaisPubResponsavel, type MesFiltroEficiencia } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
 import type { RacionalIndicador } from '../types/eficiencia.types'
@@ -35,6 +36,7 @@ type Props = {
     | 'ops_legais_eficiencia_protocolo'
     | 'ops_legais_pub_analise'
     | 'ops_legais_pub_agendamento'
+    | 'ops_legais_cadastro'
   >
   ano: number
   mesFiltro: MesFiltroEficiencia
@@ -110,6 +112,26 @@ function mapDesvio(
       },
     }
   }
+  if (indicador === 'ops_legais_cadastro') {
+    if (isOpsLegaisCadastroDeParaOk(row.adesao_indicador)) return null
+    const motivo = String(row.adesao_indicador ?? '').trim()
+    const tipo =
+      String(row.tipo_abertura_encerramento ?? '').trim() ||
+      String(row.tipo_agendamento ?? '').trim() ||
+      null
+    const data = dataDia(row.solicitado_em == null ? null : String(row.solicitado_em))
+    return {
+      pessoa: String(row.agendado_por ?? '').trim() || '—',
+      detalhe: {
+        id,
+        data,
+        processo: tipo,
+        motivo: motivo || 'Inconsistência',
+        area: String(row.area_equipe ?? '').trim() || null,
+        check: null,
+      },
+    }
+  }
   if (String(row.eficiencia ?? '').trim() !== 'DESVIO') return null
   const subtipo = String(row.inconsistencia_subtipo ?? '').trim()
   const tipo = String(row.inconsistencias_tipo ?? '').trim()
@@ -175,6 +197,7 @@ export function OpsLegaisInconsistenciasCard({
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const [abertoKey, setAbertoKey] = useState<string | null>(null)
   const showCheck = isPubIndicador(indicador)
+  const processoColLabel = indicador === 'ops_legais_cadastro' ? 'Tipo' : 'Processo'
 
   const { data: rowsData, isLoading } = useQuery({
     queryKey: ['eficiencia', 'ops-desvios', indicador, ano, mesFiltro],
@@ -260,7 +283,7 @@ export function OpsLegaisInconsistenciasCard({
                       <thead>
                         <tr className="border-b border-rose-100/80 text-slate-500">
                           <th className="px-2 py-1.5 font-semibold">ID</th>
-                          <th className="px-2 py-1.5 font-semibold">Processo</th>
+                          <th className="px-2 py-1.5 font-semibold">{processoColLabel}</th>
                           <th className="px-2 py-1.5 font-semibold">Data</th>
                           <th className="px-2 py-1.5 font-semibold">Área</th>
                           <th className="px-2 py-1.5 font-semibold">Motivo</th>

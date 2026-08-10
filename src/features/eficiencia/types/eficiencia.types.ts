@@ -398,6 +398,7 @@ export type RacionalIndicador =
   | 'ops_legais_eficiencia_protocolo'
   | 'ops_legais_pub_analise'
   | 'ops_legais_pub_agendamento'
+  | 'ops_legais_cadastro'
   | 'sla_ciencia_agendamentos'
   | 'sla_vistagem_risco'
   | 'sla_vistagem_normal'

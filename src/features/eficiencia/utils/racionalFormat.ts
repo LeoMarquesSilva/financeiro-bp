@@ -1,6 +1,13 @@
 import { EFICIENCIA_TZ } from '../constants'
 import { stripJsonArrayDecorators } from './textFormat'
 
+/** BI DePara Cadastro: vazio ou SEM ADESÃO = OK; demais = Inconsistência. */
+export function isOpsLegaisCadastroDeParaOk(adesao: unknown): boolean {
+  const v = String(adesao ?? '').trim()
+  if (!v) return true
+  return v.toLocaleUpperCase('pt-BR') === 'SEM ADESÃO'
+}
+
 export function formatRacionalCell(value: unknown): string {
   if (value == null) return '—'
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
@@ -73,6 +80,8 @@ export function isRacionalLinhaForaMeta(
         Boolean(String(row.inconsistencias_tipo ?? '').trim()) ||
         Boolean(String(row.inconsistencia_subtipo ?? '').trim())
       )
+    case 'ops_legais_cadastro':
+      return !isOpsLegaisCadastroDeParaOk(row.adesao_indicador)
     case 'sla_ciencia_agendamentos':
       return String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')
     case 'sla_vistagem_risco':
@@ -96,6 +105,8 @@ export function racionalLinhaForaMetaTitle(indicador: string): string | undefine
     case 'ops_legais_pub_analise':
     case 'ops_legais_pub_agendamento':
       return 'DESVIO — fora da eficiência de publicação'
+    case 'ops_legais_cadastro':
+      return 'Inconsistência — fora da conformidade de cadastro'
     case 'sla_ciencia_agendamentos':
       return 'Fora do prazo — fora da meta'
     case 'sla_vistagem_risco':

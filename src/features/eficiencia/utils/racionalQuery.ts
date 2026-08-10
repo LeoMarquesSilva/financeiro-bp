@@ -18,7 +18,7 @@ import type {
   RacionalIndicador,
   RacionalResultado,
 } from '../types/eficiencia.types'
-import { isVistadoD1Sim } from './racionalFormat'
+import { isVistadoD1Sim, isOpsLegaisCadastroDeParaOk } from './racionalFormat'
 
 const RACIONAL_LIMITE = 500
 
@@ -42,6 +42,8 @@ export type RacionalFiltro =
    * Ex.: excluir Trabalhista + Demanda de Risco = Sim na Análise.
    */
   | { tipo: 'notAllEq'; pares: { coluna: string; valor: string }[] }
+  /** OR de ILIKE prefixo% — ex.: controladoria (agendado_por). */
+  | { tipo: 'orIlikeStarts'; coluna: string; valores: string[] }
 
 export type RacionalConfig = {
   tabela: string
@@ -141,6 +143,13 @@ export function applyRacionalFiltroNativo(
         `${p.coluna}.is.null`,
         `${p.coluna}.neq.${p.valor}`,
       ])
+      return query.or(parts.join(','))
+    }
+    case 'orIlikeStarts': {
+      const parts = filtro.valores.map((v) => {
+        const safe = v.replace(/[%*,]/g, '').trim()
+        return `${filtro.coluna}.ilike.${safe}*`
+      })
       return query.or(parts.join(','))
     }
     default:
@@ -360,6 +369,12 @@ export function buildRacionalBaseQuery(
     case 'ops_legais_pub_agendamento':
       query = query
         .order('eficiencia', { ascending: true })
+        .order(cfg.dataColuna, { ascending: false })
+      break
+    case 'ops_legais_cadastro':
+      // Inconsistência (DePara) = Adesão preenchida e ≠ SEM ADESÃO
+      query = query
+        .order('adesao_indicador', { ascending: false, nullsFirst: false })
         .order(cfg.dataColuna, { ascending: false })
       break
     case 'sla_ciencia_agendamentos':
@@ -620,6 +635,47 @@ export async function fetchOpsLegaisEficienciaProtocoloRacionalResumo(
     for (const row of rows) {
       if (String(row.inconsistencia_controladoria ?? '').trim()) qtd_inconsistencia += 1
       else qtd_eficiencia += 1
+    }
+
+    if (rows.length < RACIONAL_FETCH_PAGE) break
+    offset += RACIONAL_FETCH_PAGE
+  }
+
+  return {
+    qtd_eficiencia,
+    qtd_inconsistencia,
+    qtd_total: qtd_eficiencia + qtd_inconsistencia,
+  }
+}
+
+/** Ops Legais Cadastro — DePara via Adesão ao Indicador (controladoria). */
+export async function fetchOpsLegaisCadastroRacionalResumo(
+  cfg: RacionalConfig,
+  ano: number,
+  area: string | null,
+  mes: MesFiltroEficiencia,
+): Promise<RacionalResultado['resumo']> {
+  let qtd_eficiencia = 0
+  let qtd_inconsistencia = 0
+  let offset = 0
+
+  while (true) {
+    const query = buildRacionalBaseQuery(
+      cfg,
+      'ops_legais_cadastro',
+      ano,
+      area,
+      mes,
+      'adesao_indicador',
+    ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const rows = (data ?? []) as Array<{ adesao_indicador: string | null }>
+    for (const row of rows) {
+      if (isOpsLegaisCadastroDeParaOk(row.adesao_indicador)) qtd_eficiencia += 1
+      else qtd_inconsistencia += 1
     }
 
     if (rows.length < RACIONAL_FETCH_PAGE) break

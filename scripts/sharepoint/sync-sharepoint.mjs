@@ -682,8 +682,15 @@ const FONTES = {
         })
         .map((r) => ({
           ...r,
-          // BI Agendamento[DePara] — Inconsistência se jurídico preenchido
-          de_para: r.inconsistencia_juridico ? 'Inconsistência' : 'Eficiência',
+          // BI Agendamento[DePara]:
+          // IF (TRIM(Adesão)="" || Adesão="SEM ADESÃO", "OK", "Inconsistência")
+          de_para: (() => {
+            const adesao = (r.adesao_indicador ?? '').trim()
+            if (!adesao || adesao.toLocaleUpperCase('pt-BR') === 'SEM ADESÃO') {
+              return 'Eficiência'
+            }
+            return 'Inconsistência'
+          })(),
         }))
         .filter((r) => Number.isFinite(r.sp_id))
       const upserted = await upsertChunks('sp_agendamento', dedupeBy(rows, (r) => r.sp_id), 'sp_id')

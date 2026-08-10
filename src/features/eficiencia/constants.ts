@@ -52,6 +52,27 @@ export const EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM = 'Operações Lega
 /** Área canônica do módulo Operações Legais. */
 export const EFICIENCIA_AREA_OPS_LEGAIS = 'Operações Legais' as const
 
+/**
+ * Controladoria ativa — população do KPI Eficiência Cadastro (BI Agendamento / DePara).
+ * Match por prefixo do nome (agendado_por).
+ */
+export const OPS_LEGAIS_CADASTRO_CONTROLADORIA = [
+  'Isadora Godoy Conte',
+  'Maria Julia Pereira',
+  'Marina Silva Pinelli',
+  'Natalia Borges Breve',
+] as const
+
+/**
+ * Tipos Abertura/Encerramento do KPI Cadastro (BI).
+ * Exclui vazio e demais tipos — só estes três entram na população.
+ */
+export const OPS_LEGAIS_CADASTRO_TIPOS_ABERTURA = [
+  'Abertura de Pasta',
+  'Abertura de Pasta Com Agendamentos',
+  'Serviço',
+] as const
+
 export function isAgendamentoVistagemIndisponivelPorArea(area: string | null): boolean {
   return area === EFICIENCIA_AREA_SEM_FILTRO_AGENDAMENTO_VISTAGEM
 }
