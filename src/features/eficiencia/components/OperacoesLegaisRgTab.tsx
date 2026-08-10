@@ -112,12 +112,14 @@ export function OperacoesLegaisRgTab({
     ano,
     EFICIENCIA_AREA_OPS_LEGAIS,
   )
-  const { data: ativosOps = [], isLoading: loadingAtivosOps } = useQuery({
+  const { data: ativosOpsData, isLoading: loadingAtivosOps } = useQuery({
     queryKey: ['eficiencia', 'ops-turnover-ativos-detalhe', ano],
     queryFn: () =>
       eficienciaService.fetchTurnoverAtivosAreaDetalhe(ano, EFICIENCIA_AREA_OPS_LEGAIS),
     enabled: secao === 'treinamentos' || secao === 'turnover',
   })
+  const ativosOps: Array<{ nome: string; cargo: string | null; admissao: string | null }> =
+    ativosOpsData ?? []
   const ativosTreino = useMemo(
     () => ativosOps.map((a) => ({ nome: a.nome, cargo: a.cargo })),
     [ativosOps],

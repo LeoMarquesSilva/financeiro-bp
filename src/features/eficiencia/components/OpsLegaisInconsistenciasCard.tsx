@@ -116,7 +116,7 @@ export function OpsLegaisInconsistenciasCard({
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
 
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rowsData, isLoading } = useQuery({
     queryKey: ['eficiencia', 'ops-desvios', indicador, ano, mesFiltro],
     enabled,
     queryFn: async () => {
@@ -129,8 +129,9 @@ export function OpsLegaisInconsistenciasCard({
       return unificarDesvios(mapped)
     },
   })
+  const rows: OpsDesvioRow[] = rowsData ?? []
 
-  const totalOcorrencias = rows.reduce((s, r) => s + r.qtd, 0)
+  const totalOcorrencias = rows.reduce((s: number, r: OpsDesvioRow) => s + r.qtd, 0)
 
   return (
     <section className="rounded-xl border border-rose-100 bg-white p-3 shadow-sm sm:p-4">
@@ -156,7 +157,7 @@ export function OpsLegaisInconsistenciasCard({
         </p>
       ) : (
         <ul className="max-h-56 space-y-0 overflow-y-auto divide-y divide-slate-50">
-          {rows.map((r) => {
+          {rows.map((r: OpsDesvioRow) => {
             const nome = resolvePessoaDisplayNome(r.pessoa, teamMembers, avatarCatalog)
             const avatarUrl = resolvePessoaAvatarUrl(r.pessoa, teamMembers, avatarCatalog)
             return (
