@@ -8,6 +8,7 @@ import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import {
   EFICIENCIA_META_PDI,
   filtrarMensalPorMesFiltro,
+  filtroEfetivoGestaoAVista,
   MESES_EFICIENCIA,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -36,13 +37,16 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
   const acumulado = acumuladoGestaoPdi(mensal, mesFiltro, ano)
+  const acumuladoGestaoVista = acumuladoGestaoPdi(
+    mensal,
+    filtroEfetivoGestaoAVista(ano),
+    ano,
+  )
 
   const elegiveis = mensalFiltrado.reduce((s, m) => s + m.elegiveis, 0)
   const aptas = mensalFiltrado.reduce((s, m) => s + m.aptas, 0)
   const desvios = mensalFiltrado.reduce((s, m) => s + m.desvios, 0)
   const desviosLista = detalhe.filter((d) => !d.apta)
-  const mesAtual = new Date().getMonth() + 1
-  const rowMesAtual = mensalFiltrado.find((m) => m.mes === mesAtual)
 
   const handleExportarExcel = async () => {
     if (desviosLista.length === 0) return
@@ -77,13 +81,11 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
         <EficienciaKpiCard
           title="Gestão de PDI Gestão a Vista"
           value={
-            rowMesAtual?.pct_aptas != null ? formatPercent(rowMesAtual.pct_aptas) : '—'
+            acumuladoGestaoVista.value != null
+              ? formatPercent(acumuladoGestaoVista.value)
+              : '—'
           }
-          hint={
-            rowMesAtual
-              ? `${rowMesAtual.aptas} aptas de ${rowMesAtual.elegiveis} elegíveis`
-              : 'sem dados'
-          }
+          hint="Aptas ÷ elegíveis (prog.+evid.+1:1) · jun→hoje"
           icon={Target}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
@@ -91,11 +93,7 @@ export function GestaoPdiTab({ ano, mesFiltro }: Props) {
         <EficienciaKpiCard
           title="Gestão de PDI no período selecionado"
           value={acumulado.value != null ? formatPercent(acumulado.value) : '—'}
-          hint={
-            elegiveis > 0
-              ? `${aptas} aptas de ${elegiveis} elegíveis`
-              : 'Sem elegíveis no período'
-          }
+          hint="Aptas ÷ elegíveis (prog.+evid.+1:1) · meses filtrados"
           meta="Meta 100%"
           atingiuMeta={acumulado.value != null ? acumulado.value >= 100 : null}
           icon={Target}

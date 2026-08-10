@@ -3,6 +3,7 @@ import { ClipboardCheck } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import {
   EFICIENCIA_META_EFICIENCIA_PROTOCOLO,
+  filtrarMensalGestaoAVista,
   filtrarMensalPorMesFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -27,6 +28,7 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { data: mensal, loading } = useEficienciaProtocolo(ano, area)
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
+  const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
   const { data: ranking, loading: loadingRanking } = useEficienciaProtocoloRanking(
     ano,
     mesFiltro,
@@ -35,10 +37,12 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
 
   const semInconsistencia = mensalFiltrado.reduce((s, m) => s + m.sem_inconsistencia, 0)
   const total = mensalFiltrado.reduce((s, m) => s + m.total, 0)
+  const inconsistentes = Math.max(0, total - semInconsistencia)
   const pctGeral = total > 0 ? (semInconsistencia / total) * 100 : 0
 
-  const mesAtual = new Date().getMonth() + 1
-  const rowMesAtual = mensalFiltrado.find((m) => m.mes === mesAtual)
+  const semInconsistenciaGav = mensalGestaoVista.reduce((s, m) => s + m.sem_inconsistencia, 0)
+  const totalGav = mensalGestaoVista.reduce((s, m) => s + m.total, 0)
+  const pctGestaoVista = totalGav > 0 ? (semInconsistenciaGav / totalGav) * 100 : null
   const areaHint = area ? `Área ${area}` : undefined
 
   const resultadoRacional: HeatCell = {
@@ -60,8 +64,8 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="Eficiência de Protocolo Gestão a Vista"
-          value={rowMesAtual ? formatPercent(rowMesAtual.pct_eficiencia) : '—'}
-          hint={rowMesAtual ? `${rowMesAtual.total} protocolos no mês` : 'sem dados'}
+          value={pctGestaoVista != null ? formatPercent(pctGestaoVista) : '—'}
+          hint="Protocolos sem inconsistência ÷ total · jun→hoje"
           icon={ClipboardCheck}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
@@ -69,7 +73,7 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
         <EficienciaKpiCard
           title="Eficiência de Protocolo no período selecionado"
           value={formatPercent(pctGeral)}
-          hint={`${semInconsistencia} de ${total} protocolos sem inconsistência`}
+          hint="Protocolos sem inconsistência ÷ total · meses filtrados"
           icon={ClipboardCheck}
           accentClass="bg-emerald-100 text-emerald-700"
           loading={loading}
@@ -77,6 +81,11 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
         <EficienciaKpiCard
           title="Protocolos no período selecionado"
           value={String(total)}
+          hint={
+            total > 0
+              ? `${inconsistentes} inconsistente${inconsistentes === 1 ? '' : 's'}`
+              : 'sem protocolos'
+          }
           icon={ClipboardCheck}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}

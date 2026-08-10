@@ -30,7 +30,7 @@ import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab
 const ANO_PADRAO = 2026
 const ANOS_COMPARATIVO = [2026, 2025] as const
 
-/** Abas na 1ª linha após Overview (SLA…Desenvolvimento). Retenção começa na 2ª linha sob SLA. */
+/** Faixas à direita do Overview (SLA…Desenvolvimento / Retenção…Êxito). */
 const ROW1_AFTER_OVERVIEW = 6
 
 function EficienciaTabPanel({
@@ -155,29 +155,26 @@ export function EficienciaPage() {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as EficienciaTabId)}>
         <div className="flex justify-center overflow-x-auto pb-1">
-          <div className="inline-flex flex-col gap-1">
-            <TabsList className="h-auto flex-nowrap justify-start">
-              {overviewTab ? <TabTrigger tab={overviewTab} /> : null}
-              {row1.map((t) => (
-                <TabTrigger key={t.id} tab={t} />
-              ))}
-            </TabsList>
-            <TabsList className="h-auto flex-nowrap justify-start">
-              {/* Espaço sob Overview — 2ª linha começa alinhada ao SLA Protocolo */}
-              {overviewTab ? (
-                <span
-                  className="invisible inline-flex min-h-[36px] select-none items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium"
-                  aria-hidden
-                >
-                  <overviewTab.icon className="h-4 w-4" />
-                  {toPriMaiuscula(overviewTab.label)}
-                </span>
-              ) : null}
-              {row2.map((t) => (
-                <TabTrigger key={t.id} tab={t} />
-              ))}
-            </TabsList>
-          </div>
+          <TabsList className="inline-flex h-auto flex-row items-stretch gap-0.5 p-1">
+            {/* Overview centralizado na altura das duas linhas (print). */}
+            {overviewTab ? (
+              <div className="flex shrink-0 items-center self-stretch pr-0.5">
+                <TabTrigger tab={overviewTab} />
+              </div>
+            ) : null}
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="flex flex-nowrap justify-start gap-0.5">
+                {row1.map((t) => (
+                  <TabTrigger key={t.id} tab={t} />
+                ))}
+              </div>
+              <div className="flex flex-nowrap justify-start gap-0.5">
+                {row2.map((t) => (
+                  <TabTrigger key={t.id} tab={t} />
+                ))}
+              </div>
+            </div>
+          </TabsList>
         </div>
 
         <div className="mt-6">

@@ -3,7 +3,7 @@ import { formatPercent } from '@/shared/utils/format'
 import type { GestaoVistaMesRow } from '@/features/receita/types/receita.types'
 import {
   MES_INICIO_RESULTADO,
-  isMesesFiltro,
+  filtroEfetivoGestaoAVista,
   mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -20,6 +20,10 @@ type Props = {
 export function InadimplenciaTab({ ano, mesFiltro }: Props) {
   const { data, isLoading } = useOverviewFinanceiroKpis(ano)
   const overview = data ? buildOverviewInadimplencia(data.meses, mesFiltro, ano) : null
+  const filtroGav = filtroEfetivoGestaoAVista(ano)
+  const overviewGestaoVista = data
+    ? buildOverviewInadimplencia(data.meses, filtroGav, ano)
+    : null
 
   const mesesEscopo = (data?.meses ?? []).filter(
     (m: GestaoVistaMesRow) =>
@@ -30,24 +34,17 @@ export function InadimplenciaTab({ ano, mesFiltro }: Props) {
     .filter((m: GestaoVistaMesRow) => m.inadimplenciaPct != null)
     .map((m: GestaoVistaMesRow) => ({ mes: m.mes, valor: m.inadimplenciaPct! }))
 
-  const mesDestaque =
-    isMesesFiltro(mesFiltro) && mesFiltro.length === 1
-      ? mesFiltro[0]
-      : new Date().getMonth() + 1
-  const rowMesDestaque = data?.meses.find((m: GestaoVistaMesRow) => m.mes === mesDestaque)
-
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="Índice de Inadimplência Gestão a Vista"
           value={
-            rowMesDestaque?.inadimplenciaPct != null &&
-            rowMesDestaque.mes >= MES_INICIO_RESULTADO &&
-            mesNoFiltro(rowMesDestaque.mes, mesFiltro, ano)
-              ? formatPercent(rowMesDestaque.inadimplenciaPct)
+            overviewGestaoVista?.acumulado.value != null
+              ? formatPercent(overviewGestaoVista.acumulado.value)
               : '—'
           }
+          hint="Saldo ÷ previsto · jun→hoje"
           icon={AlertTriangle}
           accentClass="bg-slate-100 text-slate-700"
           loading={isLoading}
@@ -59,7 +56,7 @@ export function InadimplenciaTab({ ano, mesFiltro }: Props) {
               ? formatPercent(overview.acumulado.value)
               : '—'
           }
-          hint="Saldo congelado ÷ previsto (Jun+)"
+          hint="Saldo ÷ previsto · meses filtrados"
           icon={AlertTriangle}
           accentClass="bg-amber-100 text-amber-800"
           loading={isLoading}

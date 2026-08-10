@@ -4,6 +4,7 @@ import { formatPercent } from '@/shared/utils/format'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
   EFICIENCIA_META_VISTAGEM,
+  filtrarMensalGestaoAVista,
   filtrarMensalPorMesFiltro,
   isAgendamentoVistagemIndisponivelPorArea,
   type MesFiltroEficiencia,
@@ -44,13 +45,22 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
     !risco && area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
   const indisponivel = indisponivelOps || indisponivelNormal
 
+  const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
   const totalPublicacoes = indisponivel ? 0 : mensalFiltrado.reduce((s, m) => s + m.total, 0)
   const totalVistadoD1 = indisponivel ? 0 : mensalFiltrado.reduce((s, m) => s + m.vistado_d1, 0)
   const pctGeral =
     !indisponivel && totalPublicacoes > 0 ? (totalVistadoD1 / totalPublicacoes) * 100 : null
 
-  const mesAtual = new Date().getMonth() + 1
-  const rowMesAtual = mensalFiltrado.find((m) => m.mes === mesAtual)
+  const totalPublicacoesGav = indisponivel
+    ? 0
+    : mensalGestaoVista.reduce((s, m) => s + m.total, 0)
+  const totalVistadoD1Gav = indisponivel
+    ? 0
+    : mensalGestaoVista.reduce((s, m) => s + m.vistado_d1, 0)
+  const pctGestaoVista =
+    !indisponivel && totalPublicacoesGav > 0
+      ? (totalVistadoD1Gav / totalPublicacoesGav) * 100
+      : null
   const areaHint = area ? `Área ${area}` : undefined
 
   const indicador: RacionalIndicador = risco ? 'sla_vistagem_risco' : 'sla_vistagem_normal'
@@ -77,8 +87,12 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title={`SLA Vistagem ${risco ? 'Risco' : 'Normal'} Gestão a Vista`}
-          value={rowMesAtual ? formatPercent(rowMesAtual.pct_d1) : '—'}
-          hint={rowMesAtual ? `${rowMesAtual.vistado_d1} de ${rowMesAtual.total}` : 'sem publicações'}
+          value={pctGestaoVista != null ? formatPercent(pctGestaoVista) : '—'}
+          hint={
+            indisponivel
+              ? emptyDesvio
+              : 'Vistado no D+1 ÷ pubs · jun→hoje'
+          }
           icon={ShieldCheck}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
@@ -91,7 +105,7 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
               ? 'Indicador não se aplica a Operações Legais'
               : indisponivelNormal
                 ? 'Trabalhista não possui SLA Vistagem Normal'
-                : `${totalVistadoD1} de ${totalPublicacoes} publicações`
+                : 'Vistado no D+1 ÷ pubs · meses filtrados'
           }
           icon={ShieldCheck}
           accentClass="bg-sky-100 text-sky-700"

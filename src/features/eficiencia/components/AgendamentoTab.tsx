@@ -3,6 +3,7 @@ import { CalendarCheck2 } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import {
   EFICIENCIA_META_AGENDAMENTO,
+  filtrarMensalGestaoAVista,
   filtrarMensalPorMesFiltro,
   isAgendamentoVistagemIndisponivelPorArea,
   type MesFiltroEficiencia,
@@ -30,14 +31,22 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
   const { data: ranking, loading: loadingRanking } = useAgendamentoRanking(ano, mesFiltro, area)
 
+  const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
   const indisponivel = isAgendamentoVistagemIndisponivelPorArea(area)
   const dentroPrazo = indisponivel ? 0 : mensalFiltrado.reduce((s, m) => s + m.dentro_prazo, 0)
   const foraPrazo = indisponivel ? 0 : mensalFiltrado.reduce((s, m) => s + m.fora_prazo, 0)
   const totalGeral = dentroPrazo + foraPrazo
   const pctGeral = !indisponivel && totalGeral > 0 ? (dentroPrazo / totalGeral) * 100 : null
 
-  const mesAtual = new Date().getMonth() + 1
-  const rowMesAtual = mensalFiltrado.find((m) => m.mes === mesAtual)
+  const dentroPrazoGav = indisponivel
+    ? 0
+    : mensalGestaoVista.reduce((s, m) => s + m.dentro_prazo, 0)
+  const foraPrazoGav = indisponivel
+    ? 0
+    : mensalGestaoVista.reduce((s, m) => s + m.fora_prazo, 0)
+  const totalGav = dentroPrazoGav + foraPrazoGav
+  const pctGestaoVista =
+    !indisponivel && totalGav > 0 ? (dentroPrazoGav / totalGav) * 100 : null
   const areaHint = area ? `Área ${area}` : undefined
 
   const rankingFatal = useMemo(() => {
@@ -72,11 +81,11 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="SLA Ciência Agendamentos Gestão a Vista"
-          value={rowMesAtual ? formatPercent(rowMesAtual.pct_dentro_prazo) : '—'}
+          value={pctGestaoVista != null ? formatPercent(pctGestaoVista) : '—'}
           hint={
-            rowMesAtual
-              ? `${rowMesAtual.dentro_prazo} de ${rowMesAtual.dentro_prazo + rowMesAtual.fora_prazo}`
-              : 'sem dados'
+            indisponivel
+              ? 'Indicador não se aplica a Operações Legais'
+              : 'Ciência no D+1 ÷ tarefas · jun→hoje'
           }
           icon={CalendarCheck2}
           accentClass="bg-slate-100 text-slate-700"
@@ -88,7 +97,7 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
           hint={
             indisponivel
               ? 'Indicador não se aplica a Operações Legais'
-              : `${dentroPrazo} de ${totalGeral} tarefas dentro do prazo`
+              : 'Ciência no D+1 ÷ tarefas · meses filtrados'
           }
           icon={CalendarCheck2}
           accentClass="bg-amber-100 text-amber-700"

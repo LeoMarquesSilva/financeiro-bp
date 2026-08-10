@@ -24,6 +24,13 @@ const AXIS_TICK_Y = { fontSize: 11, fill: '#94a3b8' }
 /** Meses no eixo X — maiores e em negrito. */
 const AXIS_TICK_X = { fontSize: 13, fill: '#334155', fontWeight: 700 }
 
+/** Cor padrão das linhas de evolução (igual SLA Protocolo). */
+const LINE_COLOR = '#7c3aed'
+const LABEL_OK = '#059669'
+const LABEL_NOK = '#dc2626'
+const LABEL_NEUTRO = '#334155'
+const META_LABEL = '#b45309'
+
 export type EvolucaoPoint = {
   mes: number
   valor: number
@@ -36,8 +43,11 @@ type Props = {
   title: string
   subtitle?: string
   data: EvolucaoPoint[]
+  /** @deprecated Ignorado — todas as séries usam roxo padrão. */
   color?: string
   metaFixa?: number | null
+  /** Se true, valor ≤ meta é verde (ex.: inadimplência). Default: ≥ meta = verde. */
+  metaAbaixoMelhor?: boolean
   /** Abre o sheet de Racional (mesma base do Overview). */
   onRacionalClick?: () => void
 }
@@ -83,8 +93,10 @@ function EvolucaoPointLabel(props: {
   value?: number | string | null
   index?: number
   total?: number
+  meta?: number | null
+  metaAbaixoMelhor?: boolean
 }) {
-  const { x, y, value, index, total } = props
+  const { x, y, value, index, total, meta, metaAbaixoMelhor } = props
   if (value == null) return null
   const num = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(num)) return null
@@ -105,13 +117,19 @@ function EvolucaoPointLabel(props: {
           ? 'end'
           : 'middle'
 
+  let fill = LABEL_NEUTRO
+  if (meta != null && Number.isFinite(meta)) {
+    const ok = metaAbaixoMelhor ? num <= meta : num >= meta
+    fill = ok ? LABEL_OK : LABEL_NOK
+  }
+
   return (
     <text
       x={cx}
       y={labelY}
       textAnchor={anchor}
       dominantBaseline={above ? 'auto' : 'hanging'}
-      fill="#334155"
+      fill={fill}
       fontSize={11}
       fontWeight={600}
       className="tabular-nums"
@@ -144,8 +162,8 @@ export function EficienciaEvolucaoChart({
   title,
   subtitle,
   data,
-  color = '#0ea5e9',
   metaFixa = null,
+  metaAbaixoMelhor = false,
   onRacionalClick,
 }: Props) {
   const chartExportRef = useRef<HTMLDivElement>(null)
@@ -188,14 +206,24 @@ export function EficienciaEvolucaoChart({
 
       {/* ref no wrapper; data-chart-plot no filho — copyChartImage usa querySelector nos descendentes */}
       <div ref={chartExportRef} className="w-full">
-        {melhor ? (
-          <div className="mb-2 flex justify-end">
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-              <Trophy className="h-3 w-3 shrink-0" aria-hidden />
-              Melhor mês: {melhor.label} · {formatPercent(melhor.valor)}
-            </span>
+        {(melhor || (metaNum != null && Number.isFinite(metaNum))) && (
+          <div className="mb-2 flex flex-col items-end gap-1">
+            {melhor ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                <Trophy className="h-3 w-3 shrink-0" aria-hidden />
+                Melhor mês: {melhor.label} · {formatPercent(melhor.valor)}
+              </span>
+            ) : null}
+            {metaNum != null && Number.isFinite(metaNum) ? (
+              <span
+                className="text-[11px] font-semibold tabular-nums"
+                style={{ color: META_LABEL }}
+              >
+                Meta {formatPercent(metaNum)}
+              </span>
+            ) : null}
           </div>
-        ) : null}
+        )}
         <div data-chart-plot className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%" minHeight={300}>
             <LineChart data={chartData} margin={{ left: 4, right: 20, top: 28, bottom: 8 }}>
@@ -204,50 +232,49 @@ export function EficienciaEvolucaoChart({
               <YAxis
                 tickFormatter={(v: number) => formatPercent(v)}
                 tick={AXIS_TICK_Y}
+                ticks={[0, 25, 50, 75, 100]}
                 axisLine={false}
                 tickLine={false}
                 width={52}
                 domain={[0, 100]}
-                padding={{ top: 18 }}
               />
               <Tooltip content={<EvolucaoTooltip />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '4 4' }} />
               {metaNum != null && Number.isFinite(metaNum) && (
-                <ReferenceLine
-                  y={metaNum}
-                  stroke="#f59e0b"
-                  strokeDasharray="6 4"
-                  label={{
-                    value: `Meta ${formatPercent(metaNum)}`,
-                    position: 'insideTopRight',
-                    fontSize: 11,
-                    fill: '#b45309',
-                  }}
-                />
+                <ReferenceLine y={metaNum} stroke="#f59e0b" strokeDasharray="6 4" />
               )}
               <Line
                 type="monotone"
                 dataKey="valor"
                 name={toPriMaiuscula(title)}
-                stroke={color}
+                stroke={LINE_COLOR}
                 strokeWidth={2.5}
-                dot={{ r: 4, fill: color, strokeWidth: 0 }}
-                activeDot={{ r: 6, fill: color, stroke: '#fff', strokeWidth: 2 }}
+                dot={{ r: 4, fill: LINE_COLOR, strokeWidth: 0 }}
+                activeDot={{ r: 6, fill: LINE_COLOR, stroke: '#fff', strokeWidth: 2 }}
               >
                 <LabelList
                   dataKey="valor"
-                  content={(props) => (
-                    <EvolucaoPointLabel
-                      x={props.x}
-                      y={props.y}
-                      value={
-                        props.value == null || typeof props.value === 'boolean'
-                          ? null
-                          : (props.value as number | string)
-                      }
-                      index={typeof props.index === 'number' ? props.index : undefined}
-                      total={pointCount}
-                    />
-                  )}
+                  content={(props) => {
+                    const payload = props.payload as { meta?: number | null } | undefined
+                    const pointMeta =
+                      payload?.meta != null && Number.isFinite(Number(payload.meta))
+                        ? Number(payload.meta)
+                        : metaNum
+                    return (
+                      <EvolucaoPointLabel
+                        x={props.x}
+                        y={props.y}
+                        value={
+                          props.value == null || typeof props.value === 'boolean'
+                            ? null
+                            : (props.value as number | string)
+                        }
+                        index={typeof props.index === 'number' ? props.index : undefined}
+                        total={pointCount}
+                        meta={pointMeta}
+                        metaAbaixoMelhor={metaAbaixoMelhor}
+                      />
+                    )
+                  }}
                 />
               </Line>
             </LineChart>

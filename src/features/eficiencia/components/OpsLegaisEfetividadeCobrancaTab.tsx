@@ -4,7 +4,7 @@ import { formatPercent } from '@/shared/utils/format'
 import { useCobrancaKpiRows } from '@/features/cobranca/hooks/useWhatsapp'
 import {
   EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA,
-  isMesesFiltro,
+  filtroEfetivoGestaoAVista,
   mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -29,6 +29,12 @@ export function OpsLegaisEfetividadeCobrancaTab({ ano, mesFiltro }: Props) {
     [rows, ano, mesFiltro],
   )
   const periodo = useMemo(() => agregarEfetividade(filtradas), [filtradas])
+  const filtroGav = useMemo(() => filtroEfetivoGestaoAVista(ano), [ano])
+  const filtradasGav = useMemo(
+    () => filtrarPainelEfetividade(rows, ano, filtroGav),
+    [rows, ano, filtroGav],
+  )
+  const gestaoVista = useMemo(() => agregarEfetividade(filtradasGav), [filtradasGav])
 
   const serieAno = useMemo(() => serieMensalEfetividade(rows, ano), [rows, ano])
   const chartData = useMemo(() => {
@@ -41,14 +47,6 @@ export function OpsLegaisEfetividadeCobrancaTab({ ano, mesFiltro }: Props) {
       }))
   }, [serieAno, mesFiltro, ano])
 
-  const mesDestaque =
-    isMesesFiltro(mesFiltro) && mesFiltro.length === 1
-      ? mesFiltro[0]!
-      : new Date().getMonth() + 1
-  const rowMes = serieAno.find((m) => m.mes === mesDestaque)
-  const mesNoEscopo =
-    rowMes != null && mesNoFiltro(rowMes.mes, mesFiltro, ano)
-
   const foraOuSem = periodo.total - periodo.cobrados_d1
 
   return (
@@ -57,11 +55,9 @@ export function OpsLegaisEfetividadeCobrancaTab({ ano, mesFiltro }: Props) {
         <EficienciaKpiCard
           title="Efetividade Gestão a Vista"
           value={
-            mesNoEscopo && rowMes
-              ? formatPercent(rowMes.pct_efetividade)
-              : '—'
+            gestaoVista.total > 0 ? formatPercent(gestaoVista.pct_efetividade) : '—'
           }
-          hint="WhatsApp no D+1 útil · títulos em aberto (mesmo painel Cobrança)"
+          hint="WhatsApp D+1 ÷ abertos · jun→hoje"
           icon={Target}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
@@ -69,7 +65,7 @@ export function OpsLegaisEfetividadeCobrancaTab({ ano, mesFiltro }: Props) {
         <EficienciaKpiCard
           title="Efetividade no período selecionado"
           value={periodo.total > 0 ? formatPercent(periodo.pct_efetividade) : '—'}
-          hint="Cobrados D+1 ÷ títulos em aberto com prazo vencido"
+          hint="WhatsApp D+1 ÷ abertos · meses filtrados"
           meta={`Meta ${formatPercent(EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA)}`}
           atingiuMeta={
             periodo.total > 0

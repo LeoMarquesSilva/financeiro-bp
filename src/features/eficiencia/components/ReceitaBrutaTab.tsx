@@ -4,7 +4,7 @@ import type { GestaoVistaMesRow } from '@/features/receita/types/receita.types'
 import {
   EFICIENCIA_META_RECEITA_BRUTA,
   MES_INICIO_RESULTADO,
-  isMesesFiltro,
+  filtroEfetivoGestaoAVista,
   mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -23,6 +23,10 @@ export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
   const overview = data
     ? buildOverviewReceitaBruta(data.meses, data.rows, ano, mesFiltro)
     : null
+  const filtroGav = filtroEfetivoGestaoAVista(ano)
+  const overviewGestaoVista = data
+    ? buildOverviewReceitaBruta(data.meses, data.rows, ano, filtroGav)
+    : null
 
   const mesesEscopo = (data?.meses ?? []).filter(
     (m: GestaoVistaMesRow) =>
@@ -37,24 +41,17 @@ export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
       meta: EFICIENCIA_META_RECEITA_BRUTA,
     }))
 
-  const mesDestaque =
-    isMesesFiltro(mesFiltro) && mesFiltro.length === 1
-      ? mesFiltro[0]
-      : new Date().getMonth() + 1
-  const rowMesDestaque = data?.meses.find((m: GestaoVistaMesRow) => m.mes === mesDestaque)
-
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="Receita Bruta Gestão a Vista"
           value={
-            rowMesDestaque?.pctMeta != null &&
-            rowMesDestaque.mes >= MES_INICIO_RESULTADO &&
-            mesNoFiltro(rowMesDestaque.mes, mesFiltro, ano)
-              ? formatPercent(rowMesDestaque.pctMeta)
+            overviewGestaoVista?.acumulado.value != null
+              ? formatPercent(overviewGestaoVista.acumulado.value)
               : '—'
           }
+          hint="Recebido ÷ meta · jun→hoje"
           icon={TrendingUp}
           accentClass="bg-slate-100 text-slate-700"
           loading={isLoading}
@@ -66,7 +63,7 @@ export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
               ? formatPercent(overview.acumulado.value)
               : '—'
           }
-          hint="Recebido ÷ meta (Jun+)"
+          hint="Recebido ÷ meta · meses filtrados"
           meta="Meta 100%"
           atingiuMeta={
             overview?.acumulado.value != null ? overview.acumulado.value >= 100 : null

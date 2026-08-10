@@ -3,6 +3,7 @@ import { FileCheck2 } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import {
   EFICIENCIA_META_SLA_PROTOCOLO,
+  filtrarMensalGestaoAVista,
   filtrarMensalPorMesFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -45,6 +46,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
   const { data: justificativas, loading: loadingJustificativas } =
     useSlaProtocoloJustificativaFatal(ano, mesFiltro, area)
 
+  const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
   const qtdD1 = mensalFiltrado.reduce((s, m) => s + m.qtd_d1, 0)
   const qtdTotal = mensalFiltrado.reduce((s, m) => s + m.qtd_total, 0)
   const qtdFatal = mensalFiltrado.reduce((s, m) => s + m.qtd_fatal, 0)
@@ -54,8 +56,12 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
     ? mensalFiltrado[mensalFiltrado.length - 1]!.meta
     : null
 
-  const mesAtual = new Date().getMonth() + 1
-  const rowMesAtual = mensalFiltrado.find((m) => m.mes === mesAtual)
+  const qtdD1Gav = mensalGestaoVista.reduce((s, m) => s + m.qtd_d1, 0)
+  const qtdTotalGav = mensalGestaoVista.reduce((s, m) => s + m.qtd_total, 0)
+  const pctGestaoVista = qtdTotalGav > 0 ? (qtdD1Gav / qtdTotalGav) * 100 : null
+  const metaGestaoVista = mensalGestaoVista.length
+    ? mensalGestaoVista[mensalGestaoVista.length - 1]!.meta
+    : null
 
   const areaHint = area ? `Área ${area}` : undefined
 
@@ -85,11 +91,13 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="SLA de Protocolo Gestão a Vista"
-          value={rowMesAtual ? formatPercent(rowMesAtual.pct_eficiencia) : '—'}
-          hint={rowMesAtual ? `${rowMesAtual.qtd_d1} D-1 de ${rowMesAtual.qtd_total}` : 'sem dados'}
-          meta={rowMesAtual?.meta != null ? formatPercent(rowMesAtual.meta) : undefined}
+          value={pctGestaoVista != null ? formatPercent(pctGestaoVista) : '—'}
+          hint="Protocolos no prazo D-1 ÷ total · jun→hoje"
+          meta={metaGestaoVista != null ? formatPercent(metaGestaoVista) : undefined}
           atingiuMeta={
-            rowMesAtual?.meta != null ? rowMesAtual.pct_eficiencia >= rowMesAtual.meta : null
+            pctGestaoVista != null && metaGestaoVista != null
+              ? pctGestaoVista >= metaGestaoVista
+              : null
           }
           icon={FileCheck2}
           accentClass="bg-slate-100 text-slate-700"
@@ -98,7 +106,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
         <EficienciaKpiCard
           title="SLA de Protocolo no período selecionado"
           value={formatPercent(pctGeral)}
-          hint={`${qtdD1} D-1 de ${qtdTotal} CIs`}
+          hint="Protocolos no prazo D-1 ÷ total · meses filtrados"
           meta={metaAtual != null ? formatPercent(metaAtual) : undefined}
           atingiuMeta={metaAtual != null ? pctGeral >= metaAtual : null}
           icon={FileCheck2}

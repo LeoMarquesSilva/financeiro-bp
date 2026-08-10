@@ -408,6 +408,36 @@ export function filtrarMensalPorMesFiltro<T extends { mes: number }>(
 }
 
 /**
+ * Escopo fixo do card "Gestão a Vista": junho até o mês corrente (inclui mês em aberto).
+ * Não depende do filtro de meses da UI.
+ */
+export function filtroEfetivoGestaoAVista(
+  ano: number,
+  ref = new Date(),
+): number[] {
+  const anoRef = ref.getFullYear()
+  const mesCorrente = ref.getMonth() + 1
+  let fim: number
+  if (ano < anoRef) fim = 12
+  else if (ano > anoRef) return []
+  else fim = mesCorrente
+  if (fim < MES_INICIO_RESULTADO) return []
+  return Array.from(
+    { length: fim - MES_INICIO_RESULTADO + 1 },
+    (_, i) => MES_INICIO_RESULTADO + i,
+  )
+}
+
+/** Série mensal do card Gestão a Vista (junho → mês atual; ignora filtro de meses). */
+export function filtrarMensalGestaoAVista<T extends { mes: number }>(
+  rows: T[],
+  ano: number,
+  ref = new Date(),
+): T[] {
+  return filtrarMensalPorMesFiltro(rows, filtroEfetivoGestaoAVista(ano, ref), ano)
+}
+
+/**
  * Intervalo [inicio, fimExclusivo) YYYY-MM-DD para RPCs/edge (mês, resultado, semana ou ano).
  */
 export function rangePeriodoFiltro(
