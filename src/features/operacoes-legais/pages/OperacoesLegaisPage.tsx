@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import {
-  Briefcase,
   CalendarCheck2,
   FileCheck2,
   FolderKanban,
@@ -115,18 +114,7 @@ export function OperacoesLegaisPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
-            <Briefcase className="h-6 w-6 text-slate-600" />
-            Operações Legais
-          </h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Dashboard BI Operações Legais — protocolos, publicações, cadastro, desenvolvimento,
-            retenção, PDI, tarefas, financeiro, marketing e iniciativas
-          </p>
-        </div>
-
+      <header className="flex flex-wrap items-center justify-end gap-4">
         {tab !== 'marketing' && (
           <div className="flex flex-wrap items-center gap-3">
             {maisRecente && (
@@ -160,7 +148,13 @@ export function OperacoesLegaisPage() {
         )}
       </header>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)}>
+      <Tabs
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v as TabId)
+          setMesFiltro(null)
+        }}
+      >
         <div className="flex justify-center overflow-x-auto pb-1">
           <TabsList className="inline-flex h-auto flex-row items-stretch gap-0.5 p-1">
             {overviewTab ? (

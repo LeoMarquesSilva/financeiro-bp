@@ -35,6 +35,8 @@ import type {
 } from '../types/eficiencia.types'
 import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
 import { RacionalSheet } from './RacionalSheet'
+import { useInstagramMarketing } from '@/features/operacoes-legais/marketing/useInstagramMarketing'
+import { groupPostsByMonth } from '@/features/operacoes-legais/marketing/instagramAnalytics'
 
 type Props = {
   ano: number
@@ -100,6 +102,8 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
       eficienciaService.fetchOpsLegaisIniciativas(ano, null),
   })
 
+  const { data: marketingDash, isLoading: loadingMarketing } = useInstagramMarketing()
+  const marketingGoal = Math.max(1, Number(marketingDash?.monthlyGoal) || 12)
   const treinoResumos = useMemo(
     () => buildOpsTreinamentosCategorias(ativos, itens).resumos,
     [ativos, itens],
@@ -220,6 +224,41 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     return { value: pct, label: formatPercent(pct) }
   })()
 
+  const marketingPorMes = useMemo(() => {
+    const posts = (marketingDash?.posts ?? []).filter((p) =>
+      String(p.published_at ?? '').startsWith(`${ano}-`),
+    )
+    const byMonth = groupPostsByMonth(posts)
+    const map = new Map(byMonth.map((r) => [Number(r.month.slice(5, 7)), r]))
+    return Array.from({ length: 12 }, (_, i) => {
+      const mes = i + 1
+      const row = map.get(mes)
+      const qtd = row?.posts ?? 0
+      const pct = marketingGoal > 0 ? (qtd / marketingGoal) * 100 : 0
+      return { mes, qtd, pct }
+    })
+  }, [marketingDash?.posts, ano, marketingGoal])
+
+  const cellsMarketing = aplicarCelulasFiltro(
+    marketingPorMes.map((r) =>
+      r.qtd > 0
+        ? { value: r.pct, label: formatPercent(r.pct) }
+        : { value: null, label: '-' },
+    ),
+    mesFiltro,
+    ano,
+  )
+
+  const acumMarketing: HeatCell = (() => {
+    if (loadingMarketing) return { value: null, label: '…' }
+    const filtrados = filtrarMensalPorMesFiltro(marketingPorMes, mesFiltro, ano)
+    const mesesComDado = filtrados.filter((r) => r.qtd > 0)
+    if (mesesComDado.length === 0) return { value: null, label: '-' }
+    const mediaPct =
+      mesesComDado.reduce((s, r) => s + r.pct, 0) / mesesComDado.length
+    return { value: mediaPct, label: formatPercent(mediaPct) }
+  })()
+
   const mesDestaque =
     Array.isArray(mesFiltro) && mesFiltro.length === 1 ? mesFiltro[0]! : null
 
@@ -229,7 +268,8 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     loadingTreino ||
     loadingAtivos ||
     loadingPdi ||
-    loadingIniciativas
+    loadingIniciativas ||
+    loadingMarketing
 
   const handleCopiar = async () => {
     const container = copyRef.current
@@ -358,6 +398,18 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsPdi
           }
           acumulado={loadingPdi ? { value: null, label: '…' } : acumPdi}
+        />
+        <OverviewKpiHeatRow
+          title="Marketing — Posts vs meta"
+          meta={100}
+          metaLabel={`Meta: ${marketingGoal} posts/mês`}
+          mesDestaque={mesDestaque}
+          cells={
+            loadingMarketing
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsMarketing
+          }
+          acumulado={acumMarketing}
         />
         <OverviewKpiHeatRow
           title="Iniciativas Estratégicas"

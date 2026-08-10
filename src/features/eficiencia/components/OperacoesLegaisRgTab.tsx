@@ -38,6 +38,7 @@ import { OpsLegaisResponsumPanel } from './OpsLegaisResponsumPanel'
 import { RacionalSheet } from './RacionalSheet'
 import { OpsLegaisTreinamentosSection } from './OpsLegaisTreinamentosSection'
 import { OpsLegaisInconsistenciasCard } from './OpsLegaisInconsistenciasCard'
+import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 import { Avatar } from '@/shared/components/Avatar'
 import { formatDate } from '@/shared/utils/format'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
@@ -299,9 +300,15 @@ export function OperacoesLegaisRgTab({
         <div className="space-y-5">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                SLA PROTOCOLO
-              </h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  SLA PROTOCOLO
+                </h3>
+                <OverviewRacionalButton
+                  onClick={() => setRacionalAberto('ops_legais_sla_protocolo')}
+                  className="w-auto"
+                />
+              </div>
               <EficienciaEficDesvioCard
                 okLabel="D1"
                 nokLabel="PROTOCOLADO NO FATAL"
@@ -338,9 +345,15 @@ export function OperacoesLegaisRgTab({
               />
             </div>
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Eficiência Protocolo
-              </h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Eficiência Protocolo
+                </h3>
+                <OverviewRacionalButton
+                  onClick={() => setRacionalAberto('ops_legais_eficiencia_protocolo')}
+                  className="w-auto"
+                />
+              </div>
               <EficienciaEficDesvioCard
                 okLabel="Eficiência"
                 nokLabel="Inconsistência"

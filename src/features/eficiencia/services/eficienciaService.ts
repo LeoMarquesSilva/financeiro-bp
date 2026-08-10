@@ -958,6 +958,7 @@ export const eficienciaService = {
     area: string | null = null,
     mes: MesFiltroEficiencia = null,
     escopo: RacionalEscopo = 'default',
+    opts?: { somenteDesvios?: boolean },
   ): Promise<RacionalResultado> {
     if (
       indicador === 'sla_vistagem_normal' &&
@@ -986,7 +987,7 @@ export const eficienciaService = {
 
     const areaEfetiva = areaFiltroParaIndicador(indicador, area)
 
-    const query = buildRacionalBaseQuery(
+    let query = buildRacionalBaseQuery(
       cfg,
       indicador,
       ano,
@@ -994,13 +995,29 @@ export const eficienciaService = {
       mes,
       cfg.colunas.map((c) => c.key).join(','),
       escopo,
-    ).limit(RACIONAL_LIMITE + 1)
+    )
 
-    const { data, error } = await query
+    if (opts?.somenteDesvios) {
+      if (indicador === 'ops_legais_eficiencia_protocolo') {
+        query = query.not('inconsistencia_controladoria', 'is', null)
+      } else if (indicador === 'ops_legais_sla_protocolo') {
+        query = query.eq('eficiencia_sla', 'PROTOCOLADO NO FATAL')
+      } else if (indicador === 'ops_legais_pub_analise' || indicador === 'ops_legais_pub_agendamento') {
+        query = query.eq('eficiencia', 'DESVIO')
+      } else if (indicador === 'ops_legais_cadastro') {
+        query = query
+          .not('adesao_indicador', 'is', null)
+          .neq('adesao_indicador', 'SEM ADESÃO')
+      }
+    }
+
+    const { data, error } = await query.limit(RACIONAL_LIMITE + 1)
     if (error) throw error
     const linhas = (data ?? []) as unknown as Array<Record<string, unknown>>
 
-    const resumo = await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo)
+    const resumo = opts?.somenteDesvios
+      ? undefined
+      : await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo)
 
     return {
       colunas: cfg.colunas,

@@ -361,18 +361,19 @@ export function buildRacionalBaseQuery(
         .order(cfg.dataColuna, { ascending: false })
       break
     case 'ops_legais_eficiencia_protocolo':
+      // Preenchidos primeiro (NULLS LAST) — senão o limite de 500 só pega linhas OK.
       query = query
-        .order('inconsistencia_controladoria', { ascending: false })
+        .order('inconsistencia_controladoria', { ascending: false, nullsFirst: false })
         .order(cfg.dataColuna, { ascending: false })
       break
     case 'ops_legais_pub_analise':
     case 'ops_legais_pub_agendamento':
       query = query
-        .order('eficiencia', { ascending: true })
+        .order('eficiencia', { ascending: true, nullsFirst: false })
         .order(cfg.dataColuna, { ascending: false })
       break
     case 'ops_legais_cadastro':
-      // Inconsistência (DePara) = Adesão preenchida e ≠ SEM ADESÃO
+      // Inconsistência (Adesão preenchida) antes de OK/nulos.
       query = query
         .order('adesao_indicador', { ascending: false, nullsFirst: false })
         .order(cfg.dataColuna, { ascending: false })

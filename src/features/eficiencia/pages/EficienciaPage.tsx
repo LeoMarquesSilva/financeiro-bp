@@ -110,8 +110,20 @@ export function EficienciaPage() {
   const [areaOverview, setAreaOverview] = useState<string | null>(null)
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
 
-  // Overview: coordenador vê consolidado (Todas as áreas), sem slicer.
-  const areaOverviewData = access.canFilterAreas ? areaOverview : null
+  // Overview: admin/sócio filtram qualquer área; coordenador só Todas ↔ área dele.
+  const overviewAllowedAreas = access.canFilterAreas
+    ? null
+    : access.lockedArea
+      ? [access.lockedArea]
+      : []
+  const showOverviewAreaFilter =
+    access.canFilterAreas || access.profile === 'coordenador'
+  const areaOverviewData =
+    access.profile === 'coordenador' &&
+    areaOverview != null &&
+    areaOverview !== access.lockedArea
+      ? null
+      : areaOverview
   const tabsVisiveis = visibleEficienciaTabs(areaOverviewData)
   const { data: overview, loading: loadingOverview } = useEficienciaOverview(
     ano,
@@ -129,8 +141,12 @@ export function EficienciaPage() {
   const row2 = demais.slice(ROW1_AFTER_OVERVIEW)
 
   const handleAreaChange = (area: string | null) => {
-    if (!access.canFilterAreas) return
-    setAreaOverview(area)
+    if (access.canFilterAreas) {
+      setAreaOverview(area)
+      return
+    }
+    if (access.profile !== 'coordenador') return
+    if (area === null || area === access.lockedArea) setAreaOverview(area)
   }
 
   if (authLoading) {
@@ -189,8 +205,9 @@ export function EficienciaPage() {
             area={areaOverviewData}
             onAreaChange={handleAreaChange}
             mesFiltro={mesFiltro}
-            showAreaFilter={access.canFilterAreas}
-            allowTodasAreas={access.canFilterAreas}
+            showAreaFilter={showOverviewAreaFilter}
+            allowTodasAreas
+            allowedAreas={overviewAllowedAreas}
           />
         </TabsContent>
 

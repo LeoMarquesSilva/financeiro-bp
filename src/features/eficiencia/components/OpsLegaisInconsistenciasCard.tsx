@@ -205,7 +205,9 @@ export function OpsLegaisInconsistenciasCard({
     queryKey: ['eficiencia', 'ops-desvios', indicador, ano, mesFiltro],
     enabled,
     queryFn: async () => {
-      const result = await eficienciaService.fetchRacional(indicador, ano, null, mesFiltro)
+      const result = await eficienciaService.fetchRacional(indicador, ano, null, mesFiltro, 'default', {
+        somenteDesvios: true,
+      })
       const mapped: MappedDesvio[] = []
       for (const row of result.linhas) {
         const d = mapDesvio(indicador, row)
@@ -311,8 +313,13 @@ export function OpsLegaisInconsistenciasCard({
                               {toPriMaiuscula(d.motivo)}
                             </td>
                             {showCheck ? (
-                              <td className="px-2 py-1 text-slate-600">
-                                {d.check ? toPriMaiuscula(d.check) : '—'}
+                              <td
+                                className="max-w-[9rem] px-2 py-1 text-slate-600"
+                                title={d.check ?? undefined}
+                              >
+                                <span className="line-clamp-2 break-words">
+                                  {d.check ? toPriMaiuscula(d.check) : '—'}
+                                </span>
                               </td>
                             ) : null}
                           </tr>

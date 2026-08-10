@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { Fragment, useMemo, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   CheckCircle2,
@@ -56,10 +56,12 @@ function TituloLink({
   nome,
   url,
   className,
+  onClick,
 }: {
   nome: string
   url: string | null
   className?: string
+  onClick?: (e: MouseEvent) => void
 }) {
   if (url) {
     return (
@@ -67,6 +69,7 @@ function TituloLink({
         href={url}
         target="_blank"
         rel="noreferrer"
+        onClick={onClick}
         className={cn('font-semibold text-slate-900 hover:underline', className)}
       >
         {nome}
@@ -173,11 +176,22 @@ function KpiShell({
   )
 }
 
+function projetoTemAtividadeNoFiltro(
+  p: OpsLegaisIniciativasProjeto,
+  mesFiltro: MesFiltroEficiencia,
+  ano: number,
+): boolean {
+  if (projetoNoFiltro(p.data, mesFiltro, ano)) return true
+  return p.subtarefas.some((s) => projetoNoFiltro(s.data, mesFiltro, ano))
+}
+
 function ProjetosRealizadosPanel({
   loading,
   painel,
+  mesFiltroAtivo,
 }: {
   loading: boolean
+  mesFiltroAtivo: boolean
   painel:
     | {
         projetos_em_andamento: number
@@ -185,15 +199,32 @@ function ProjetosRealizadosPanel({
         subtarefas_concluidas_periodo: number
         concluidos: OpsLegaisIniciativasProjeto[]
         semana: OpsLegaisIniciativasItemSemana[]
+        semana_por_tarefa?: OpsLegaisIniciativasProjeto[]
         andamento: OpsLegaisIniciativasProjeto[]
       }
     | undefined
 }) {
   const [view, setView] = useState<PainelView>('concluidos')
   const qtdAndamento = painel?.projetos_em_andamento ?? 0
+  const qtdConcluidos = painel?.concluidos.length ?? 0
+  const qtdSubConcluidasFiltro = useMemo(
+    () =>
+      (painel?.concluidos ?? []).reduce(
+        (s, p) => s + p.subtarefas.filter((t) => t.status === 'concluido').length,
+        0,
+      ),
+    [painel?.concluidos],
+  )
+  const semanaRows = painel?.semana_por_tarefa?.length
+    ? painel.semana_por_tarefa
+    : []
 
   const tabs: { id: PainelView; label: string; icon: typeof CheckCircle2 }[] = [
-    { id: 'concluidos', label: 'Concluídos', icon: CheckCircle2 },
+    {
+      id: 'concluidos',
+      label: `Concluídos (${loading ? '…' : qtdConcluidos})`,
+      icon: CheckCircle2,
+    },
     { id: 'semana', label: 'Semana passada', icon: CalendarDays },
     {
       id: 'andamento',
@@ -233,18 +264,13 @@ function ProjetosRealizadosPanel({
       </div>
 
       <p className="text-[10px] text-slate-400">
-        🔄{' '}
-        <b className="text-slate-900">{loading ? '…' : (painel?.projetos_em_andamento ?? 0)}</b>{' '}
-        projetos em andamento · 📋{' '}
-        <b className="text-slate-900">
-          {loading ? '…' : (painel?.tarefas_sob_em_andamento ?? 0)}
-        </b>{' '}
-        tarefas sob eles (abertas ou concluídas) · ✅{' '}
-        <b className="text-slate-900">
-          {loading ? '…' : (painel?.subtarefas_concluidas_periodo ?? 0)}
-        </b>{' '}
-        subtarefas concluídas no período ·{' '}
-        <span className="text-slate-400">não afetado pelo filtro de data de conclusão</span>
+        ✅{' '}
+        <b className="text-slate-900">{loading ? '…' : qtdConcluidos}</b> tarefa
+        {qtdConcluidos === 1 ? '' : 's'} com conclusão
+        {mesFiltroAtivo ? ' no período selecionado' : ' no ano'} · ↳{' '}
+        <b className="text-slate-900">{loading ? '…' : qtdSubConcluidasFiltro}</b>{' '}
+        subtarefas concluídas nessas tarefas · 🔄{' '}
+        <b className="text-slate-900">{loading ? '…' : qtdAndamento}</b> em andamento
       </p>
 
       <hr className="border-0 border-t border-slate-200" />
@@ -257,9 +283,16 @@ function ProjetosRealizadosPanel({
             <div className="h-8 animate-pulse rounded bg-slate-100" />
           </div>
         ) : view === 'concluidos' ? (
-          <TabelaConcluidos rows={painel?.concluidos ?? []} />
+          <TabelaConcluidos rows={painel?.concluidos ?? []} emptyLabel="Nenhuma tarefa concluída no período." />
         ) : view === 'semana' ? (
-          <TabelaSemana rows={painel?.semana ?? []} />
+          semanaRows.length > 0 ? (
+            <TabelaConcluidos
+              rows={semanaRows}
+              emptyLabel="Nenhuma tarefa concluída na semana passada."
+            />
+          ) : (
+            <TabelaSemana rows={painel?.semana ?? []} />
+          )
         ) : (
           <TabelaAndamento rows={painel?.andamento ?? []} />
         )}
@@ -268,11 +301,19 @@ function ProjetosRealizadosPanel({
   )
 }
 
-function TabelaConcluidos({ rows }: { rows: OpsLegaisIniciativasProjeto[] }) {
+function TabelaConcluidos({
+  rows,
+  emptyLabel = 'Nenhuma tarefa concluída no período.',
+}: {
+  rows: OpsLegaisIniciativasProjeto[]
+  emptyLabel?: string
+}) {
+  const [abertoId, setAbertoId] = useState<string | null>(null)
+
   if (!rows.length) {
     return (
       <p className="px-4 py-8 text-center text-[11px] text-slate-400">
-        Nenhum projeto concluído no período.
+        {emptyLabel}
       </p>
     )
   }
@@ -288,7 +329,7 @@ function TabelaConcluidos({ rows }: { rows: OpsLegaisIniciativasProjeto[] }) {
       <thead className="sticky top-0 z-[1]">
         <tr className="bg-slate-50 text-slate-600">
           <th className="border-b border-slate-200 px-1.5 py-1.5 text-left font-semibold">
-            Título
+            Tarefa
           </th>
           <th className="border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold">
             Tipo
@@ -305,34 +346,69 @@ function TabelaConcluidos({ rows }: { rows: OpsLegaisIniciativasProjeto[] }) {
         </tr>
       </thead>
       <tbody>
-        {rows.map((r) => (
-          <Fragment key={r.id}>
-            <tr>
-              <td className="px-1.5 py-1.5 align-top">
-                <TituloLink nome={r.nome} url={r.url} className="text-[11px]" />
-              </td>
-              <td className="px-1.5 py-1.5 text-center align-top whitespace-nowrap text-blue-700">
-                {r.tipo || '—'}
-              </td>
-              <td className="px-1.5 py-1.5 text-center align-top whitespace-nowrap text-emerald-600">
-                {r.extensao || '—'}
-              </td>
-              <td className="px-1.5 py-1.5 text-center align-top whitespace-nowrap text-slate-900">
-                {respLabel(r.responsavel)}
-              </td>
-              <td className="px-1.5 py-1.5 text-center align-top whitespace-nowrap text-slate-500">
-                {r.data ? formatDataBr(r.data) : 'em andamento'}
-              </td>
-            </tr>
-            {r.subtarefas.length > 0 && (
-              <tr>
-                <td colSpan={5} className="p-0">
-                  <SubChips items={r.subtarefas} mode="concluidos" />
+        {rows.map((r) => {
+          const subsConcluidas = r.subtarefas.filter((s) => s.status === 'concluido')
+          const aberto = abertoId === r.id
+          const temSubs = subsConcluidas.length > 0
+          return (
+            <Fragment key={r.id}>
+              <tr
+                className={cn(temSubs && 'cursor-pointer hover:bg-slate-50/80')}
+                onClick={() => {
+                  if (!temSubs) return
+                  setAbertoId(aberto ? null : r.id)
+                }}
+              >
+                <td className="px-1.5 py-1.5 align-top">
+                  <div className="flex items-start gap-1">
+                    {temSubs ? (
+                      <span className="mt-0.5 text-[10px] text-slate-400" aria-hidden>
+                        {aberto ? '▾' : '▸'}
+                      </span>
+                    ) : (
+                      <span className="mt-0.5 w-2.5" aria-hidden />
+                    )}
+                    <div className="min-w-0">
+                      <TituloLink
+                        nome={r.nome}
+                        url={r.url}
+                        className="text-[11px]"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      {temSubs ? (
+                        <p className="text-[9px] text-slate-400">
+                          {subsConcluidas.length} subtarefa
+                          {subsConcluidas.length === 1 ? '' : 's'} concluída
+                          {subsConcluidas.length === 1 ? '' : 's'}
+                          {!aberto ? ' · clique para ver' : ''}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-1.5 py-1.5 text-center align-top whitespace-nowrap text-blue-700">
+                  {r.tipo || '—'}
+                </td>
+                <td className="px-1.5 py-1.5 text-center align-top whitespace-nowrap text-emerald-600">
+                  {r.extensao || '—'}
+                </td>
+                <td className="px-1.5 py-1.5 text-center align-top text-slate-900">
+                  <span className="line-clamp-2 break-words">{respLabel(r.responsavel)}</span>
+                </td>
+                <td className="px-1.5 py-1.5 text-center align-top whitespace-nowrap text-slate-500">
+                  {r.data ? formatDataBr(r.data) : 'em andamento'}
                 </td>
               </tr>
-            )}
-          </Fragment>
-        ))}
+              {aberto && temSubs ? (
+                <tr>
+                  <td colSpan={5} className="p-0">
+                    <SubChips items={subsConcluidas} mode="concluidos" />
+                  </td>
+                </tr>
+              ) : null}
+            </Fragment>
+          )
+        })}
       </tbody>
     </table>
   )
@@ -511,7 +587,7 @@ export function OpsLegaisIniciativasTab({ ano, mesFiltro }: Props) {
     return {
       ...painel,
       concluidos: painel.concluidos.filter((p: OpsLegaisIniciativasProjeto) =>
-        projetoNoFiltro(p.data, mesFiltro, ano),
+        projetoTemAtividadeNoFiltro(p, mesFiltro, ano),
       ),
     }
   }, [d?.painel, mesFiltro, ano])
@@ -623,7 +699,11 @@ export function OpsLegaisIniciativasTab({ ano, mesFiltro }: Props) {
         />
       </div>
 
-      <ProjetosRealizadosPanel loading={loading} painel={painelFiltrado} />
+      <ProjetosRealizadosPanel
+        loading={loading}
+        painel={painelFiltrado}
+        mesFiltroAtivo={mesFiltro != null}
+      />
     </div>
   )
 }

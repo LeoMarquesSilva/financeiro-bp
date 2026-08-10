@@ -25,7 +25,11 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-type ClickUpAssignee = { username?: string; email?: string }
+type ClickUpAssignee = {
+  username?: string | null
+  email?: string | null
+  initials?: string | null
+}
 type ClickUpTask = {
   id: string
   name?: string
@@ -38,7 +42,8 @@ type ClickUpTask = {
   date_updated?: string | number | null
   date_closed?: string | number | null
   date_done?: string | number | null
-  url?: string
+  url?: string | null
+  creator?: { username?: string | null; email?: string | null } | null
 }
 
 type SubtarefaOut = {
@@ -83,6 +88,26 @@ function normStatus(s: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase()
+}
+
+/** Status de conclusão no ClickUp (lista Ops Legais / BI). */
+function isConcluidoStatus(t: ClickUpTask): boolean {
+  const n = normStatus(statusName(t))
+  return (
+    n === 'concluido' ||
+    n === 'complete' ||
+    n === 'completed' ||
+    n === 'closed' ||
+    n === 'done' ||
+    n === 'fechado' ||
+    n === 'fechados'
+  )
+}
+
+function maxIso(a: string | null, b: string | null): string | null {
+  if (!a) return b
+  if (!b) return a
+  return a >= b ? a : b
 }
 
 function msToIsoDate(ms: string | number | null | undefined): string | null {
@@ -143,11 +168,19 @@ function classifyTags(tags: string[]): { tipo: string; extensao: string } {
   return { tipo, extensao: extensao.join(', ') }
 }
 
+function assigneeLabel(a: ClickUpAssignee): string {
+  return (a.username || a.email || a.initials || '').trim()
+}
+
 function responsaveis(t: ClickUpTask): string {
-  const names = (t.assignees ?? [])
-    .map((a) => (a.username || a.email || '').trim())
-    .filter(Boolean)
-  return [...new Set(names)].join(', ')
+  const names = (t.assignees ?? []).map(assigneeLabel).filter(Boolean)
+  if (names.length) return [...new Set(names)].join(', ')
+  const creator = t.creator
+  if (creator) {
+    const c = (creator.username || creator.email || '').trim()
+    if (c) return c
+  }
+  return ''
 }
 
 function todayBrazil(): string {
@@ -242,7 +275,8 @@ function mapSubtarefa(t: ClickUpTask): SubtarefaOut {
     nome: t.name ?? '',
     responsavel: responsaveis(t),
     data: taskDate(t),
-    status: normStatus(statusName(t)),
+    // UI filtra por 'concluido' — normaliza aliases do ClickUp
+    status: isConcluidoStatus(t) ? 'concluido' : normStatus(statusName(t)),
   }
 }
 
@@ -251,18 +285,87 @@ function buildProjeto(t: ClickUpTask, children: ClickUpTask[]): ProjetoOut {
   const subs = dedupeById(children)
     .map(mapSubtarefa)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  let responsavel = responsaveis(t)
+  if (!responsavel) {
+    responsavel = [...new Set(subs.map((s) => s.responsavel).filter(Boolean))].join(', ')
+  }
+  const dataSubs = subs.reduce<string | null>((acc, s) => maxIso(acc, s.data), null)
   return {
     id: t.id,
     nome: t.name ?? '',
     url: t.url ?? null,
     tipo,
     extensao,
-    responsavel: responsaveis(t),
-    data: taskDate(t),
+    responsavel,
+    data: maxIso(taskDate(t), dataSubs),
     subtarefas: subs,
     total_sub: subs.length,
     sub_concluidas: subs.filter((s) => s.status === 'concluido').length,
   }
+}
+
+/**
+ * Agrupa pelo título da TAREFA (não da subtarefa).
+ * - Folha concluída → linha = pai (tarefa), com todas as subtarefas concluídas.
+ * - Item com filhos concluído no período → linha própria (não sobe para o projeto).
+ */
+function buildPainelPorTarefa(
+  all: ClickUpTask[],
+  byId: Map<string, ClickUpTask>,
+  childrenOf: Map<string, ClickUpTask[]>,
+  inicio: string,
+  fim: string,
+  inclusive: boolean,
+): ProjetoOut[] {
+  const inRange = (iso: string | null) =>
+    inclusive ? inInclusive(iso, inicio, fim) : inPeriod(iso, inicio, fim)
+
+  const tarefaIds = new Set<string>()
+
+  for (const t of all) {
+    if (!isConcluidoStatus(t) || !inRange(taskDate(t))) continue
+    const hasChildren = (childrenOf.get(t.id) ?? []).length > 0
+    if (hasChildren) {
+      tarefaIds.add(t.id)
+      continue
+    }
+    const p = parentId(t)
+    if (p) {
+      tarefaIds.add(p)
+    } else {
+      tarefaIds.add(t.id)
+    }
+  }
+
+  const out: ProjetoOut[] = []
+  for (const tarefaId of tarefaIds) {
+    const tarefa = byId.get(tarefaId)
+    if (!tarefa) continue
+
+    const todasSubsConcluidas = dedupeById(childrenOf.get(tarefaId) ?? []).filter(
+      isConcluidoStatus,
+    )
+
+    let tagsSource = tarefa
+    let walk: ClickUpTask | undefined = tarefa
+    const seen = new Set<string>()
+    while (walk) {
+      const pid = parentId(walk)
+      if (!pid || seen.has(pid)) break
+      seen.add(pid)
+      const parent = byId.get(pid)
+      if (!parent) break
+      tagsSource = parent
+      walk = parent
+    }
+    const { tipo, extensao } = classifyTags(tagNames(tagsSource))
+    const projeto = buildProjeto(tarefa, todasSubsConcluidas)
+    if (!projeto.tipo && tipo) projeto.tipo = tipo
+    if (!projeto.extensao && extensao) projeto.extensao = extensao
+    out.push(projeto)
+  }
+
+  return out.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
 Deno.serve(async (req: Request) => {
@@ -304,7 +407,7 @@ Deno.serve(async (req: Request) => {
 
     const topLevel = all.filter(isTopLevel)
     const concluidosPeriodo = topLevel.filter((t) => {
-      return normStatus(statusName(t)) === 'concluido' && inPeriod(taskDate(t), inicio, fim)
+      return isConcluidoStatus(t) && inPeriod(taskDate(t), inicio, fim)
     })
 
     const unicos = concluidosPeriodo
@@ -320,7 +423,10 @@ Deno.serve(async (req: Request) => {
 
     const semana = rangeSemanaPassada()
 
-    const emAndamento = topLevel.filter((t) => normStatus(statusName(t)) === 'in progress')
+    const emAndamento = topLevel.filter((t) => {
+      const n = normStatus(statusName(t))
+      return n === 'in progress' || n === 'em andamento'
+    })
     const idsAndamento = new Set(emAndamento.map((t) => t.id))
     let tarefasSobEmAndamento = 0
     for (const id of idsAndamento) {
@@ -330,39 +436,59 @@ Deno.serve(async (req: Request) => {
     const subtarefasConcluidasPeriodo = all.filter((t) => {
       const p = parentId(t)
       if (!p) return false
-      return (
-        normStatus(statusName(t)) === 'concluido' &&
-        inInclusive(taskDate(t), semana.inicio, semana.fim)
-      )
+      return isConcluidoStatus(t) && inInclusive(taskDate(t), semana.inicio, semana.fim)
     }).length
 
-    const concluidosPainel: ProjetoOut[] = unicos
-      .map((t) => buildProjeto(t, childrenOf.get(t.id) ?? []))
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    // Painel: agrega pela TAREFA (pai), com todas as subtarefas concluídas
+    const concluidosPainel = buildPainelPorTarefa(
+      all,
+      byId,
+      childrenOf,
+      inicio,
+      fim,
+      false,
+    )
 
-    const itensSemana: ItemSemanaOut[] = all
-      .filter(
-        (t) =>
-          normStatus(statusName(t)) === 'concluido' &&
-          inInclusive(taskDate(t), semana.inicio, semana.fim),
-      )
-      .map((t) => {
-        const p = parentId(t)
-        const pai = p ? byId.get(p) : null
-        return {
-          id: t.id,
-          nome: t.name ?? '',
-          url: t.url ?? null,
-          tipo: p ? ('Subtarefa' as const) : ('Projeto' as const),
-          pai_titulo: pai?.name ?? '',
-          responsavel: responsaveis(t),
-          data: taskDate(t),
-        }
-      })
-      .sort((a, b) => (a.data ?? '').localeCompare(b.data ?? ''))
+    const semanaAgrupada = buildPainelPorTarefa(
+      all,
+      byId,
+      childrenOf,
+      semana.inicio,
+      semana.fim,
+      true,
+    )
+
+    // Compat: lista plana da semana (opcional) — UI usa agrupado em `concluidos`-like
+    const itensSemana: ItemSemanaOut[] = semanaAgrupada.flatMap((p) => {
+      if (p.subtarefas.length === 0) {
+        return [
+          {
+            id: p.id,
+            nome: p.nome,
+            url: p.url,
+            tipo: 'Projeto' as const,
+            pai_titulo: '',
+            responsavel: p.responsavel,
+            data: p.data,
+          },
+        ]
+      }
+      return p.subtarefas.map((s) => ({
+        id: s.id,
+        nome: s.nome,
+        url: null,
+        tipo: 'Subtarefa' as const,
+        pai_titulo: p.nome,
+        responsavel: s.responsavel,
+        data: s.data,
+      }))
+    })
 
     const andamentoPainel: ProjetoOut[] = emAndamento
-      .map((t) => buildProjeto(t, childrenOf.get(t.id) ?? []))
+      .map((t) => {
+        const subs = dedupeById(childrenOf.get(t.id) ?? [])
+        return buildProjeto(t, subs)
+      })
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 
     return jsonResponse({
@@ -404,6 +530,7 @@ Deno.serve(async (req: Request) => {
         semana_fim: semana.fim,
         concluidos: concluidosPainel,
         semana: itensSemana,
+        semana_por_tarefa: semanaAgrupada,
         andamento: andamentoPainel,
       },
     })

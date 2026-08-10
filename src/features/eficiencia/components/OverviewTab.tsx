@@ -39,7 +39,7 @@ type Props = {
   /** Áreas visíveis no filtro (null = todas). */
   allowedAreas?: readonly string[] | null
   allowTodasAreas?: boolean
-  /** Coordenador: Overview consolidado sem slicer de área. */
+  /** Exibir slicer de área (admin/sócio: todas; coordenador: Todas + área dele). */
   showAreaFilter?: boolean
 }
 

@@ -16,7 +16,7 @@ function formatInt(n: number): string {
   return n.toLocaleString('pt-BR')
 }
 
-/** Card estilo KPI_HTML_ANALISEPUB — contagem OK × problema + % e total. */
+/** Card estilo KPI_HTML_ANALISEPUB — % em destaque; quantidade em secundário. */
 export function EficienciaEficDesvioCard({
   title = 'Eficiência x Desvio',
   okLabel,
@@ -52,20 +52,24 @@ export function EficienciaEficDesvioCard({
         <>
           <div className="flex items-center justify-between gap-3">
             <div className="text-[13px] text-slate-700">{okLabel}</div>
-            <div className="text-right text-sm font-bold tabular-nums text-emerald-600">
-              {formatInt(qtdOk)}{' '}
-              <span className="text-[11px] font-normal text-slate-500">
-                ({formatPercent(pctOk)})
-              </span>
+            <div className="text-right">
+              <div className="text-xl font-bold tabular-nums text-emerald-600">
+                {formatPercent(pctOk)}
+              </div>
+              <div className="text-[11px] font-bold tabular-nums text-slate-500">
+                {formatInt(qtdOk)} de {formatInt(total)}
+              </div>
             </div>
           </div>
           <div className="flex items-center justify-between gap-3">
             <div className="text-[13px] text-slate-700">{nokLabel}</div>
-            <div className="text-right text-sm font-bold tabular-nums text-red-600">
-              {formatInt(qtdNok)}{' '}
-              <span className="text-[11px] font-normal text-slate-500">
-                ({formatPercent(pctNok)})
-              </span>
+            <div className="text-right">
+              <div className="text-xl font-bold tabular-nums text-red-600">
+                {formatPercent(pctNok)}
+              </div>
+              <div className="text-[11px] font-bold tabular-nums text-slate-500">
+                {formatInt(qtdNok)} de {formatInt(total)}
+              </div>
             </div>
           </div>
           <div className="mt-1.5 text-xs text-slate-700">

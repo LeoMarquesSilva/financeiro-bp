@@ -199,6 +199,8 @@ export interface OpsLegaisIniciativasPainel {
   semana_fim: string
   concluidos: OpsLegaisIniciativasProjeto[]
   semana: OpsLegaisIniciativasItemSemana[]
+  /** Semana passada agregada por tarefa (mesma forma de `concluidos`). */
+  semana_por_tarefa?: OpsLegaisIniciativasProjeto[]
   andamento: OpsLegaisIniciativasProjeto[]
 }
 
