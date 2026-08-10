@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import {
   CartesianGrid,
   LabelList,
@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { LineChart as LineChartIcon } from 'lucide-react'
+import { LineChart as LineChartIcon, Trophy } from 'lucide-react'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import { formatPercent } from '@/shared/utils/format'
 import { toPriMaiuscula } from '../utils/textFormat'
@@ -121,6 +121,25 @@ function EvolucaoPointLabel(props: {
   )
 }
 
+function resolveMelhorPonto(data: EvolucaoPoint[]): { label: string; valor: number } | null {
+  // Precisa de 2+ pontos para “melhor mês” fazer sentido (ex.: semana única some).
+  const validos = data
+    .map((d, index) => ({ d, index, valor: Number(d.valor) }))
+    .filter((x) => Number.isFinite(x.valor))
+  if (validos.length < 2) return null
+
+  let best = validos[0]!
+  for (const cur of validos.slice(1)) {
+    if (cur.valor > best.valor || (cur.valor === best.valor && cur.index > best.index)) {
+      best = cur
+    }
+  }
+  return {
+    label: best.d.label ?? MESES_LABEL[best.d.mes - 1] ?? String(best.d.mes),
+    valor: best.valor,
+  }
+}
+
 export function EficienciaEvolucaoChart({
   title,
   subtitle,
@@ -131,6 +150,7 @@ export function EficienciaEvolucaoChart({
 }: Props) {
   const chartExportRef = useRef<HTMLDivElement>(null)
   const pointCount = data.length
+  const melhor = useMemo(() => resolveMelhorPonto(data), [data])
 
   const metaLinha =
     metaFixa ??
@@ -168,6 +188,14 @@ export function EficienciaEvolucaoChart({
 
       {/* ref no wrapper; data-chart-plot no filho — copyChartImage usa querySelector nos descendentes */}
       <div ref={chartExportRef} className="w-full">
+        {melhor ? (
+          <div className="mb-2 flex justify-end">
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+              <Trophy className="h-3 w-3 shrink-0" aria-hidden />
+              Melhor mês: {melhor.label} · {formatPercent(melhor.valor)}
+            </span>
+          </div>
+        ) : null}
         <div data-chart-plot className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%" minHeight={300}>
             <LineChart data={chartData} margin={{ left: 4, right: 20, top: 28, bottom: 8 }}>

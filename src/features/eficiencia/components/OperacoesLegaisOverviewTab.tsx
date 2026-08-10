@@ -7,15 +7,18 @@ import { copyOverviewKpiCardsToClipboard } from '@/shared/utils/copyChartImage'
 import { Button } from '@/components/ui/button'
 import {
   EFICIENCIA_AREA_OPS_LEGAIS,
+  EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA,
   EFICIENCIA_META_OPS_EFICIENCIA,
   EFICIENCIA_META_OPS_PUBLICACOES,
   EFICIENCIA_META_OPS_SLA_PROTOCOLO,
   filtrarMensalPorMesFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
+import { useCobrancaKpiRows } from '@/features/cobranca/hooks/useWhatsapp'
 import { useOpsLegaisRg, useTreinamentos, useTurnover } from '../hooks/useEficiencia'
 import { eficienciaService } from '../services/eficienciaService'
 import { buildOpsTreinamentosCategorias } from '../utils/opsTreinamentosCategorias'
+import { serieMensalEfetividade } from '../utils/opsEfetividadeCobranca'
 import { aplicarCelulasFiltro } from '../utils/overviewFinanceiroKpis'
 import { toPriMaiuscula } from '../utils/textFormat'
 import type { RacionalIndicador } from '../types/eficiencia.types'
@@ -68,6 +71,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     queryKey: ['eficiencia', 'ops-turnover-ativos', ano],
     queryFn: () => eficienciaService.fetchTurnoverAtivosArea(ano, EFICIENCIA_AREA_OPS_LEGAIS),
   })
+  const { rows: cobrancaRows, loading: loadingEfetividade } = useCobrancaKpiRows()
 
   const treinoResumos = useMemo(
     () => buildOpsTreinamentosCategorias(ativos, itens).resumos,
@@ -75,9 +79,15 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   )
   const equipeResumo = treinoResumos.find((r) => r.categoria === 'Equipe')
 
+  const efetividadeMensal = useMemo(
+    () => serieMensalEfetividade(cobrancaRows, ano),
+    [cobrancaRows, ano],
+  )
+
   const protFiltrado = filtrarMensalPorMesFiltro(protocoloMensal, mesFiltro, ano)
   const analiseFiltrado = filtrarMensalPorMesFiltro(publicacoesAnalise, mesFiltro, ano)
   const agendaFiltrado = filtrarMensalPorMesFiltro(publicacoesAgendamento, mesFiltro, ano)
+  const efetividadeFiltrado = filtrarMensalPorMesFiltro(efetividadeMensal, mesFiltro, ano)
 
   const cellsSla = aplicarCelulasFiltro(
     buildCells(protocoloMensal, (r) => Number(r.pct_d1 ?? 0)),
@@ -99,6 +109,11 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     mesFiltro,
     ano,
   )
+  const cellsEfetividade = aplicarCelulasFiltro(
+    buildCells(efetividadeMensal, (r) => Number(r.pct_efetividade ?? 0)),
+    mesFiltro,
+    ano,
+  )
 
   const acumSla = somaRazaoPct(
     protFiltrado.map((m) => Number(m.qtd_d1 ?? 0)),
@@ -115,6 +130,10 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   const acumAgenda = somaRazaoPct(
     agendaFiltrado.map((m) => Number(m.qtd_eficiencia ?? 0)),
     agendaFiltrado.map((m) => Number(m.total ?? 0)),
+  )
+  const acumEfetividade = somaRazaoPct(
+    efetividadeFiltrado.map((m) => Number(m.cobrados_d1 ?? 0)),
+    efetividadeFiltrado.map((m) => Number(m.total ?? 0)),
   )
 
   const cellsAnual: HeatCell[] = Array.from({ length: 12 }, () => ({
@@ -136,7 +155,8 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   const mesDestaque =
     Array.isArray(mesFiltro) && mesFiltro.length === 1 ? mesFiltro[0]! : null
 
-  const busy = loading || loadingTurn || loadingTreino || loadingAtivos
+  const busy =
+    loading || loadingTurn || loadingTreino || loadingAtivos || loadingEfetividade
 
   const handleCopiar = async () => {
     const container = copyRef.current
@@ -227,6 +247,19 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           onRacionalClick={() => setRacionalAberto('ops_legais_pub_agendamento')}
         />
         <OverviewKpiHeatRow
+          title="Efetividade na Cobrança Inicial"
+          meta={EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA}
+          mesDestaque={mesDestaque}
+          cells={
+            loadingEfetividade
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsEfetividade
+          }
+          acumulado={
+            loadingEfetividade ? { value: null, label: '…' } : acumEfetividade
+          }
+        />
+        <OverviewKpiHeatRow
           title="Desenvolvimento Equipe"
           meta={100}
           metaLabel={
@@ -249,7 +282,9 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
       </div>
 
       <p className="text-center text-[11px] text-slate-400">
-        {toPriMaiuscula('Operações Legais · metas 98% nos indicadores de protocolo e publicação')}
+        {toPriMaiuscula(
+          'Operações Legais · metas 98% em protocolo/publicação · cobrança inicial meta 100%',
+        )}
       </p>
 
       <RacionalSheet

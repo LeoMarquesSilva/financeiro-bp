@@ -15,6 +15,8 @@ type Props = {
   onChange: (mes: MesFiltroEficiencia) => void
   /** Filtros de semana (Ops Legais). Default true. */
   showSemanas?: boolean
+  /** Botão "Resultado" (jun+ fechados). Default true. */
+  showResultado?: boolean
 }
 
 const BTN =
@@ -22,9 +24,15 @@ const BTN =
 const BTN_ON = 'border-slate-800 bg-slate-800 text-white shadow-sm'
 const BTN_OFF = 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
 
-export function MesFilterButtons({ value, onChange, showSemanas = true }: Props) {
-  const valueEfetivo =
-    !showSemanas && isSemanaFiltro(value) ? null : value
+export function MesFilterButtons({
+  value,
+  onChange,
+  showSemanas = true,
+  showResultado = true,
+}: Props) {
+  let valueEfetivo: MesFiltroEficiencia = value
+  if (!showSemanas && isSemanaFiltro(valueEfetivo)) valueEfetivo = null
+  if (!showResultado && valueEfetivo === 'resultado') valueEfetivo = null
 
   return (
     <div className="flex w-full flex-wrap items-center justify-center gap-2">
@@ -37,15 +45,17 @@ export function MesFilterButtons({ value, onChange, showSemanas = true }: Props)
       >
         {toPriMaiuscula('Todos os meses')}
       </button>
-      <button
-        type="button"
-        onClick={() => onChange('resultado')}
-        className={cn(BTN, valueEfetivo === 'resultado' ? BTN_ON : BTN_OFF)}
-        aria-pressed={valueEfetivo === 'resultado'}
-        title="Junho até o último mês fechado — exclui o mês corrente"
-      >
-        {toPriMaiuscula('Resultado')}
-      </button>
+      {showResultado ? (
+        <button
+          type="button"
+          onClick={() => onChange('resultado')}
+          className={cn(BTN, valueEfetivo === 'resultado' ? BTN_ON : BTN_OFF)}
+          aria-pressed={valueEfetivo === 'resultado'}
+          title="Junho até o último mês fechado — exclui o mês corrente"
+        >
+          {toPriMaiuscula('Resultado')}
+        </button>
+      ) : null}
       {showSemanas ? (
         <>
           <button

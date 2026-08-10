@@ -6,6 +6,7 @@ import {
   FolderKanban,
   GraduationCap,
   LayoutDashboard,
+  MessageCircle,
   Newspaper,
   RefreshCcw,
   UserMinus,
@@ -16,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MesFilterButtons } from '@/features/eficiencia/components/MesFilterButtons'
 import { OperacoesLegaisOverviewTab } from '@/features/eficiencia/components/OperacoesLegaisOverviewTab'
 import { OperacoesLegaisRgTab } from '@/features/eficiencia/components/OperacoesLegaisRgTab'
+import { OpsLegaisEfetividadeCobrancaTab } from '@/features/eficiencia/components/OpsLegaisEfetividadeCobrancaTab'
 import { useEficienciaOverview } from '@/features/eficiencia/hooks/useEficiencia'
 import type { MesFiltroEficiencia } from '@/features/eficiencia/constants'
 import type { UltimaAtualizacaoRow } from '@/features/eficiencia/types/eficiencia.types'
@@ -36,6 +38,7 @@ type TabId =
   | 'publicacoes'
   | 'tarefas'
   | 'cadastro'
+  | 'cobranca'
   | 'treinamentos'
   | 'turnover'
 
@@ -45,6 +48,7 @@ const TABS: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'publicacoes', label: 'SLA Publicações', icon: Newspaper },
   { id: 'tarefas', label: 'Tarefas', icon: CalendarCheck2 },
   { id: 'cadastro', label: 'Cadastro', icon: FolderKanban },
+  { id: 'cobranca', label: 'Cobrança', icon: MessageCircle },
   { id: 'treinamentos', label: 'Treinamentos', icon: GraduationCap },
   { id: 'turnover', label: 'Turnover', icon: UserMinus },
 ]
@@ -80,7 +84,7 @@ export function OperacoesLegaisPage() {
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
             Dashboard BI Operações Legais — overview, protocolos, publicações, tarefas, cadastro,
-            treinamentos e turnover
+            cobrança, treinamentos e turnover
           </p>
         </div>
 
@@ -128,11 +132,19 @@ export function OperacoesLegaisPage() {
         </div>
 
         <div className="mt-6">
-          <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} />
+          <MesFilterButtons
+            value={mesFiltro}
+            onChange={setMesFiltro}
+            showResultado={false}
+          />
         </div>
 
         <TabsContent value="overview" className="mt-5">
           <OperacoesLegaisOverviewTab ano={ano} mesFiltro={mesFiltro} />
+        </TabsContent>
+
+        <TabsContent value="cobranca" className="mt-5">
+          <OpsLegaisEfetividadeCobrancaTab ano={ano} mesFiltro={mesFiltro} />
         </TabsContent>
 
         {(

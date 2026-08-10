@@ -86,6 +86,33 @@ const MES_NOME_PARA_NUM = {
 }
 
 const LISTA_PROTOCOLOS = '4e115aab-39c5-4aab-8d5a-e905f4efd65d'
+/**
+ * Campos Pessoa (PROTOCOLADOPOR, CHECKADOPOR) exigem $select explícito no Graph —
+ * expand genérico só traz *LookupId (protocolado_por ficava sempre null).
+ */
+const PROTOCOLOS_FIELD_SELECT = [
+  'id',
+  'Created',
+  'PROTOCOLADOPOR',
+  'CHECKADOPOR',
+  'PROTOCOLADOEM',
+  'DATADOFATAL',
+  'TIPODEPROTOCOLO',
+  'TIPO_x0020_DA_x0020_PE_x00c7_A',
+  'SISTEMA',
+  'STATUS',
+  'INST_x00c2_NCIA',
+  'PROTOCOLONOSAUTOS',
+  'CLIENTE',
+  'PARTECONTR_x00c1_RIA',
+  'EFICI_x00ca_NCIA_x0020_OPERACION',
+  'EFICI_x00ca_NCIA_x0020_OPERACION0',
+  'INCONSIST_x00ca_NCIA_x002d_CONTR',
+  'INCONSIST_x00ca_NCIA_x002d_CONTR0',
+  'INCONSIST_x00ca_NCIA_x002d_JUR_x',
+  'INCONSIST_x00ca_NCIA_x002d_JUR_x0',
+  'URGENTE_x003f_',
+].join(',')
 const LISTA_PUBLICACOES = '91e8ba11-8248-4a20-9fd9-b66466144ad1'
 /** Campos Pessoa (VISTADOPOR, AGENDADOPOR) exigem $select explícito no Graph — expand genérico não traz o nome. */
 const PUBLICACOES_FIELD_SELECT = [
@@ -113,6 +140,8 @@ const PUBLICACOES_FIELD_SELECT = [
   'DATARECEBIMENTOKURIER',
   'INCONSIST_x00ca_NCIAS_x002d_TIPO',
   'INCONSIST_x00ca_NCIA_x002d_SUBTI',
+  // CHECK (displayName) — nome interno opaco confirmado via Graph /columns
+  'field_13',
 ].join(',')
 const LISTA_TREINAMENTOS = '30ea2880-475e-489c-8600-ae541d29faf3'
 /**
@@ -656,6 +685,7 @@ const FONTES = {
             acao: pick(f, ['Ação', 'Acao', 'field_19']),
             inconsistencias_tipo: String(inconsistenciasTipo).trim() || null,
             inconsistencia_subtipo: String(inconsistenciaSubtipo).trim() || null,
+            check_pub: strOrNull(pick(f, ['CHECK', 'field_13'])),
             // Coluna calculada do BI (não existe no SharePoint)
             eficiencia: computeEficienciaPublicacao(inconsistenciasTipo, inconsistenciaSubtipo),
           }
@@ -670,7 +700,12 @@ const FONTES = {
   protocolos: {
     tabela: 'sp_protocolos',
     async run(ctx) {
-      const items = await fetchListItems(ctx.siteJuridica, LISTA_PROTOCOLOS)
+      const items = await fetchListItems(
+        ctx.siteJuridica,
+        LISTA_PROTOCOLOS,
+        null,
+        PROTOCOLOS_FIELD_SELECT,
+      )
       if (ctx.dumpFields) return dumpFields(items)
       const turnover = await loadTurnover()
       const rows = items
@@ -688,11 +723,20 @@ const FONTES = {
           // confirmado via schema real de colunas (Graph /lists/{id}/columns).
           const inconsistencia =
             pick(f, ['INCONSISTÊNCIA - JURÍDICO', 'INCONSISTENCIAJURIDICO', 'INCONSIST_x00ca_NCIA_x002d_JUR_x']) ?? ''
-          // Nome interno truncado (Graph): INCONSIST_x00ca_NCIA_x002d_CONTR0
+          // Graph /columns:
+          //   INCONSISTÊNCIA - CONTROLADORIA        → INCONSIST_x00ca_NCIA_x002d_CONTR
+          //   INCONSISTÊNCIA - CONTROLADORIA - MOTIVO → INCONSIST_x00ca_NCIA_x002d_CONTR0
+          // KPI / card usam só CONTROLADORIA (não o motivo — motivo pode vir preenchido sozinho).
           const inconsistenciaControladoria =
             pick(f, [
               'INCONSISTÊNCIA - CONTROLADORIA',
               'INCONSISTENCIACONTROLADORIA',
+              'INCONSIST_x00ca_NCIA_x002d_CONTR',
+            ]) ?? ''
+          const inconsistenciaControladoriaMotivo =
+            pick(f, [
+              'INCONSISTÊNCIA - CONTROLADORIA - MOTIVO',
+              'INCONSISTENCIACONTROLADORIAMOTIVO',
               'INCONSIST_x00ca_NCIA_x002d_CONTR0',
             ]) ?? ''
           const protocoladoEm = parseDate(pick(f, ['PROTOCOLADO EM', 'PROTOCOLADOEM']))
@@ -714,7 +758,9 @@ const FONTES = {
             protocolado_em: toIsoDateBrt(protocoladoEm),
             data_do_fatal: toIsoDateTime(dataDoFatal),
             eficiencia_sla: eficienciaSla,
-            protocolado_por: expandUserField(pick(f, ['PROTOCOLADO POR', 'PROTOCOLADOPOR'])),
+            protocolado_por: expandUserField(
+              pick(f, ['PROTOCOLADO POR', 'PROTOCOLADOPOR']),
+            ),
             tipo_protocolo: pick(f, ['TIPO DE PROTOCOLO', 'TIPODEPROTOCOLO']),
             tipo_peca: pick(f, ['TIPO DA PEÇA', 'TIPODAPECA']),
             sistema: pick(f, ['SISTEMA']),
@@ -741,12 +787,7 @@ const FONTES = {
               'INCONSIST_x00ca_NCIA_x002d_JUR_x0',
             ]),
             inconsistencia_controladoria: inconsistenciaControladoria || null,
-            inconsistencia_controladoria_motivo: pick(f, [
-              'INCONSISTÊNCIA - CONTROLADORIA - MOTIVO',
-              'INCONSISTENCIACONTROLADORIAMOTIVO',
-              'INCONSIST_x00ca_NCIA_x002d_CONTR1',
-              'INCONSIST_x00ca_NCIA_x002d_CONTR00',
-            ]),
+            inconsistencia_controladoria_motivo: inconsistenciaControladoriaMotivo || null,
             status_inconsistencia: inconsistencia.trim() === '' ? 'EFICIÊNCIA' : 'INCONSISTÊNCIA',
             urgente: pick(f, ['URGENTE?', 'URGENTE']),
           }

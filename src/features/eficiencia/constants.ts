@@ -27,6 +27,23 @@ export const AREAS_EFICIENCIA_JURIDICO = [
 export const EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL = 'Trabalhista' as const
 
 /**
+ * Responsável no card Inconsistências — Análise (Ops Legais), conforme a Área.
+ * Agendamento continua usando AGENDADO POR.
+ */
+export const OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA = {
+  trabalhista: 'Isadora Godoy Conte',
+  demais: 'Giovanna Pereira de Souza',
+} as const
+
+export function resolveOpsLegaisPubResponsavel(area: string | null | undefined): string {
+  const a = (area ?? '').trim()
+  if (a === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) {
+    return OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA.trabalhista
+  }
+  return OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA.demais
+}
+
+/**
  * Slicer Operações Legais: Ciência Agendamentos e SLAs de Vistagem ficam sem dado (`-`),
  * como Trabalhista em Vistagem Normal — não há KPI por área nesses indicadores.
  */
@@ -65,6 +82,8 @@ export const EFICIENCIA_META_OPS_SLA_PROTOCOLO = 98
 export const EFICIENCIA_META_OPS_EFICIENCIA = 98
 export const EFICIENCIA_META_OPS_PUBLICACOES = 98
 export const EFICIENCIA_META_OPS_CADASTRO = 95
+/** Meta Efetividade na Cobrança Inicial (D+1) — módulo Cobrança / BI. */
+export const EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA = 100
 
 /** Meta individual de treinamentos (14h = 840 min) — Equipe e Liderança. */
 export const EFICIENCIA_META_TREINAMENTO_MINUTOS = 14 * 60

@@ -745,7 +745,8 @@ export async function exportIndicadoresResultadoExcel(
     linhasTabela(data.eficienciaProtocolo),
     {
       statusCol: {
-        col: 7,
+        // Colunas: ID, Nº Processo, Área, Criado por, Cliente, Tipo, Protocolado em, Status, Motivo
+        col: 8,
         map: { INCONSISTÊNCIA: RED_SOFT, INCONSISTENCIA: RED_SOFT, EFICIÊNCIA: GREEN_SOFT, EFICIENCIA: GREEN_SOFT },
       },
     },
