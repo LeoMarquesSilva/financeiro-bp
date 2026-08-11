@@ -35,8 +35,16 @@ type Props = {
   color?: string
   loading?: boolean
   emptyLabel?: string
-  /** Limita barras exibidas (ranking já vem ordenado). */
+  /**
+   * Limita barras exibidas (ranking já vem ordenado).
+   * Com `scrollAll`, vira só a altura visível (viewport) — lista completa com scroll.
+   */
   maxItems?: number
+  /**
+   * Mostra todos os itens na altura de `maxItems` linhas, com barra de rolagem.
+   * Não exibe "Top N de X".
+   */
+  scrollAll?: boolean
   /** Se false, exibe o nome completo no eixo (sem truncar). Default: true. */
   truncateLabels?: boolean
   /** Largura do eixo Y; se omitido, calcula pelo maior rótulo. */
@@ -203,6 +211,7 @@ export function EficienciaRankingChart({
   loading,
   emptyLabel = 'Sem dados no período.',
   maxItems = 20,
+  scrollAll = false,
   truncateLabels = true,
   yAxisWidth,
   biStyle = false,
@@ -218,9 +227,11 @@ export function EficienciaRankingChart({
 
   const rowH = compact ? 26 : 34
   const axisTick = { fontSize: compact ? 11 : 12, fill: '#64748b' }
+  const viewportItems = Math.max(1, maxItems)
 
   const chartData = useMemo(() => {
-    return rows.slice(0, maxItems).map((row, i) => {
+    const source = scrollAll ? rows : rows.slice(0, maxItems)
+    return source.map((row, i) => {
       const rawLabel = String(row[labelKey] ?? '').trim()
       const full = showAvatars
         ? resolvePessoaDisplayNome(rawLabel, teamMembers, avatarCatalog)
@@ -244,6 +255,7 @@ export function EficienciaRankingChart({
     labelKey,
     valueKey,
     maxItems,
+    scrollAll,
     truncateLabels,
     compact,
     showAvatars,
@@ -268,7 +280,14 @@ export function EficienciaRankingChart({
     compact ? 140 : 180,
     chartData.length * rowH + (compact ? 20 : 40),
   )
-  const truncated = rows.length > maxItems
+  const viewportHeight = Math.max(
+    compact ? 140 : 180,
+    viewportItems * rowH + (compact ? 20 : 40),
+  )
+  const truncated = !scrollAll && rows.length > maxItems
+  const plotViewportStyle = scrollAll
+    ? { height: viewportHeight, overflowY: 'auto' as const }
+    : { height: chartHeight }
 
   return (
     <section
@@ -353,12 +372,17 @@ export function EficienciaRankingChart({
       ) : (
         /* ref no wrapper; data-chart-plot no filho — copyChartImage usa querySelector nos descendentes */
         <div ref={chartExportRef} className="w-full">
-          <div data-chart-plot className="w-full" style={{ height: chartHeight }}>
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-              minHeight={compact ? 140 : 180}
-            >
+          <div
+            data-chart-plot
+            className="w-full"
+            style={plotViewportStyle}
+          >
+            <div style={{ height: chartHeight, minHeight: chartHeight }}>
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minHeight={compact ? 140 : 180}
+              >
               <BarChart
                 data={chartData}
                 layout="vertical"
@@ -445,7 +469,8 @@ export function EficienciaRankingChart({
                   />
                 </Bar>
               </BarChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       )}

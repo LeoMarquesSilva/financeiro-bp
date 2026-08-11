@@ -10,6 +10,119 @@ const LEGEND_SWATCH_GAP = 6
 const LEGEND_ROW_GAP = 6
 const KEEP_WHITE_FILLS = new Set(['#fff', '#ffffff', 'white', 'rgb(255, 255, 255)', 'rgb(255,255,255)'])
 
+/** Cache de URL → data URL para não re-baixar a cada cópia. */
+const exportImageDataUrlCache = new Map<string, string | null>()
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('Falha ao ler imagem'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * Converte URL de imagem em data URL (necessário para SVG/foreignObject no clipboard —
+ * hrefs externos viram ícone quebrado no PowerPoint).
+ */
+async function urlToExportDataUrl(url: string): Promise<string | null> {
+  if (!url || url.startsWith('data:')) return url || null
+  if (exportImageDataUrlCache.has(url)) return exportImageDataUrlCache.get(url) ?? null
+
+  let absolute = url
+  try {
+    absolute = new URL(url, window.location.href).href
+  } catch {
+    /* mantém url */
+  }
+
+  let dataUrl: string | null = null
+
+  try {
+    const res = await fetch(absolute, { mode: 'cors', credentials: 'omit', cache: 'force-cache' })
+    if (res.ok) {
+      dataUrl = await blobToDataUrl(await res.blob())
+    }
+  } catch {
+    /* tenta via Image */
+  }
+
+  if (!dataUrl) {
+    dataUrl = await new Promise<string | null>((resolve) => {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      const timer = window.setTimeout(() => resolve(null), 5000)
+      img.onload = () => {
+        window.clearTimeout(timer)
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = Math.max(1, img.naturalWidth || 64)
+          canvas.height = Math.max(1, img.naturalHeight || 64)
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            resolve(null)
+            return
+          }
+          ctx.drawImage(img, 0, 0)
+          resolve(canvas.toDataURL('image/png'))
+        } catch {
+          resolve(null)
+        }
+      }
+      img.onerror = () => {
+        window.clearTimeout(timer)
+        resolve(null)
+      }
+      img.src = absolute
+    })
+  }
+
+  exportImageDataUrlCache.set(url, dataUrl)
+  if (absolute !== url) exportImageDataUrlCache.set(absolute, dataUrl)
+  return dataUrl
+}
+
+/**
+ * Embute &lt;img&gt; e SVG &lt;image&gt; como data URL no clone de exportação.
+ * Se a URL não puder ser lida (CORS), remove o nó para não colar ícone quebrado no PPT.
+ */
+async function inlineRasterImagesForExport(root: ParentNode): Promise<void> {
+  const htmlImgs = Array.from(root.querySelectorAll('img'))
+  await Promise.all(
+    htmlImgs.map(async (img) => {
+      const src = img.getAttribute('src')
+      if (!src || src.startsWith('data:')) return
+      const dataUrl = await urlToExportDataUrl(src)
+      if (dataUrl) {
+        img.setAttribute('src', dataUrl)
+        img.removeAttribute('srcset')
+      } else {
+        img.remove()
+      }
+    }),
+  )
+
+  const svgImgs = Array.from(root.querySelectorAll('image'))
+  const xlinkNs = 'http://www.w3.org/1999/xlink'
+  await Promise.all(
+    svgImgs.map(async (img) => {
+      const href =
+        img.getAttribute('href') ||
+        img.getAttributeNS(xlinkNs, 'href') ||
+        img.getAttribute('xlink:href')
+      if (!href || href.startsWith('data:')) return
+      const dataUrl = await urlToExportDataUrl(href)
+      if (dataUrl) {
+        img.setAttribute('href', dataUrl)
+        img.setAttributeNS(xlinkNs, 'href', dataUrl)
+      } else {
+        img.remove()
+      }
+    }),
+  )
+}
+
 function shouldKeepTextFill(fill: string | null): boolean {
   const normalized = (fill ?? '').trim().toLowerCase()
   return KEEP_WHITE_FILLS.has(normalized)
@@ -53,6 +166,7 @@ async function svgElementToImage(svg: SVGSVGElement): Promise<HTMLImageElement> 
   clone.setAttribute('height', String(height))
   clone.style.background = 'transparent'
   applyExportTextColors(clone)
+  await inlineRasterImagesForExport(clone)
 
   const serialized = new XMLSerializer().serializeToString(clone)
   return loadImageFromSvgString(serialized)
@@ -609,6 +723,7 @@ async function renderPreparedElementToPngBlob(
 ): Promise<Blob> {
   // Clona para não mover o nó original (ex.: wrapper montado em document.body).
   const snapshot = prepared.cloneNode(true) as HTMLElement
+  await inlineRasterImagesForExport(snapshot)
   snapshot.style.position = 'static'
   snapshot.style.left = 'auto'
   snapshot.style.visibility = 'visible'
