@@ -10,7 +10,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { escritorioLevantamentoService, BLOCO_LABELS, type LevantamentoBloco, type LevantamentoFiltros } from '../services/escritorioLevantamentoService'
+import {
+  escritorioLevantamentoService,
+  BLOCO_LABELS,
+  type LevantamentoBloco,
+  type LevantamentoColuna,
+  type LevantamentoFiltros,
+  type LevantamentoRacional,
+} from '../services/escritorioLevantamentoService'
 import { exportLevantamentoRacionalExcel, formatRacionalCell } from '../utils/levantamentoExport'
 
 type Props = {
@@ -41,7 +48,7 @@ export function LevantamentoRacionalSheet({
       filtros.area,
       tipoAgendamento,
     ],
-    queryFn: () =>
+    queryFn: (): Promise<LevantamentoRacional> =>
       escritorioLevantamentoService.fetchRacional(bloco as LevantamentoBloco, filtros, {
         tipoAgendamento,
       }),
@@ -120,7 +127,7 @@ export function LevantamentoRacionalSheet({
             <table className="min-w-full text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 text-slate-600">
                 <tr>
-                  {data.colunas.map((c) => (
+                  {data.colunas.map((c: LevantamentoColuna) => (
                     <th key={c.key} className="whitespace-nowrap px-3 py-2 font-semibold">
                       {c.label}
                     </th>
@@ -128,9 +135,9 @@ export function LevantamentoRacionalSheet({
                 </tr>
               </thead>
               <tbody>
-                {data.linhas.map((row, i) => (
+                {data.linhas.map((row: Record<string, unknown>, i: number) => (
                   <tr key={i} className="border-t border-slate-100 odd:bg-white even:bg-slate-50/40">
-                    {data.colunas.map((c) => (
+                    {data.colunas.map((c: LevantamentoColuna) => (
                       <td key={c.key} className="max-w-[16rem] truncate px-3 py-1.5 text-slate-800">
                         {formatRacionalCell(row[c.key])}
                       </td>

@@ -10,6 +10,7 @@ import { eficienciaService } from '../services/eficienciaService'
 import { buildRacionalExcelBlob } from '../utils/racionalExport'
 import { formatRacionalPeriodoLabel } from '../utils/racionalQuery'
 import type { MesFiltroEficiencia } from '../constants'
+import { isDiaFiltro, isSemanaFiltro } from '../constants'
 import type { RacionalEscopo, RacionalIndicador } from '../types/eficiencia.types'
 
 export type ReportarIndicadorItem = {
@@ -50,9 +51,16 @@ export function ReportarIndicadorButton({
     if (reportando || items.length === 0) return
     setReportando(true)
     try {
-      const mes = mesFiltro === 'resultado' ? null : mesFiltro
-      const periodoLabel = formatRacionalPeriodoLabel(ano, mes)
+      const mesParaFetch = mesFiltro === 'resultado' ? null : mesFiltro
+      const periodoLabel = formatRacionalPeriodoLabel(ano, mesParaFetch)
       const areaLabel = area ?? 'todas as áreas'
+      // openReport só aceita number | number[] | string — período curto vira rótulo.
+      const mesParaReport: number | number[] | string | null =
+        mesParaFetch == null
+          ? null
+          : isDiaFiltro(mesParaFetch) || isSemanaFiltro(mesParaFetch)
+            ? periodoLabel
+            : mesParaFetch
 
       const anexos: ReportarErroAnexo[] = []
       for (const item of items) {
@@ -60,7 +68,7 @@ export function ReportarIndicadorButton({
           item.indicador,
           ano,
           area,
-          mes,
+          mesParaFetch,
           escopo,
         )
         const { blob, filename } = await buildRacionalExcelBlob(
@@ -86,7 +94,7 @@ export function ReportarIndicadorButton({
         indicador: titulo,
         modulo,
         ano,
-        mes,
+        mes: mesParaReport,
         area,
         anexos,
       })

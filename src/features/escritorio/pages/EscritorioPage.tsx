@@ -14,6 +14,7 @@ import {
   defaultMesCorrente,
   type LevantamentoBloco,
   type LevantamentoFiltros as Filtros,
+  type LevantamentoSituacaoRow,
 } from '../services/escritorioLevantamentoService'
 import { mesContainingIso } from '../utils/levantamentoAreas'
 import { exportLevantamentoRelatorioCompleto } from '../utils/levantamentoExport'
@@ -160,7 +161,7 @@ export function EscritorioPage() {
         <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
           <h2 className="mb-3 text-sm font-semibold text-slate-900">Processos por situação</h2>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-            {resumo.processos_por_situacao.map((s) => (
+            {resumo.processos_por_situacao.map((s: LevantamentoSituacaoRow) => (
               <div
                 key={s.situacao}
                 className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
