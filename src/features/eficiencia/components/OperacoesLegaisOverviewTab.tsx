@@ -43,6 +43,7 @@ import {
   MARKETING_META_POSTS_ANUAL,
   buildMonthlyIndicadoresSeries,
 } from '@/features/operacoes-legais/marketing/computeMarketingIndicadores'
+import { useErrorReportingOptional } from '@/shared/error-reporting/ErrorReportingProvider'
 
 type Props = {
   ano: number
@@ -76,6 +77,15 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const copyRef = useRef<HTMLDivElement>(null)
+  const { openReport } = useErrorReportingOptional()
+  const reportarIndicador = (indicador: string) => () =>
+    openReport({
+      indicador,
+      modulo: 'Operações Legais',
+      ano,
+      mes: mesFiltro === 'resultado' ? null : mesFiltro,
+      area: EFICIENCIA_AREA_OPS_LEGAIS,
+    })
 
   const {
     protocoloMensal,
@@ -397,6 +407,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsSla}
           acumulado={acumSla}
           onRacionalClick={() => setRacionalAberto('ops_legais_sla_protocolo')}
+          onReportarErroClick={reportarIndicador('SLA Protocolo')}
         />
         <OverviewKpiHeatRow
           title="Eficiência Protocolo"
@@ -405,6 +416,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsEfi}
           acumulado={acumEfi}
           onRacionalClick={() => setRacionalAberto('ops_legais_eficiencia_protocolo')}
+          onReportarErroClick={reportarIndicador('Eficiência Protocolo')}
         />
         <OverviewKpiHeatRow
           title="Eficiência Análise de Publicação"
@@ -413,6 +425,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsAnalise}
           acumulado={acumAnalise}
           onRacionalClick={() => setRacionalAberto('ops_legais_pub_analise')}
+          onReportarErroClick={reportarIndicador('Eficiência Análise de Publicação')}
         />
         <OverviewKpiHeatRow
           title="Eficiência Agendamento"
@@ -421,6 +434,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsAgenda}
           acumulado={acumAgenda}
           onRacionalClick={() => setRacionalAberto('ops_legais_pub_agendamento')}
+          onReportarErroClick={reportarIndicador('Eficiência Agendamento')}
         />
         <OverviewKpiHeatRow
           title="Eficiência no Cadastro de Processos"
@@ -429,6 +443,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsCadastro}
           acumulado={acumCadastro}
           onRacionalClick={() => setRacionalAberto('ops_legais_cadastro')}
+          onReportarErroClick={reportarIndicador('Eficiência no Cadastro de Processos')}
         />
         <OverviewKpiHeatRow
           title="Desenvolvimento Contínuo"
@@ -442,6 +457,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           anoLabel={String(ano)}
           cells={[]}
           acumulado={acumTreino}
+          onReportarErroClick={reportarIndicador('Desenvolvimento Contínuo')}
         />
         <OverviewKpiHeatRow
           title="Retenção de Talentos"
@@ -450,6 +466,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           anoLabel={String(ano)}
           cells={[]}
           acumulado={acumRetencao}
+          onReportarErroClick={reportarIndicador('Retenção de Talentos')}
         />
         <OverviewKpiHeatRow
           title="Gestão de PDI"
@@ -461,6 +478,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsPdi
           }
           acumulado={loadingPdi ? { value: null, label: '…' } : acumPdi}
+          onReportarErroClick={reportarIndicador('Gestão de PDI')}
         />
         <OverviewKpiHeatRow
           title="Iniciativas Estratégicas"
@@ -473,6 +491,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsIniciativas
           }
           acumulado={acumIniciativas}
+          onReportarErroClick={reportarIndicador('Iniciativas Estratégicas')}
         />
         <OverviewKpiHeatRow
           title="MKT - Posts Anuais"
@@ -485,6 +504,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsMarketingPosts
           }
           acumulado={acumMarketingPosts}
+          onReportarErroClick={reportarIndicador('MKT - Posts Anuais')}
         />
         <OverviewKpiHeatRow
           title="MKT - Engajamento"
@@ -497,6 +517,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsMarketingEngaj
           }
           acumulado={acumMarketingEngaj}
+          onReportarErroClick={reportarIndicador('MKT - Engajamento')}
         />
         <OverviewKpiHeatRow
           title="MKT - Pautas Anuais"
@@ -509,6 +530,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsMarketingPautas
           }
           acumulado={acumMarketingPautas}
+          onReportarErroClick={reportarIndicador('MKT - Pautas Anuais')}
         />
         <OverviewKpiHeatRow
           title="MKT - Alcance Mensal"
@@ -521,6 +543,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsMarketingAlcance
           }
           acumulado={acumMarketingAlcance}
+          onReportarErroClick={reportarIndicador('MKT - Alcance Mensal')}
         />
       </div>
 

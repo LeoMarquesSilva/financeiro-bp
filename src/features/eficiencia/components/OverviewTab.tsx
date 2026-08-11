@@ -28,6 +28,7 @@ import {
 } from '../utils/overviewFinanceiroKpis'
 import { acumuladoGestaoPdi, buildGestaoPdiCells } from '../utils/gestaoPdiCalc'
 import { resolveMetaTexto } from '../utils/overviewKpiMeta'
+import { useErrorReportingOptional } from '@/shared/error-reporting/ErrorReportingProvider'
 
 type Props = {
   ano: number
@@ -126,6 +127,15 @@ export function OverviewTab({
   const copyRef = useRef<HTMLDivElement>(null)
   const mesDestaque = isMesesFiltro(mesFiltro) ? mesFiltro : null
   const { data: financeiroKpis, isLoading: loadingFinanceiroKpis } = useOverviewFinanceiroKpis(ano)
+  const { openReport } = useErrorReportingOptional()
+  const reportarIndicador = (indicador: string) => () =>
+    openReport({
+      indicador,
+      modulo: 'Eficiência',
+      ano,
+      mes: mesFiltro === 'resultado' ? null : mesFiltro,
+      area,
+    })
 
   if (loading || !data) {
     return (
@@ -425,6 +435,7 @@ export function OverviewTab({
           )}
           acumulado={acumuladoSlaProtocolo}
           onRacionalClick={() => setRacionalAberto('sla_protocolo')}
+          onReportarErroClick={reportarIndicador('SLA Protocolo')}
         />
         <OverviewKpiHeatRow
           title="Eficiência Protocolo"
@@ -437,6 +448,7 @@ export function OverviewTab({
           )}
           acumulado={acumuladoEficienciaProtocolo}
           onRacionalClick={() => setRacionalAberto('eficiencia_protocolo')}
+          onReportarErroClick={reportarIndicador('Eficiência Protocolo')}
         />
         <OverviewKpiHeatRow
           title="SLA Ciência Agendamentos"
@@ -449,6 +461,7 @@ export function OverviewTab({
               ? undefined
               : () => setRacionalAberto('sla_ciencia_agendamentos')
           }
+          onReportarErroClick={reportarIndicador('SLA Ciência Agendamentos')}
         />
         <OverviewKpiHeatRow
           title="SLA Vistagem Risco"
@@ -461,6 +474,7 @@ export function OverviewTab({
               ? undefined
               : () => setRacionalAberto('sla_vistagem_risco')
           }
+          onReportarErroClick={reportarIndicador('SLA Vistagem Risco')}
         />
         <OverviewKpiHeatRow
           title="SLA Vistagem Normal"
@@ -473,6 +487,7 @@ export function OverviewTab({
               ? undefined
               : () => setRacionalAberto('sla_vistagem_normal')
           }
+          onReportarErroClick={reportarIndicador('SLA Vistagem Normal')}
         />
         <OverviewKpiHeatRow
           title="Desenvolvimento Equipe"
@@ -482,6 +497,7 @@ export function OverviewTab({
           cells={treinamentosCells}
           acumulado={acumuladoTreinamentos}
           onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
+          onReportarErroClick={reportarIndicador('Desenvolvimento Equipe')}
         />
         <OverviewKpiHeatRow
           title="Retenção de Talentos"
@@ -491,6 +507,7 @@ export function OverviewTab({
           cells={[]}
           acumulado={retencaoCell}
           onRacionalClick={() => setRacionalAberto('retencao_talentos')}
+          onReportarErroClick={reportarIndicador('Retenção de Talentos')}
         />
         <OverviewKpiHeatRow
           title="Gestão de PDI"
@@ -498,6 +515,7 @@ export function OverviewTab({
           mesDestaque={mesDestaque}
           cells={cellsGestaoPdi}
           acumulado={acumuladoGestaoPdiCell}
+          onReportarErroClick={reportarIndicador('Gestão de PDI')}
         />
         <OverviewKpiHeatRow
           title="Receita Bruta"
@@ -509,9 +527,10 @@ export function OverviewTab({
               : cellsReceitaBruta
           }
           acumulado={loadingFinanceiroKpis ? { value: null, label: '…' } : acumuladoReceitaBruta}
+          onReportarErroClick={reportarIndicador('Receita Bruta')}
         />
         <OverviewKpiHeatRow
-          title="Índice de Inadimplência**"
+          title="Índice de Inadimplência"
           meta={Infinity}
           metaLabel="Meta x"
           mesDestaque={mesDestaque}
@@ -523,17 +542,19 @@ export function OverviewTab({
           acumulado={
             loadingFinanceiroKpis ? { value: null, label: '…' } : acumuladoInadimplencia
           }
+          onReportarErroClick={reportarIndicador('Índice de Inadimplência')}
         />
       </div>
 
       <div className="space-y-3">
         <OverviewKpiHeatRow
-          title="NPS**"
+          title="NPS"
           meta={Infinity}
           metaLabel="Meta 85%"
           mesDestaque={mesDestaque}
           cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
           acumulado={{ value: null, label: '-' }}
+          onReportarErroClick={reportarIndicador('NPS')}
         />
         <OverviewKpiHeatRow
           title="Reputação**"
@@ -542,6 +563,7 @@ export function OverviewTab({
           mesDestaque={mesDestaque}
           cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
           acumulado={{ value: null, label: '-' }}
+          onReportarErroClick={reportarIndicador('Reputação')}
         />
         <OverviewKpiHeatRow
           title="Êxito**"
@@ -550,6 +572,7 @@ export function OverviewTab({
           mesDestaque={mesDestaque}
           cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
           acumulado={{ value: null, label: '-' }}
+          onReportarErroClick={reportarIndicador('Êxito')}
         />
       </div>
 

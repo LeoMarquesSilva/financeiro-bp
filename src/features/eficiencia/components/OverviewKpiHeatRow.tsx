@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { FileSearch } from 'lucide-react'
+import { Bug, FileSearch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MESES_EFICIENCIA } from '../constants'
 import { atingiuMetaKpi, resolveMetaTexto } from '../utils/overviewKpiMeta'
@@ -10,9 +10,9 @@ const COL_MES_WIDTH = 60
 const COL_ACUM_WIDTH = 64
 const TABLE_MIN_WIDTH = COL_TITLE_WIDTH + MESES_EFICIENCIA.length * COL_MES_WIDTH + COL_ACUM_WIDTH
 export const OVERVIEW_RACIONAL_SLOT_WIDTH = 100
-const RACIONAL_SLOT_CLASS = 'flex w-[100px] shrink-0 self-center'
+const SIDE_SLOT_CLASS = 'flex w-[100px] shrink-0 flex-col gap-1.5 self-center'
 
-export type OverviewKpiHeatCardProps = Omit<Props, 'onRacionalClick'>
+export type OverviewKpiHeatCardProps = Omit<Props, 'onRacionalClick' | 'onReportarErroClick'>
 
 export function OverviewRacionalButton({
   onClick,
@@ -26,8 +26,7 @@ export function OverviewRacionalButton({
       type="button"
       onClick={onClick}
       className={cn(
-        RACIONAL_SLOT_CLASS,
-        'items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50',
+        'flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50',
         className,
       )}
     >
@@ -37,8 +36,30 @@ export function OverviewRacionalButton({
   )
 }
 
+export function OverviewReportarErroButton({
+  onClick,
+  className,
+}: {
+  onClick: () => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-50',
+        className,
+      )}
+    >
+      <Bug className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      Reportar
+    </button>
+  )
+}
+
 export function OverviewRacionalSpacer() {
-  return <div className={RACIONAL_SLOT_CLASS} aria-hidden />
+  return <div className="h-[34px] w-full" aria-hidden />
 }
 
 export type HeatCell = {
@@ -72,6 +93,8 @@ type Props = {
   anoLabel?: string
   /** Quando informado, mostra o botão "Racional" que abre o detalhamento das linhas do indicador. */
   onRacionalClick?: () => void
+  /** Abre o fluxo "Reportar Erro" com contexto deste indicador. */
+  onReportarErroClick?: () => void
 }
 
 function mesesDestaqueSet(mesDestaque: number | number[] | null): Set<number> | null {
@@ -270,16 +293,20 @@ export function OverviewKpiHeatCard({
 
 export function OverviewKpiHeatRow({
   onRacionalClick,
+  onReportarErroClick,
   ...cardProps
 }: Props) {
   return (
     <div className="flex items-stretch gap-2">
       <OverviewKpiHeatCard {...cardProps} />
-      {onRacionalClick ? (
-        <OverviewRacionalButton onClick={onRacionalClick} />
-      ) : (
-        <OverviewRacionalSpacer />
-      )}
+      <div className={SIDE_SLOT_CLASS}>
+        {onRacionalClick ? <OverviewRacionalButton onClick={onRacionalClick} /> : null}
+        {onReportarErroClick ? (
+          <OverviewReportarErroButton onClick={onReportarErroClick} />
+        ) : !onRacionalClick ? (
+          <OverviewRacionalSpacer />
+        ) : null}
+      </div>
     </div>
   )
 }
