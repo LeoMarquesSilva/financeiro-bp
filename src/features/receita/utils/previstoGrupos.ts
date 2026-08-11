@@ -364,6 +364,7 @@ export function agruparPrevistoTituloComQuitado(
 
 export type ReceitaInadMesGrupoAgg = {
   grupo_cliente: string
+  data_vencimento: string
   faturado: number
   recebido: number
   inadimplencia: number
@@ -371,7 +372,58 @@ export type ReceitaInadMesGrupoAgg = {
   qtd_clientes_inad: number
 }
 
-/** Inad. do mês por grupo — soma item a item, sem compensação entre razões sociais. */
+export type ReceitaInadMesVencimentoAgg = {
+  vencimentoKey: string
+  faturado: number
+  recebido: number
+  inadimplencia: number
+  qtd_grupos: number
+  grupos: ReceitaInadMesGrupoAgg[]
+}
+
+/** Agrupa linhas grupo×vencimento em blocos por data de vencimento. */
+export function agruparInadMesFlatPorVencimento(
+  linhas: ReceitaInadMesGrupoAgg[],
+): ReceitaInadMesVencimentoAgg[] {
+  const byVenc = new Map<string, ReceitaInadMesGrupoAgg[]>()
+  for (const row of linhas) {
+    const list = byVenc.get(row.data_vencimento) ?? []
+    list.push(row)
+    byVenc.set(row.data_vencimento, list)
+  }
+
+  return ordenarChavesVencimento([...byVenc.keys()]).map((vencimentoKey) => {
+    const grupos = byVenc.get(vencimentoKey) ?? []
+    return {
+      vencimentoKey,
+      faturado: grupos.reduce((s, g) => s + g.faturado, 0),
+      recebido: grupos.reduce((s, g) => s + g.recebido, 0),
+      inadimplencia: grupos.reduce((s, g) => s + g.inadimplencia, 0),
+      qtd_grupos: grupos.length,
+      grupos,
+    }
+  })
+}
+
+/** Inad. do mês por vencimento e grupo — soma item a item, sem compensação entre razões sociais. */
+export function agruparInadMesPorVencimentoEGrupo(
+  itens: Array<{
+    cliente: string | null
+    valor_item: number
+    data_vencimento?: string | null
+    data_pagamento?: string | null
+  }>,
+  clienteGrupoMap: Map<string, string>,
+  ano: number,
+  mes: number,
+  ref = new Date(),
+): ReceitaInadMesVencimentoAgg[] {
+  return agruparInadMesFlatPorVencimento(
+    agruparInadMesPorGrupoSemCompensacao(itens, clienteGrupoMap, ano, mes, ref),
+  )
+}
+
+/** Inad. do mês por grupo e vencimento (lista plana). */
 export function agruparInadMesPorGrupoSemCompensacao(
   itens: Array<{
     cliente: string | null
@@ -384,9 +436,11 @@ export function agruparInadMesPorGrupoSemCompensacao(
   mes: number,
   ref = new Date(),
 ): ReceitaInadMesGrupoAgg[] {
-  const byGrupo = new Map<
+  const byGrupoVenc = new Map<
     string,
     {
+      grupo_cliente: string
+      data_vencimento: string
       faturado: number
       recebido: number
       inad: number
@@ -397,7 +451,12 @@ export function agruparInadMesPorGrupoSemCompensacao(
 
   for (const item of itens) {
     const grupo = resolverGrupoCliente(item.cliente, clienteGrupoMap)
-    const cur = byGrupo.get(grupo) ?? {
+    const data_vencimento = normalizePrevistoVencimentoKey(item.data_vencimento)
+    if (data_vencimento === PREVISTO_SEM_VENCIMENTO_KEY) continue
+    const rowKey = `${grupo}::${data_vencimento}`
+    const cur = byGrupoVenc.get(rowKey) ?? {
+      grupo_cliente: grupo,
+      data_vencimento,
       faturado: 0,
       recebido: 0,
       inad: 0,
@@ -414,12 +473,13 @@ export function agruparInadMesPorGrupoSemCompensacao(
       if (item.cliente) cur.inadClientes.add(item.cliente)
     }
     if (item.cliente) cur.clientes.add(item.cliente)
-    byGrupo.set(grupo, cur)
+    byGrupoVenc.set(rowKey, cur)
   }
 
-  return [...byGrupo.entries()]
-    .map(([grupo_cliente, v]) => ({
-      grupo_cliente,
+  return [...byGrupoVenc.values()]
+    .map((v) => ({
+      grupo_cliente: v.grupo_cliente,
+      data_vencimento: v.data_vencimento,
       faturado: v.faturado,
       recebido: v.recebido,
       inadimplencia: v.inad,
@@ -430,6 +490,7 @@ export function agruparInadMesPorGrupoSemCompensacao(
     .sort(
       (a, b) =>
         b.inadimplencia - a.inadimplencia ||
+        a.data_vencimento.localeCompare(b.data_vencimento) ||
         a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR'),
     )
 }

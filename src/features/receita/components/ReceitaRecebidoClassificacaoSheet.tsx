@@ -47,10 +47,12 @@ import {
   agruparPrevistoPorVencimentoComQuitado,
   agruparPrevistoTituloComQuitado,
   agruparInadMesPorGrupoSemCompensacao,
+  agruparInadMesFlatPorVencimento,
   filtrarPrevistoItensPorBusca,
   normalizePrevistoVencimentoKey,
   PREVISTO_SEM_VENCIMENTO_KEY,
   type ReceitaInadMesGrupoAgg,
+  type ReceitaInadMesVencimentoAgg,
   type ReceitaPrevistoGrupoQuitadoAgg,
 } from '../utils/previstoGrupos'
 import {
@@ -87,6 +89,13 @@ const PREVISTO_GRUPO_SORT_DEFAULT: { key: PrevistoGrupoSortKey; dir: SortDir } =
   dir: 'desc',
 }
 
+type InadGrupoSortKey = 'grupo' | 'data_vencimento' | 'faturado' | 'recebido' | 'inadimplencia'
+
+const INAD_GRUPO_SORT_DEFAULT: { key: InadGrupoSortKey; dir: SortDir } = {
+  key: 'data_vencimento',
+  dir: 'asc',
+}
+
 export function ReceitaRecebidoClassificacaoSheet({
   open,
   onOpenChange,
@@ -116,6 +125,7 @@ export function ReceitaRecebidoClassificacaoSheet({
   const [fechamentoError, setFechamentoError] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
   const [previstoGrupoSort, setPrevistoGrupoSort] = useState(PREVISTO_GRUPO_SORT_DEFAULT)
+  const [inadGrupoSort, setInadGrupoSort] = useState(INAD_GRUPO_SORT_DEFAULT)
   const [previstoMesItensArea, setPrevistoMesItensArea] = useState<ReceitaPrevistoFechamentoItemRow[]>(
     [],
   )
@@ -134,6 +144,7 @@ export function ReceitaRecebidoClassificacaoSheet({
       setFechamentoDrill(null)
       setFechamentoItens([])
       setInadGrupos([])
+      setInadGrupoSort(INAD_GRUPO_SORT_DEFAULT)
       setPrevistoMesItensArea([])
       setFechamentoError(null)
       setError(null)
@@ -413,6 +424,73 @@ export function ReceitaRecebidoClassificacaoSheet({
     )
   }
 
+  const toggleInadGrupoSort = (key: InadGrupoSortKey) => {
+    setInadGrupoSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === 'desc' ? 'asc' : 'desc' }
+        : { key, dir: key === 'grupo' || key === 'data_vencimento' ? 'asc' : 'desc' },
+    )
+  }
+
+  const toggleInadHierarchySort = () => {
+    setInadGrupoSort((prev) => {
+      if (prev.key === 'data_vencimento') {
+        return { key: 'grupo', dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      }
+      return { key: 'data_vencimento', dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+    })
+  }
+
+  const inadHierarchySortIcon = () => {
+    if (inadGrupoSort.key !== 'data_vencimento' && inadGrupoSort.key !== 'grupo') return null
+    return inadGrupoSort.dir === 'desc' ? (
+      <ArrowDown className="h-3 w-3 shrink-0" aria-hidden />
+    ) : (
+      <ArrowUp className="h-3 w-3 shrink-0" aria-hidden />
+    )
+  }
+
+  const inadGrupoSortIcon = (key: InadGrupoSortKey) => {
+    if (inadGrupoSort.key !== key) return null
+    return inadGrupoSort.dir === 'desc' ? (
+      <ArrowDown className="h-3 w-3 shrink-0" aria-hidden />
+    ) : (
+      <ArrowUp className="h-3 w-3 shrink-0" aria-hidden />
+    )
+  }
+
+  const ordenarInadGrupos = (rows: ReceitaInadMesGrupoAgg[]) => {
+    const { key, dir } = inadGrupoSort
+    const mult = dir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => {
+      if (key === 'grupo' || key === 'data_vencimento') {
+        return mult * a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR')
+      }
+      return mult * (a[key] - b[key])
+    })
+  }
+
+  const ordenarInadVencimentos = (rows: ReceitaInadMesVencimentoAgg[]) => {
+    const { key, dir } = inadGrupoSort
+    const mult = dir === 'asc' ? 1 : -1
+    if (key === 'grupo') {
+      return [...rows].sort((a, b) => {
+        const aGrupo = [...a.grupos].sort((x, y) =>
+          x.grupo_cliente.localeCompare(y.grupo_cliente, 'pt-BR'),
+        )[0]?.grupo_cliente
+        const bGrupo = [...b.grupos].sort((x, y) =>
+          x.grupo_cliente.localeCompare(y.grupo_cliente, 'pt-BR'),
+        )[0]?.grupo_cliente
+        if (!aGrupo || !bGrupo) return 0
+        return mult * aGrupo.localeCompare(bGrupo, 'pt-BR')
+      })
+    }
+    if (key === 'data_vencimento') {
+      return [...rows].sort((a, b) => mult * a.vencimentoKey.localeCompare(b.vencimentoKey))
+    }
+    return [...rows].sort((a, b) => mult * (a[key] - b[key]))
+  }
+
   const fechamentoGruposFiltrados = useMemo(() => {
     const q = buscaDebounced.trim().toLowerCase()
     if (!q) return fechamentoGruposAgg
@@ -439,8 +517,22 @@ export function ReceitaRecebidoClassificacaoSheet({
   const inadGruposFiltrados = useMemo(() => {
     const q = buscaDebounced.trim().toLowerCase()
     if (!q) return inadGrupos
-    return inadGrupos.filter((g) => g.grupo_cliente.toLowerCase().includes(q))
+    return inadGrupos.filter(
+      (g) =>
+        g.grupo_cliente.toLowerCase().includes(q) ||
+        g.data_vencimento.includes(q) ||
+        formatDate(g.data_vencimento).toLowerCase().includes(q),
+    )
   }, [inadGrupos, buscaDebounced])
+
+  const inadVencimentoOrdenados = useMemo(() => {
+    const porVenc = agruparInadMesFlatPorVencimento(inadGruposFiltrados)
+    return ordenarInadVencimentos(porVenc).map((venc) => ({
+      ...venc,
+      grupos: ordenarInadGrupos(venc.grupos),
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ordenadores usam inadGrupoSort
+  }, [inadGruposFiltrados, inadGrupoSort])
 
   const inadGruposSoma = useMemo(
     () => inadGrupos.reduce((s, g) => s + g.inadimplencia, 0),
@@ -489,6 +581,9 @@ export function ReceitaRecebidoClassificacaoSheet({
     setPrevistoVencExpandido(null)
     if (key === 'previsto_grupo') {
       setPrevistoGrupoSort(PREVISTO_GRUPO_SORT_DEFAULT)
+    }
+    if (key === 'inad_grupo') {
+      setInadGrupoSort(INAD_GRUPO_SORT_DEFAULT)
     }
     setView('fechamento')
     setFechamentoLoading(true)
@@ -582,7 +677,7 @@ export function ReceitaRecebidoClassificacaoSheet({
               <SheetDescription className="text-xs text-sky-100">
                 {FECHAMENTO_DRILL_HINTS[fechamentoDrill]} · {mesLabel} / {ano}
                 {fechamentoDrill === 'inad_grupo'
-                  ? ` · ${inadGruposFiltrados.length} ${inadGruposFiltrados.length === 1 ? 'grupo' : 'grupos'}`
+                  ? ` · ${inadVencimentoOrdenados.length} ${inadVencimentoOrdenados.length === 1 ? 'vencimento' : 'vencimentos'} · ${inadGruposFiltrados.length} ${inadGruposFiltrados.length === 1 ? 'grupo' : 'grupos'}`
                   : fechamentoDrill === 'previsto_grupo'
                     ? ` · ${previstoVencimentoOrdenados.length} ${previstoVencimentoOrdenados.length === 1 ? 'vencimento' : 'vencimentos'} · ${previstoGrupoOrdenados.length} ${previstoGrupoOrdenados.length === 1 ? 'grupo' : 'grupos'}`
                     : ` · ${fechamentoGruposFiltrados.length} ${fechamentoGruposFiltrados.length === 1 ? 'grupo' : 'grupos'} · ${fechamentoItens.length} ${fechamentoItens.length === 1 ? 'item' : 'itens'}`}
@@ -745,7 +840,7 @@ export function ReceitaRecebidoClassificacaoSheet({
                   onChange={(e) => setBusca(e.target.value)}
                   placeholder={
                     view === 'fechamento' && fechamentoDrill === 'inad_grupo'
-                      ? 'Buscar grupo…'
+                      ? 'Buscar grupo ou vencimento…'
                       : view === 'fechamento' && fechamentoDrill === 'previsto_grupo'
                         ? 'Buscar grupo, título, cliente…'
                         : 'Buscar grupo, título, cliente…'
@@ -801,7 +896,7 @@ export function ReceitaRecebidoClassificacaoSheet({
               !fechamentoLoading &&
               !fechamentoError &&
               fechamentoDrill === 'inad_grupo' &&
-              inadGruposFiltrados.length === 0 && (
+              inadVencimentoOrdenados.length === 0 && (
                 <p className="py-10 text-center text-sm text-slate-500">
                   {buscaDebounced
                     ? 'Nenhum grupo corresponde à busca.'
@@ -813,38 +908,174 @@ export function ReceitaRecebidoClassificacaoSheet({
               !fechamentoLoading &&
               !fechamentoError &&
               fechamentoDrill === 'inad_grupo' &&
-              inadGruposFiltrados.length > 0 && (
+              inadVencimentoOrdenados.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-slate-200/80">
-                  <table className="w-full min-w-[480px] text-sm">
+                  <table className="w-full min-w-[560px] text-sm">
                     <thead>
                       <tr className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                        <th className="px-3 py-2">Grupo</th>
-                        <th className="px-3 py-2 text-right">Faturado</th>
-                        <th className="px-3 py-2 text-right">Recebido</th>
-                        <th className="px-3 py-2 text-right">Inadimplência</th>
+                        <th className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={toggleInadHierarchySort}
+                            className="inline-flex items-center gap-1 hover:text-slate-800"
+                            title={
+                              inadGrupoSort.key === 'grupo'
+                                ? 'Ordenar grupos dentro de cada vencimento'
+                                : 'Ordenar blocos por data de vencimento'
+                            }
+                          >
+                            Vencimento / Grupo
+                            {inadHierarchySortIcon()}
+                          </button>
+                        </th>
+                        <th className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => toggleInadGrupoSort('faturado')}
+                            className="ml-auto inline-flex items-center gap-1 hover:text-slate-800"
+                          >
+                            Faturado
+                            {inadGrupoSortIcon('faturado')}
+                          </button>
+                        </th>
+                        <th className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => toggleInadGrupoSort('recebido')}
+                            className="ml-auto inline-flex items-center gap-1 hover:text-slate-800"
+                          >
+                            Recebido
+                            {inadGrupoSortIcon('recebido')}
+                          </button>
+                        </th>
+                        <th className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => toggleInadGrupoSort('inadimplencia')}
+                            className="ml-auto inline-flex items-center gap-1 text-red-700 hover:text-red-900"
+                          >
+                            Inadimplência
+                            {inadGrupoSortIcon('inadimplencia')}
+                          </button>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {inadGruposFiltrados.map((g) => (
-                        <tr
-                          key={g.grupo_cliente}
-                          className="border-t border-slate-100 hover:bg-slate-50/80"
-                        >
-                          <td className="px-3 py-2.5 font-medium text-slate-800">
-                            {g.grupo_cliente}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-600">
-                            {formatCurrency(g.faturado)}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-600">
-                            {formatCurrency(g.recebido)}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold tabular-nums text-red-700">
-                            {formatCurrency(g.inadimplencia)}
-                          </td>
-                        </tr>
-                      ))}
+                      {inadVencimentoOrdenados.map((venc) => {
+                        const vencExpandido = previstoVencExpandido === venc.vencimentoKey
+                        return (
+                          <Fragment key={venc.vencimentoKey}>
+                            <tr
+                              className="cursor-pointer border-t border-slate-200 bg-red-50/40 hover:bg-red-50/70"
+                              onClick={() => togglePrevistoVencimento(venc.vencimentoKey)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault()
+                                  togglePrevistoVencimento(venc.vencimentoKey)
+                                }
+                              }}
+                              tabIndex={0}
+                              role="button"
+                              aria-expanded={vencExpandido}
+                            >
+                              <td className="px-3 py-2.5 align-top">
+                                <div className="flex items-start gap-2">
+                                  {vencExpandido ? (
+                                    <ChevronDown
+                                      className="mt-0.5 h-4 w-4 shrink-0 text-red-700"
+                                      aria-hidden
+                                    />
+                                  ) : (
+                                    <ChevronRight
+                                      className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                                      aria-hidden
+                                    />
+                                  )}
+                                  <Calendar
+                                    className="mt-0.5 h-4 w-4 shrink-0 text-red-700"
+                                    aria-hidden
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-slate-900">
+                                      {labelPrevistoVencimento(venc.vencimentoKey)}
+                                    </p>
+                                    <p className="mt-0.5 text-[11px] text-slate-500">
+                                      {venc.qtd_grupos}{' '}
+                                      {venc.qtd_grupos === 1 ? 'grupo' : 'grupos'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-bold tabular-nums text-slate-700">
+                                {formatCurrency(venc.faturado)}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-emerald-700">
+                                {formatCurrency(venc.recebido)}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-bold tabular-nums text-red-700">
+                                {formatCurrency(venc.inadimplencia)}
+                              </td>
+                            </tr>
+                            {vencExpandido &&
+                              venc.grupos.map((g) => (
+                                <tr
+                                  key={`${venc.vencimentoKey}::${g.grupo_cliente}`}
+                                  className="border-t border-slate-100 bg-slate-50/60 hover:bg-slate-50/80"
+                                >
+                                  <td className="px-3 py-2.5 align-top pl-10">
+                                    <div className="flex items-start gap-2">
+                                      <Building2
+                                        className="mt-0.5 h-4 w-4 shrink-0 text-sky-600"
+                                        aria-hidden
+                                      />
+                                      <div className="min-w-0">
+                                        <p className="font-semibold text-slate-800">
+                                          {g.grupo_cliente}
+                                        </p>
+                                        {g.qtd_clientes_inad > 0 ? (
+                                          <p className="mt-0.5 text-[11px] text-slate-500">
+                                            {g.qtd_clientes_inad}{' '}
+                                            {g.qtd_clientes_inad === 1
+                                              ? 'cliente inad.'
+                                              : 'clientes inad.'}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-slate-600">
+                                    {formatCurrency(g.faturado)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-slate-600">
+                                    {formatCurrency(g.recebido)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-red-700">
+                                    {formatCurrency(g.inadimplencia)}
+                                  </td>
+                                </tr>
+                              ))}
+                          </Fragment>
+                        )
+                      })}
                     </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-200 bg-slate-50/80 font-semibold">
+                        <td className="px-3 py-2.5 text-slate-700">Total</td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-700">
+                          {formatCurrency(
+                            inadGruposFiltrados.reduce((s, g) => s + g.faturado, 0),
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-emerald-700">
+                          {formatCurrency(
+                            inadGruposFiltrados.reduce((s, g) => s + g.recebido, 0),
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-red-700">
+                          {formatCurrency(inadGruposSoma)}
+                        </td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               )}
