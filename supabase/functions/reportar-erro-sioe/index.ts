@@ -76,28 +76,6 @@ function decodeBase64(data: string): Uint8Array {
   return out
 }
 
-function buildEvidencias(payload: Payload, screenshotUrl: string | null): string[] {
-  const evidencias: string[] = []
-  if (screenshotUrl) {
-    evidencias.push(`![Screenshot do SIOE](${screenshotUrl})`)
-    evidencias.push(`Screenshot: ${screenshotUrl}`)
-  }
-  if (payload.route) evidencias.push(`Rota: ${payload.route}`)
-  if (payload.modulo) evidencias.push(`Módulo: ${payload.modulo}`)
-  if (payload.indicador) evidencias.push(`Indicador: ${payload.indicador}`)
-  if (payload.area) evidencias.push(`Área: ${payload.area}`)
-  if (payload.ano != null) evidencias.push(`Ano: ${payload.ano}`)
-  if (payload.mes != null) {
-    const mesTxt = Array.isArray(payload.mes) ? payload.mes.join(', ') : String(payload.mes)
-    evidencias.push(`Mês filtro: ${mesTxt}`)
-  }
-  if (payload.user_agent) evidencias.push(`User-Agent: ${payload.user_agent}`)
-  if (payload.error_message) evidencias.push(`Erro: ${payload.error_message}`)
-  if (payload.error_stack) evidencias.push(`Stack:\n${payload.error_stack}`)
-  if (payload.client_logs) evidencias.push(`Logs do cliente:\n${payload.client_logs}`)
-  return evidencias
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -224,15 +202,9 @@ Deno.serve(async (req: Request) => {
       description,
       '',
       '---',
-      '## Evidências (SIOE)',
-      ...buildEvidencias(payload, null),
-      screenshotBytes ? 'Screenshot: (anexo do chamado)' : null,
-      '',
       `Reportado por: ${responsumUser.name} <${caller.email}>`,
       `Categoria: Manutenção em Sistemas / Subcategoria: SIOE (frente LexNextLab)`,
-    ]
-      .filter((line): line is string => line != null)
-      .join('\n')
+    ].join('\n')
 
     const { data: criado, error: insertError } = await responsum
       .from('app_c009c0e4f1_tickets')
@@ -316,26 +288,19 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (screenshotUrl || uploadedNames.length > 0) {
-      const anexosLinha =
-        uploadedNames.length > 0 ? `Anexos: ${uploadedNames.join(', ')}` : null
-      const descriptionComPrint = [
+    if (uploadedNames.length > 0) {
+      const descriptionFinal = [
         description,
         '',
         '---',
-        '## Evidências (SIOE)',
-        ...buildEvidencias(payload, screenshotUrl),
-        anexosLinha,
-        '',
+        `Anexos: ${uploadedNames.join(', ')}`,
         `Reportado por: ${responsumUser.name} <${caller.email}>`,
         `Categoria: Manutenção em Sistemas / Subcategoria: SIOE (frente LexNextLab)`,
-      ]
-        .filter((line): line is string => line != null)
-        .join('\n')
+      ].join('\n')
 
       await responsum
         .from('app_c009c0e4f1_tickets')
-        .update({ description: descriptionComPrint })
+        .update({ description: descriptionFinal })
         .eq('id', criado.id)
     }
 

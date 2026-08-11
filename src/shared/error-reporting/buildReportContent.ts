@@ -68,7 +68,7 @@ export function buildCursorPrompt(ctx: ReportarErroContext, route: string): stri
     '3. Corrija a causa raiz (não só o sintoma na UI).',
     '4. Valide o KPI / tela após a correção.',
     '',
-    'Anexe as evidências do ticket RESPONSUM (screenshot + logs) ao diagnosticar.',
+    'Use os anexos do ticket RESPONSUM (screenshot, racional, logs) ao diagnosticar.',
   )
   return lines.join('\n')
 }
@@ -78,19 +78,34 @@ export function buildDefaultDescription(ctx: ReportarErroContext, _route: string
   return (ctx.resumo?.trim() || ctx.error?.message || '').trim()
 }
 
-/** Anexado ao enviar o ticket (não aparece no campo do modal). */
-export function appendCursorPromptToDescription(
+/** Descrição limpa do ticket — sem prompt/logs inline (vão como anexos). */
+export function buildTicketDescription(
   userDescription: string,
   ctx: ReportarErroContext,
   route: string,
 ): string {
-  return [
-    userDescription.trim(),
-    '',
-    '---',
-    '## Prompt para o Cursor',
-    '```',
-    buildCursorPrompt(ctx, route),
-    '```',
-  ].join('\n')
+  const modulo = ctx.modulo ?? resolveModuloFromPath(route)
+  const lines = [userDescription.trim(), '', '---', `Módulo: ${modulo}`, `Rota: ${route}`]
+  if (ctx.indicador) lines.push(`Indicador: ${ctx.indicador}`)
+  if (ctx.area) lines.push(`Área: ${ctx.area}`)
+  if (ctx.ano != null) lines.push(`Ano: ${ctx.ano}`)
+  if (ctx.mes != null) {
+    const mesTxt = Array.isArray(ctx.mes) ? ctx.mes.join(', ') : String(ctx.mes)
+    lines.push(`Mês: ${mesTxt}`)
+  }
+  if (ctx.error?.message) lines.push(`Erro: ${ctx.error.message}`)
+  lines.push('', 'Evidências (screenshot / racional / logs) nos anexos do chamado.')
+  return lines.join('\n')
+}
+
+export function textToAnexoBase64(text: string, filename: string): ReportarErroAnexo {
+  const bytes = new TextEncoder().encode(text)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!)
+  const content_base64 = `data:text/plain;base64,${btoa(binary)}`
+  return {
+    filename,
+    content_base64,
+    content_type: 'text/plain; charset=utf-8',
+  }
 }

@@ -26,10 +26,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { installClientLogBuffer, formatClientLogsForTicket } from './clientLogBuffer'
 import { captureViewportScreenshot } from './captureScreenshot'
 import {
-  appendCursorPromptToDescription,
+  buildCursorPrompt,
   buildDefaultDescription,
   buildDefaultTitle,
+  buildTicketDescription,
   resolveModuloFromPath,
+  textToAnexoBase64,
   type ReportarErroContext,
 } from './buildReportContent'
 import { reportarErroSioe } from './reportarErroService'
@@ -124,11 +126,15 @@ export function ErrorReportingProvider({ children }: { children: ReactNode }) {
       toast.error('Informe título e descrição')
       return
     }
-    const description = appendCursorPromptToDescription(
-      userDescription,
-      draft.ctx,
-      draft.route,
+    const description = buildTicketDescription(userDescription, draft.ctx, draft.route)
+    const anexos = [...(draft.ctx.anexos ?? [])]
+    anexos.push(
+      textToAnexoBase64(buildCursorPrompt(draft.ctx, draft.route), 'prompt-cursor.txt'),
     )
+    const logs = formatClientLogsForTicket(25)
+    if (logs && !logs.includes('nenhum log')) {
+      anexos.push(textToAnexoBase64(logs, 'client-logs.txt'))
+    }
     setSubmitting(true)
     try {
       const result = await reportarErroSioe({
@@ -141,11 +147,10 @@ export function ErrorReportingProvider({ children }: { children: ReactNode }) {
         mes: draft.ctx.mes,
         area: draft.ctx.area,
         screenshot_base64: draft.screenshot,
-        client_logs: formatClientLogsForTicket(),
         user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
         error_message: draft.ctx.error?.message ?? null,
         error_stack: draft.ctx.error?.stack ?? null,
-        anexos: draft.ctx.anexos,
+        anexos,
       })
       toast.success(
         result.assigned_to_name
