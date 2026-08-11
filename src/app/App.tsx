@@ -11,7 +11,6 @@ import { InadimplenciaPage } from '@/features/inadimplencia/pages/InadimplenciaP
 import { InadimplenciaDashboardPage } from '@/features/inadimplencia/pages/InadimplenciaDashboardPage'
 import { InadimplenciaJudicializadaPage } from '@/features/inadimplencia-judicializada/pages/InadimplenciaJudicializadaPage'
 import { EscritorioPage } from '@/features/escritorio/pages/EscritorioPage'
-import { EscritorioFinanceiroDetalhePage } from '@/features/escritorio/pages/EscritorioFinanceiroDetalhePage'
 import { CobrancaPage } from '@/features/cobranca/pages/CobrancaPage'
 import { CobrancaSeguimentoPage } from '@/features/cobranca/pages/CobrancaSeguimentoPage'
 import { UsuariosPage } from '@/features/usuarios/pages/UsuariosPage'
@@ -117,11 +116,7 @@ function AppRoutes() {
           />
           <Route
             path="escritorio/financeiro/:metrica"
-            element={
-              <ProtectedRoute routePath="/financeiro/escritorio" moduleKey="escritorio">
-                <EscritorioFinanceiroDetalhePage />
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/financeiro/escritorio" replace />}
           />
           <Route
             path="cobranca"

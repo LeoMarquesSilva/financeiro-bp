@@ -281,10 +281,30 @@ function normalizeCnpj(val) {
   return digits.length >= 14 ? digits.slice(0, 14) : digits.length > 0 ? digits : null;
 }
  
+/**
+ * Match de cabeçalho por aliases.
+ * NÃO usa `alias.includes(h)` para h curto (ex.: "ci") — isso fazia
+ * "total de horas em decimal".includes("ci") === true e mapeava horas → coluna CI.
+ */
+function stripHeaderAccents(s) {
+  return String(s ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\uFFFD/g, '');
+}
+
 function findColumnIndex(headerRow, aliases) {
-  const normalized = headerRow.map((h) => (h != null ? String(h).toLowerCase().trim() : ''));
+  const normalized = headerRow.map((h) => stripHeaderAccents(h != null ? String(h).trim() : ''));
   for (const alias of aliases) {
-    const idx = normalized.findIndex((h) => h.includes(alias.toLowerCase()) || alias.toLowerCase().includes(h));
+    const a = stripHeaderAccents(alias);
+    if (!a) continue;
+    let idx = normalized.findIndex((h) => h === a);
+    if (idx >= 0) return idx;
+    idx = normalized.findIndex((h) => h.length > 0 && h.includes(a));
+    if (idx >= 0) return idx;
+    // Alias contém o cabeçalho só se o cabeçalho for razoavelmente específico (≥ 4 chars)
+    idx = normalized.findIndex((h) => h.length >= 4 && a.includes(h));
     if (idx >= 0) return idx;
   }
   return -1;
@@ -505,41 +525,166 @@ const TIMESHEETS_COLUMNS = {
   area: ['área', 'area'],
   nro_processo: ['nro processo', 'nro_processo', 'numero processo', 'processo'],
   origem: ['origem'],
-  ci_atendimento_processo: ['ci atendimento processo', 'ci atendimento'],
-  pasta_interna_processo: ['pasta interna processo', 'pasta interna'],
-  pasta_contrato: ['pasta contrato'],
+  ci_atendimento_processo: ['ci do atendimento/processo', 'ci atendimento processo', 'ci atendimento'],
+  pasta_interna_processo: ['pasta interna - processo', 'pasta interna processo', 'pasta interna'],
+  pasta_contrato: ['pasta - contrato', 'pasta contrato'],
   colaborador: ['colaborador'],
   tipo_apontamento: ['tipo apontamento', 'tipo de apontamento'],
-  tipo_tarefa: ['tipo tarefa', 'tipo de tarefa'],
+  tipo_tarefa: ['tipo tarefa', 'tipo de tarefa', 'tipo da tarefa'],
   descricao: ['descrição', 'descricao'],
   hora_inicial: ['hora inicial', 'hora inicial'],
   hora_final: ['hora final', 'hora final'],
-  total_horas: ['total de horas em decimal', 'total de horas', 'total horas', 'horas', 'total_horas', 'horas totais', 'em decimal'],
-  total_horas_decimal: ['total de horas em decimal', 'total horas decimal'],
-  valor_hora: ['valor hora', 'valor/hora'],
+  // Ordem importa: aliases longos primeiro; NÃO usar só "em decimal" / "horas" (pega coluna errada).
+  // VIOS atual: "Horas Apontadas" / "Horas Apontadas em decimal" (antes: "Total de Horas").
+  total_horas: [
+    'horas apontadas em decimal',
+    'total de horas em decimal',
+    'total horas em decimal',
+    'horas apontadas',
+    'total de horas',
+    'total horas',
+    'horas totais',
+    'total_horas',
+  ],
+  total_horas_decimal: [
+    'horas apontadas em decimal',
+    'total de horas em decimal',
+    'total horas em decimal',
+    'total horas decimal',
+  ],
+  valor_hora: ['valor da hora', 'valor hora', 'valor/hora'],
   valor_total: ['valor total', 'valor total'],
   contrato: ['contrato'],
 };
+
+/** Limite: apontamento individual > isto é tratado como valor suspeito (ex.: CI na coluna de horas). */
+const TIMESHEET_HORAS_ABSURDO = 100;
  
-/** Normaliza cabeçalho para match: strip HTML e colapsa espaços (ex.: "Total de Horas <br><small>em decimal</small>" → "total de horas em decimal"). */
+/** Normaliza cabeçalho para match: strip HTML, acentos e colapsa espaços. */
 function normalizeTimeSheetsHeader(headerRow) {
-  return headerRow.map((h) =>
-    (h != null ? String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase() : '')
-  );
+  return headerRow.map((h) => {
+    if (h == null) return '';
+    return String(h)
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\uFFFD/g, '');
+  });
+}
+
+/**
+ * Lê TimeSheets (.csv VIOS com ; + latin1, ou .xlsx) → matriz [header, ...rows].
+ * Se as primeiras linhas forem título/vazio, procura a linha de cabeçalho real.
+ */
+function readTimeSheetsMatrix(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  let data;
+  if (ext === '.csv') {
+    const text = decodeViosCsvFile(filePath);
+    const firstLine = (text.split(/\r?\n/).find((l) => l.trim()) || '').replace(/^\uFEFF/, '');
+    const semi = (firstLine.match(/;/g) || []).length;
+    const comma = (firstLine.match(/,/g) || []).length;
+    const tab = (firstLine.match(/\t/g) || []).length;
+    let delim = ';';
+    if (tab > semi && tab > comma) delim = '\t';
+    else if (comma > semi) delim = ',';
+    const workbook = XLSX.read(text, {
+      type: 'string',
+      FS: delim,
+      cellDates: true,
+      raw: true,
+    });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!sheet) throw new Error('Nenhuma aba encontrada no TimeSheets CSV.');
+    data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+    console.log(
+      '[Sync Supabase] TimeSheets CSV: delim=',
+      JSON.stringify(delim),
+      '| colunas na 1ª linha=',
+      (data[0] || []).length,
+    );
+  } else {
+    const workbook = XLSX.readFile(filePath, { cellDates: true, raw: true });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!sheet) throw new Error('Nenhuma aba encontrada no TimeSheets.');
+    data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+  }
+
+  // VIOS às vezes coloca título antes do cabeçalho — achar linha com Data + Cliente + Horas.
+  const headerAt = findTimeSheetsHeaderRowIndex(data);
+  if (headerAt > 0) {
+    console.log('[Sync Supabase] TimeSheets: cabeçalho na linha', headerAt + 1, '(ignorando', headerAt, 'linha(s) acima)');
+    data = data.slice(headerAt);
+  }
+  return data;
+}
+
+/** Índice da linha que parece cabeçalho do relatório de horas. */
+function findTimeSheetsHeaderRowIndex(data) {
+  const maxScan = Math.min(15, data.length);
+  for (let i = 0; i < maxScan; i++) {
+    const norm = normalizeTimeSheetsHeader(data[i] || []);
+    const hasData = norm.some((h) => h === 'data' || h.startsWith('data '));
+    const hasCliente = norm.some((h) => h === 'cliente' || h === 'razao social');
+    const hasHoras = norm.some((h) => h.includes('hora'));
+    if (hasData && hasCliente && hasHoras) return i;
+    // Cabeçalho numa única célula (CSV sem split) — não conta como válido aqui
+  }
+  return 0;
 }
  
 /**
- * Retorna o índice da coluna de total de horas. Prioriza a coluna "Total de Horas em decimal"
- * (ex.: índice 19 no Adhemar.xlsx); senão cai na coluna "Total de Horas" (que pode ser data Excel).
+ * Coluna "Horas Apontadas em decimal" / "Total de Horas em decimal" (preferencial).
  */
-function findTotalHorasColumnIndex(normalized, headerRow) {
+function findTotalHorasDecimalColumnIndex(normalized, headerRow) {
   for (let i = 0; i < normalized.length; i++) {
     const n = normalized[i];
     const raw = headerRow[i] != null ? String(headerRow[i]).toLowerCase() : '';
-    if ((n.includes('total de horas') || n.includes('total horas')) && (n.includes('decimal') || raw.includes('decimal'))) {
+    const isHoras =
+      n.includes('horas apontadas') ||
+      n.includes('total de horas') ||
+      n.includes('total horas');
+    if (isHoras && (n.includes('decimal') || raw.includes('decimal'))) {
       return i;
     }
   }
+  return -1;
+}
+
+/**
+ * Coluna "Horas Apontadas" / "Total de Horas" (HH:MM / duração), sem "decimal".
+ */
+function findTotalHorasHhmmColumnIndex(normalized) {
+  for (let i = 0; i < normalized.length; i++) {
+    const n = normalized[i];
+    if (!n.includes('hora')) continue;
+    if (n.includes('decimal')) continue;
+    if (n.includes('inicial') || n.includes('final')) continue;
+    if (n.includes('valor')) continue;
+    if (
+      n.includes('horas apontadas') ||
+      n.includes('total de horas') ||
+      n.includes('total horas') ||
+      n === 'horas' ||
+      n === 'total_horas'
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Índice principal de horas: decimal se existir; senão HH:MM.
+ */
+function findTotalHorasColumnIndex(normalized, headerRow) {
+  const dec = findTotalHorasDecimalColumnIndex(normalized, headerRow);
+  if (dec >= 0) return dec;
+  const hhmm = findTotalHorasHhmmColumnIndex(normalized);
+  if (hhmm >= 0) return hhmm;
   return findColumnIndex(normalized, TIMESHEETS_COLUMNS.total_horas);
 }
 
@@ -557,19 +702,53 @@ function findTimeSheetsClienteIndex(normalized) {
   return normalized.findIndex((h) => (h === 'razao social' || h === 'razão social') && !h.includes('grupo'));
 }
 
+/** Coluna CI: cabeçalho exato "ci" (evita "ci atendimento"). */
+function findTimeSheetsCiIndex(normalized) {
+  const exact = normalized.findIndex((h) => h === 'ci');
+  if (exact >= 0) return exact;
+  return normalized.findIndex((h) => h === 'c.i.' || h === 'c.i');
+}
+
 function buildTimeSheetsColumnIndexes(headerRow) {
   const normalized = normalizeTimeSheetsHeader(headerRow);
+  const idxDecimal = findTotalHorasDecimalColumnIndex(normalized, headerRow);
+  const idxHhmm = findTotalHorasHhmmColumnIndex(normalized);
   const idx = {
     data: findColumnIndex(normalized, TIMESHEETS_COLUMNS.data),
     grupo_cliente: findTimeSheetsGrupoClienteIndex(normalized),
     cliente: findTimeSheetsClienteIndex(normalized),
+    ci: findTimeSheetsCiIndex(normalized),
     total_horas: findTotalHorasColumnIndex(normalized, headerRow),
+    total_horas_hhmm: idxHhmm,
+    total_horas_decimal: idxDecimal >= 0 ? idxDecimal : -1,
   };
   for (const [key, aliases] of Object.entries(TIMESHEETS_COLUMNS)) {
     if (idx[key] === undefined) idx[key] = findColumnIndex(normalized, aliases);
   }
-  idx.total_horas_decimal = idx.total_horas_decimal >= 0 ? idx.total_horas_decimal : idx.total_horas;
+  if (idx.total_horas_decimal < 0) idx.total_horas_decimal = idx.total_horas;
   return idx;
+}
+
+/**
+ * Resolve horas do apontamento. Se a coluna decimal vier com CI/lixo (>100h),
+ * tenta a coluna HH:MM; se ainda absurdo, retorna null.
+ */
+function resolveTimeSheetHoras(rawPrimary, rawHhmm, primaryIsDecimal) {
+  let horas = primaryIsDecimal ? parseDecimalHoursColumn(rawPrimary) : parseHorasTimeSheet(rawPrimary);
+  if (horas != null && horas >= 0 && horas <= TIMESHEET_HORAS_ABSURDO) return horas;
+
+  if (rawHhmm != null && rawHhmm !== '' && rawHhmm !== rawPrimary) {
+    const alt = parseHorasTimeSheet(rawHhmm);
+    if (alt != null && alt >= 0 && alt <= TIMESHEET_HORAS_ABSURDO) return alt;
+  }
+
+  // Inteiro grande: pode ser segundos (ex.: 7200 → 2h), não CI de 6 dígitos.
+  if (typeof rawPrimary === 'number' && Number.isInteger(rawPrimary) && rawPrimary > 60 && rawPrimary <= 86400) {
+    const asSec = rawPrimary / 3600;
+    if (asSec <= TIMESHEET_HORAS_ABSURDO) return asSec;
+  }
+
+  return horas != null && horas >= 0 ? horas : null;
 }
  
 /**
@@ -587,26 +766,48 @@ export async function runSyncTimeSheets(filePath) {
   }
  
   console.log('[Sync Supabase] TimeSheets:', filePath);
-  let workbook;
+  let data;
   try {
-    workbook = XLSX.readFile(filePath, { cellDates: true, raw: true });
+    data = readTimeSheetsMatrix(filePath);
   } catch (err) {
     throw new Error('Erro ao abrir o arquivo TimeSheets: ' + err.message);
   }
- 
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  if (!sheet) throw new Error('Nenhuma aba encontrada no TimeSheets.');
- 
-  const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
-  if (data.length < 2) throw new Error('TimeSheets sem dados (cabeçalho + pelo menos uma linha).');
+  if (!data || data.length < 2) {
+    throw new Error('TimeSheets sem dados (cabeçalho + pelo menos uma linha).');
+  }
  
   const headerRow = data[0];
   const idx = buildTimeSheetsColumnIndexes(headerRow);
   if (idx.data < 0 || idx.cliente < 0 || idx.total_horas < 0) {
-    throw new Error('TimeSheets: colunas obrigatórias não encontradas (Data, Cliente, Total de Horas). Verifique os cabeçalhos.');
+    const missing = [];
+    if (idx.data < 0) missing.push('Data');
+    if (idx.cliente < 0) missing.push('Cliente');
+    if (idx.total_horas < 0) missing.push('Total de Horas');
+    const preview = normalizeTimeSheetsHeader(headerRow)
+      .map((h, i) => `[${i}]${h || '(vazio)'}`)
+      .join(' | ');
+    console.error('[Sync Supabase] Cabeçalhos normalizados:', preview);
+    throw new Error(
+      'TimeSheets: colunas obrigatórias não encontradas (' +
+        missing.join(', ') +
+        '). Verifique os cabeçalhos.',
+    );
   }
+
+  console.log('[Sync Supabase] TimeSheets colunas:', {
+    data: idx.data,
+    cliente: idx.cliente,
+    ci: idx.ci,
+    total_horas: idx.total_horas,
+    header_horas: headerRow[idx.total_horas],
+    total_horas_hhmm: idx.total_horas_hhmm,
+    total_horas_decimal: idx.total_horas_decimal,
+  });
  
   const rows = [];
+  let skippedIncomplete = 0;
+  let skippedAbsurd = 0;
+  let skippedNoCi = 0;
   const headerTotalHorasRaw = idx.total_horas >= 0 && headerRow[idx.total_horas] != null ? String(headerRow[idx.total_horas]).toLowerCase() : '';
   const isDecimalHorasColumn = headerTotalHorasRaw.includes('decimal');
  
@@ -617,21 +818,45 @@ export async function runSyncTimeSheets(filePath) {
     const dataISO = parseDateToISO(idx.data >= 0 ? row[idx.data] : null);
     const cliente = idx.cliente >= 0 ? String(row[idx.cliente] ?? '').trim() : '';
     const rawHoras = idx.total_horas >= 0 ? row[idx.total_horas] : null;
-    const totalHoras = isDecimalHorasColumn ? parseDecimalHoursColumn(rawHoras) : parseHorasTimeSheet(rawHoras);
-    if (!dataISO || !cliente || totalHoras == null || totalHoras < 0) continue;
-    if (totalHoras > 10000) {
-      console.warn('[Sync Supabase] TimeSheets: linha ignorada (total_horas absurdo):', totalHoras, '| data:', dataISO, '| cliente:', cliente);
+    const rawHhmm = idx.total_horas_hhmm >= 0 ? row[idx.total_horas_hhmm] : null;
+    const totalHoras = resolveTimeSheetHoras(rawHoras, rawHhmm, isDecimalHorasColumn);
+    if (!dataISO || !cliente || totalHoras == null || totalHoras < 0) {
+      skippedIncomplete++;
+      continue;
+    }
+    if (totalHoras > TIMESHEET_HORAS_ABSURDO) {
+      skippedAbsurd++;
+      if (skippedAbsurd <= 5) {
+        console.warn(
+          '[Sync Supabase] TimeSheets: linha ignorada (total_horas absurdo):',
+          totalHoras,
+          '| raw:',
+          rawHoras,
+          '| data:',
+          dataISO,
+          '| cliente:',
+          cliente,
+        );
+      }
+      continue;
+    }
+    const ci = trimOpt(idx.ci);
+    if (!ci) {
+      skippedNoCi++;
       continue;
     }
     const th = Math.max(0, totalHoras);
     const vHora = numOpt(idx.valor_hora);
     const vTotal = numOpt(idx.valor_total);
     const rawDecimal = idx.total_horas_decimal >= 0 ? row[idx.total_horas_decimal] : null;
-    const totalHorasDecimal = isDecimalHorasColumn
+    let totalHorasDecimal = isDecimalHorasColumn
       ? th
       : (typeof rawDecimal === 'number' ? rawDecimal : parseValorBR(rawDecimal));
+    if (totalHorasDecimal == null || Number.isNaN(totalHorasDecimal) || totalHorasDecimal > TIMESHEET_HORAS_ABSURDO) {
+      totalHorasDecimal = th;
+    }
     rows.push({
-      ci: trimOpt(idx.ci),
+      ci,
       data: dataISO,
       cobrar: trimOpt(idx.cobrar),
       grupo_cliente: idx.grupo_cliente >= 0 ? String(row[idx.grupo_cliente] ?? '').trim() || null : null,
@@ -650,18 +875,26 @@ export async function runSyncTimeSheets(filePath) {
       hora_inicial: trimOpt(idx.hora_inicial),
       hora_final: trimOpt(idx.hora_final),
       total_horas: th,
-      total_horas_decimal: totalHorasDecimal != null && !Number.isNaN(totalHorasDecimal) ? Math.round(totalHorasDecimal * 100) / 100 : th,
+      total_horas_decimal: Math.round(totalHorasDecimal * 100) / 100,
       valor_hora: vHora != null ? Math.round(vHora * 100) / 100 : null,
       valor_total: vTotal != null ? Math.round(vTotal * 100) / 100 : null,
       contrato: trimOpt(idx.contrato),
     });
   }
 
+  console.log(
+    '[Sync Supabase] TimeSheets parse:',
+    'linhas arquivo=', data.length - 1,
+    '| válidas=', rows.length,
+    '| incompletas=', skippedIncomplete,
+    '| horas absurdas=', skippedAbsurd,
+    '| sem CI=', skippedNoCi,
+  );
+
   // Uma linha por CI: evita "ON CONFLICT DO UPDATE cannot affect row a second time" no mesmo lote.
   const byCi = new Map();
   for (const r of rows) {
-    const key = String(r.ci ?? '');
-    byCi.set(key, r);
+    byCi.set(String(r.ci), r);
   }
   const rowsDedup = [...byCi.values()];
   if (rowsDedup.length < rows.length) {

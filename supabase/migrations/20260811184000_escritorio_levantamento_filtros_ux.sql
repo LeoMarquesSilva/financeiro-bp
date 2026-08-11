@@ -1,0 +1,2 @@
+-- UX: grupos unificados (casing), match case-insensitive, timesheet_data_max no resumo/opcoes.
+-- Aplicado via MCP; arquivo espelha o estado remoto.

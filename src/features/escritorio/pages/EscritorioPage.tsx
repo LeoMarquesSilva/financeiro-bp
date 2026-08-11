@@ -1,459 +1,188 @@
-import { useState, useMemo, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import type { GrupoEscritorio, FiltroFinanceiro, OrdenacaoEscritorio } from '../services/escritorioService'
-import { GRUPO_SEM_NOME } from '../services/escritorioService'
-import { GrupoEscritorioCard } from '../components/GrupoEscritorioCard'
-import { ClienteEscritorioDetailSheet } from '../components/ClienteEscritorioDetailSheet'
-import { useGruposEscritorioPaginado } from '../hooks/useGruposEscritorioPaginado'
-import { useInadimplenciaGruposIndex } from '../hooks/useInadimplenciaGruposIndex'
-import {
-  getInadimplenciaStatusForGrupo,
-  countInadimplenciaFromResumo,
-  countComiteFromResumo,
-  type FiltroInadimplencia,
-  type FiltroComite,
-  type InadimplenciaGrupoStatus,
-} from '../services/inadimplenciaGruposIndex'
-import {
-  countAtrasoInadimplenciaFromResumo,
-  defaultDataReferenciaEscritorio,
-  type FiltroAtrasoInadimplencia,
-} from '../services/escritorioAtrasoIndex'
-import { useEscritorioAtrasoIndex } from '../hooks/useEscritorioAtrasoIndex'
-import { useDebounce } from '@/shared/hooks/useDebounce'
-import { Input } from '@/components/ui/input'
+import { useEffect, useMemo, useState } from 'react'
+import { Building2, Download, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { EscritorioTotalCard } from '../components/EscritorioTotalCard'
+import { LevantamentoFiltros } from '../components/LevantamentoFiltros'
+import { LevantamentoKpiCards } from '../components/LevantamentoKpiCards'
+import { LevantamentoTiposAgendamento } from '../components/LevantamentoTiposAgendamento'
+import { LevantamentoRacionalSheet } from '../components/LevantamentoRacionalSheet'
 import {
-  METRICAS_FINANCEIRAS,
-  countGruposMetrica,
-  valorTotalMetrica,
-  type MetricaFinanceiraEscritorio,
-} from '../constants/financeiroTotais'
-import { parseCurrencyBr } from '@/shared/utils/format'
-import { Search, Building2, Loader2, RefreshCw, Filter, ArrowUpDown, AlertTriangle, CircleDollarSign, Banknote, CalendarClock, ChevronLeft, ChevronRight, Scale, CheckCircle2, Users, UserX, CalendarDays } from 'lucide-react'
-import { cn } from '@/lib/utils'
-
-import type { ClienteEscritorioRow } from '@/lib/database.types'
-
-interface SheetContext {
-  cliente: ClienteEscritorioRow
-  empresas: ClienteEscritorioRow[]
-  escopoGrupoInicial: boolean
-  inadimplencia: InadimplenciaGrupoStatus | null
-}
-
-export type { FiltroFinanceiro, OrdenacaoEscritorio }
-
-const GRUPOS_POR_PAGINA = 12
-const DEBOUNCE_BUSCA_MS = 350
+  useLevantamentoFiltrosOpcoes,
+  useLevantamentoResumo,
+} from '../hooks/useEscritorioLevantamento'
+import {
+  defaultMesCorrente,
+  type LevantamentoBloco,
+  type LevantamentoFiltros as Filtros,
+} from '../services/escritorioLevantamentoService'
+import { mesContainingIso } from '../utils/levantamentoAreas'
+import { exportLevantamentoRelatorioCompleto } from '../utils/levantamentoExport'
 
 export function EscritorioPage() {
-  const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [busca, setBusca] = useState('')
-  const debouncedBusca = useDebounce(busca, DEBOUNCE_BUSCA_MS)
+  const mes = defaultMesCorrente()
+  const [dataInicio, setDataInicio] = useState(mes.dataInicio)
+  const [dataFim, setDataFim] = useState(mes.dataFim)
+  const [periodoInicializado, setPeriodoInicializado] = useState(false)
+  const [gruposSelecionados, setGruposSelecionados] = useState<string[]>([])
+  const [area, setArea] = useState<string | null>(null)
+  const [exportando, setExportando] = useState(false)
+  const [racionalBloco, setRacionalBloco] = useState<LevantamentoBloco | null>(null)
+  const [racionalTipo, setRacionalTipo] = useState<string | null>(null)
 
-  useEffect(() => {
-    const buscaParam = searchParams.get('busca')
-    if (buscaParam) {
-      setBusca(buscaParam)
-      setSearchParams({}, { replace: true })
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  const [filtroFinanceiro, setFiltroFinanceiro] = useState<FiltroFinanceiro>('todos')
-  const [filtroInadimplencia, setFiltroInadimplencia] = useState<FiltroInadimplencia>('todos')
-  const [filtroComite, setFiltroComite] = useState<FiltroComite>('todos')
-  const [filtroAtrasoInadimplencia, setFiltroAtrasoInadimplencia] = useState<FiltroAtrasoInadimplencia>('todos')
-  const [dataReferencia, setDataReferencia] = useState(defaultDataReferenciaEscritorio)
-  const [minValorStr, setMinValorStr] = useState('')
-  const [ordenacao, setOrdenacao] = useState<OrdenacaoEscritorio>('nome')
-  const [selectedContext, setSelectedContext] = useState<SheetContext | null>(null)
-
-  const minValor = useMemo(() => (minValorStr.trim() ? parseCurrencyBr(minValorStr) : 0), [minValorStr])
-  const filtros = useMemo(
-    () => ({
-      busca: debouncedBusca,
-      filtroFinanceiro,
-      filtroInadimplencia,
-      filtroComite,
-      filtroAtrasoInadimplencia,
-      minValor,
-      ordenacao,
-    }),
-    [debouncedBusca, filtroFinanceiro, filtroInadimplencia, filtroComite, filtroAtrasoInadimplencia, minValor, ordenacao],
+  const filtros: Filtros = useMemo(
+    () => ({ dataInicio, dataFim, grupos: gruposSelecionados, area }),
+    [dataInicio, dataFim, gruposSelecionados, area],
   )
 
-  const { index: inadimplenciaIndex } = useInadimplenciaGruposIndex()
-  const { index: atrasoIndex, fetching: fetchingAtraso } = useEscritorioAtrasoIndex(dataReferencia)
+  const { data: opcoes } = useLevantamentoFiltrosOpcoes()
+  const { data: resumo, isLoading, error, refetch, isFetching } = useLevantamentoResumo(filtros)
 
-  const {
-    grupos: filtrado,
-    resumoAll,
-    totalCount,
-    totalPages,
-    page,
-    setPage,
-    totais,
-    loading,
-    fetchingResumo,
-    loadingEmpresas,
-    error,
-    refetch,
-  } = useGruposEscritorioPaginado(filtros, GRUPOS_POR_PAGINA, inadimplenciaIndex, atrasoIndex)
-
-  const inadimplenciaCounts = useMemo(() => {
-    if (!inadimplenciaIndex || resumoAll.length === 0) return { inadimplentes: 0, resolvidos: 0 }
-    return countInadimplenciaFromResumo(resumoAll, inadimplenciaIndex)
-  }, [resumoAll, inadimplenciaIndex])
-
-  const comiteCounts = useMemo(() => {
-    if (!inadimplenciaIndex || resumoAll.length === 0) return { comite: 0, foraComite: 0 }
-    return countComiteFromResumo(resumoAll, inadimplenciaIndex)
-  }, [resumoAll, inadimplenciaIndex])
-
-  const atrasoCounts = useMemo(() => {
-    if (!atrasoIndex || resumoAll.length === 0) return { emAtraso: 0, inadimplentes: 0 }
-    return countAtrasoInadimplenciaFromResumo(resumoAll, atrasoIndex)
-  }, [resumoAll, atrasoIndex])
-
-  const openGrupoSheet = (grupo: GrupoEscritorio, empresa: ClienteEscritorioRow, escopoGrupoInicial: boolean) => {
-    const inadimplencia = inadimplenciaIndex
-      ? getInadimplenciaStatusForGrupo(grupo, inadimplenciaIndex)
-      : null
-    setSelectedContext({
-      cliente: empresa,
-      empresas: grupo.empresas,
-      escopoGrupoInicial,
-      inadimplencia,
-    })
-  }
-
-  const handleSelectEmpresa = (grupo: GrupoEscritorio, empresa: ClienteEscritorioRow) => {
-    openGrupoSheet(grupo, empresa, false)
-  }
-
-  const handleOpenGrupo = (grupo: GrupoEscritorio) => {
-    if (grupo.empresas.length === 0) return
-    openGrupoSheet(grupo, grupo.empresas[0], grupo.empresas.length > 1)
-  }
-
+  // Se o mês corrente ainda não tem timesheet, abre no mês da última sync.
   useEffect(() => {
-    setPage(1)
-  }, [debouncedBusca, filtroFinanceiro, filtroInadimplencia, filtroComite, filtroAtrasoInadimplencia, dataReferencia, minValor, ordenacao])
+    if (periodoInicializado || !opcoes?.timesheetDataMax) return
+    if (mes.dataInicio > opcoes.timesheetDataMax) {
+      const periodo = mesContainingIso(opcoes.timesheetDataMax)
+      setDataInicio(periodo.dataInicio)
+      setDataFim(periodo.dataFim)
+    }
+    setPeriodoInicializado(true)
+  }, [opcoes?.timesheetDataMax, periodoInicializado, mes.dataInicio])
 
-  const handleOpenMetrica = (metrica: MetricaFinanceiraEscritorio) => {
-    const config = METRICAS_FINANCEIRAS.find((m) => m.id === metrica)
-    if (config) navigate(`/financeiro/escritorio/financeiro/${config.slug}`)
+  async function handleBaixarRelatorio() {
+    if (!resumo || exportando) return
+    setExportando(true)
+    try {
+      const { truncado } = await exportLevantamentoRelatorioCompleto(resumo, filtros)
+      toast.success(
+        truncado
+          ? 'Relatório baixado (algumas abas truncadas em 5.000 linhas)'
+          : 'Relatório baixado',
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falha ao gerar relatório')
+    } finally {
+      setExportando(false)
+    }
   }
+
+  const timesheetAteLabel = opcoes?.timesheetDataMax
+    ? opcoes.timesheetDataMax.split('-').reverse().join('/')
+    : null
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-          <Building2 className="h-7 w-7 shrink-0 text-slate-600" />
-          Escritório
-        </h1>
-      </header>
-
-      {/* Cards de totais — scroll horizontal no mobile, grid no desktop */}
-      {!loading && !error && resumoAll.length > 0 && (
-        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 snap-x snap-mandatory sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3 2xl:grid-cols-5">
-          {METRICAS_FINANCEIRAS.map((config) => (
-            <EscritorioTotalCard
-              key={config.id}
-              config={config}
-              valor={valorTotalMetrica(totais, config.id)}
-              countGrupos={countGruposMetrica(totais, config.id)}
-              onClick={() => handleOpenMetrica(config.id)}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <Input
-          type="search"
-          placeholder="Buscar por grupo ou empresa..."
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          className="pl-9"
-        />
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={loading || fetchingResumo}
-          className="shrink-0"
-        >
-          {(fetchingResumo || loadingEmpresas) && !loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-          <span className="ml-1.5">Atualizar</span>
-        </Button>
-      </div>
-
-      {/* Filtros: situação (com contagem) + valor mínimo + ordenação */}
-      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3">
-        <div className="flex w-full flex-wrap items-center gap-2 border-b border-slate-200 pb-3 sm:w-auto sm:border-b-0 sm:pb-0">
-          <CalendarDays className="h-4 w-4 shrink-0 text-slate-500" />
-          <Label htmlFor="data-referencia-escritorio" className="whitespace-nowrap text-sm font-medium text-slate-600">
-            Data de referência:
-          </Label>
-          <Input
-            id="data-referencia-escritorio"
-            type="date"
-            value={dataReferencia}
-            onChange={(e) => setDataReferencia(e.target.value)}
-            className="h-8 w-40 bg-white"
-          />
-          {fetchingAtraso && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+            <Building2 className="h-6 w-6 text-slate-600" />
+            Escritório
+          </h1>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Levantamento e visualização — publicações, timesheet, processos e tarefas
+            {timesheetAteLabel ? ` · timesheet até ${timesheetAteLabel}` : null}
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-slate-500" />
-          <span className="text-sm font-medium text-slate-600">Situação:</span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {(
-            [
-              { value: 'todos' as const, label: 'Todos', icon: undefined, count: totalCount },
-              { value: 'em_atraso' as const, label: 'Em atraso', icon: AlertTriangle, count: totais.countAtraso },
-              { value: 'a_vencer' as const, label: 'A vencer', icon: CalendarClock, count: totais.countAVencer },
-              { value: 'em_aberto' as const, label: 'Em aberto', icon: CircleDollarSign, count: totais.countAberto },
-              { value: 'com_pago' as const, label: 'Com valor pago', icon: Banknote, count: totais.countPago },
-            ]
-          ).map(({ value, label, icon: Icon, count }) => (
-            <Button
-              key={value}
-              type="button"
-              variant={filtroFinanceiro === value ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFiltroFinanceiro(value)}
-              className={cn('shrink-0', filtroFinanceiro === value && 'ring-1 ring-slate-400')}
-            >
-              {Icon != null && <Icon className="mr-1 h-3.5 w-3.5" />}
-              {value === 'todos' ? `${label} (${count})` : `${label} (${count})`}
-            </Button>
-          ))}
-        </div>
-        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-200 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 sm:w-auto">
-          <Users className="h-4 w-4 shrink-0 text-slate-500" />
-          <span className="text-sm font-medium text-slate-600">Comitê:</span>
-          {(
-            [
-              { value: 'todos' as const, label: 'Todos', icon: undefined, count: resumoAll.length },
-              { value: 'comite' as const, label: 'No Comitê', icon: Users, count: comiteCounts.comite },
-              { value: 'fora_comite' as const, label: 'Fora do Comitê', icon: UserX, count: comiteCounts.foraComite },
-            ]
-          ).map(({ value, label, icon: Icon, count }) => (
-            <Button
-              key={value}
-              type="button"
-              variant={filtroComite === value ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFiltroComite(value)}
-              className={cn(
-                'shrink-0',
-                filtroComite === value && 'ring-1 ring-slate-400',
-                value === 'comite' && filtroComite === value && 'bg-amber-700 hover:bg-amber-800',
-              )}
-            >
-              {Icon != null && <Icon className="mr-1 h-3.5 w-3.5" />}
-              {`${label} (${count})`}
-            </Button>
-          ))}
-        </div>
-        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-200 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 sm:w-auto">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-slate-500" />
-          <span className="text-sm font-medium text-slate-600">Atraso:</span>
-          {(
-            [
-              { value: 'todos' as const, label: 'Todos', icon: undefined, count: resumoAll.length },
-              { value: 'em_atraso' as const, label: 'Em atraso (<3 meses)', icon: AlertTriangle, count: atrasoCounts.emAtraso },
-              { value: 'inadimplentes' as const, label: 'Inadimplentes (≥3 meses)', icon: Scale, count: atrasoCounts.inadimplentes },
-            ]
-          ).map(({ value, label, icon: Icon, count }) => (
-            <Button
-              key={value}
-              type="button"
-              variant={filtroAtrasoInadimplencia === value ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFiltroAtrasoInadimplencia(value)}
-              className={cn(
-                'shrink-0',
-                filtroAtrasoInadimplencia === value && 'ring-1 ring-slate-400',
-                value === 'inadimplentes' && filtroAtrasoInadimplencia === value && 'bg-red-700 hover:bg-red-800',
-              )}
-            >
-              {Icon != null && <Icon className="mr-1 h-3.5 w-3.5" />}
-              {`${label} (${count})`}
-            </Button>
-          ))}
-        </div>
-        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-200 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 sm:w-auto">
-          <Scale className="h-4 w-4 shrink-0 text-slate-500" />
-          <span className="text-sm font-medium text-slate-600">Cadastro comitê:</span>
-          {(
-            [
-              { value: 'todos' as const, label: 'Todos', icon: undefined, count: resumoAll.length },
-              { value: 'inadimplentes' as const, label: 'Só inadimplentes', icon: Scale, count: inadimplenciaCounts.inadimplentes },
-              { value: 'resolvidos' as const, label: 'Resolvidos', icon: CheckCircle2, count: inadimplenciaCounts.resolvidos },
-            ]
-          ).map(({ value, label, icon: Icon, count }) => (
-            <Button
-              key={value}
-              type="button"
-              variant={filtroInadimplencia === value ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFiltroInadimplencia(value)}
-              className={cn(
-                'shrink-0',
-                filtroInadimplencia === value && 'ring-1 ring-slate-400',
-                value === 'inadimplentes' && filtroInadimplencia === value && 'bg-red-700 hover:bg-red-800',
-                value === 'resolvidos' && filtroInadimplencia === value && 'bg-slate-600 hover:bg-slate-700'
-              )}
-            >
-              {Icon != null && <Icon className="mr-1 h-3.5 w-3.5" />}
-              {`${label} (${count})`}
-            </Button>
-          ))}
-        </div>
-        {filtroFinanceiro !== 'todos' && (
-          <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
-            <Label htmlFor="min-valor-escritorio" className="whitespace-nowrap text-sm font-medium text-slate-600">
-              Valor mínimo (R$):
-            </Label>
-            <Input
-              id="min-valor-escritorio"
-              type="text"
-              inputMode="decimal"
-              placeholder="Ex: 1000"
-              value={minValorStr}
-              onChange={(e) => setMinValorStr(e.target.value)}
-              className="h-8 w-24"
-            />
-          </div>
-        )}
-        <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
-          <ArrowUpDown className="h-4 w-4 text-slate-500" />
-          <Label htmlFor="ordenacao-escritorio" className="whitespace-nowrap text-sm font-medium text-slate-600">
-            Ordenar:
-          </Label>
-          <select
-            id="ordenacao-escritorio"
-            value={ordenacao}
-            onChange={(e) => setOrdenacao(e.target.value as OrdenacaoEscritorio)}
-            className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            disabled={isLoading || isFetching}
+            onClick={() => void refetch()}
           >
-            <option value="nome">Nome do grupo</option>
-            <option value="atraso">Mais valor em atraso</option>
-            <option value="a_vencer">Mais a vencer</option>
-            <option value="aberto">Mais valor em aberto</option>
-            <option value="pago">Mais valor pago</option>
-          </select>
-        </div>
-      </div>
-
-      {loading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && totalCount === 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white py-12 text-center text-slate-500">
-          Nenhum grupo encontrado ou nenhum grupo corresponde aos filtros. Execute o sync do Processos Completo no vios-app.
-        </div>
-      )}
-
-      {!loading && !error && filtrado.length > 0 && (
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-800">Grupos</h2>
-              <p className="text-sm text-slate-500">
-                Cada card é um grupo; dentro dele estão as empresas. Página {page} de {totalPages} ({totalCount} grupo{totalCount !== 1 ? 's' : ''}).
-              </p>
-            </div>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1 || loadingEmpresas}
-                  className="shrink-0"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Anterior
-                </Button>
-                <span className="text-sm text-slate-600">
-                  {page} / {totalPages}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages || loadingEmpresas}
-                  className="shrink-0"
-                >
-                  Próxima
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+            {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Atualizar
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 gap-1.5"
+            disabled={!resumo || exportando}
+            onClick={() => void handleBaixarRelatorio()}
+          >
+            {exportando ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
             )}
-          </div>
-          {loadingEmpresas && (
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando empresas da página...
-            </div>
-          )}
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {filtrado.map((grupo: GrupoEscritorio) => (
+            Baixar relatório
+          </Button>
+        </div>
+      </header>
+
+      <LevantamentoFiltros
+        dataInicio={dataInicio}
+        dataFim={dataFim}
+        gruposSelecionados={gruposSelecionados}
+        area={area}
+        grupos={opcoes?.grupos ?? []}
+        areas={opcoes?.areas ?? []}
+        onChange={(next) => {
+          if (next.dataInicio !== undefined) setDataInicio(next.dataInicio)
+          if (next.dataFim !== undefined) setDataFim(next.dataFim)
+          if (next.gruposSelecionados !== undefined) setGruposSelecionados(next.gruposSelecionados)
+          if (next.area !== undefined) setArea(next.area)
+        }}
+      />
+
+      {error ? (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error instanceof Error ? error.message : 'Erro ao carregar resumo'}
+        </p>
+      ) : null}
+
+      {gruposSelecionados.length > 0 ? (
+        <p className="text-xs text-slate-500">
+          Filtro de grupo não se aplica a <strong>Agendamentos</strong> (tabela sem grupo_cliente).
+        </p>
+      ) : null}
+
+      <LevantamentoKpiCards
+        resumo={resumo}
+        loading={isLoading}
+        onRacional={(bloco) => {
+          setRacionalTipo(null)
+          setRacionalBloco(bloco)
+        }}
+      />
+
+      <LevantamentoTiposAgendamento
+        rows={resumo?.agendamento_por_tipo ?? []}
+        loading={isLoading}
+        onSelectTipo={(tipo) => {
+          setRacionalTipo(tipo)
+          setRacionalBloco('agendamento')
+        }}
+      />
+
+      {resumo?.processos_por_situacao?.length ? (
+        <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="mb-3 text-sm font-semibold text-slate-900">Processos por situação</h2>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            {resumo.processos_por_situacao.map((s) => (
               <div
-                key={grupo.grupo_cliente}
-                className={grupo.grupo_cliente === GRUPO_SEM_NOME ? 'sm:col-span-2 lg:col-span-3' : undefined}
+                key={s.situacao}
+                className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
               >
-                <GrupoEscritorioCard
-                  grupo={grupo}
-                  inadimplencia={
-                    inadimplenciaIndex ? getInadimplenciaStatusForGrupo(grupo, inadimplenciaIndex) : null
-                  }
-                  onSelectCliente={handleSelectEmpresa}
-                  onOpenGrupo={handleOpenGrupo}
-                />
+                <p className="truncate text-xs text-slate-500">{s.situacao}</p>
+                <p className="text-lg font-semibold tabular-nums text-slate-900">
+                  {s.qtd.toLocaleString('pt-BR')}
+                </p>
               </div>
             ))}
           </div>
         </section>
-      )}
+      ) : null}
 
-      <ClienteEscritorioDetailSheet
-        open={!!selectedContext}
-        onClose={() => setSelectedContext(null)}
-        cliente={selectedContext?.cliente ?? null}
-        grupoEmpresas={selectedContext?.empresas ?? []}
-        onClienteChange={(c) =>
-          setSelectedContext((ctx) => (ctx ? { ...ctx, cliente: c } : null))
-        }
-        inadimplencia={selectedContext?.inadimplencia ?? null}
-        escopoGrupoInicial={selectedContext?.escopoGrupoInicial ?? false}
+      <LevantamentoRacionalSheet
+        bloco={racionalBloco}
+        filtros={filtros}
+        tipoAgendamento={racionalTipo}
+        onClose={() => {
+          setRacionalBloco(null)
+          setRacionalTipo(null)
+        }}
       />
     </div>
   )
