@@ -94,7 +94,7 @@ export function buildTicketDescription(
     lines.push(`Mês: ${mesTxt}`)
   }
   if (ctx.error?.message) lines.push(`Erro: ${ctx.error.message}`)
-  lines.push('', 'Evidências (screenshot / racional / logs) nos anexos do chamado.')
+  lines.push('', 'Evidências nos anexos da conversa do chamado.')
   return lines.join('\n')
 }
 

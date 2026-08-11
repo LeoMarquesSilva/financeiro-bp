@@ -227,34 +227,49 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: insertError.message }, 500)
     }
 
-    let screenshotUrl: string | null = null
-    const uploadedNames: string[] = []
-    if (screenshotBytes) {
-      const fileName = `${Date.now()}-sioe-screenshot.png`
-      const responsumPath = `tickets/${criado.id}/${fileName}`
+    type ChatAttachment = { url: string; name: string; size: number; type: string }
+    const chatAttachments: ChatAttachment[] = []
 
-      const { error: attachErr } = await responsum.storage
+    async function uploadChatFile(
+      bytes: Uint8Array,
+      displayName: string,
+      contentType: string,
+    ): Promise<string | null> {
+      const safeName = displayName.replace(/[^\w.\- ()]+/g, '_').slice(0, 120)
+      const storageName = `${Date.now()}-${safeName}`
+      const responsumPath = `tickets/${criado.id}/${storageName}`
+      const { error: upErr } = await responsum.storage
         .from(RESPONSUM_ATTACHMENTS_BUCKET)
-        .upload(responsumPath, screenshotBytes, {
-          contentType: 'image/png',
-          upsert: false,
-        })
-      if (attachErr) {
+        .upload(responsumPath, bytes, { contentType, upsert: false })
+      if (upErr) return null
+      const { data: pub } = responsum.storage
+        .from(RESPONSUM_ATTACHMENTS_BUCKET)
+        .getPublicUrl(responsumPath)
+      chatAttachments.push({
+        url: pub.publicUrl,
+        name: safeName,
+        size: bytes.length,
+        type: contentType,
+      })
+      return pub.publicUrl
+    }
+
+    let screenshotUrl: string | null = null
+    if (screenshotBytes) {
+      screenshotUrl = await uploadChatFile(
+        screenshotBytes,
+        'sioe-screenshot.png',
+        'image/png',
+      )
+      if (!screenshotUrl) {
         return jsonResponse(
           {
-            error: `Ticket criado (${criado.id}), mas falhou o anexo: ${attachErr.message}`,
+            error: `Ticket criado (${criado.id}), mas falhou o upload do screenshot.`,
             ticket_id: criado.id,
           },
           500,
         )
       }
-      uploadedNames.push(fileName)
-
-      const { data: pubResponsum } = responsum.storage
-        .from(RESPONSUM_ATTACHMENTS_BUCKET)
-        .getPublicUrl(responsumPath)
-      screenshotUrl = pubResponsum.publicUrl
-
       // Backup no SIOE (não bloqueia o fluxo se falhar).
       const now = new Date()
       const yyyy = now.getUTCFullYear()
@@ -275,40 +290,43 @@ Deno.serve(async (req: Request) => {
       try {
         const { mime, data } = stripDataUrlPrefix(raw)
         const bytes = decodeBase64(data)
-        const path = `tickets/${criado.id}/${Date.now()}-${filename}`
-        const { error: upErr } = await responsum.storage
-          .from(RESPONSUM_ATTACHMENTS_BUCKET)
-          .upload(path, bytes, {
-            contentType: anexo.content_type || mime || 'application/octet-stream',
-            upsert: false,
-          })
-        if (!upErr) uploadedNames.push(filename)
+        await uploadChatFile(
+          bytes,
+          filename,
+          anexo.content_type || mime || 'application/octet-stream',
+        )
       } catch {
         // anexo opcional — não derruba o ticket
       }
     }
 
-    if (uploadedNames.length > 0) {
-      const descriptionFinal = [
-        description,
-        '',
-        '---',
-        `Anexos: ${uploadedNames.join(', ')}`,
-        `Reportado por: ${responsumUser.name} <${caller.email}>`,
-        `Categoria: Manutenção em Sistemas / Subcategoria: SIOE (frente LexNextLab)`,
-      ].join('\n')
-
-      await responsum
-        .from('app_c009c0e4f1_tickets')
-        .update({ description: descriptionFinal })
-        .eq('id', criado.id)
+    if (chatAttachments.length > 0) {
+      const { error: chatErr } = await responsum.from('app_c009c0e4f1_chat_messages').insert({
+        ticket_id: criado.id,
+        user_id: responsumUser.id,
+        user_name: responsumUser.name,
+        user_role: 'user',
+        message: 'Evidências do SIOE (screenshot / racional / logs).',
+        attachments: chatAttachments,
+        read: false,
+      })
+      if (chatErr) {
+        return jsonResponse(
+          {
+            error: `Ticket criado (${criado.id}), mas falhou a mensagem do chat com anexos: ${chatErr.message}`,
+            ticket_id: criado.id,
+            screenshot_url: screenshotUrl,
+          },
+          500,
+        )
+      }
     }
 
     return jsonResponse({
       ok: true,
       ticket_id: criado.id,
       screenshot_url: screenshotUrl,
-      anexos: uploadedNames,
+      anexos: chatAttachments.map((a) => a.name),
       assigned_to_name: subcategoria?.default_assigned_to_name ?? null,
     })
   } catch (e) {
