@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ComposedChart,
   Legend,
   Line,
@@ -16,6 +17,11 @@ import {
 
 const compact = (value: number) =>
   new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
+
+const COR_OK = '#0f766e'
+const COR_ABAIXO = '#DC2626'
+const COR_VAZIO = '#cbd5e1'
+const COR_META = '#d97706'
 
 const monthLabel = (value: string) => {
   const [year, month] = value.split('-').map(Number)
@@ -112,10 +118,15 @@ type IndicadorSeriesChartProps = {
   metaKey: string
   valueName: string
   metaName: string
-  color: string
   formatValue?: (n: number) => string
   /** true = eixo Y em % */
   percent?: boolean
+}
+
+function barColorForMeta(value: number, meta: number): string {
+  if (!Number.isFinite(value) || value <= 0) return COR_VAZIO
+  if (value < meta) return COR_ABAIXO
+  return COR_OK
 }
 
 export function MarketingIndicadorSeriesChart({
@@ -124,7 +135,6 @@ export function MarketingIndicadorSeriesChart({
   metaKey,
   valueName,
   metaName,
-  color,
   formatValue,
   percent = false,
 }: IndicadorSeriesChartProps) {
@@ -132,13 +142,16 @@ export function MarketingIndicadorSeriesChart({
     formatValue ??
     ((n: number) =>
       percent
-        ? `${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+        ? `${n.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}%`
         : compact(n))
 
   return (
-    <div className="h-56 w-full">
+    <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+        <ComposedChart data={data} margin={{ top: 8, right: 10, left: -18, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
           <XAxis
             dataKey="month"
@@ -148,7 +161,6 @@ export function MarketingIndicadorSeriesChart({
           <YAxis
             tickFormatter={(v) => fmt(Number(v))}
             tick={{ fontSize: 11, fill: '#64748b' }}
-            width={52}
           />
           <Tooltip
             labelFormatter={(label) => monthLabel(String(label))}
@@ -158,15 +170,21 @@ export function MarketingIndicadorSeriesChart({
           <Bar
             dataKey={valueKey}
             name={valueName}
-            fill={color}
-            radius={[4, 4, 0, 0]}
-            maxBarSize={36}
-          />
+            radius={[5, 5, 0, 0]}
+            maxBarSize={40}
+          >
+            {data.map((row, index) => (
+              <Cell
+                key={`${String(row.month)}-${index}`}
+                fill={barColorForMeta(Number(row[valueKey]), Number(row[metaKey]))}
+              />
+            ))}
+          </Bar>
           <Line
             type="monotone"
             dataKey={metaKey}
             name={metaName}
-            stroke="#94a3b8"
+            stroke={COR_META}
             strokeWidth={2}
             strokeDasharray="5 4"
             dot={false}

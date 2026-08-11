@@ -43,9 +43,9 @@ function ChartCard({
 }) {
   return (
     <Card className="border-slate-200/80 shadow-sm">
-      <CardHeader className="pb-1">
-        <CardTitle className="text-sm">{title}</CardTitle>
-        <p className="text-[11px] text-slate-500">{subtitle}</p>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+        <p className="text-xs text-slate-500">{subtitle}</p>
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
@@ -138,7 +138,7 @@ export function MarketingIndicadores({ allPosts }: { allPosts: InstagramPost[] }
 
       <MarketingIndicadorCards kpis={kpis} />
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-2">
         <ChartCard
           title="Posts — acompanhamento mensal"
           subtitle="Volume publicado vs ritmo da meta anual (12 posts/mês)"
@@ -149,7 +149,6 @@ export function MarketingIndicadores({ allPosts }: { allPosts: InstagramPost[] }
             metaKey="postsMetaMensal"
             valueName="Posts"
             metaName="Meta mensal"
-            color="#e11d48"
             formatValue={(n) => Math.round(n).toLocaleString('pt-BR')}
           />
         </ChartCard>
@@ -163,7 +162,6 @@ export function MarketingIndicadores({ allPosts }: { allPosts: InstagramPost[] }
             metaKey="engajamentoMeta"
             valueName="Engajamento"
             metaName="Meta 3,50%"
-            color="#be123c"
             percent
           />
         </ChartCard>
@@ -177,7 +175,6 @@ export function MarketingIndicadores({ allPosts }: { allPosts: InstagramPost[] }
             metaKey="pautasMeta"
             valueName="Pautas"
             metaName="Meta 10"
-            color="#c2410c"
             formatValue={(n) => Math.round(n).toLocaleString('pt-BR')}
           />
         </ChartCard>
@@ -191,7 +188,6 @@ export function MarketingIndicadores({ allPosts }: { allPosts: InstagramPost[] }
             metaKey="alcanceMeta"
             valueName="Alcance"
             metaName="Meta 15.000"
-            color="#0284c7"
             formatValue={(n) => Math.round(n).toLocaleString('pt-BR')}
           />
         </ChartCard>
