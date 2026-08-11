@@ -69,7 +69,8 @@ export const NAV_ACCESS_ITEMS: NavAccessItem[] = [
   {
     to: '/financeiro/operacoes-legais',
     label: 'Operações Legais',
-    // Módulo próprio. Só admin ou checkbox "Operações Legais".
+    // Só admin no perfil. Coordenador de Ops Legais entra via checkbox do módulo
+    // (não herda pelo role coordenador — áreas jurídicas não veem este menu).
     roles: ['admin'],
     moduleKey: 'operacoes-legais',
   },
