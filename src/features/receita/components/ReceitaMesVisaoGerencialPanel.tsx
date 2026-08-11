@@ -1,28 +1,52 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
-import type { ReceitaPrevistoFechamentoMes } from '../types/receita.types'
+import type {
+  ReceitaPrevistoFechamentoItemRow,
+  ReceitaPrevistoFechamentoMes,
+  ReceitaRecebidoClassificacaoItemRow,
+} from '../types/receita.types'
 import type { ReceitaRecebidoDetalheKey } from '../utils/recebidoClassificacao'
+import {
+  agruparRecebidoPorVencimentoEGrupo,
+  filtrarItensDetalheRecebido,
+} from '../utils/recebidoClassificacao'
 import {
   RECEBIDO_GERENCIAL_LINHAS,
   inadimplenciaMesFaturadoNaoPago,
   type FechamentoDrillKey,
 } from '../utils/receitaPrevistoFechamento'
+import { agruparInadMesPorVencimentoEGrupo } from '../utils/previstoGrupos'
 import { ReceitaPrevistoFechamentoContabilPanel } from './ReceitaPrevistoFechamentoContabilPanel'
+import { ReceitaVencimentoGrupoDrillTable } from './ReceitaVencimentoGrupoDrillTable'
 
 type Props = {
   fechamento: ReceitaPrevistoFechamentoMes
-  onDrillRecebido?: (key: ReceitaRecebidoDetalheKey) => void
+  itens: ReceitaRecebidoClassificacaoItemRow[]
+  previstoMesItens: ReceitaPrevistoFechamentoItemRow[]
+  clienteGrupoMap: Map<string, string>
+  ano: number
+  mes: number
   onDrillContabil?: (key: FechamentoDrillKey) => void
 }
 
 export function ReceitaMesVisaoGerencialPanel({
   fechamento,
-  onDrillRecebido,
+  itens,
+  previstoMesItens,
+  clienteGrupoMap,
+  ano,
+  mes,
   onDrillContabil,
 }: Props) {
   const [contabilAberto, setContabilAberto] = useState(false)
+  const [recebidoExpandido, setRecebidoExpandido] = useState<ReceitaRecebidoDetalheKey | null>(
+    null,
+  )
+  const [inadGrupoExpandido, setInadGrupoExpandido] = useState(false)
+  const [vencExpandidoRecebido, setVencExpandidoRecebido] = useState<string | null>(null)
+  const [vencExpandidoInad, setVencExpandidoInad] = useState<string | null>(null)
 
   const totalRecebido = fechamento.recebido_classificado
   const inadMes = inadimplenciaMesFaturadoNaoPago(fechamento)
@@ -39,6 +63,41 @@ export function ReceitaMesVisaoGerencialPanel({
   )
   const recebidoFecha = Math.abs(somaLinhas - totalRecebido) < 0.02
 
+  const recebidoVencimentosPorLinha = useMemo(() => {
+    const map = new Map<ReceitaRecebidoDetalheKey, ReturnType<typeof agruparRecebidoPorVencimentoEGrupo>>()
+    for (const linha of RECEBIDO_GERENCIAL_LINHAS) {
+      const filtrados = filtrarItensDetalheRecebido(itens, linha.key, ano, mes)
+      map.set(linha.key, agruparRecebidoPorVencimentoEGrupo(filtrados, clienteGrupoMap))
+    }
+    return map
+  }, [itens, clienteGrupoMap, ano, mes])
+
+  const inadVencimentos = useMemo(
+    () =>
+      agruparInadMesPorVencimentoEGrupo(previstoMesItens, clienteGrupoMap, ano, mes).filter(
+        (v) => v.inadimplencia > 0,
+      ),
+    [previstoMesItens, clienteGrupoMap, ano, mes],
+  )
+
+  const toggleRecebidoLinha = (key: ReceitaRecebidoDetalheKey) => {
+    setRecebidoExpandido((prev) => {
+      if (prev === key) {
+        setVencExpandidoRecebido(null)
+        return null
+      }
+      setVencExpandidoRecebido(null)
+      return key
+    })
+  }
+
+  const toggleInadGrupo = () => {
+    setInadGrupoExpandido((v) => {
+      if (v) setVencExpandidoInad(null)
+      return !v
+    })
+  }
+
   return (
     <div className="mb-4 space-y-4">
       <section className="rounded-xl border border-sky-200/70 bg-sky-50/40 p-3">
@@ -48,7 +107,7 @@ export function ReceitaMesVisaoGerencialPanel({
               Composição do recebido
             </h3>
             <p className="mt-1 text-[11px] leading-snug text-sky-800/80">
-              Caixa líquido do mês — clique para ver títulos
+              Caixa líquido do mês — clique para expandir por vencimento e grupo
             </p>
           </div>
           {pctPrevistoCaixa != null ? (
@@ -63,18 +122,36 @@ export function ReceitaMesVisaoGerencialPanel({
             const valor = fechamento[linha.valorKey]
             if (Math.abs(valor) < 0.01) return null
             const pct = totalRecebido > 0 ? (valor / totalRecebido) * 100 : 0
+            const expandido = recebidoExpandido === linha.key
+            const vencimentos = recebidoVencimentosPorLinha.get(linha.key) ?? []
             return (
               <li key={linha.key}>
                 <button
                   type="button"
-                  onClick={() => onDrillRecebido?.(linha.key)}
+                  onClick={() => toggleRecebidoLinha(linha.key)}
                   className="group w-full rounded-lg px-1 py-2 text-left transition-colors hover:bg-white/60"
+                  aria-expanded={expandido}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-800">{linha.label}</p>
-                      <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{linha.hint}</p>
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        {expandido ? (
+                          <ChevronDown
+                            className="h-4 w-4 shrink-0 text-sky-600"
+                            aria-hidden
+                          />
+                        ) : (
+                          <ChevronRight
+                            className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-sky-600"
+                            aria-hidden
+                          />
+                        )}
+                        <p className="text-sm font-medium text-slate-800">{linha.label}</p>
+                      </div>
+                      <p className="mt-0.5 pl-5 text-[10px] leading-snug text-slate-500">
+                        {linha.hint}
+                      </p>
+                      <div className="mt-2 flex items-center gap-2 pl-5">
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/80">
                           <div
                             className={cn('h-full rounded-full', linha.barClassName)}
@@ -86,24 +163,24 @@ export function ReceitaMesVisaoGerencialPanel({
                         </span>
                       </div>
                     </div>
-                    <span className="flex shrink-0 items-center gap-1">
-                      <span
-                        className={cn(
-                          'text-sm font-semibold tabular-nums',
-                          linha.valorClassName,
-                        )}
-                      >
-                        {formatCurrency(valor)}
-                      </span>
-                      {onDrillRecebido ? (
-                        <ChevronRight
-                          className="h-4 w-4 text-slate-400 group-hover:text-sky-600"
-                          aria-hidden
-                        />
-                      ) : null}
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-800">
+                      <span className={linha.valorClassName}>{formatCurrency(valor)}</span>
                     </span>
                   </div>
                 </button>
+                {expandido ? (
+                  <div className="mb-2 mt-1 pl-1">
+                    <ReceitaVencimentoGrupoDrillTable
+                      variant="recebido"
+                      vencimentos={vencimentos}
+                      vencExpandido={vencExpandidoRecebido}
+                      onToggleVenc={(key) =>
+                        setVencExpandidoRecebido((prev) => (prev === key ? null : key))
+                      }
+                      accent="sky"
+                    />
+                  </div>
+                ) : null}
               </li>
             )
           })}
@@ -122,40 +199,55 @@ export function ReceitaMesVisaoGerencialPanel({
         </div>
       </section>
 
-      <section>
+      <section className="rounded-xl border border-red-200/80 bg-red-50/60 p-3">
         <button
           type="button"
-          onClick={() => onDrillContabil?.('inad_grupo')}
-          className="group w-full rounded-xl border border-red-200/80 bg-red-50/60 p-3 text-left transition-colors hover:border-red-300 hover:bg-red-50"
+          onClick={toggleInadGrupo}
+          className="group w-full text-left"
+          aria-expanded={inadGrupoExpandido}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-red-900">
-                Inadimplência do mês — por grupo
-              </h3>
-              <p className="mt-1 text-[11px] leading-snug text-red-800/80">
+              <div className="flex items-center gap-1.5">
+                {inadGrupoExpandido ? (
+                  <ChevronDown className="h-4 w-4 shrink-0 text-red-700" aria-hidden />
+                ) : (
+                  <ChevronRight
+                    className="h-4 w-4 shrink-0 text-red-400 group-hover:text-red-600"
+                    aria-hidden
+                  />
+                )}
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-red-900">
+                  Inadimplência do mês — por grupo
+                </h3>
+              </div>
+              <p className="mt-1 pl-5 text-[11px] leading-snug text-red-800/80">
                 Somente vencimentos já vencidos até hoje, não quitados no mês — item a item, sem
                 compensação entre razões sociais.
               </p>
               {pctInadPrevisto != null ? (
-                <p className="mt-1.5 text-[10px] font-medium tabular-nums text-red-800/70">
+                <p className="mt-1.5 pl-5 text-[10px] font-medium tabular-nums text-red-800/70">
                   {formatPercent(pctInadPrevisto)} do previsto
                 </p>
               ) : null}
             </div>
-            <span className="flex shrink-0 items-center gap-1">
-              <span className="text-lg font-bold tabular-nums text-red-800">
-                {formatCurrency(inadMes)}
-              </span>
-              {onDrillContabil ? (
-                <ChevronRight
-                  className="h-4 w-4 text-red-400 group-hover:text-red-600"
-                  aria-hidden
-                />
-              ) : null}
+            <span className="text-lg font-bold tabular-nums text-red-800">
+              {formatCurrency(inadMes)}
             </span>
           </div>
         </button>
+        {inadGrupoExpandido ? (
+          <div className="mt-3">
+            <ReceitaVencimentoGrupoDrillTable
+              variant="inad"
+              vencimentos={inadVencimentos}
+              vencExpandido={vencExpandidoInad}
+              onToggleVenc={(key) =>
+                setVencExpandidoInad((prev) => (prev === key ? null : key))
+              }
+            />
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-xl border border-slate-200/80 bg-slate-50/40">

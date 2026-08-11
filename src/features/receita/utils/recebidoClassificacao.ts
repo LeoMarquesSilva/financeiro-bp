@@ -5,6 +5,10 @@ import {
   valorRecebidoItem,
   type ReceitaRecebidoGrupoAgg,
 } from './recebidoGrupos'
+import {
+  normalizePrevistoVencimentoKey,
+  PREVISTO_SEM_VENCIMENTO_KEY,
+} from './previstoGrupos'
 
 export type ReceitaRecebidoCategoria = 'inadimplencia' | 'novos_contratos' | 'receita_mes'
 
@@ -223,6 +227,50 @@ export function agruparClassificacaoPorTitulo(
   }
 
   return [...byTitulo.values()].sort((a, b) => b.total - a.total)
+}
+
+export type ReceitaRecebidoVencimentoGrupoAgg = {
+  vencimentoKey: string
+  total: number
+  quantidadeTitulos: number
+  quantidadeItens: number
+  qtd_grupos: number
+  grupos: ReceitaRecebidoGrupoAgg[]
+}
+
+function ordenarChavesVencimentoRecebido(keys: string[]): string[] {
+  return [...keys].sort((a, b) => {
+    if (a === PREVISTO_SEM_VENCIMENTO_KEY) return 1
+    if (b === PREVISTO_SEM_VENCIMENTO_KEY) return -1
+    return a.localeCompare(b)
+  })
+}
+
+/** Recebido por vencimento e grupo (mesma hierarquia do drill de previsto/inad.). */
+export function agruparRecebidoPorVencimentoEGrupo(
+  itens: ReceitaRecebidoClassificacaoItemRow[],
+  clienteGrupoMap: Map<string, string>,
+): ReceitaRecebidoVencimentoGrupoAgg[] {
+  const byVenc = new Map<string, ReceitaRecebidoClassificacaoItemRow[]>()
+  for (const item of itens) {
+    const key = normalizePrevistoVencimentoKey(item.data_vencimento)
+    const list = byVenc.get(key) ?? []
+    list.push(item)
+    byVenc.set(key, list)
+  }
+
+  return ordenarChavesVencimentoRecebido([...byVenc.keys()]).map((vencimentoKey) => {
+    const vencItens = byVenc.get(vencimentoKey) ?? []
+    const grupos = agruparRecebidoPorGrupo(vencItens, clienteGrupoMap)
+    return {
+      vencimentoKey,
+      total: grupos.reduce((s, g) => s + g.total, 0),
+      quantidadeTitulos: new Set(vencItens.map((i) => i.ci_titulo)).size,
+      quantidadeItens: vencItens.length,
+      qtd_grupos: grupos.length,
+      grupos,
+    }
+  })
 }
 
 /** Soma das três categorias de recebido no mês. */

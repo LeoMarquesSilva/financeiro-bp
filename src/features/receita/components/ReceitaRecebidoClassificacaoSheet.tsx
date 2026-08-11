@@ -622,14 +622,6 @@ export function ReceitaRecebidoClassificacaoSheet({
       .finally(() => setFechamentoLoading(false))
   }
 
-  const abrirTitulos = (key: ReceitaRecebidoDetalheKey) => {
-    setDetalheSelecionado(key)
-    setBusca('')
-    setGrupoExpandido(null)
-    setPrevistoVencExpandido(null)
-    setView('titulos')
-  }
-
   const voltarCategorias = () => {
     setView('categorias')
     setDetalheSelecionado(null)
@@ -874,7 +866,11 @@ export function ReceitaRecebidoClassificacaoSheet({
             {!loading && !error && view === 'categorias' && fechamento && (
               <ReceitaMesVisaoGerencialPanel
                 fechamento={fechamento}
-                onDrillRecebido={abrirTitulos}
+                itens={itens}
+                previstoMesItens={previstoMesItensArea}
+                clienteGrupoMap={clienteGrupoMap}
+                ano={ano}
+                mes={mes}
                 onDrillContabil={abrirFechamentoDrill}
               />
             )}
