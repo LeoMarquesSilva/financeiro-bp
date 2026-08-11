@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  Briefcase,
   CalendarCheck2,
   FileCheck2,
   FolderKanban,
@@ -22,12 +23,16 @@ import { OperacoesLegaisOverviewTab } from '@/features/eficiencia/components/Ope
 import { OperacoesLegaisRgTab } from '@/features/eficiencia/components/OperacoesLegaisRgTab'
 import { OpsLegaisFinanceiroTab } from '@/features/eficiencia/components/OpsLegaisFinanceiroTab'
 import { OpsLegaisIniciativasTab } from '@/features/eficiencia/components/OpsLegaisIniciativasTab'
+import { ReportarIndicadorButton } from '@/features/eficiencia/components/ReportarIndicadorButton'
 import { useEficienciaOverview } from '@/features/eficiencia/hooks/useEficiencia'
 import {
   EFICIENCIA_AREA_OPS_LEGAIS,
   type MesFiltroEficiencia,
 } from '@/features/eficiencia/constants'
-import type { UltimaAtualizacaoRow } from '@/features/eficiencia/types/eficiencia.types'
+import type {
+  RacionalIndicador,
+  UltimaAtualizacaoRow,
+} from '@/features/eficiencia/types/eficiencia.types'
 import { toPriMaiuscula } from '@/features/eficiencia/utils/textFormat'
 import { formatDateTime } from '@/shared/utils/format'
 import { MarketingTab } from '@/features/operacoes-legais/marketing/MarketingTab'
@@ -57,6 +62,46 @@ type TabId =
   | 'iniciativas'
 
 type TabDef = { id: TabId; label: string; icon: typeof LayoutDashboard }
+
+type TabRacional = {
+  titulo: string
+  items: Array<{ indicador: RacionalIndicador; titulo: string }>
+  area?: string | null
+}
+
+/** Abas com racional — botão Reportar só nelas (não no Overview). */
+const TAB_RACIONAL: Partial<Record<TabId, TabRacional>> = {
+  protocolos: {
+    titulo: 'SLA Protocolo / Eficiência Protocolo',
+    items: [
+      { indicador: 'ops_legais_sla_protocolo', titulo: 'SLA Protocolo' },
+      { indicador: 'ops_legais_eficiencia_protocolo', titulo: 'Eficiência Protocolo' },
+    ],
+  },
+  publicacoes: {
+    titulo: 'Eficiência Publicações',
+    items: [
+      { indicador: 'ops_legais_pub_analise', titulo: 'Publicações — Análise' },
+      { indicador: 'ops_legais_pub_agendamento', titulo: 'Publicações — Agendamento' },
+    ],
+  },
+  cadastro: {
+    titulo: 'Eficiência no Cadastro',
+    items: [{ indicador: 'ops_legais_cadastro', titulo: 'Eficiência no Cadastro' }],
+  },
+  treinamentos: {
+    titulo: 'Desenvolvimento Contínuo',
+    area: EFICIENCIA_AREA_OPS_LEGAIS,
+    items: [
+      { indicador: 'desenvolvimento_equipe', titulo: 'Desenvolvimento Contínuo' },
+    ],
+  },
+  turnover: {
+    titulo: 'Retenção de Talentos',
+    area: EFICIENCIA_AREA_OPS_LEGAIS,
+    items: [{ indicador: 'retencao_talentos', titulo: 'Retenção de Talentos' }],
+  },
+}
 
 /**
  * Ordem alinhada ao Overview Ops Legais; extras (Tarefas/Financeiro/Marketing)
@@ -102,6 +147,7 @@ export function OperacoesLegaisPage() {
   const demais = TABS.filter((t) => t.id !== 'overview')
   const row1 = demais.slice(0, ROW1_AFTER_OVERVIEW)
   const row2 = demais.slice(ROW1_AFTER_OVERVIEW)
+  const tabRacional = TAB_RACIONAL[tab]
 
   if (authLoading) {
     return (
@@ -114,7 +160,18 @@ export function OperacoesLegaisPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-end gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+            <Briefcase className="h-6 w-6 text-slate-600" />
+            Operações Legais
+          </h1>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Dashboard BI Operações Legais — protocolos, publicações, cadastro, desenvolvimento,
+            retenção, PDI, tarefas, financeiro e marketing
+          </p>
+        </div>
+
         {tab !== 'marketing' && (
           <div className="flex flex-wrap items-center gap-3">
             {maisRecente && (
@@ -174,6 +231,18 @@ export function OperacoesLegaisPage() {
                 ))}
               </div>
             </div>
+            {tabRacional ? (
+              <div className="ml-1 flex shrink-0 items-end self-stretch pl-1">
+                <ReportarIndicadorButton
+                  titulo={tabRacional.titulo}
+                  items={tabRacional.items}
+                  ano={ano}
+                  mesFiltro={mesFiltro}
+                  area={tabRacional.area ?? null}
+                  modulo="Operações Legais"
+                />
+              </div>
+            ) : null}
           </TabsList>
         </div>
 

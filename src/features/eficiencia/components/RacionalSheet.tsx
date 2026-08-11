@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Bug, Download, FileSearch, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
+import { Download, FileSearch, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -11,10 +10,8 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import { blobToDataUrl } from '@/shared/error-reporting/captureScreenshot'
-import { useErrorReportingOptional } from '@/shared/error-reporting/ErrorReportingProvider'
 import { eficienciaService } from '../services/eficienciaService'
-import { buildRacionalExcelBlob, exportRacionalExcel } from '../utils/racionalExport'
+import { exportRacionalExcel } from '../utils/racionalExport'
 import { formatRacionalCell, formatRacionalResumoLabel, isRacionalLinhaForaMeta, racionalLinhaForaMetaTitle } from '../utils/racionalFormat'
 import { formatRacionalPeriodoLabel } from '../utils/racionalQuery'
 import {
@@ -56,8 +53,6 @@ export function RacionalSheet({
   onClose,
 }: Props) {
   const [exportando, setExportando] = useState(false)
-  const [reportando, setReportando] = useState(false)
-  const { openReport } = useErrorReportingOptional()
   const fatalEscopo = escopo === 'sla_protocolo_fatal'
 
   const { data, isLoading, error } = useQuery({
@@ -109,47 +104,6 @@ export function RacionalSheet({
     }
   }
 
-  async function handleReportarErro() {
-    if (indicador == null || reportando) return
-    setReportando(true)
-    try {
-      const exportData = await eficienciaService.fetchRacionalParaExport(
-        indicador,
-        ano,
-        area,
-        mes,
-        escopo,
-      )
-      const { blob, filename } = await buildRacionalExcelBlob(
-        exportData.colunas,
-        exportData.linhas,
-        exportData.resumo,
-        exportMeta,
-      )
-      const content_base64 = await blobToDataUrl(blob)
-      const modulo = indicador.startsWith('ops_legais_') ? 'Operações Legais' : 'Eficiência'
-      openReport({
-        indicador: titulo,
-        modulo,
-        ano,
-        mes: mes === 'resultado' ? null : mes,
-        area,
-        anexos: [
-          {
-            filename,
-            content_base64,
-            content_type:
-              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          },
-        ],
-      })
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Falha ao preparar o racional')
-    } finally {
-      setReportando(false)
-    }
-  }
-
   return (
     <Sheet open={indicador != null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="flex w-full flex-col overflow-hidden sm:max-w-4xl">
@@ -195,21 +149,6 @@ export function RacionalSheet({
               </SheetDescription>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 text-xs text-rose-700 border-rose-200 hover:bg-rose-50"
-                disabled={isLoading || reportando || linhas.length === 0}
-                onClick={() => void handleReportarErro()}
-              >
-                {reportando ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Bug className="h-3.5 w-3.5" />
-                )}
-                Reportar
-              </Button>
               <Button
                 type="button"
                 variant="outline"

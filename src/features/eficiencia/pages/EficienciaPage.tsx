@@ -25,6 +25,8 @@ import { GestaoPdiTab } from '../components/GestaoPdiTab'
 import { ReceitaBrutaTab } from '../components/ReceitaBrutaTab'
 import { InadimplenciaTab } from '../components/InadimplenciaTab'
 import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab'
+import { ReportarIndicadorButton } from '../components/ReportarIndicadorButton'
+import type { RacionalIndicador } from '../types/eficiencia.types'
 
 /** Ano padrão da tela (sempre o corrente). 2025 fica disponível só para comparativo anual. */
 const ANO_PADRAO = 2026
@@ -32,6 +34,25 @@ const ANOS_COMPARATIVO = [2026, 2025] as const
 
 /** Faixas à direita do Overview (SLA…Desenvolvimento / Retenção…Êxito). */
 const ROW1_AFTER_OVERVIEW = 6
+
+/** Abas de indicador com racional — Reportar fica só nelas (não no Overview). */
+const TAB_RACIONAL: Partial<
+  Record<EficienciaTabId, { indicador: RacionalIndicador; titulo: string }>
+> = {
+  'sla-protocolo': { indicador: 'sla_protocolo', titulo: 'SLA Protocolo' },
+  'eficiencia-protocolo': { indicador: 'eficiencia_protocolo', titulo: 'Eficiência Protocolo' },
+  'sla-ciencia-agendamentos': {
+    indicador: 'sla_ciencia_agendamentos',
+    titulo: 'SLA Ciência Agendamentos',
+  },
+  'sla-vistagem-risco': { indicador: 'sla_vistagem_risco', titulo: 'SLA Vistagem Risco' },
+  'sla-vistagem-normal': { indicador: 'sla_vistagem_normal', titulo: 'SLA Vistagem Normal' },
+  'desenvolvimento-equipe': {
+    indicador: 'desenvolvimento_equipe',
+    titulo: 'Desenvolvimento Equipe',
+  },
+  'retencao-talentos': { indicador: 'retencao_talentos', titulo: 'Retenção de Talentos' },
+}
 
 function EficienciaTabPanel({
   tab,
@@ -190,6 +211,23 @@ export function EficienciaPage() {
                 ))}
               </div>
             </div>
+            {TAB_RACIONAL[tab] ? (
+              <div className="ml-1 flex shrink-0 items-end self-stretch pl-1">
+                <ReportarIndicadorButton
+                  titulo={TAB_RACIONAL[tab]!.titulo}
+                  items={[
+                    {
+                      indicador: TAB_RACIONAL[tab]!.indicador,
+                      titulo: TAB_RACIONAL[tab]!.titulo,
+                    },
+                  ]}
+                  ano={ano}
+                  mesFiltro={mesFiltro}
+                  area={areaOverviewData}
+                  modulo="Eficiência"
+                />
+              </div>
+            ) : null}
           </TabsList>
         </div>
 
