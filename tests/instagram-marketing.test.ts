@@ -79,3 +79,19 @@ test('atribui posts colaborativos a todas as áreas e ordena por engajamento', (
   assert.equal(ranking[0].posts, 2)
   assert.equal(ranking.find((row) => row.area === 'Contratos')?.posts, 1)
 })
+
+test('indicadores: posts vs meta anual 144 e pautas vs 10/mês no ano', () => {
+  const yearPosts = filterPostsByPeriod(
+    posts,
+    resolveInstagramPeriod({ kind: 'year', year: 2026 }),
+  )
+  assert.equal(yearPosts.length, 2)
+  // Meta posts anual fixa: 2/144 ≈ 1,39%
+  assert.equal(Number(((yearPosts.length / 144) * 100).toFixed(2)), 1.39)
+  // Meta pautas dinâmica: 12 meses × 10 = 120
+  assert.equal(yearPosts.length / (12 * 10), 2 / 120)
+  const monthly = groupPostsByMonth(yearPosts)
+  assert.equal(monthly.length, 2)
+  const avgReach = monthly.reduce((s, m) => s + m.reach, 0) / monthly.length
+  assert.equal(avgReach, 750)
+})

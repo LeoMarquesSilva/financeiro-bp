@@ -36,7 +36,13 @@ import type {
 import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
 import { RacionalSheet } from './RacionalSheet'
 import { useInstagramMarketing } from '@/features/operacoes-legais/marketing/useInstagramMarketing'
-import { groupPostsByMonth } from '@/features/operacoes-legais/marketing/instagramAnalytics'
+import {
+  MARKETING_META_ALCANCE,
+  MARKETING_META_ENGAJAMENTO_PCT,
+  MARKETING_META_PAUTAS_POR_MES,
+  MARKETING_META_POSTS_ANUAL,
+  buildMonthlyIndicadoresSeries,
+} from '@/features/operacoes-legais/marketing/computeMarketingIndicadores'
 
 type Props = {
   ano: number
@@ -103,7 +109,6 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   })
 
   const { data: marketingDash, isLoading: loadingMarketing } = useInstagramMarketing()
-  const marketingGoal = Math.max(1, Number(marketingDash?.monthlyGoal) || 12)
   const treinoResumos = useMemo(
     () => buildOpsTreinamentosCategorias(ativos, itens).resumos,
     [ativos, itens],
@@ -225,38 +230,96 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   })()
 
   const marketingPorMes = useMemo(() => {
-    const posts = (marketingDash?.posts ?? []).filter((p) =>
-      String(p.published_at ?? '').startsWith(`${ano}-`),
+    return buildMonthlyIndicadoresSeries(marketingDash?.posts ?? [], ano, null).map(
+      (row, i) => ({
+        mes: i + 1,
+        posts: row.posts,
+        postsPct: row.postsMetaMensal > 0 ? (row.posts / row.postsMetaMensal) * 100 : 0,
+        engajamentoPct: row.engajamentoPct,
+        pautas: row.pautas,
+        pautasPct: row.pautasMeta > 0 ? (row.pautas / row.pautasMeta) * 100 : 0,
+        alcance: row.alcance,
+      }),
     )
-    const byMonth = groupPostsByMonth(posts)
-    const map = new Map(byMonth.map((r) => [Number(r.month.slice(5, 7)), r]))
-    return Array.from({ length: 12 }, (_, i) => {
-      const mes = i + 1
-      const row = map.get(mes)
-      const qtd = row?.posts ?? 0
-      const pct = marketingGoal > 0 ? (qtd / marketingGoal) * 100 : 0
-      return { mes, qtd, pct }
-    })
-  }, [marketingDash?.posts, ano, marketingGoal])
+  }, [marketingDash?.posts, ano])
 
-  const cellsMarketing = aplicarCelulasFiltro(
+  const cellsMarketingPosts = aplicarCelulasFiltro(
     marketingPorMes.map((r) =>
-      r.qtd > 0
-        ? { value: r.pct, label: formatPercent(r.pct) }
+      r.posts > 0
+        ? { value: r.postsPct, label: formatPercent(r.postsPct) }
+        : { value: null, label: '-' },
+    ),
+    mesFiltro,
+    ano,
+  )
+  const cellsMarketingEngaj = aplicarCelulasFiltro(
+    marketingPorMes.map((r) =>
+      r.posts > 0
+        ? { value: r.engajamentoPct, label: formatPercent(r.engajamentoPct) }
+        : { value: null, label: '-' },
+    ),
+    mesFiltro,
+    ano,
+  )
+  const cellsMarketingPautas = aplicarCelulasFiltro(
+    marketingPorMes.map((r) =>
+      r.pautas > 0
+        ? { value: r.pautasPct, label: formatPercent(r.pautasPct) }
+        : { value: null, label: '-' },
+    ),
+    mesFiltro,
+    ano,
+  )
+  const cellsMarketingAlcance = aplicarCelulasFiltro(
+    marketingPorMes.map((r) =>
+      r.posts > 0
+        ? {
+            value: r.alcance,
+            label: Math.round(r.alcance).toLocaleString('pt-BR'),
+          }
         : { value: null, label: '-' },
     ),
     mesFiltro,
     ano,
   )
 
-  const acumMarketing: HeatCell = (() => {
+  const marketingFiltrado = filtrarMensalPorMesFiltro(marketingPorMes, mesFiltro, ano)
+  const marketingComDado = marketingFiltrado.filter((r) => r.posts > 0)
+
+  const acumMarketingPosts: HeatCell = (() => {
     if (loadingMarketing) return { value: null, label: '…' }
-    const filtrados = filtrarMensalPorMesFiltro(marketingPorMes, mesFiltro, ano)
-    const mesesComDado = filtrados.filter((r) => r.qtd > 0)
-    if (mesesComDado.length === 0) return { value: null, label: '-' }
-    const mediaPct =
-      mesesComDado.reduce((s, r) => s + r.pct, 0) / mesesComDado.length
-    return { value: mediaPct, label: formatPercent(mediaPct) }
+    const qtd = marketingFiltrado.reduce((s, r) => s + r.posts, 0)
+    if (qtd <= 0) return { value: null, label: '-' }
+    const pct = (qtd / MARKETING_META_POSTS_ANUAL) * 100
+    return { value: pct, label: formatPercent(pct) }
+  })()
+
+  const acumMarketingEngaj: HeatCell = (() => {
+    if (loadingMarketing) return { value: null, label: '…' }
+    if (marketingComDado.length === 0) return { value: null, label: '-' }
+    const media =
+      marketingComDado.reduce((s, r) => s + r.engajamentoPct, 0) / marketingComDado.length
+    return { value: media, label: formatPercent(media) }
+  })()
+
+  const acumMarketingPautas: HeatCell = (() => {
+    if (loadingMarketing) return { value: null, label: '…' }
+    const qtd = marketingFiltrado.reduce((s, r) => s + r.pautas, 0)
+    if (qtd <= 0) return { value: null, label: '-' }
+    const meta = Math.max(marketingFiltrado.length, 1) * MARKETING_META_PAUTAS_POR_MES
+    const pct = (qtd / meta) * 100
+    return { value: pct, label: formatPercent(pct) }
+  })()
+
+  const acumMarketingAlcance: HeatCell = (() => {
+    if (loadingMarketing) return { value: null, label: '…' }
+    if (marketingComDado.length === 0) return { value: null, label: '-' }
+    const media =
+      marketingComDado.reduce((s, r) => s + r.alcance, 0) / marketingComDado.length
+    return {
+      value: media,
+      label: Math.round(media).toLocaleString('pt-BR'),
+    }
   })()
 
   const mesDestaque =
@@ -400,18 +463,6 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           acumulado={loadingPdi ? { value: null, label: '…' } : acumPdi}
         />
         <OverviewKpiHeatRow
-          title="Marketing — Posts vs meta"
-          meta={100}
-          metaLabel={`Meta: ${marketingGoal} posts/mês`}
-          mesDestaque={mesDestaque}
-          cells={
-            loadingMarketing
-              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
-              : cellsMarketing
-          }
-          acumulado={acumMarketing}
-        />
-        <OverviewKpiHeatRow
           title="Iniciativas Estratégicas"
           meta={100}
           metaLabel={`Meta: ${EFICIENCIA_META_OPS_INICIATIVAS} projetos`}
@@ -422,6 +473,54 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsIniciativas
           }
           acumulado={acumIniciativas}
+        />
+        <OverviewKpiHeatRow
+          title="MKT - Posts Anuais"
+          meta={100}
+          metaLabel="Meta: 144 posts/ano"
+          mesDestaque={mesDestaque}
+          cells={
+            loadingMarketing
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsMarketingPosts
+          }
+          acumulado={acumMarketingPosts}
+        />
+        <OverviewKpiHeatRow
+          title="MKT - Engajamento"
+          meta={MARKETING_META_ENGAJAMENTO_PCT}
+          metaLabel="Meta: ≥ 3,50%"
+          mesDestaque={mesDestaque}
+          cells={
+            loadingMarketing
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsMarketingEngaj
+          }
+          acumulado={acumMarketingEngaj}
+        />
+        <OverviewKpiHeatRow
+          title="MKT - Pautas Anuais"
+          meta={100}
+          metaLabel="Meta: 10 pautas/mês"
+          mesDestaque={mesDestaque}
+          cells={
+            loadingMarketing
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsMarketingPautas
+          }
+          acumulado={acumMarketingPautas}
+        />
+        <OverviewKpiHeatRow
+          title="MKT - Alcance Mensal"
+          meta={MARKETING_META_ALCANCE}
+          metaLabel="Meta: ≥ 15.000 pessoas"
+          mesDestaque={mesDestaque}
+          cells={
+            loadingMarketing
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsMarketingAlcance
+          }
+          acumulado={acumMarketingAlcance}
         />
       </div>
 

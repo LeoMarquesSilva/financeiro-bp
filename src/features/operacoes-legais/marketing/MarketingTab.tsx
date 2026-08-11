@@ -3,6 +3,7 @@ import {
   AlertCircle,
   BarChart3,
   Building2,
+  Gauge,
   Instagram,
   LayoutDashboard,
   Loader2,
@@ -18,12 +19,13 @@ import { filterPostsByPeriod } from './instagramAnalytics'
 import { resolveInstagramPeriod } from './instagramPeriod'
 import { MarketingAreas } from './MarketingAreas'
 import { MarketingAudience } from './MarketingAudience'
+import { MarketingIndicadores } from './MarketingIndicadores'
 import { MarketingOverview } from './MarketingOverview'
 import { MarketingPosts } from './MarketingPosts'
 import { useInstagramMarketing, useInstagramPeople, useSyncInstagram } from './useInstagramMarketing'
 import type { InstagramPeriodFilter } from './types'
 
-type Section = 'overview' | 'audience' | 'areas' | 'posts'
+type Section = 'overview' | 'indicadores' | 'audience' | 'areas' | 'posts'
 
 function periodFromValue(value: string): InstagramPeriodFilter {
   if (value === 'all') return { kind: 'all' }
@@ -111,11 +113,15 @@ export function MarketingTab() {
       <Tabs value={section} onValueChange={(value) => setSection(value as Section)}>
         <div className="overflow-x-auto pb-1"><TabsList className="h-auto min-w-max justify-start">
           <TabsTrigger value="overview"><LayoutDashboard className="h-4 w-4" />Visão geral</TabsTrigger>
+          <TabsTrigger value="indicadores"><Gauge className="h-4 w-4" />Indicadores</TabsTrigger>
           <TabsTrigger value="audience"><Users className="h-4 w-4" />Conta & audiência</TabsTrigger>
           <TabsTrigger value="areas"><Building2 className="h-4 w-4" />Por área</TabsTrigger>
           <TabsTrigger value="posts"><BarChart3 className="h-4 w-4" />Postagens</TabsTrigger>
         </TabsList></div>
         <TabsContent value="overview" className="mt-5"><MarketingOverview posts={posts} account={data?.accountStats ?? null} stories={stories} monthlyGoal={data?.monthlyGoal ?? 12} /></TabsContent>
+        <TabsContent value="indicadores" className="mt-5">
+          <MarketingIndicadores allPosts={data?.posts ?? []} />
+        </TabsContent>
         <TabsContent value="audience" className="mt-5"><MarketingAudience insights={accountInsights} demographics={data?.demographics ?? []} accountHistory={accountHistory.length ? accountHistory : data?.accountHistory ?? []} /></TabsContent>
         <TabsContent value="areas" className="mt-5"><MarketingAreas posts={posts} /></TabsContent>
         <TabsContent value="posts" className="mt-5"><MarketingPosts posts={posts} people={peopleQuery.data ?? []} canManage={canManage} /></TabsContent>

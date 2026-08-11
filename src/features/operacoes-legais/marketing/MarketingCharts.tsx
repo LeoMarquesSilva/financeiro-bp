@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
@@ -100,6 +101,77 @@ export function MarketingAccountChart({
           <Line type="monotone" dataKey="views" name="Visualizações" stroke="#2563eb" strokeWidth={2} dot={false} />
           <Line type="monotone" dataKey="total_interactions" name="Interações" stroke="#d97706" strokeWidth={2} dot={false} />
         </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+type IndicadorSeriesChartProps = {
+  data: Array<Record<string, string | number>>
+  valueKey: string
+  metaKey: string
+  valueName: string
+  metaName: string
+  color: string
+  formatValue?: (n: number) => string
+  /** true = eixo Y em % */
+  percent?: boolean
+}
+
+export function MarketingIndicadorSeriesChart({
+  data,
+  valueKey,
+  metaKey,
+  valueName,
+  metaName,
+  color,
+  formatValue,
+  percent = false,
+}: IndicadorSeriesChartProps) {
+  const fmt =
+    formatValue ??
+    ((n: number) =>
+      percent
+        ? `${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+        : compact(n))
+
+  return (
+    <div className="h-56 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+          <XAxis
+            dataKey="month"
+            tickFormatter={monthLabel}
+            tick={{ fontSize: 11, fill: '#64748b' }}
+          />
+          <YAxis
+            tickFormatter={(v) => fmt(Number(v))}
+            tick={{ fontSize: 11, fill: '#64748b' }}
+            width={52}
+          />
+          <Tooltip
+            labelFormatter={(label) => monthLabel(String(label))}
+            formatter={(value, name) => [fmt(Number(value ?? 0)), String(name)]}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Bar
+            dataKey={valueKey}
+            name={valueName}
+            fill={color}
+            radius={[4, 4, 0, 0]}
+            maxBarSize={36}
+          />
+          <Line
+            type="monotone"
+            dataKey={metaKey}
+            name={metaName}
+            stroke="#94a3b8"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            dot={false}
+          />
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   )
