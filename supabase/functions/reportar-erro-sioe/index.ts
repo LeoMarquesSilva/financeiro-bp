@@ -198,13 +198,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const fullDescription = [
-      description,
-      '',
-      '---',
-      `Reportado por: ${responsumUser.name} <${caller.email}>`,
-      `Categoria: Manutenção em Sistemas / Subcategoria: SIOE (frente LexNextLab)`,
-    ].join('\n')
+    const fullDescription = description
 
     const { data: criado, error: insertError } = await responsum
       .from('app_c009c0e4f1_tickets')
@@ -285,7 +279,13 @@ Deno.serve(async (req: Request) => {
     for (const anexo of anexos.slice(0, 5)) {
       const raw = anexo.content_base64?.trim()
       const filename = (anexo.filename ?? 'anexo.bin').replace(/[^\w.\-]+/g, '_').slice(0, 120)
-      if (!raw || !filename) continue
+      const contentType = anexo.content_type || ''
+      // Só Excel do racional (print vai separado como screenshot).
+      const isXlsx =
+        contentType.includes('spreadsheet') ||
+        contentType.includes('excel') ||
+        /\.xlsx$/i.test(filename)
+      if (!raw || !filename || !isXlsx) continue
       if (raw.length > MAX_ANEXO_CHARS) continue
       try {
         const { mime, data } = stripDataUrlPrefix(raw)
@@ -293,7 +293,7 @@ Deno.serve(async (req: Request) => {
         await uploadChatFile(
           bytes,
           filename,
-          anexo.content_type || mime || 'application/octet-stream',
+          contentType || mime || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
       } catch {
         // anexo opcional — não derruba o ticket
@@ -306,7 +306,7 @@ Deno.serve(async (req: Request) => {
         user_id: responsumUser.id,
         user_name: responsumUser.name,
         user_role: 'user',
-        message: 'Evidências do SIOE (screenshot / racional / logs).',
+        message: 'Evidências do SIOE (screenshot e racional).',
         attachments: chatAttachments,
         read: false,
       })

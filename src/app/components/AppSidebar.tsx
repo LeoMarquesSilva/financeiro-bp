@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
-import { AlertTriangle, BarChart3, Briefcase, Bug, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock, Scale, Gauge } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock, Scale, Gauge } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -11,7 +11,6 @@ import type { ModuleKey } from '@/lib/moduleAccess'
 import { resolveHomePath } from '@/lib/homePath'
 import { useRoleAccessDefaults } from '@/lib/RoleAccessDefaultsContext'
 import { NAV_ACCESS_ITEMS, filterNavItemsForAccess } from '@/lib/navAccess'
-import { useErrorReportingOptional } from '@/shared/error-reporting/ErrorReportingProvider'
 
 const LOGO_FENIX = '/fenix.png'
 
@@ -53,7 +52,6 @@ export function AppSidebar() {
   const { role, moduleAccess, fullName, avatarUrl, signOut } = useAuth()
   const { config: roleRouteAccess } = useRoleAccessDefaults()
   const { unreadChats } = useWhatsappNotifications()
-  const { openReport } = useErrorReportingOptional()
   const location = useLocation()
   const navigate = useNavigate()
   const homePath = resolveHomePath(role, moduleAccess)
@@ -130,20 +128,6 @@ export function AppSidebar() {
 
         {/* User footer */}
         <div className="flex flex-col items-center gap-2 py-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => openReport()}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-rose-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-                aria-label="Reportar Erro"
-              >
-                <Bug className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Reportar Erro</TooltipContent>
-          </Tooltip>
-
           <Tooltip>
             <TooltipTrigger asChild>
               <button

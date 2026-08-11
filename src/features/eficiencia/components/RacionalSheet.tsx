@@ -134,7 +134,6 @@ export function RacionalSheet({
         ano,
         mes: mes === 'resultado' ? null : mes,
         area,
-        resumo: `Racional — ${titulo}`,
         anexos: [
           {
             filename,

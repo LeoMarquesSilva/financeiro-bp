@@ -23,15 +23,12 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { installClientLogBuffer, formatClientLogsForTicket } from './clientLogBuffer'
+import { installClientLogBuffer } from './clientLogBuffer'
 import { captureViewportScreenshot } from './captureScreenshot'
 import {
-  buildCursorPrompt,
   buildDefaultDescription,
   buildDefaultTitle,
-  buildTicketDescription,
   resolveModuloFromPath,
-  textToAnexoBase64,
   type ReportarErroContext,
 } from './buildReportContent'
 import { reportarErroSioe } from './reportarErroService'
@@ -126,15 +123,8 @@ export function ErrorReportingProvider({ children }: { children: ReactNode }) {
       toast.error('Informe título e descrição')
       return
     }
-    const description = buildTicketDescription(userDescription, draft.ctx, draft.route)
+    const description = userDescription
     const anexos = [...(draft.ctx.anexos ?? [])]
-    anexos.push(
-      textToAnexoBase64(buildCursorPrompt(draft.ctx, draft.route), 'prompt-cursor.txt'),
-    )
-    const logs = formatClientLogsForTicket(25)
-    if (logs && !logs.includes('nenhum log')) {
-      anexos.push(textToAnexoBase64(logs, 'client-logs.txt'))
-    }
     setSubmitting(true)
     try {
       const result = await reportarErroSioe({
@@ -147,9 +137,6 @@ export function ErrorReportingProvider({ children }: { children: ReactNode }) {
         mes: draft.ctx.mes,
         area: draft.ctx.area,
         screenshot_base64: draft.screenshot,
-        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-        error_message: draft.ctx.error?.message ?? null,
-        error_stack: draft.ctx.error?.stack ?? null,
         anexos,
       })
       toast.success(
@@ -184,8 +171,7 @@ export function ErrorReportingProvider({ children }: { children: ReactNode }) {
               Reportar Erro
             </DialogTitle>
             <DialogDescription>
-              Abre chamado na RESPONSUM · Manutenção em Sistemas / SIOE (LexNextLab), com
-              screenshot da tela.
+              Abre chamado na RESPONSUM com screenshot e Excel do racional deste indicador.
             </DialogDescription>
           </DialogHeader>
 
@@ -271,7 +257,6 @@ export function ErrorReportingProvider({ children }: { children: ReactNode }) {
 
 type BoundaryProps = {
   children: ReactNode
-  onReport?: (error: Error) => void
 }
 
 type BoundaryState = { error: Error | null }
@@ -301,14 +286,6 @@ export class FinanceiroErrorBoundary extends Component<BoundaryProps, BoundarySt
             {err.message || 'Erro inesperado no módulo financeiro.'}
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              className="gap-1.5"
-              onClick={() => this.props.onReport?.(err)}
-            >
-              <Bug className="h-4 w-4" aria-hidden />
-              Reportar Erro
-            </Button>
             <Button type="button" variant="outline" onClick={() => this.setState({ error: null })}>
               Tentar novamente
             </Button>
@@ -322,17 +299,5 @@ export class FinanceiroErrorBoundary extends Component<BoundaryProps, BoundarySt
 
 /** Liga o boundary ao provider (precisa estar dentro do provider). */
 export function FinanceiroErrorBoundaryConnected({ children }: { children: ReactNode }) {
-  const { openReport } = useErrorReporting()
-  return (
-    <FinanceiroErrorBoundary
-      onReport={(error) =>
-        openReport({
-          error,
-          resumo: error.message.slice(0, 80),
-        })
-      }
-    >
-      {children}
-    </FinanceiroErrorBoundary>
-  )
+  return <FinanceiroErrorBoundary>{children}</FinanceiroErrorBoundary>
 }
