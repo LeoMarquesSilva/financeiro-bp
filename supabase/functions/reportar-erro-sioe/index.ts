@@ -25,6 +25,7 @@ const SUBCATEGORY_ID = 'bfa3eec3-32f6-406d-af0c-4b8853b74209'
 const SIOE_BUCKET = 'error-reports'
 const RESPONSUM_ATTACHMENTS_BUCKET = 'attachments'
 const MAX_SCREENSHOT_CHARS = 3_500_000
+const MAX_ANEXO_CHARS = 8_000_000
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -55,6 +56,11 @@ interface Payload {
   user_agent?: string | null
   error_message?: string | null
   error_stack?: string | null
+  anexos?: Array<{
+    filename?: string
+    content_base64?: string
+    content_type?: string
+  }> | null
 }
 
 function stripDataUrlPrefix(b64: string): { mime: string; data: string } {
@@ -250,6 +256,7 @@ Deno.serve(async (req: Request) => {
     }
 
     let screenshotUrl: string | null = null
+    const uploadedNames: string[] = []
     if (screenshotBytes) {
       const fileName = `${Date.now()}-sioe-screenshot.png`
       const responsumPath = `tickets/${criado.id}/${fileName}`
@@ -269,6 +276,7 @@ Deno.serve(async (req: Request) => {
           500,
         )
       }
+      uploadedNames.push(fileName)
 
       const { data: pubResponsum } = responsum.storage
         .from(RESPONSUM_ATTACHMENTS_BUCKET)
@@ -284,17 +292,46 @@ Deno.serve(async (req: Request) => {
         contentType: 'image/png',
         upsert: true,
       })
+    }
 
+    const anexos = Array.isArray(payload.anexos) ? payload.anexos : []
+    for (const anexo of anexos.slice(0, 5)) {
+      const raw = anexo.content_base64?.trim()
+      const filename = (anexo.filename ?? 'anexo.bin').replace(/[^\w.\-]+/g, '_').slice(0, 120)
+      if (!raw || !filename) continue
+      if (raw.length > MAX_ANEXO_CHARS) continue
+      try {
+        const { mime, data } = stripDataUrlPrefix(raw)
+        const bytes = decodeBase64(data)
+        const path = `tickets/${criado.id}/${Date.now()}-${filename}`
+        const { error: upErr } = await responsum.storage
+          .from(RESPONSUM_ATTACHMENTS_BUCKET)
+          .upload(path, bytes, {
+            contentType: anexo.content_type || mime || 'application/octet-stream',
+            upsert: false,
+          })
+        if (!upErr) uploadedNames.push(filename)
+      } catch {
+        // anexo opcional — não derruba o ticket
+      }
+    }
+
+    if (screenshotUrl || uploadedNames.length > 0) {
+      const anexosLinha =
+        uploadedNames.length > 0 ? `Anexos: ${uploadedNames.join(', ')}` : null
       const descriptionComPrint = [
         description,
         '',
         '---',
         '## Evidências (SIOE)',
         ...buildEvidencias(payload, screenshotUrl),
+        anexosLinha,
         '',
         `Reportado por: ${responsumUser.name} <${caller.email}>`,
         `Categoria: Manutenção em Sistemas / Subcategoria: SIOE (frente LexNextLab)`,
-      ].join('\n')
+      ]
+        .filter((line): line is string => line != null)
+        .join('\n')
 
       await responsum
         .from('app_c009c0e4f1_tickets')
@@ -306,6 +343,7 @@ Deno.serve(async (req: Request) => {
       ok: true,
       ticket_id: criado.id,
       screenshot_url: screenshotUrl,
+      anexos: uploadedNames,
       assigned_to_name: subcategoria?.default_assigned_to_name ?? null,
     })
   } catch (e) {

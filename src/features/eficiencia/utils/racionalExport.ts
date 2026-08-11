@@ -28,6 +28,22 @@ export async function exportRacionalExcel(
   resumo: RacionalResultado['resumo'],
   meta: RacionalExportMeta,
 ): Promise<void> {
+  const { blob, filename } = await buildRacionalExcelBlob(colunas, linhas, resumo, meta)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/** Gera o .xlsx do racional (download ou anexo de Reportar Erro). */
+export async function buildRacionalExcelBlob(
+  colunas: RacionalColuna[],
+  linhas: Array<Record<string, unknown>>,
+  resumo: RacionalResultado['resumo'],
+  meta: RacionalExportMeta,
+): Promise<{ blob: Blob; filename: string }> {
   const XLSX = await import('xlsx')
 
   const rows: Array<Record<string, string>> = linhas.map((row) => {
@@ -68,5 +84,11 @@ export async function exportRacionalExcel(
     .filter(Boolean)
     .join('-')
 
-  XLSX.writeFile(wb, `${filename}.xlsx`)
+  const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+  return {
+    blob: new Blob([buffer as BlobPart], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+    filename: `${filename}.xlsx`,
+  }
 }

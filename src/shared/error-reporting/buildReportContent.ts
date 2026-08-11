@@ -1,3 +1,9 @@
+export type ReportarErroAnexo = {
+  filename: string
+  content_base64: string
+  content_type: string
+}
+
 export type ReportarErroContext = {
   /** Nome do indicador (Overview) ou seção. */
   indicador?: string | null
@@ -11,6 +17,8 @@ export type ReportarErroContext = {
   error?: Error | null
   /** Resumo curto opcional (entra no título). */
   resumo?: string | null
+  /** Anexos extras (ex.: Excel do Racional). */
+  anexos?: ReportarErroAnexo[]
 }
 
 export function resolveModuloFromPath(pathname: string): string {

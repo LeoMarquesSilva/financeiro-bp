@@ -145,6 +145,7 @@ export function ErrorReportingProvider({ children }: { children: ReactNode }) {
         user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
         error_message: draft.ctx.error?.message ?? null,
         error_stack: draft.ctx.error?.stack ?? null,
+        anexos: draft.ctx.anexos,
       })
       toast.success(
         result.assigned_to_name
@@ -222,6 +223,11 @@ export function ErrorReportingProvider({ children }: { children: ReactNode }) {
                 ) : (
                   <p>Não foi possível capturar o screenshot — o ticket seguirá com logs e contexto.</p>
                 )}
+                {(draft.ctx.anexos?.length ?? 0) > 0 ? (
+                  <p className="mt-2 font-medium text-slate-700">
+                    Anexo: {draft.ctx.anexos!.map((a) => a.filename).join(', ')}
+                  </p>
+                ) : null}
               </div>
             </div>
           ) : null}

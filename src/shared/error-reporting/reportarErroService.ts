@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
+import type { ReportarErroAnexo } from './buildReportContent'
 
 export type ReportarErroPayload = {
   title: string
@@ -15,6 +16,7 @@ export type ReportarErroPayload = {
   user_agent?: string | null
   error_message?: string | null
   error_stack?: string | null
+  anexos?: ReportarErroAnexo[]
 }
 
 export type ReportarErroResultado = {
