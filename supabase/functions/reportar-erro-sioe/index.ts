@@ -6,6 +6,9 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
  *
  * Categoria: manutencao_em_sistemas (frente LexNextLab via tag da categoria)
  * Subcategoria: sioe
+ *
+ * Screenshot: sobe no bucket RESPONSUM `attachments/tickets/{ticket_id}/`
+ * (mesmo padrão da UI do RESPONSUM) + backup no SIOE `error-reports`.
  */
 
 const corsHeaders = {
@@ -19,7 +22,8 @@ const CATEGORY_KEY = 'manutencao_em_sistemas'
 const CATEGORY_ID = '49d8f44b-8f11-4bdd-9d13-7418c522884e'
 const SUBCATEGORY_KEY = 'sioe'
 const SUBCATEGORY_ID = 'bfa3eec3-32f6-406d-af0c-4b8853b74209'
-const BUCKET = 'error-reports'
+const SIOE_BUCKET = 'error-reports'
+const RESPONSUM_ATTACHMENTS_BUCKET = 'attachments'
 const MAX_SCREENSHOT_CHARS = 3_500_000
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -64,6 +68,28 @@ function decodeBase64(data: string): Uint8Array {
   const out = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
   return out
+}
+
+function buildEvidencias(payload: Payload, screenshotUrl: string | null): string[] {
+  const evidencias: string[] = []
+  if (screenshotUrl) {
+    evidencias.push(`![Screenshot do SIOE](${screenshotUrl})`)
+    evidencias.push(`Screenshot: ${screenshotUrl}`)
+  }
+  if (payload.route) evidencias.push(`Rota: ${payload.route}`)
+  if (payload.modulo) evidencias.push(`Módulo: ${payload.modulo}`)
+  if (payload.indicador) evidencias.push(`Indicador: ${payload.indicador}`)
+  if (payload.area) evidencias.push(`Área: ${payload.area}`)
+  if (payload.ano != null) evidencias.push(`Ano: ${payload.ano}`)
+  if (payload.mes != null) {
+    const mesTxt = Array.isArray(payload.mes) ? payload.mes.join(', ') : String(payload.mes)
+    evidencias.push(`Mês filtro: ${mesTxt}`)
+  }
+  if (payload.user_agent) evidencias.push(`User-Agent: ${payload.user_agent}`)
+  if (payload.error_message) evidencias.push(`Erro: ${payload.error_message}`)
+  if (payload.error_stack) evidencias.push(`Stack:\n${payload.error_stack}`)
+  if (payload.client_logs) evidencias.push(`Logs do cliente:\n${payload.client_logs}`)
+  return evidencias
 }
 
 Deno.serve(async (req: Request) => {
@@ -168,7 +194,7 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    let screenshotUrl: string | null = null
+    let screenshotBytes: Uint8Array | null = null
     const rawShot = payload.screenshot_base64?.trim()
     if (rawShot) {
       if (rawShot.length > MAX_SCREENSHOT_CHARS) {
@@ -179,21 +205,7 @@ Deno.serve(async (req: Request) => {
         if (!mime.includes('png') && !mime.includes('jpeg') && !mime.includes('jpg')) {
           return jsonResponse({ error: 'Screenshot deve ser PNG ou JPEG.' }, 400)
         }
-        const bytes = decodeBase64(data)
-        const now = new Date()
-        const yyyy = now.getUTCFullYear()
-        const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
-        const id = crypto.randomUUID()
-        const path = `${yyyy}/${mm}/${id}.png`
-        const { error: upErr } = await sioe.storage.from(BUCKET).upload(path, bytes, {
-          contentType: 'image/png',
-          upsert: false,
-        })
-        if (upErr) {
-          return jsonResponse({ error: `Falha ao salvar screenshot: ${upErr.message}` }, 500)
-        }
-        const { data: pub } = sioe.storage.from(BUCKET).getPublicUrl(path)
-        screenshotUrl = pub.publicUrl
+        screenshotBytes = decodeBase64(data)
       } catch (e) {
         return jsonResponse(
           { error: `Screenshot inválido: ${e instanceof Error ? e.message : String(e)}` },
@@ -202,32 +214,19 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const evidencias: string[] = []
-    if (screenshotUrl) evidencias.push(`Screenshot: ${screenshotUrl}`)
-    if (payload.route) evidencias.push(`Rota: ${payload.route}`)
-    if (payload.modulo) evidencias.push(`Módulo: ${payload.modulo}`)
-    if (payload.indicador) evidencias.push(`Indicador: ${payload.indicador}`)
-    if (payload.area) evidencias.push(`Área: ${payload.area}`)
-    if (payload.ano != null) evidencias.push(`Ano: ${payload.ano}`)
-    if (payload.mes != null) {
-      const mesTxt = Array.isArray(payload.mes) ? payload.mes.join(', ') : String(payload.mes)
-      evidencias.push(`Mês filtro: ${mesTxt}`)
-    }
-    if (payload.user_agent) evidencias.push(`User-Agent: ${payload.user_agent}`)
-    if (payload.error_message) evidencias.push(`Erro: ${payload.error_message}`)
-    if (payload.error_stack) evidencias.push(`Stack:\n${payload.error_stack}`)
-    if (payload.client_logs) evidencias.push(`Logs do cliente:\n${payload.client_logs}`)
-
     const fullDescription = [
       description,
       '',
       '---',
       '## Evidências (SIOE)',
-      ...evidencias,
+      ...buildEvidencias(payload, null),
+      screenshotBytes ? 'Screenshot: (anexo do chamado)' : null,
       '',
       `Reportado por: ${responsumUser.name} <${caller.email}>`,
       `Categoria: Manutenção em Sistemas / Subcategoria: SIOE (frente LexNextLab)`,
-    ].join('\n')
+    ]
+      .filter((line): line is string => line != null)
+      .join('\n')
 
     const { data: criado, error: insertError } = await responsum
       .from('app_c009c0e4f1_tickets')
@@ -250,6 +249,59 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: insertError.message }, 500)
     }
 
+    let screenshotUrl: string | null = null
+    if (screenshotBytes) {
+      const fileName = `${Date.now()}-sioe-screenshot.png`
+      const responsumPath = `tickets/${criado.id}/${fileName}`
+
+      const { error: attachErr } = await responsum.storage
+        .from(RESPONSUM_ATTACHMENTS_BUCKET)
+        .upload(responsumPath, screenshotBytes, {
+          contentType: 'image/png',
+          upsert: false,
+        })
+      if (attachErr) {
+        return jsonResponse(
+          {
+            error: `Ticket criado (${criado.id}), mas falhou o anexo: ${attachErr.message}`,
+            ticket_id: criado.id,
+          },
+          500,
+        )
+      }
+
+      const { data: pubResponsum } = responsum.storage
+        .from(RESPONSUM_ATTACHMENTS_BUCKET)
+        .getPublicUrl(responsumPath)
+      screenshotUrl = pubResponsum.publicUrl
+
+      // Backup no SIOE (não bloqueia o fluxo se falhar).
+      const now = new Date()
+      const yyyy = now.getUTCFullYear()
+      const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
+      const sioePath = `${yyyy}/${mm}/${criado.id}.png`
+      await sioe.storage.from(SIOE_BUCKET).upload(sioePath, screenshotBytes, {
+        contentType: 'image/png',
+        upsert: true,
+      })
+
+      const descriptionComPrint = [
+        description,
+        '',
+        '---',
+        '## Evidências (SIOE)',
+        ...buildEvidencias(payload, screenshotUrl),
+        '',
+        `Reportado por: ${responsumUser.name} <${caller.email}>`,
+        `Categoria: Manutenção em Sistemas / Subcategoria: SIOE (frente LexNextLab)`,
+      ].join('\n')
+
+      await responsum
+        .from('app_c009c0e4f1_tickets')
+        .update({ description: descriptionComPrint })
+        .eq('id', criado.id)
+    }
+
     return jsonResponse({
       ok: true,
       ticket_id: criado.id,
@@ -260,7 +312,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(
       {
         error: e instanceof Error ? e.message : String(e),
-        hint: 'Verifique RESPONSUM_SUPABASE_URL / RESPONSUM_SERVICE_ROLE_KEY e o bucket error-reports.',
+        hint: 'Verifique RESPONSUM_SUPABASE_URL / RESPONSUM_SERVICE_ROLE_KEY e buckets attachments/error-reports.',
       },
       500,
     )
