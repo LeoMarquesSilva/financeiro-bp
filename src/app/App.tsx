@@ -1,8 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/AuthContext'
-import type { AppRole } from '@/lib/database.types'
 import type { ModuleKey } from '@/lib/moduleAccess'
 import { resolveHomePath } from '@/lib/homePath'
+import { canAccessRoutePath } from '@/lib/roleAccessConfig'
+import { RoleAccessDefaultsProvider, useRoleAccessDefaults } from '@/lib/RoleAccessDefaultsContext'
 import { Login } from './Login'
 import { ResetPassword } from './ResetPassword'
 import { FinanceiroLayout } from './layouts/FinanceiroLayout'
@@ -22,19 +23,26 @@ import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
 import { OperacoesLegaisPage } from '@/features/operacoes-legais/pages/OperacoesLegaisPage'
 
 function ProtectedRoute({
-  allowedRoles,
+  routePath,
   moduleKey,
   children,
 }: {
-  allowedRoles: AppRole[]
+  routePath: string
   /** Libera o acesso também para quem tem esse módulo concedido individualmente (Fase 2). */
   moduleKey?: ModuleKey
   children: React.ReactNode
 }) {
   const { role, moduleAccess } = useAuth()
-  const hasRoleAccess = !!role && allowedRoles.includes(role)
-  const hasModuleAccess = !!moduleKey && moduleAccess.includes(moduleKey)
-  if (!hasRoleAccess && !hasModuleAccess) {
+  const { config } = useRoleAccessDefaults()
+  if (
+    !canAccessRoutePath({
+      role,
+      moduleAccess,
+      routePath,
+      moduleKey,
+      roleRouteAccess: config,
+    })
+  ) {
     return <Navigate to={resolveHomePath(role, moduleAccess)} replace />
   }
   return <>{children}</>
@@ -73,7 +81,7 @@ function AppRoutes() {
             path="inadimplencia"
             element={
               <ProtectedRoute
-                allowedRoles={['admin', 'financeiro', 'comite']}
+                routePath="/financeiro/inadimplencia"
                 moduleKey="inadimplencia"
               >
                 <InadimplenciaPage />
@@ -84,7 +92,7 @@ function AppRoutes() {
             path="inadimplencia/dashboard"
             element={
               <ProtectedRoute
-                allowedRoles={['admin', 'financeiro', 'comite']}
+                routePath="/financeiro/inadimplencia/dashboard"
                 moduleKey="inadimplencia"
               >
                 <InadimplenciaDashboardPage />
@@ -94,7 +102,7 @@ function AppRoutes() {
           <Route
             path="inadimplencia/judicializada"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro', 'comite']}>
+              <ProtectedRoute routePath="/financeiro/inadimplencia/judicializada">
                 <InadimplenciaJudicializadaPage />
               </ProtectedRoute>
             }
@@ -102,7 +110,7 @@ function AppRoutes() {
           <Route
             path="escritorio"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro']} moduleKey="escritorio">
+              <ProtectedRoute routePath="/financeiro/escritorio" moduleKey="escritorio">
                 <EscritorioPage />
               </ProtectedRoute>
             }
@@ -110,7 +118,7 @@ function AppRoutes() {
           <Route
             path="escritorio/financeiro/:metrica"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro']} moduleKey="escritorio">
+              <ProtectedRoute routePath="/financeiro/escritorio" moduleKey="escritorio">
                 <EscritorioFinanceiroDetalhePage />
               </ProtectedRoute>
             }
@@ -118,7 +126,7 @@ function AppRoutes() {
           <Route
             path="cobranca"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro']} moduleKey="cobranca">
+              <ProtectedRoute routePath="/financeiro/cobranca" moduleKey="cobranca">
                 <CobrancaPage />
               </ProtectedRoute>
             }
@@ -126,7 +134,7 @@ function AppRoutes() {
           <Route
             path="cobranca/seguimento"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro', 'comite']} moduleKey="cobranca">
+              <ProtectedRoute routePath="/financeiro/cobranca/seguimento" moduleKey="cobranca">
                 <CobrancaSeguimentoPage />
               </ProtectedRoute>
             }
@@ -134,7 +142,7 @@ function AppRoutes() {
           <Route
             path="usuarios"
             element={
-              <ProtectedRoute allowedRoles={['admin']} moduleKey="gestores">
+              <ProtectedRoute routePath="/financeiro/usuarios" moduleKey="gestores">
                 <UsuariosPage />
               </ProtectedRoute>
             }
@@ -144,7 +152,7 @@ function AppRoutes() {
           <Route
             path="receita"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro', 'comite']} moduleKey="receita">
+              <ProtectedRoute routePath="/financeiro/receita" moduleKey="receita">
                 <ReceitaPage />
               </ProtectedRoute>
             }
@@ -152,7 +160,7 @@ function AppRoutes() {
           <Route
             path="opex"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'financeiro']} moduleKey="opex">
+              <ProtectedRoute routePath="/financeiro/opex" moduleKey="opex">
                 <OpexPage />
               </ProtectedRoute>
             }
@@ -160,7 +168,7 @@ function AppRoutes() {
           <Route
             path="eficiencia"
             element={
-              <ProtectedRoute allowedRoles={['admin']} moduleKey="eficiencia">
+              <ProtectedRoute routePath="/financeiro/eficiencia" moduleKey="eficiencia">
                 <EficienciaPage />
               </ProtectedRoute>
             }
@@ -168,7 +176,7 @@ function AppRoutes() {
           <Route
             path="operacoes-legais"
             element={
-              <ProtectedRoute allowedRoles={['admin']} moduleKey="operacoes-legais">
+              <ProtectedRoute routePath="/financeiro/operacoes-legais" moduleKey="operacoes-legais">
                 <OperacoesLegaisPage />
               </ProtectedRoute>
             }
@@ -176,7 +184,7 @@ function AppRoutes() {
           <Route
             path="configuracoes"
             element={
-              <ProtectedRoute allowedRoles={['admin']} moduleKey="configuracoes">
+              <ProtectedRoute routePath="/financeiro/configuracoes" moduleKey="configuracoes">
                 <ConfiguracoesPage />
               </ProtectedRoute>
             }
@@ -193,7 +201,9 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <RoleAccessDefaultsProvider>
+        <AppRoutes />
+      </RoleAccessDefaultsProvider>
     </AuthProvider>
   )
 }

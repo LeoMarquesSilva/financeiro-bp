@@ -9,6 +9,7 @@ import { useWhatsappNotifications } from '@/features/cobranca/notifications/What
 import type { AppRole } from '@/lib/database.types'
 import type { ModuleKey } from '@/lib/moduleAccess'
 import { resolveHomePath } from '@/lib/homePath'
+import { useRoleAccessDefaults } from '@/lib/RoleAccessDefaultsContext'
 import { NAV_ACCESS_ITEMS, filterNavItemsForAccess } from '@/lib/navAccess'
 
 const LOGO_FENIX = '/fenix.png'
@@ -49,14 +50,15 @@ function getInitials(name: string | null): string {
 
 export function AppSidebar() {
   const { role, moduleAccess, fullName, avatarUrl, signOut } = useAuth()
+  const { config: roleRouteAccess } = useRoleAccessDefaults()
   const { unreadChats } = useWhatsappNotifications()
   const location = useLocation()
   const navigate = useNavigate()
   const homePath = resolveHomePath(role, moduleAccess)
 
   const visibleItems = useMemo(
-    () => filterNavItemsForAccess(navItems, role, moduleAccess),
-    [role, moduleAccess],
+    () => filterNavItemsForAccess(navItems, role, moduleAccess, roleRouteAccess),
+    [role, moduleAccess, roleRouteAccess],
   )
 
   return (

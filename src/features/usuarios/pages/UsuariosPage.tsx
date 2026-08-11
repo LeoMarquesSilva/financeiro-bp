@@ -5,6 +5,7 @@ import {
   KeyRound,
   Loader2,
   Search,
+  Settings2,
   UserCheck,
   UserX,
   Users,
@@ -30,6 +31,7 @@ import {
 import type { AuthMeta, UsuarioListItem, UsuariosTab } from '../types'
 import { AcessoUsuarioDialog } from '../components/AcessoUsuarioDialog'
 import { UsuariosDivergenciasTab } from '../components/UsuariosDivergenciasTab'
+import { PerfisPadraoDialog } from '../components/PerfisPadraoDialog'
 import { formatRelativeAccess, getInitials } from '../utils/formatAccess'
 import {
   buildAreaFiltroOptions,
@@ -165,6 +167,7 @@ export function UsuariosPage() {
   const [accessFilter, setAccessFilter] = useState<AccessFilter>('all')
   const [areaFilter, setAreaFilter] = useState('all')
   const [selected, setSelected] = useState<UsuarioListItem | null>(null)
+  const [perfisPadraoOpen, setPerfisPadraoOpen] = useState(false)
 
   const {
     data: colaboradores,
@@ -295,21 +298,33 @@ export function UsuariosPage() {
       </header>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as UsuariosTab)}>
-        <TabsList>
-          <TabsTrigger value="lista">
-            <Users className="h-4 w-4" />
-            Lista
-          </TabsTrigger>
-          <TabsTrigger value="divergencias">
-            <AlertTriangle className="h-4 w-4" />
-            Divergências
-            {divergenciasPendentes > 0 && (
-              <span className="ml-1 rounded-full bg-red-100 px-1.5 text-xs font-semibold text-red-700">
-                {divergenciasPendentes}
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center gap-2">
+          <TabsList>
+            <TabsTrigger value="lista">
+              <Users className="h-4 w-4" />
+              Lista
+            </TabsTrigger>
+            <TabsTrigger value="divergencias">
+              <AlertTriangle className="h-4 w-4" />
+              Divergências
+              {divergenciasPendentes > 0 && (
+                <span className="ml-1 rounded-full bg-red-100 px-1.5 text-xs font-semibold text-red-700">
+                  {divergenciasPendentes}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0 gap-1.5 border-teal-200 bg-teal-50/50 text-teal-800 hover:bg-teal-50"
+            onClick={() => setPerfisPadraoOpen(true)}
+          >
+            <Settings2 className="h-4 w-4" />
+            Perfis padrão
+          </Button>
+        </div>
 
         <TabsContent value="lista" className="mt-4 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -557,6 +572,8 @@ export function UsuariosPage() {
         grantedModules={selectedModules}
         authMeta={selectedAuth}
       />
+
+      <PerfisPadraoDialog open={perfisPadraoOpen} onOpenChange={setPerfisPadraoOpen} />
     </div>
   )
 }
