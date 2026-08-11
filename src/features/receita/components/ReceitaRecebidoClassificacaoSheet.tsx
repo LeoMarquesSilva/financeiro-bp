@@ -5,6 +5,7 @@ import {
   ArrowUp,
   Banknote,
   Building2,
+  Calendar,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -23,13 +24,11 @@ import { Input } from '@/components/ui/input'
 import { formatCurrency, formatDate, formatPercent } from '@/shared/utils/format'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 import { receitaService } from '../services/receitaService'
-import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
 import type {
   ReceitaRecebidoClassificacaoItemRow,
   ReceitaPrevistoFechamentoMes,
   ReceitaPrevistoFechamentoItemRow,
 } from '../types/receita.types'
-import type { ReceitaInadimplenciaGrupoMes } from '../types/receitaInadimplencia.types'
 import {
   agruparClassificacaoPorGrupo,
   agruparClassificacaoPorTitulo,
@@ -42,12 +41,28 @@ import {
   type ReceitaRecebidoDetalheKey,
 } from '../utils/recebidoClassificacao'
 import { buildClienteGrupoMap } from '../utils/recebidoGrupos'
-import { agruparPrevistoPorGrupo, agruparPrevistoPorTitulo, agruparPrevistoGrupoComQuitado, agruparPrevistoTituloComQuitado } from '../utils/previstoGrupos'
+import {
+  agruparPrevistoPorGrupo,
+  agruparPrevistoPorTitulo,
+  agruparPrevistoPorVencimentoComQuitado,
+  agruparPrevistoTituloComQuitado,
+  agruparInadMesPorGrupoSemCompensacao,
+  filtrarPrevistoItensPorBusca,
+  normalizePrevistoVencimentoKey,
+  PREVISTO_SEM_VENCIMENTO_KEY,
+  type ReceitaInadMesGrupoAgg,
+  type ReceitaPrevistoGrupoQuitadoAgg,
+} from '../utils/previstoGrupos'
 import {
   FECHAMENTO_DRILL_HINTS,
   FECHAMENTO_DRILL_LABELS,
+  buildPrevistoFechamentoMesFromDados,
+  filtrarPrevistoMesItensPorCiItens,
+  inadimplenciaItemMesFaturadoNaoPago,
+  inadimplenciaMesFaturadoNaoPago,
   type FechamentoDrillKey,
 } from '../utils/receitaPrevistoFechamento'
+import { filtrarClassificacaoPorArea } from '../utils/receitaInadimplenciaAreaFilter'
 import { ReceitaMesVisaoGerencialPanel } from './ReceitaMesVisaoGerencialPanel'
 
 type Props = {
@@ -58,16 +73,14 @@ type Props = {
   mesLabel: string
   totalRecebido: number
   totalPrevisto: number
-  inadimplenciaMes?: number | null
+  areaKey?: string | null
+  areaLabel?: string | null
 }
 
 type View = 'categorias' | 'titulos' | 'fechamento'
 
 type PrevistoGrupoSortKey = 'grupo' | 'previsto' | 'quitado_no_mes' | 'inadimplencia'
 type SortDir = 'asc' | 'desc'
-
-const previstoGrupoInadimplencia = (previsto: number, quitado: number) =>
-  Math.max(0, previsto - quitado)
 
 const PREVISTO_GRUPO_SORT_DEFAULT: { key: PrevistoGrupoSortKey; dir: SortDir } = {
   key: 'inadimplencia',
@@ -82,7 +95,8 @@ export function ReceitaRecebidoClassificacaoSheet({
   mesLabel,
   totalRecebido,
   totalPrevisto,
-  inadimplenciaMes = null,
+  areaKey = null,
+  areaLabel = null,
 }: Props) {
   const [view, setView] = useState<View>('categorias')
   const [detalheSelecionado, setDetalheSelecionado] = useState<ReceitaRecebidoDetalheKey | null>(
@@ -93,14 +107,18 @@ export function ReceitaRecebidoClassificacaoSheet({
   const [itens, setItens] = useState<ReceitaRecebidoClassificacaoItemRow[]>([])
   const [clienteGrupoMap, setClienteGrupoMap] = useState<Map<string, string>>(() => new Map())
   const [grupoExpandido, setGrupoExpandido] = useState<string | null>(null)
+  const [previstoVencExpandido, setPrevistoVencExpandido] = useState<string | null>(null)
   const [fechamento, setFechamento] = useState<ReceitaPrevistoFechamentoMes | null>(null)
   const [fechamentoDrill, setFechamentoDrill] = useState<FechamentoDrillKey | null>(null)
   const [fechamentoItens, setFechamentoItens] = useState<ReceitaPrevistoFechamentoItemRow[]>([])
-  const [inadGrupos, setInadGrupos] = useState<ReceitaInadimplenciaGrupoMes[]>([])
+  const [inadGrupos, setInadGrupos] = useState<ReceitaInadMesGrupoAgg[]>([])
   const [fechamentoLoading, setFechamentoLoading] = useState(false)
   const [fechamentoError, setFechamentoError] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
   const [previstoGrupoSort, setPrevistoGrupoSort] = useState(PREVISTO_GRUPO_SORT_DEFAULT)
+  const [previstoMesItensArea, setPrevistoMesItensArea] = useState<ReceitaPrevistoFechamentoItemRow[]>(
+    [],
+  )
   const buscaDebounced = useDebounce(busca, 250)
 
   useEffect(() => {
@@ -111,10 +129,12 @@ export function ReceitaRecebidoClassificacaoSheet({
       setItens([])
       setClienteGrupoMap(new Map())
       setGrupoExpandido(null)
+      setPrevistoVencExpandido(null)
       setFechamento(null)
       setFechamentoDrill(null)
       setFechamentoItens([])
       setInadGrupos([])
+      setPrevistoMesItensArea([])
       setFechamentoError(null)
       setError(null)
       return
@@ -122,15 +142,41 @@ export function ReceitaRecebidoClassificacaoSheet({
     let cancelled = false
     setLoading(true)
     setError(null)
-    Promise.all([
-      receitaService.fetchRecebidoClassificacaoMes(ano, mes),
-      receitaService.fetchPrevistoFechamentoMes(ano, mes),
-      receitaService.fetchEmpresasNomeGrupo(),
-    ])
-      .then(([itensData, fechamentoData, empresas]) => {
+    setPrevistoMesItensArea([])
+
+    const load = areaKey
+      ? Promise.all([
+          receitaService.fetchRecebidoClassificacaoMes(ano, mes),
+          receitaService.fetchPrevistoMesItens(ano, mes),
+          receitaService.fetchPrevistoItensPorArea(ano, mes, areaKey),
+          receitaService.fetchEmpresasNomeGrupo(),
+        ]).then(([classAll, prevMesAll, prevArea, empresas]) => {
+          const classArea = filtrarClassificacaoPorArea(classAll, areaKey)
+          const prevMesArea = filtrarPrevistoMesItensPorCiItens(prevMesAll, prevArea)
+          return {
+            itens: classArea,
+            fechamento: buildPrevistoFechamentoMesFromDados(prevMesArea, classArea, ano, mes),
+            empresas,
+            prevMesArea,
+          }
+        })
+      : Promise.all([
+          receitaService.fetchRecebidoClassificacaoMes(ano, mes),
+          receitaService.fetchPrevistoMesItens(ano, mes),
+          receitaService.fetchEmpresasNomeGrupo(),
+        ]).then(([itensData, prevMesAll, empresas]) => ({
+          itens: itensData,
+          fechamento: buildPrevistoFechamentoMesFromDados(prevMesAll, itensData, ano, mes),
+          empresas,
+          prevMesArea: prevMesAll,
+        }))
+
+    load
+      .then(({ itens: itensData, fechamento: fechamentoData, empresas, prevMesArea }) => {
         if (!cancelled) {
           setItens(itensData)
           setFechamento(fechamentoData)
+          setPrevistoMesItensArea(prevMesArea)
           setClienteGrupoMap(buildClienteGrupoMap(empresas))
         }
       })
@@ -147,7 +193,7 @@ export function ReceitaRecebidoClassificacaoSheet({
     return () => {
       cancelled = true
     }
-  }, [open, ano, mes])
+  }, [open, ano, mes, areaKey])
 
   const categoriasAgg = useMemo(() => agruparRecebidoPorCategoria(itens), [itens])
   const somaCategorias = useMemo(() => somaRecebidoClassificado(categoriasAgg), [categoriasAgg])
@@ -225,10 +271,25 @@ export function ReceitaRecebidoClassificacaoSheet({
     return agruparPrevistoPorGrupo(fechamentoItens, clienteGrupoMap)
   }, [fechamentoItens, clienteGrupoMap, fechamentoDrill])
 
-  const previstoGrupoAgg = useMemo(() => {
+  const previstoItensFiltrados = useMemo(() => {
     if (fechamentoDrill !== 'previsto_grupo') return []
-    return agruparPrevistoGrupoComQuitado(fechamentoItens, clienteGrupoMap, ano, mes)
-  }, [fechamentoItens, clienteGrupoMap, fechamentoDrill, ano, mes])
+    return filtrarPrevistoItensPorBusca(fechamentoItens, buscaDebounced, clienteGrupoMap)
+  }, [fechamentoItens, buscaDebounced, clienteGrupoMap, fechamentoDrill])
+
+  const previstoVencimentoAgg = useMemo(() => {
+    if (fechamentoDrill !== 'previsto_grupo') return []
+    return agruparPrevistoPorVencimentoComQuitado(
+      previstoItensFiltrados,
+      clienteGrupoMap,
+      ano,
+      mes,
+    )
+  }, [previstoItensFiltrados, clienteGrupoMap, fechamentoDrill, ano, mes])
+
+  const previstoGrupoAgg = useMemo(
+    () => previstoVencimentoAgg.flatMap((v) => v.grupos),
+    [previstoVencimentoAgg],
+  )
 
   function previstoTituloMatchesBusca(
     t: ReturnType<typeof agruparPrevistoPorTitulo>[number],
@@ -241,55 +302,58 @@ export function ReceitaRecebidoClassificacaoSheet({
     return hay.includes(q)
   }
 
-  const previstoGrupoFiltrados = useMemo(() => {
-    const q = buscaDebounced.trim().toLowerCase()
-    if (!q) return previstoGrupoAgg
-    return previstoGrupoAgg.filter((g) => {
-      if (g.grupo.toLowerCase().includes(q)) return true
-      return agruparPrevistoTituloComQuitado(
-        fechamentoItens,
-        g.grupo,
-        clienteGrupoMap,
-        ano,
-        mes,
-      ).some((t) => previstoTituloMatchesBusca(t, q))
-    })
-  }, [previstoGrupoAgg, buscaDebounced, fechamentoItens, clienteGrupoMap, ano, mes])
-
-  const previstoGrupoOrdenados = useMemo(() => {
+  const ordenarPrevistoGrupos = (grupos: ReceitaPrevistoGrupoQuitadoAgg[]) => {
     const { key, dir } = previstoGrupoSort
     const mult = dir === 'asc' ? 1 : -1
-    return [...previstoGrupoFiltrados].sort((a, b) => {
+    return [...grupos].sort((a, b) => {
       if (key === 'grupo') {
         return mult * a.grupo.localeCompare(b.grupo, 'pt-BR')
       }
       if (key === 'inadimplencia') {
-        return (
-          mult *
-          (previstoGrupoInadimplencia(a.previsto, a.quitado_no_mes) -
-            previstoGrupoInadimplencia(b.previsto, b.quitado_no_mes))
-        )
+        return mult * (a.inadimplencia - b.inadimplencia)
       }
       return mult * (a[key] - b[key])
     })
-  }, [previstoGrupoFiltrados, previstoGrupoSort])
+  }
+
+  const previstoVencimentoOrdenados = useMemo(
+    () =>
+      previstoVencimentoAgg.map((venc) => ({
+        ...venc,
+        grupos: ordenarPrevistoGrupos(venc.grupos),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ordenarPrevistoGrupos usa previstoGrupoSort
+    [previstoVencimentoAgg, previstoGrupoSort],
+  )
+
+  const previstoGrupoOrdenados = previstoGrupoAgg
 
   const previstoGrupoSoma = useMemo(() => {
-    const previsto = previstoGrupoAgg.reduce((s, g) => s + g.previsto, 0)
-    const quitado = previstoGrupoAgg.reduce((s, g) => s + g.quitado_no_mes, 0)
-    const inadimplencia = previstoGrupoInadimplencia(previsto, quitado)
+    const previsto = previstoItensFiltrados.reduce((s, i) => s + i.valor_item, 0)
+    const quitado = previstoItensFiltrados.reduce((s, i) => {
+      if (!i.data_pagamento) return s
+      const d = new Date(`${i.data_pagamento}T12:00:00`)
+      return d.getFullYear() === ano && d.getMonth() + 1 === mes ? s + i.valor_item : s
+    }, 0)
+    const inadimplencia = previstoItensFiltrados.reduce(
+      (s, i) => s + inadimplenciaItemMesFaturadoNaoPago(i, ano, mes),
+      0,
+    )
     return {
       previsto,
       quitado,
       inadimplencia,
       pctInadimplencia: previsto > 0 ? (inadimplencia / previsto) * 100 : null,
     }
-  }, [previstoGrupoAgg])
+  }, [previstoItensFiltrados, ano, mes])
 
-  const previstoTitulosPorGrupo = (grupo: string) => {
+  const previstoTitulosPorGrupo = (vencimentoKey: string, grupo: string) => {
     const q = buscaDebounced.trim().toLowerCase()
+    const itensVenc = fechamentoItens.filter(
+      (i) => normalizePrevistoVencimentoKey(i.data_vencimento) === vencimentoKey,
+    )
     let titulos = agruparPrevistoTituloComQuitado(
-      fechamentoItens,
+      itensVenc,
       grupo,
       clienteGrupoMap,
       ano,
@@ -308,15 +372,29 @@ export function ReceitaRecebidoClassificacaoSheet({
       }
       if (key === 'previsto') return mult * (a.total - b.total)
       if (key === 'inadimplencia') {
-        return (
-          mult *
-          (previstoGrupoInadimplencia(a.total, a.quitado_no_mes) -
-            previstoGrupoInadimplencia(b.total, b.quitado_no_mes))
-        )
+        return mult * (a.inadimplencia - b.inadimplencia)
       }
       return mult * (a[key] - b[key])
     })
   }
+
+  const previstoGrupoExpandidoKey = (vencimentoKey: string, grupo: string) =>
+    `${vencimentoKey}::${grupo}`
+
+  const togglePrevistoVencimento = (vencimentoKey: string) => {
+    setPrevistoVencExpandido((prev) => (prev === vencimentoKey ? null : vencimentoKey))
+    setGrupoExpandido(null)
+  }
+
+  const togglePrevistoGrupo = (vencimentoKey: string, grupo: string) => {
+    const key = previstoGrupoExpandidoKey(vencimentoKey, grupo)
+    setGrupoExpandido((prev) => (prev === key ? null : key))
+  }
+
+  const labelPrevistoVencimento = (vencimentoKey: string) =>
+    vencimentoKey === PREVISTO_SEM_VENCIMENTO_KEY
+      ? 'Sem data de vencimento'
+      : formatDate(vencimentoKey)
 
   const togglePrevistoGrupoSort = (key: PrevistoGrupoSortKey) => {
     setPrevistoGrupoSort((prev) =>
@@ -371,7 +449,7 @@ export function ReceitaRecebidoClassificacaoSheet({
 
   const fechamentoDrillEsperado = useMemo(() => {
     if (!fechamento || !fechamentoDrill) return null
-    if (fechamentoDrill === 'inad_grupo') return fechamento.inadimplencia_kpi
+    if (fechamentoDrill === 'inad_grupo') return inadimplenciaMesFaturadoNaoPago(fechamento)
     if (fechamentoDrill === 'previsto_grupo') return fechamento.previsto
     return fechamento[fechamentoDrill]
   }, [fechamento, fechamentoDrill])
@@ -386,6 +464,10 @@ export function ReceitaRecebidoClassificacaoSheet({
     fechamentoDrillEsperado != null &&
     Math.abs(fechamentoDrillTotal - fechamentoDrillEsperado) < 0.02
 
+  const previstoInadFecha =
+    fechamento != null &&
+    Math.abs(previstoGrupoSoma.inadimplencia - inadimplenciaMesFaturadoNaoPago(fechamento)) < 0.02
+
   const pagamentoTituloFechamento = (ciTitulo: number) => {
     const datas = fechamentoItens
       .filter((i) => i.ci_titulo === ciTitulo && i.data_pagamento)
@@ -394,8 +476,7 @@ export function ReceitaRecebidoClassificacaoSheet({
   }
 
   const recebidoHeader = somaCategorias > 0 ? somaCategorias : totalRecebido
-  const inadHeader =
-    fechamento?.inadimplencia_kpi ?? inadimplenciaMes ?? null
+  const inadHeader = fechamento ? inadimplenciaMesFaturadoNaoPago(fechamento) : null
   const pctPrevistoCaixaHeader =
     fechamento && fechamento.previsto > 0
       ? (fechamento.recebido_previsto_caixa / fechamento.previsto) * 100
@@ -405,6 +486,7 @@ export function ReceitaRecebidoClassificacaoSheet({
     setFechamentoDrill(key)
     setBusca('')
     setGrupoExpandido(null)
+    setPrevistoVencExpandido(null)
     if (key === 'previsto_grupo') {
       setPrevistoGrupoSort(PREVISTO_GRUPO_SORT_DEFAULT)
     }
@@ -414,17 +496,26 @@ export function ReceitaRecebidoClassificacaoSheet({
     setFechamentoItens([])
     setInadGrupos([])
 
+    const loadInadGrupos = (rows: ReceitaPrevistoFechamentoItemRow[]) =>
+      setInadGrupos(agruparInadMesPorGrupoSemCompensacao(rows, clienteGrupoMap, ano, mes))
+
     const load =
       key === 'inad_grupo'
-        ? receitaInadimplenciaService.fetchGruposMes(ano, mes).then((grupos) => {
-            setInadGrupos(grupos)
-          })
+        ? previstoMesItensArea.length > 0
+          ? Promise.resolve().then(() => loadInadGrupos(previstoMesItensArea))
+          : receitaService.fetchPrevistoMesItens(ano, mes).then((rows) => loadInadGrupos(rows))
         : key === 'previsto_grupo'
-          ? receitaService.fetchPrevistoMesItens(ano, mes).then((rows) => {
-              setFechamentoItens(rows)
-            })
+          ? areaKey
+            ? Promise.resolve().then(() => {
+                setFechamentoItens(previstoMesItensArea)
+              })
+            : receitaService.fetchPrevistoMesItens(ano, mes).then((rows) => {
+                setFechamentoItens(rows)
+              })
           : receitaService.fetchPrevistoFechamentoItens(ano, mes, key).then((rows) => {
-              setFechamentoItens(rows)
+              setFechamentoItens(
+                areaKey ? filtrarPrevistoMesItensPorCiItens(rows, previstoMesItensArea) : rows,
+              )
             })
 
     load
@@ -440,6 +531,7 @@ export function ReceitaRecebidoClassificacaoSheet({
     setDetalheSelecionado(key)
     setBusca('')
     setGrupoExpandido(null)
+    setPrevistoVencExpandido(null)
     setView('titulos')
   }
 
@@ -451,6 +543,7 @@ export function ReceitaRecebidoClassificacaoSheet({
     setInadGrupos([])
     setFechamentoError(null)
     setGrupoExpandido(null)
+    setPrevistoVencExpandido(null)
     setBusca('')
   }
 
@@ -491,7 +584,7 @@ export function ReceitaRecebidoClassificacaoSheet({
                 {fechamentoDrill === 'inad_grupo'
                   ? ` · ${inadGruposFiltrados.length} ${inadGruposFiltrados.length === 1 ? 'grupo' : 'grupos'}`
                   : fechamentoDrill === 'previsto_grupo'
-                    ? ` · ${previstoGrupoOrdenados.length} ${previstoGrupoOrdenados.length === 1 ? 'grupo' : 'grupos'}`
+                    ? ` · ${previstoVencimentoOrdenados.length} ${previstoVencimentoOrdenados.length === 1 ? 'vencimento' : 'vencimentos'} · ${previstoGrupoOrdenados.length} ${previstoGrupoOrdenados.length === 1 ? 'grupo' : 'grupos'}`
                     : ` · ${fechamentoGruposFiltrados.length} ${fechamentoGruposFiltrados.length === 1 ? 'grupo' : 'grupos'} · ${fechamentoItens.length} ${fechamentoItens.length === 1 ? 'item' : 'itens'}`}
               </SheetDescription>
               {fechamentoDrill === 'previsto_grupo' ? (
@@ -530,6 +623,11 @@ export function ReceitaRecebidoClassificacaoSheet({
                   {fechamentoDrillEsperado != null && fechamentoDrillFecha ? (
                     <span className="mt-2 inline-flex rounded bg-emerald-400/20 px-2 py-0.5 text-[10px] font-medium text-emerald-100">
                       previsto fecha com o painel
+                    </span>
+                  ) : null}
+                  {previstoInadFecha ? (
+                    <span className="mt-2 inline-flex rounded bg-emerald-400/20 px-2 py-0.5 text-[10px] font-medium text-emerald-100">
+                      inad. fecha com o header
                     </span>
                   ) : null}
                 </>
@@ -581,10 +679,12 @@ export function ReceitaRecebidoClassificacaoSheet({
                 </span>
                 <div className="min-w-0">
                   <SheetTitle className="text-base font-semibold text-white">
-                    Visão do mês — {mesLabel} / {ano}
+                    Visão do mês
+                    {areaLabel ? ` — ${areaLabel}` : ''} · {mesLabel} / {ano}
                   </SheetTitle>
                   <SheetDescription className="mt-1 text-xs text-sky-100">
                     Previsto · Recebido · Inadimplência
+                    {areaLabel ? ` · filtro ${areaLabel}` : ''}
                   </SheetDescription>
                 </div>
               </div>
@@ -626,7 +726,9 @@ export function ReceitaRecebidoClassificacaoSheet({
                   <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight text-red-100">
                     {inadHeader != null ? formatCurrency(inadHeader) : '—'}
                   </p>
-                  <p className="mt-0.5 text-[10px] leading-snug text-red-100/80">Saldo grupo</p>
+                  <p className="mt-0.5 text-[10px] leading-snug text-red-100/80">
+                    Vencido, não pago
+                  </p>
                 </div>
               </div>
             </>
@@ -751,10 +853,10 @@ export function ReceitaRecebidoClassificacaoSheet({
               !fechamentoLoading &&
               !fechamentoError &&
               fechamentoDrill === 'previsto_grupo' &&
-              previstoGrupoFiltrados.length === 0 && (
+              previstoVencimentoOrdenados.length === 0 && (
                 <p className="py-10 text-center text-sm text-slate-500">
                   {buscaDebounced
-                    ? 'Nenhum grupo corresponde à busca.'
+                    ? 'Nenhum vencimento ou grupo corresponde à busca.'
                     : 'Nenhum vencimento previsto neste mês.'}
                 </p>
               )}
@@ -763,7 +865,7 @@ export function ReceitaRecebidoClassificacaoSheet({
               !fechamentoLoading &&
               !fechamentoError &&
               fechamentoDrill === 'previsto_grupo' &&
-              previstoGrupoFiltrados.length > 0 && (
+              previstoVencimentoOrdenados.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-slate-200/80">
                   <table className="w-full min-w-[560px] text-sm">
                     <thead>
@@ -774,7 +876,7 @@ export function ReceitaRecebidoClassificacaoSheet({
                             onClick={() => togglePrevistoGrupoSort('grupo')}
                             className="inline-flex items-center gap-1 hover:text-slate-800"
                           >
-                            Grupo / Título
+                            Vencimento / Grupo
                             {previstoGrupoSortIcon('grupo')}
                           </button>
                         </th>
@@ -811,29 +913,28 @@ export function ReceitaRecebidoClassificacaoSheet({
                       </tr>
                     </thead>
                     <tbody>
-                      {previstoGrupoOrdenados.map((grupo) => {
-                        const expandido = grupoExpandido === grupo.grupo
-                        const titulos = previstoTitulosPorGrupo(grupo.grupo)
+                      {previstoVencimentoOrdenados.map((venc) => {
+                        const vencExpandido = previstoVencExpandido === venc.vencimentoKey
                         return (
-                          <Fragment key={grupo.grupo}>
+                          <Fragment key={venc.vencimentoKey}>
                             <tr
-                              className="cursor-pointer border-t border-slate-100 bg-slate-50/60 hover:bg-sky-50/50"
-                              onClick={() => toggleGrupo(grupo.grupo)}
+                              className="cursor-pointer border-t border-slate-200 bg-violet-50/50 hover:bg-violet-50"
+                              onClick={() => togglePrevistoVencimento(venc.vencimentoKey)}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
                                   e.preventDefault()
-                                  toggleGrupo(grupo.grupo)
+                                  togglePrevistoVencimento(venc.vencimentoKey)
                                 }
                               }}
                               tabIndex={0}
                               role="button"
-                              aria-expanded={expandido}
+                              aria-expanded={vencExpandido}
                             >
                               <td className="px-3 py-2.5 align-top">
                                 <div className="flex items-start gap-2">
-                                  {expandido ? (
+                                  {vencExpandido ? (
                                     <ChevronDown
-                                      className="mt-0.5 h-4 w-4 shrink-0 text-sky-600"
+                                      className="mt-0.5 h-4 w-4 shrink-0 text-violet-700"
                                       aria-hidden
                                     />
                                   ) : (
@@ -842,79 +943,149 @@ export function ReceitaRecebidoClassificacaoSheet({
                                       aria-hidden
                                     />
                                   )}
-                                  <Building2
-                                    className="mt-0.5 h-4 w-4 shrink-0 text-sky-600"
+                                  <Calendar
+                                    className="mt-0.5 h-4 w-4 shrink-0 text-violet-700"
                                     aria-hidden
                                   />
                                   <div className="min-w-0">
-                                    <p className="font-semibold text-slate-800">{grupo.grupo}</p>
+                                    <p className="font-semibold text-slate-900">
+                                      {labelPrevistoVencimento(venc.vencimentoKey)}
+                                    </p>
                                     <p className="mt-0.5 text-[11px] text-slate-500">
-                                      {grupo.quantidadeTitulos}{' '}
-                                      {grupo.quantidadeTitulos === 1 ? 'título' : 'títulos'} ·{' '}
-                                      {grupo.quantidadeItens}{' '}
-                                      {grupo.quantidadeItens === 1 ? 'item' : 'itens'}
+                                      {venc.grupos.length}{' '}
+                                      {venc.grupos.length === 1 ? 'grupo' : 'grupos'} ·{' '}
+                                      {venc.quantidadeTitulos}{' '}
+                                      {venc.quantidadeTitulos === 1 ? 'título' : 'títulos'}
                                     </p>
                                   </div>
                                 </div>
                               </td>
-                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-sky-800">
-                                {formatCurrency(grupo.previsto)}
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-bold tabular-nums text-sky-900">
+                                {formatCurrency(venc.previsto)}
                               </td>
-                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-emerald-700">
-                                {formatCurrency(grupo.quitado_no_mes)}
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-emerald-700">
+                                {formatCurrency(venc.quitado_no_mes)}
                               </td>
-                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-red-700">
-                                {formatCurrency(
-                                  previstoGrupoInadimplencia(grupo.previsto, grupo.quitado_no_mes),
-                                )}
+                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-bold tabular-nums text-red-700">
+                                {formatCurrency(venc.inadimplencia)}
                               </td>
                             </tr>
-                            {expandido &&
-                              titulos.map((titulo) => (
-                                <tr
-                                  key={`${grupo.grupo}-${titulo.ci_titulo}`}
-                                  className="border-t border-slate-100 bg-white hover:bg-slate-50/80"
-                                >
-                                  <td className="px-3 py-2.5 align-top pl-11">
-                                    <div className="flex items-start gap-2">
-                                      <FileText
-                                        className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
-                                        aria-hidden
-                                      />
-                                      <div className="min-w-0">
-                                        <p className="font-medium text-slate-800">
-                                          {titulo.nro_titulo
-                                            ? `Tít. ${titulo.nro_titulo}`
-                                            : `CI ${titulo.ci_titulo}`}
-                                        </p>
-                                        <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">
-                                          {titulo.descricao || '—'}
-                                        </p>
-                                        <p className="mt-0.5 text-[11px] text-slate-500 sm:hidden">
-                                          {titulo.cliente || '—'}
-                                        </p>
-                                        <p className="mt-0.5 text-[11px] tabular-nums text-slate-500">
-                                          Venc. {formatDate(titulo.data_vencimento)}
-                                          {titulo.data_pagamento
-                                            ? ` · Pago ${formatDate(titulo.data_pagamento)}`
-                                            : ''}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-sky-700">
-                                    {formatCurrency(titulo.total)}
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-emerald-700">
-                                    {formatCurrency(titulo.quitado_no_mes)}
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-red-700">
-                                    {formatCurrency(
-                                      previstoGrupoInadimplencia(titulo.total, titulo.quitado_no_mes),
-                                    )}
-                                  </td>
-                                </tr>
-                              ))}
+                            {vencExpandido &&
+                              venc.grupos.map((grupo) => {
+                                const grupoKey = previstoGrupoExpandidoKey(
+                                  venc.vencimentoKey,
+                                  grupo.grupo,
+                                )
+                                const expandido = grupoExpandido === grupoKey
+                                const titulos = previstoTitulosPorGrupo(
+                                  venc.vencimentoKey,
+                                  grupo.grupo,
+                                )
+                                return (
+                                  <Fragment key={grupoKey}>
+                                    <tr
+                                      className="cursor-pointer border-t border-slate-100 bg-slate-50/60 hover:bg-sky-50/50"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        togglePrevistoGrupo(venc.vencimentoKey, grupo.grupo)
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          togglePrevistoGrupo(venc.vencimentoKey, grupo.grupo)
+                                        }
+                                      }}
+                                      tabIndex={0}
+                                      role="button"
+                                      aria-expanded={expandido}
+                                    >
+                                      <td className="px-3 py-2.5 align-top pl-8">
+                                        <div className="flex items-start gap-2">
+                                          {expandido ? (
+                                            <ChevronDown
+                                              className="mt-0.5 h-4 w-4 shrink-0 text-sky-600"
+                                              aria-hidden
+                                            />
+                                          ) : (
+                                            <ChevronRight
+                                              className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                                              aria-hidden
+                                            />
+                                          )}
+                                          <Building2
+                                            className="mt-0.5 h-4 w-4 shrink-0 text-sky-600"
+                                            aria-hidden
+                                          />
+                                          <div className="min-w-0">
+                                            <p className="font-semibold text-slate-800">
+                                              {grupo.grupo}
+                                            </p>
+                                            <p className="mt-0.5 text-[11px] text-slate-500">
+                                              {grupo.quantidadeTitulos}{' '}
+                                              {grupo.quantidadeTitulos === 1 ? 'título' : 'títulos'}{' '}
+                                              · {grupo.quantidadeItens}{' '}
+                                              {grupo.quantidadeItens === 1 ? 'item' : 'itens'}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-sky-800">
+                                        {formatCurrency(grupo.previsto)}
+                                      </td>
+                                      <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-emerald-700">
+                                        {formatCurrency(grupo.quitado_no_mes)}
+                                      </td>
+                                      <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-red-700">
+                                        {formatCurrency(grupo.inadimplencia)}
+                                      </td>
+                                    </tr>
+                                    {expandido &&
+                                      titulos.map((titulo) => (
+                                        <tr
+                                          key={`${grupoKey}-${titulo.ci_titulo}`}
+                                          className="border-t border-slate-100 bg-white hover:bg-slate-50/80"
+                                        >
+                                          <td className="px-3 py-2.5 align-top pl-14">
+                                            <div className="flex items-start gap-2">
+                                              <FileText
+                                                className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                                                aria-hidden
+                                              />
+                                              <div className="min-w-0">
+                                                <p className="font-medium text-slate-800">
+                                                  {titulo.nro_titulo
+                                                    ? `Tít. ${titulo.nro_titulo}`
+                                                    : `CI ${titulo.ci_titulo}`}
+                                                </p>
+                                                <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">
+                                                  {titulo.descricao || '—'}
+                                                </p>
+                                                <p className="mt-0.5 text-[11px] text-slate-500 sm:hidden">
+                                                  {titulo.cliente || '—'}
+                                                </p>
+                                                {titulo.data_pagamento ? (
+                                                  <p className="mt-0.5 text-[11px] tabular-nums text-slate-500">
+                                                    Pago {formatDate(titulo.data_pagamento)}
+                                                  </p>
+                                                ) : null}
+                                              </div>
+                                            </div>
+                                          </td>
+                                          <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-sky-700">
+                                            {formatCurrency(titulo.total)}
+                                          </td>
+                                          <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-emerald-700">
+                                            {formatCurrency(titulo.quitado_no_mes)}
+                                          </td>
+                                          <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-red-700">
+                                            {formatCurrency(titulo.inadimplencia)}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                  </Fragment>
+                                )
+                              })}
                           </Fragment>
                         )
                       })}

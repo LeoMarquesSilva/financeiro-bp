@@ -86,7 +86,6 @@ export function ReceitaPrevistoFechamentoContabilPanel({ fechamento, onDrillDown
     fechamento.em_aberto
 
   const previstoFecha = Math.abs(somaPrevistoDecomp - fechamento.previsto) < 0.02
-  const compensadoNoGrupo = Math.max(0, fechamento.em_aberto - fechamento.inadimplencia_kpi)
 
   const drill = (bucket: ReceitaPrevistoFechamentoBucket) =>
     onDrillDown ? () => onDrillDown(bucket) : undefined
@@ -137,17 +136,6 @@ export function ReceitaPrevistoFechamentoContabilPanel({ fechamento, onDrillDown
         </span>
         <span className="tabular-nums">{formatCurrency(fechamento.previsto)}</span>
       </div>
-      {compensadoNoGrupo > 0.009 ? (
-        <div className="rounded-lg border border-sky-100 bg-sky-50/50 px-2.5 py-2">
-          <FechamentoRow
-            label="Compensado no grupo"
-            valor={compensadoNoGrupo}
-            hint="Diferença entre não quitado no item e inad. KPI — pagamentos cruzados entre razões sociais"
-            prefix="−"
-            valorClassName="text-sky-700"
-          />
-        </div>
-      ) : null}
       <p className="text-[10px] leading-snug text-slate-500">
         Previsto usa base de vencimento (valor item); recebido usa caixa (pagamentos do mês).
         Caixa ligado ao previsto:{' '}

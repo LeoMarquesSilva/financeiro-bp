@@ -1256,13 +1256,6 @@ export function ReceitaComparativoChart({
     graficoOpts,
   ])
 
-  const inadimplenciaMesDetalhe = useMemo(() => {
-    if (!detalheMes) return null
-    const evo = inadimplenciaEvolucaoExibicao?.evolucao.find((e) => e.mes === detalheMes.mes)
-    if (!evo) return null
-    return valorExibicaoEvolucao(evo).valor
-  }, [detalheMes, inadimplenciaEvolucaoExibicao])
-
   const abrirAreaMesDetalhe = (point: AreaLinhaPoint, serie: 'recebido' | 'previsto') => {
     const total = serie === 'recebido' ? point.recebido : point.previsto
     if (total == null || total <= 0) return
@@ -2311,7 +2304,6 @@ export function ReceitaComparativoChart({
           mesLabel={detalheMes.mesLabel}
           totalRecebido={detalheMes.recebido}
           totalPrevisto={detalheMes.previsto}
-          inadimplenciaMes={inadimplenciaMesDetalhe}
         />
       )}
 

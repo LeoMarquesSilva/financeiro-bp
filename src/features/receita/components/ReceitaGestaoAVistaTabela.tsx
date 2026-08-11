@@ -9,10 +9,12 @@ import { cn } from '@/lib/utils'
 import type { GestaoVistaMesRow } from '../types/receita.types'
 import { semaforoPctNivel } from '../utils/receitaGestaoVista'
 
+export type GestaoVistaMesClickColuna = 'recebido' | 'previsto'
+
 type Props = {
   meses: GestaoVistaMesRow[]
   totalYtd: GestaoVistaMesRow | null
-  onMesClick?: (row: GestaoVistaMesRow) => void
+  onMesClick?: (row: GestaoVistaMesRow, coluna: GestaoVistaMesClickColuna) => void
   loading?: boolean
 }
 
@@ -84,38 +86,70 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
           </thead>
           <tbody>
             {meses.map((row) => {
-              const clicavel = onMesClick != null && row.recebido != null && row.recebido > 0
+              const clicavelRecebido =
+                onMesClick != null && row.recebido != null && row.recebido > 0
+              const clicavelPrevisto = onMesClick != null && row.previsto > 0
+
+              const cellClicavelClass =
+                'cursor-pointer transition-colors hover:bg-sky-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50'
+
+              const handleCellClick = (coluna: GestaoVistaMesClickColuna) => {
+                if (!onMesClick) return
+                if (coluna === 'recebido' && !clicavelRecebido) return
+                if (coluna === 'previsto' && !clicavelPrevisto) return
+                onMesClick(row, coluna)
+              }
+
               return (
-                <tr
-                  key={row.mes}
-                  className={cn(
-                    'border-b border-slate-100 transition-colors',
-                    clicavel && 'cursor-pointer hover:bg-sky-50/40',
-                  )}
-                  onClick={clicavel ? () => onMesClick(row) : undefined}
-                  onKeyDown={
-                    clicavel
-                      ? (e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            onMesClick(row)
-                          }
-                        }
-                      : undefined
-                  }
-                  tabIndex={clicavel ? 0 : undefined}
-                  role={clicavel ? 'button' : undefined}
-                >
+                <tr key={row.mes} className="border-b border-slate-100 transition-colors">
                   <td className="whitespace-nowrap px-3 py-2 font-medium capitalize text-slate-800 sm:px-4">
                     {row.mesLabel}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-700 sm:px-4">
                     <MoedaCelula valor={row.meta} />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-700 sm:px-4">
+                  <td
+                    className={cn(
+                      'px-3 py-2 text-right tabular-nums text-slate-700 sm:px-4',
+                      clicavelPrevisto && cellClicavelClass,
+                    )}
+                    onClick={clicavelPrevisto ? () => handleCellClick('previsto') : undefined}
+                    onKeyDown={
+                      clicavelPrevisto
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              handleCellClick('previsto')
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={clicavelPrevisto ? 0 : undefined}
+                    role={clicavelPrevisto ? 'button' : undefined}
+                    title={clicavelPrevisto ? 'Ver composição do previsto' : undefined}
+                  >
                     {formatCurrency(row.previsto)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-800 sm:px-4">
+                  <td
+                    className={cn(
+                      'px-3 py-2 text-right tabular-nums text-slate-800 sm:px-4',
+                      clicavelRecebido && cellClicavelClass,
+                    )}
+                    onClick={clicavelRecebido ? () => handleCellClick('recebido') : undefined}
+                    onKeyDown={
+                      clicavelRecebido
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              handleCellClick('recebido')
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={clicavelRecebido ? 0 : undefined}
+                    role={clicavelRecebido ? 'button' : undefined}
+                    title={clicavelRecebido ? 'Ver composição do recebido' : undefined}
+                  >
                     <MoedaCelula valor={row.recebido} />
                   </td>
                   <td className="px-3 py-2 text-right sm:px-4">

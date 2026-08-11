@@ -21,6 +21,39 @@ export function departamentoMatchesAreaKey(departamento: string, areaKey: string
   return key === departamentoNormKey(label)
 }
 
+export function filtrarClassificacaoPorArea<T extends { departamento?: string | null }>(
+  itens: T[],
+  areaKey: string,
+): T[] {
+  return itens.filter(
+    (i) => i.departamento != null && departamentoMatchesAreaKey(i.departamento, areaKey),
+  )
+}
+
+export function inadGruposAreaMes(
+  rows: ReceitaInadimplenciaGrupoDepartamentoPeriodo[],
+  areaKey: string,
+): Array<{ grupo_cliente: string; faturado: number; recebido: number; inadimplencia: number }> {
+  const porGrupo = new Map<string, number>()
+  for (const r of rows) {
+    if (!departamentoMatchesAreaKey(r.departamento, areaKey)) continue
+    if (r.inadimplencia <= 0) continue
+    porGrupo.set(r.grupo_cliente, (porGrupo.get(r.grupo_cliente) ?? 0) + r.inadimplencia)
+  }
+  return [...porGrupo.entries()]
+    .map(([grupo_cliente, inadimplencia]) => ({
+      grupo_cliente,
+      faturado: 0,
+      recebido: 0,
+      inadimplencia,
+    }))
+    .sort(
+      (a, b) =>
+        b.inadimplencia - a.inadimplencia ||
+        a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR'),
+    )
+}
+
 export function inadimplenciaAreaMes(
   departamentos: ReceitaInadimplenciaDepartamentoMes[],
   areaKey: string,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, LayoutDashboard, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RECEITA_DEPARTAMENTO_CORES } from '../constants'
@@ -7,9 +7,11 @@ import { buildReceitaMetaAreaSlices } from '../utils/departamentoAreaCores'
 import { isMesFuturo } from '../utils/receitaMes'
 import { useReceitaGestaoVista } from '../hooks/useReceitaGestaoVista'
 import type { GestaoVistaMesRow } from '../types/receita.types'
-import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
 import { ReceitaGestaoAVistaKpis } from './ReceitaGestaoAVistaKpis'
-import { ReceitaGestaoAVistaTabela } from './ReceitaGestaoAVistaTabela'
+import {
+  ReceitaGestaoAVistaTabela,
+  type GestaoVistaMesClickColuna,
+} from './ReceitaGestaoAVistaTabela'
 import { ReceitaGestaoAVistaTrendChart } from './ReceitaGestaoAVistaTrendChart'
 import { ReceitaRecebidoClassificacaoSheet } from './ReceitaRecebidoClassificacaoSheet'
 
@@ -28,8 +30,7 @@ export function ReceitaGestaoAVistaSection({
 }: Props) {
   const [areaKey, setAreaKey] = useState<string | null>(null)
   const [expandido, setExpandido] = useState(true)
-  const [detalheConsolidado, setDetalheConsolidado] = useState<GestaoVistaMesRow | null>(null)
-  const [detalheArea, setDetalheArea] = useState<GestaoVistaMesRow | null>(null)
+  const [detalheMes, setDetalheMes] = useState<GestaoVistaMesRow | null>(null)
 
   const metaAreaSlices = useMemo(
     () => buildReceitaMetaAreaSlices(departamentoCores),
@@ -45,19 +46,23 @@ export function ReceitaGestaoAVistaSection({
 
   const loading = Boolean(dashLoading || isLoading)
 
-  const handleMesClick = (row: GestaoVistaMesRow) => {
+  useEffect(() => {
+    setDetalheMes(null)
+  }, [areaKey])
+
+  const handleMesClick = (row: GestaoVistaMesRow, coluna: GestaoVistaMesClickColuna) => {
     if (isMesFuturo(ano, row.mes)) return
-    if (row.recebido == null || row.recebido <= 0) return
-    if (areaKey && areaSelecionada) {
-      setDetalheArea(row)
-    } else {
-      setDetalheConsolidado(row)
+
+    if (coluna === 'recebido') {
+      if (row.recebido == null || row.recebido <= 0) return
+    } else if (row.previsto <= 0) {
+      return
     }
+
+    setDetalheMes(row)
   }
 
-  const rowConsolidado = detalheConsolidado
-    ? rows.find((r) => r.mes === detalheConsolidado.mes)
-    : null
+  const rowConsolidado = detalheMes ? rows.find((r) => r.mes === detalheMes.mes) : null
 
   return (
     <section className="space-y-4">
@@ -172,7 +177,10 @@ export function ReceitaGestaoAVistaSection({
                 loading={loading}
               />
               <p className="mt-2 text-[11px] text-slate-500">
-                Clique em um mês com recebido para ver a composição do caixa.
+                Clique em <strong className="font-medium text-slate-600">Previsto</strong> ou{' '}
+                <strong className="font-medium text-slate-600">Recebido</strong> para abrir a
+                visão do mês
+                {areaKey ? ` (${areaSelecionada?.label})` : ''}.
               </p>
             </div>
             <div className="xl:col-span-2">
@@ -182,33 +190,19 @@ export function ReceitaGestaoAVistaSection({
         </>
       )}
 
-      {detalheConsolidado && rowConsolidado && (
+      {detalheMes && (
         <ReceitaRecebidoClassificacaoSheet
-          open={!!detalheConsolidado}
+          open={!!detalheMes}
           onOpenChange={(open) => {
-            if (!open) setDetalheConsolidado(null)
+            if (!open) setDetalheMes(null)
           }}
           ano={ano}
-          mes={detalheConsolidado.mes}
-          mesLabel={detalheConsolidado.mesLabel}
-          totalRecebido={detalheConsolidado.recebido ?? rowConsolidado.recebido}
-          totalPrevisto={detalheConsolidado.previsto}
-          inadimplenciaMes={detalheConsolidado.inadimplencia}
-        />
-      )}
-
-      {detalheArea && areaSelecionada && (
-        <ReceitaAreaRecebidoGrupoSheet
-          open={!!detalheArea}
-          onOpenChange={(open) => {
-            if (!open) setDetalheArea(null)
-          }}
-          ano={ano}
-          mes={detalheArea.mes}
-          mesLabel={detalheArea.mesLabel}
-          areaKey={areaSelecionada.key}
-          areaLabel={areaSelecionada.label}
-          totalRecebido={detalheArea.recebido ?? 0}
+          mes={detalheMes.mes}
+          mesLabel={detalheMes.mesLabel}
+          totalRecebido={detalheMes.recebido ?? rowConsolidado?.recebido ?? 0}
+          totalPrevisto={detalheMes.previsto}
+          areaKey={areaSelecionada?.key ?? null}
+          areaLabel={areaSelecionada?.label ?? null}
         />
       )}
     </section>

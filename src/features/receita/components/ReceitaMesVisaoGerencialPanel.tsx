@@ -6,6 +6,7 @@ import type { ReceitaPrevistoFechamentoMes } from '../types/receita.types'
 import type { ReceitaRecebidoDetalheKey } from '../utils/recebidoClassificacao'
 import {
   RECEBIDO_GERENCIAL_LINHAS,
+  inadimplenciaMesFaturadoNaoPago,
   type FechamentoDrillKey,
 } from '../utils/receitaPrevistoFechamento'
 import { ReceitaPrevistoFechamentoContabilPanel } from './ReceitaPrevistoFechamentoContabilPanel'
@@ -24,12 +25,13 @@ export function ReceitaMesVisaoGerencialPanel({
   const [contabilAberto, setContabilAberto] = useState(false)
 
   const totalRecebido = fechamento.recebido_classificado
+  const inadMes = inadimplenciaMesFaturadoNaoPago(fechamento)
   const pctPrevistoCaixa =
     fechamento.previsto > 0
       ? (fechamento.recebido_previsto_caixa / fechamento.previsto) * 100
       : null
   const pctInadPrevisto =
-    fechamento.previsto > 0 ? (fechamento.inadimplencia_kpi / fechamento.previsto) * 100 : null
+    fechamento.previsto > 0 ? (inadMes / fechamento.previsto) * 100 : null
 
   const somaLinhas = RECEBIDO_GERENCIAL_LINHAS.reduce(
     (s, linha) => s + fechamento[linha.valorKey],
@@ -132,7 +134,8 @@ export function ReceitaMesVisaoGerencialPanel({
                 Inadimplência do mês — por grupo
               </h3>
               <p className="mt-1 text-[11px] leading-snug text-red-800/80">
-                O que vale é o grupo: pagamento de qualquer razão social abate a dívida consolidada.
+                Somente vencimentos já vencidos até hoje, não quitados no mês — item a item, sem
+                compensação entre razões sociais.
               </p>
               {pctInadPrevisto != null ? (
                 <p className="mt-1.5 text-[10px] font-medium tabular-nums text-red-800/70">
@@ -142,7 +145,7 @@ export function ReceitaMesVisaoGerencialPanel({
             </div>
             <span className="flex shrink-0 items-center gap-1">
               <span className="text-lg font-bold tabular-nums text-red-800">
-                {formatCurrency(fechamento.inadimplencia_kpi)}
+                {formatCurrency(inadMes)}
               </span>
               {onDrillContabil ? (
                 <ChevronRight
