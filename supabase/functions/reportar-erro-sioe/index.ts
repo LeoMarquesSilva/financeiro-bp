@@ -15,7 +15,10 @@ const corsHeaders = {
 }
 
 const CATEGORY_KEY = 'manutencao_em_sistemas'
+/** Manutenção em Sistemas — há outra subcategoria `sioe` em outra categoria. */
+const CATEGORY_ID = '49d8f44b-8f11-4bdd-9d13-7418c522884e'
 const SUBCATEGORY_KEY = 'sioe'
+const SUBCATEGORY_ID = 'bfa3eec3-32f6-406d-af0c-4b8853b74209'
 const BUCKET = 'error-reports'
 const MAX_SCREENSHOT_CHARS = 3_500_000
 
@@ -151,6 +154,8 @@ Deno.serve(async (req: Request) => {
     const { data: subcategoria, error: subcatError } = await responsum
       .from('app_c009c0e4f1_subcategories')
       .select('default_assigned_to, default_assigned_to_name')
+      .eq('id', SUBCATEGORY_ID)
+      .eq('category_id', CATEGORY_ID)
       .eq('key', SUBCATEGORY_KEY)
       .maybeSingle()
     if (subcatError) {
