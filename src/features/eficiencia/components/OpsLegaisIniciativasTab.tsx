@@ -12,9 +12,10 @@ import {
 import { cn } from '@/lib/utils'
 import { formatPercent } from '@/shared/utils/format'
 import {
+  isDiaFiltro,
   isSemanaFiltro,
   mesNoFiltro,
-  rangeSemanaFiltro,
+  rangePeriodoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
@@ -561,8 +562,8 @@ function projetoNoFiltro(
 ): boolean {
   if (mesFiltro == null) return true
   if (!dataIso) return false
-  if (isSemanaFiltro(mesFiltro)) {
-    const { inicio, fimExclusivo } = rangeSemanaFiltro(mesFiltro)
+  if (isSemanaFiltro(mesFiltro) || isDiaFiltro(mesFiltro)) {
+    const { inicio, fimExclusivo } = rangePeriodoFiltro(ano, mesFiltro)
     return dataIso >= inicio && dataIso < fimExclusivo
   }
   const mes = Number(dataIso.slice(5, 7))

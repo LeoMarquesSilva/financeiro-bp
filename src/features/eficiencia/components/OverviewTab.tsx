@@ -16,6 +16,7 @@ import {
   EFICIENCIA_META_SLA_PROTOCOLO,
   isAgendamentoVistagemIndisponivelPorArea,
   isMesesFiltro,
+  isPeriodoCurtoFiltro,
   mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -299,7 +300,7 @@ export function OverviewTab({
     if (isMesesFiltro(mesFiltro)) {
       return mesFiltro.map((m) => slaProtocoloMetasPorMes[m - 1] ?? null)
     }
-    if (mesFiltro === 'resultado' || mesFiltro === 'semana_passada' || mesFiltro === 'semana_retrasada') {
+    if (mesFiltro === 'resultado' || isPeriodoCurtoFiltro(mesFiltro)) {
       return slaProtocoloMetasPorMes.map((m, i) =>
         mesNoFiltro(i + 1, mesFiltro, ano) ? m : null,
       )

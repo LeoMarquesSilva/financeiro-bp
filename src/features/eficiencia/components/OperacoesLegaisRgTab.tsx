@@ -17,8 +17,11 @@ import {
   EFICIENCIA_META_OPS_PUBLICACOES,
   EFICIENCIA_META_OPS_SLA_PROTOCOLO,
   filtrarMensalPorMesFiltro,
+  isDiaFiltro,
+  isPeriodoCurtoFiltro,
   isSemanaFiltro,
   mesNoFiltro,
+  rangeDiaFiltro,
   rangeSemanaFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -166,8 +169,12 @@ export function OperacoesLegaisRgTab({
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
 
-  const semanaAtiva = isSemanaFiltro(mesFiltro)
-  const semanaLabel = semanaAtiva ? rangeSemanaFiltro(mesFiltro).label : null
+  const periodoCurtoAtivo = isPeriodoCurtoFiltro(mesFiltro)
+  const periodoCurtoLabel = isSemanaFiltro(mesFiltro)
+    ? rangeSemanaFiltro(mesFiltro).label
+    : isDiaFiltro(mesFiltro)
+      ? rangeDiaFiltro(mesFiltro).label
+      : null
 
   const protFiltrado = filtrarMensalPorMesFiltro(protocoloMensal, mesFiltro, ano)
   const cadFiltrado = filtrarMensalPorMesFiltro(cadastroMensal, mesFiltro, ano)
@@ -176,7 +183,7 @@ export function OperacoesLegaisRgTab({
 
   const { data: resumosSemana, isLoading: loadingSemana } = useQuery({
     queryKey: ['eficiencia', 'ops-legais-rg-semana', ano, mesFiltro],
-    enabled: semanaAtiva,
+    enabled: periodoCurtoAtivo,
     queryFn: async () => {
       const [sla, efi, analise, agenda] = await Promise.all([
         eficienciaService.fetchRacionalResumoOnly('ops_legais_sla_protocolo', ano, null, mesFiltro),
@@ -199,7 +206,7 @@ export function OperacoesLegaisRgTab({
   })
 
   const protTotais = useMemo(() => {
-    if (semanaAtiva && resumosSemana) {
+    if (periodoCurtoAtivo && resumosSemana) {
       const qtdD1 = resumosSemana.sla?.qtd_d1 ?? 0
       const total = resumosSemana.sla?.qtd_total ?? 0
       const qtdFatal = Math.max(0, total - qtdD1)
@@ -231,10 +238,10 @@ export function OperacoesLegaisRgTab({
       pctInc: efiBase > 0 ? (semInc / efiBase) * 100 : 0,
       comInc: Math.max(0, efiBase - semInc),
     }
-  }, [protFiltrado, semanaAtiva, resumosSemana])
+  }, [protFiltrado, periodoCurtoAtivo, resumosSemana])
 
   const pubAnaliseTotais = useMemo(() => {
-    if (semanaAtiva && resumosSemana) {
+    if (periodoCurtoAtivo && resumosSemana) {
       return {
         ok: resumosSemana.analise?.qtd_eficiencia ?? 0,
         nok: resumosSemana.analise?.qtd_inconsistencia ?? 0,
@@ -250,10 +257,10 @@ export function OperacoesLegaisRgTab({
     const nok = pubAnaliseFiltrado.reduce((s, m) => s + (m.qtd_desvio ?? 0), 0)
     const t = ok + nok
     return { ok, nok, pct: t > 0 ? (ok / t) * 100 : 0 }
-  }, [pubAnaliseFiltrado, semanaAtiva, resumosSemana])
+  }, [pubAnaliseFiltrado, periodoCurtoAtivo, resumosSemana])
 
   const pubAgendaTotais = useMemo(() => {
-    if (semanaAtiva && resumosSemana) {
+    if (periodoCurtoAtivo && resumosSemana) {
       const ok = resumosSemana.agenda?.qtd_eficiencia ?? 0
       const nok = resumosSemana.agenda?.qtd_inconsistencia ?? 0
       const t = ok + nok
@@ -263,7 +270,7 @@ export function OperacoesLegaisRgTab({
     const nok = pubAgendaFiltrado.reduce((s, m) => s + (m.qtd_desvio ?? 0), 0)
     const t = ok + nok
     return { ok, nok, pct: t > 0 ? (ok / t) * 100 : 0 }
-  }, [pubAgendaFiltrado, semanaAtiva, resumosSemana])
+  }, [pubAgendaFiltrado, periodoCurtoAtivo, resumosSemana])
 
   const cadTotais = useMemo(() => {
     const dentro = cadFiltrado.reduce((s, m) => s + m.dentro_prazo, 0)
@@ -314,7 +321,7 @@ export function OperacoesLegaisRgTab({
                 nokLabel="PROTOCOLADO NO FATAL"
                 qtdOk={protTotais.qtdD1}
                 qtdNok={protTotais.qtdFatal}
-                loading={loading || (semanaAtiva && loadingSemana)}
+                loading={loading || (periodoCurtoAtivo && loadingSemana)}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_sla_protocolo"
@@ -326,12 +333,12 @@ export function OperacoesLegaisRgTab({
               <EficienciaEvolucaoChart
                 title="SLA PROTOCOLO"
                 data={
-                  semanaAtiva
+                  periodoCurtoAtivo
                     ? [
                         {
                           mes: 1,
                           valor: protTotais.pctD1,
-                          label: semanaLabel ?? 'Semana',
+                          label: periodoCurtoLabel ?? 'Período',
                         },
                       ]
                     : protFiltrado.map((m) => ({
@@ -359,7 +366,7 @@ export function OperacoesLegaisRgTab({
                 nokLabel="Inconsistência"
                 qtdOk={protTotais.semInc}
                 qtdNok={protTotais.comInc}
-                loading={loading || (semanaAtiva && loadingSemana)}
+                loading={loading || (periodoCurtoAtivo && loadingSemana)}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_eficiencia_protocolo"
@@ -371,12 +378,12 @@ export function OperacoesLegaisRgTab({
               <EficienciaEvolucaoChart
                 title="Eficiência Protocolo"
                 data={
-                  semanaAtiva
+                  periodoCurtoAtivo
                     ? [
                         {
                           mes: 1,
                           valor: protTotais.pctInc,
-                          label: semanaLabel ?? 'Semana',
+                          label: periodoCurtoLabel ?? 'Período',
                         },
                       ]
                     : protFiltrado.map((m) => ({
@@ -405,7 +412,7 @@ export function OperacoesLegaisRgTab({
                 nokLabel="Desvio"
                 qtdOk={pubAnaliseTotais.ok}
                 qtdNok={pubAnaliseTotais.nok}
-                loading={loading || (semanaAtiva && loadingSemana)}
+                loading={loading || (periodoCurtoAtivo && loadingSemana)}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_pub_analise"
@@ -417,12 +424,12 @@ export function OperacoesLegaisRgTab({
               <EficienciaEvolucaoChart
                 title="ANÁLISE DE PUBLICAÇÃO"
                 data={
-                  semanaAtiva
+                  periodoCurtoAtivo
                     ? [
                         {
                           mes: 1,
                           valor: pubAnaliseTotais.pct,
-                          label: semanaLabel ?? 'Semana',
+                          label: periodoCurtoLabel ?? 'Período',
                         },
                       ]
                     : pubAnaliseFiltrado.map((m) => ({
@@ -444,7 +451,7 @@ export function OperacoesLegaisRgTab({
                 nokLabel="Desvio"
                 qtdOk={pubAgendaTotais.ok}
                 qtdNok={pubAgendaTotais.nok}
-                loading={loading || (semanaAtiva && loadingSemana)}
+                loading={loading || (periodoCurtoAtivo && loadingSemana)}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_pub_agendamento"
@@ -456,12 +463,12 @@ export function OperacoesLegaisRgTab({
               <EficienciaEvolucaoChart
                 title="AGENDAMENTO DE PUBLICAÇÃO"
                 data={
-                  semanaAtiva
+                  periodoCurtoAtivo
                     ? [
                         {
                           mes: 1,
                           valor: pubAgendaTotais.pct,
-                          label: semanaLabel ?? 'Semana',
+                          label: periodoCurtoLabel ?? 'Período',
                         },
                       ]
                     : pubAgendaFiltrado.map((m) => ({

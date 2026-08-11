@@ -9,7 +9,7 @@ import {
   type EficienciaTabDef,
   type EficienciaTabId,
 } from '../config/eficienciaTabs'
-import { isSemanaFiltro, type MesFiltroEficiencia } from '../constants'
+import { isDiaFiltro, isSemanaFiltro, type MesFiltroEficiencia } from '../constants'
 import { toPriMaiuscula } from '../utils/textFormat'
 import { EficienciaHeader } from '../components/EficienciaHeader'
 import { IndicadoresResultadoActions } from '../components/IndicadoresResultadoActions'
@@ -152,9 +152,14 @@ export function EficienciaPage() {
   )
 
   // Jurídico não usa filtro de semana — limpa se vier de outro contexto.
+  // Overview não usa filtro por dia.
   useEffect(() => {
     if (isSemanaFiltro(mesFiltro)) setMesFiltro(null)
   }, [mesFiltro])
+
+  useEffect(() => {
+    if (tab === 'overview' && isDiaFiltro(mesFiltro)) setMesFiltro(null)
+  }, [tab, mesFiltro])
 
   const overviewTab = tabsVisiveis.find((t) => t.id === 'overview')
   const demais = tabsVisiveis.filter((t) => t.id !== 'overview')
@@ -232,7 +237,13 @@ export function EficienciaPage() {
         </div>
 
         <div className="mt-6">
-          <MesFilterButtons value={mesFiltro} onChange={setMesFiltro} showSemanas={false} />
+          <MesFilterButtons
+            value={mesFiltro}
+            onChange={setMesFiltro}
+            showSemanas={false}
+            showDiaPicker={tab !== 'overview'}
+            ano={ano}
+          />
         </div>
 
         <TabsContent value="overview" className="mt-5">

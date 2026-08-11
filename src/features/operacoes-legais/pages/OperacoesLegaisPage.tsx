@@ -252,6 +252,8 @@ export function OperacoesLegaisPage() {
               value={mesFiltro}
               onChange={setMesFiltro}
               showResultado={false}
+              showDiaPicker={tab !== 'overview'}
+              ano={ano}
             />
           </div>
         )}

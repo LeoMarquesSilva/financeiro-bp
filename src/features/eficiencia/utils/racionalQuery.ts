@@ -7,9 +7,11 @@ import {
   isCargoExcluidoDesenvolvimento,
   isMesesFiltro,
   isSemanaFiltro,
+  isDiaFiltro,
   MES_INICIO_RESULTADO,
   mesFimResultado,
   rangeSemanaFiltro,
+  rangeDiaFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import type {
@@ -74,6 +76,10 @@ export function applyRacionalPeriodo(
 ): AnyQuery {
   if (isSemanaFiltro(mes)) {
     const { inicio, fimExclusivo } = rangeSemanaFiltro(mes)
+    return query.gte(dataColuna, inicio).lt(dataColuna, fimExclusivo)
+  }
+  if (isDiaFiltro(mes)) {
+    const { inicio, fimExclusivo } = rangeDiaFiltro(mes)
     return query.gte(dataColuna, inicio).lt(dataColuna, fimExclusivo)
   }
   if (mes === 'resultado') {
@@ -257,7 +263,7 @@ export function applyRetencaoRacionalPeriodo(
     .lte('admissao', `${ano}-12-31`)
     .or(`desligamento.is.null,desligamento.gte.${ano}-01-01`)
 
-  if (mes === 'resultado' || mes == null || isSemanaFiltro(mes)) {
+  if (mes === 'resultado' || mes == null || isSemanaFiltro(mes) || isDiaFiltro(mes)) {
     return query
   }
   if (isMesesFiltro(mes) && mes.length > 0) {
@@ -300,6 +306,7 @@ export function shouldSkipFiltroRetencaoArea(
 
 export function formatRacionalPeriodoLabel(ano: number, mes: MesFiltroEficiencia): string {
   if (isSemanaFiltro(mes)) return rangeSemanaFiltro(mes).label
+  if (isDiaFiltro(mes)) return rangeDiaFiltro(mes).label
   if (mes === 'resultado') {
     const fim = mesFimResultado(ano)
     if (fim < MES_INICIO_RESULTADO) return `resultado (sem mês fechado/${ano})`

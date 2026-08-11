@@ -247,13 +247,17 @@ export const EFICIENCIA_AMOSTRA_FRACAO = 0.3
  * - `number[]` — um ou mais meses (1..12), ordenados
  * - `'resultado'` — jun+ fechados (mês corrente fora; jan–mai em branco)
  * - `'semana_passada'` / `'semana_retrasada'` — semana civil seg–dom (BRT)
+ * - `{ tipo: 'dia', de, ate }` — intervalo civil inclusivo YYYY-MM-DD (BRT)
  */
+export type DiaFiltroEficiencia = { tipo: 'dia'; de: string; ate: string }
+
 export type MesFiltroEficiencia =
   | number[]
   | null
   | 'resultado'
   | 'semana_passada'
   | 'semana_retrasada'
+  | DiaFiltroEficiencia
 
 /** Primeiro mês do período "Resultado" (junho). */
 export const MES_INICIO_RESULTADO = 6
@@ -266,6 +270,36 @@ export function isSemanaFiltro(
   filtro: MesFiltroEficiencia,
 ): filtro is 'semana_passada' | 'semana_retrasada' {
   return filtro === 'semana_passada' || filtro === 'semana_retrasada'
+}
+
+export function isDiaFiltro(filtro: MesFiltroEficiencia): filtro is DiaFiltroEficiencia {
+  return (
+    typeof filtro === 'object' &&
+    filtro !== null &&
+    !Array.isArray(filtro) &&
+    (filtro as DiaFiltroEficiencia).tipo === 'dia' &&
+    typeof (filtro as DiaFiltroEficiencia).de === 'string' &&
+    typeof (filtro as DiaFiltroEficiencia).ate === 'string'
+  )
+}
+
+/** Filtro por intervalo curto (semana ou dias) — KPIs via racional/resumo, não série mensal. */
+export function isPeriodoCurtoFiltro(
+  filtro: MesFiltroEficiencia,
+): filtro is 'semana_passada' | 'semana_retrasada' | DiaFiltroEficiencia {
+  return isSemanaFiltro(filtro) || isDiaFiltro(filtro)
+}
+
+/** Normaliza De/Até (troca se invertido) e monta o filtro de período. */
+export function makePeriodoDiaFiltro(deIso: string, ateIso: string): DiaFiltroEficiencia {
+  const de = deIso <= ateIso ? deIso : ateIso
+  const ate = deIso <= ateIso ? ateIso : deIso
+  return { tipo: 'dia', de, ate }
+}
+
+/** @deprecated Prefer makePeriodoDiaFiltro — mantido para um único dia. */
+export function makeDiaFiltro(isoYmd: string): DiaFiltroEficiencia {
+  return makePeriodoDiaFiltro(isoYmd, isoYmd)
 }
 
 function civilPartsBrt(ref: Date): { year: number; month: number; day: number; weekday: number } {
@@ -334,6 +368,27 @@ export function rangeSemanaFiltro(
   }
 }
 
+/** Intervalo [inicio, fimExclusivo) de De–Até (inclusivo) em YYYY-MM-DD. */
+export function rangeDiaFiltro(
+  filtro: DiaFiltroEficiencia,
+): { inicio: string; fimExclusivo: string; label: string } {
+  const inicio = filtro.de <= filtro.ate ? filtro.de : filtro.ate
+  const ate = filtro.de <= filtro.ate ? filtro.ate : filtro.de
+  const y = Number(ate.slice(0, 4))
+  const m = Number(ate.slice(5, 7))
+  const d = Number(ate.slice(8, 10))
+  const next = addCivilDays(y, m, d, 1)
+  const fimExclusivo = toIsoCivil(next.year, next.month, next.day)
+  const fmt = (iso: string) => {
+    const dd = iso.slice(8, 10)
+    const mm = iso.slice(5, 7)
+    const yy = iso.slice(0, 4)
+    return `${dd}/${mm}/${yy}`
+  }
+  const label = inicio === ate ? fmt(inicio) : `${fmt(inicio)} – ${fmt(ate)}`
+  return { inicio, fimExclusivo, label }
+}
+
 /**
  * Último mês incluso no filtro Resultado.
  * Ano corrente: mês anterior ao atual (mês em aberto não entra).
@@ -360,7 +415,7 @@ export function mesNoFiltro(
     const fim = mesFimResultado(ano ?? ref.getFullYear(), ref)
     return mes <= fim
   }
-  if (isSemanaFiltro(filtro)) {
+  if (isSemanaFiltro(filtro) || isDiaFiltro(filtro)) {
     const meses = mesesEfetivosFiltro(filtro, ano ?? civilPartsBrt(ref).year, ref) ?? []
     return meses.includes(mes)
   }
@@ -369,7 +424,9 @@ export function mesNoFiltro(
 
 /** Alterna um mês no filtro (multi-seleção). Desmarcar o último volta para ano inteiro. */
 export function toggleMesFiltro(current: MesFiltroEficiencia, mes: number): MesFiltroEficiencia {
-  if (current == null || current === 'resultado' || isSemanaFiltro(current)) return [mes]
+  if (current == null || current === 'resultado' || isSemanaFiltro(current) || isDiaFiltro(current)) {
+    return [mes]
+  }
   if (current.includes(mes)) {
     const next = current.filter((m) => m !== mes)
     return next.length === 0 ? null : next
@@ -397,6 +454,31 @@ export function mesesEfetivosFiltro(
   }
   if (isSemanaFiltro(filtro)) {
     const { inicio, fimExclusivo } = rangeSemanaFiltro(filtro, ref)
+    const start = {
+      y: Number(inicio.slice(0, 4)),
+      m: Number(inicio.slice(5, 7)),
+    }
+    const endIncl = addCivilDays(
+      Number(fimExclusivo.slice(0, 4)),
+      Number(fimExclusivo.slice(5, 7)),
+      Number(fimExclusivo.slice(8, 10)),
+      -1,
+    )
+    const months = new Set<number>()
+    let y = start.y
+    let m = start.m
+    while (y < endIncl.year || (y === endIncl.year && m <= endIncl.month)) {
+      if (y === ano) months.add(m)
+      m += 1
+      if (m > 12) {
+        m = 1
+        y += 1
+      }
+    }
+    return [...months].sort((a, b) => a - b)
+  }
+  if (isDiaFiltro(filtro)) {
+    const { inicio, fimExclusivo } = rangeDiaFiltro(filtro)
     const start = {
       y: Number(inicio.slice(0, 4)),
       m: Number(inicio.slice(5, 7)),
@@ -472,6 +554,10 @@ export function rangePeriodoFiltro(
 ): { inicio: string; fimExclusivo: string } {
   if (isSemanaFiltro(filtro)) {
     const r = rangeSemanaFiltro(filtro, ref)
+    return { inicio: r.inicio, fimExclusivo: r.fimExclusivo }
+  }
+  if (isDiaFiltro(filtro)) {
+    const r = rangeDiaFiltro(filtro)
     return { inicio: r.inicio, fimExclusivo: r.fimExclusivo }
   }
   if (filtro === 'resultado') {
