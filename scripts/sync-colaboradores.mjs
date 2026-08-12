@@ -162,6 +162,34 @@ async function main() {
   )
   console.log(`  ${hrEmployees.length} colaboradores encontrados.`)
 
+  console.log('Lendo fotos do ORQESTRAI (users + perfis NFC)...')
+  const [orqUsers, orqProfiles] = await Promise.all([
+    fetchAll(
+      orqestrai,
+      'users',
+      'id, email, avatar_url, photo_onedrive_url, is_active',
+    ),
+    fetchAll(orqestrai, 'professional_profiles', 'user_id, photo_url'),
+  ])
+  const photoByUserId = new Map()
+  for (const p of orqProfiles) {
+    if (p.user_id && p.photo_url) photoByUserId.set(p.user_id, String(p.photo_url).trim())
+  }
+  const orqPhotoByKey = new Map()
+  for (const u of orqUsers) {
+    if (!isInternalEmail(u.email)) continue
+    const key = emailMatchKey(u.email)
+    if (!key) continue
+    const avatar = [u.avatar_url, u.photo_onedrive_url, photoByUserId.get(u.id)]
+      .map((v) => (typeof v === 'string' ? v.trim() : ''))
+      .find(Boolean) || null
+    const prev = orqPhotoByKey.get(key)
+    if (!prev || (!prev.avatar_url && avatar)) {
+      orqPhotoByKey.set(key, { avatar_url: avatar })
+    }
+  }
+  console.log(`  ${orqPhotoByKey.size} e-mails com foto resolvida no ORQESTRAI.`)
+
   console.log('Lendo app_c009c0e4f1_users da RESPONSUM (só para comparação)...')
   const responsumUsers = await fetchAll(
     responsum,
@@ -205,7 +233,11 @@ async function main() {
       vios_ci: emp.vios_ci,
       responsum_user_id: responsumMatch?.id ?? null,
       responsum_email: responsumMatch?.email ?? null,
-      avatar_url: responsumMatch?.avatar_url ?? null,
+      // Preferência: módulo de fotos / perfil NFC do ORQESTRAI → RESPONSUM
+      avatar_url:
+        (key ? orqPhotoByKey.get(key)?.avatar_url : null) ||
+        responsumMatch?.avatar_url ||
+        null,
       synced_at: new Date().toISOString(),
     })
 

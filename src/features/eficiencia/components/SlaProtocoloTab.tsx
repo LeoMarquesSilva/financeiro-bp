@@ -150,6 +150,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
           compact
           loading={loadingJustificativas}
           maxItems={9}
+          scrollAll
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
         />
         <EficienciaRankingChart
@@ -167,6 +168,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
           showAvatars
           loading={loadingRanking}
           maxItems={9}
+          scrollAll
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
         />
         <EficienciaRankingChart
@@ -183,6 +185,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
           showAvatars
           loading={loadingRanking}
           maxItems={9}
+          scrollAll
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
         />
       </div>

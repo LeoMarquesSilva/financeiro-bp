@@ -15,7 +15,7 @@ export interface Colaborador {
   vios_ci: string | null
   responsum_user_id: string | null
   responsum_email: string | null
-  /** URL pública da foto no RESPONSUM (`app_c009c0e4f1_users.avatar_url`). */
+  /** URL pública da foto: ORQESTRAI (users/NFC) com fallback RESPONSUM. */
   avatar_url: string | null
   synced_at: string
   created_at: string

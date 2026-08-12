@@ -23,9 +23,9 @@ function avatarFromMember(m: TeamMember): string | null {
 }
 
 /**
- * Resolve miniatura: 1) catálogo ticket-bp (bp_usuarios_avatar),
- * 2) team_members por nome completo (sem match só pelo 1º nome),
- * 3) /team/{slug}.jpg.
+ * Resolve miniatura: 1) catálogo Colaboradores/ORQUESTRAI + ticket-bp
+ * (`useBpUsuariosAvatar`), 2) team_members por nome completo (sem match só
+ * pelo 1º nome), 3) /team/{slug}.jpg.
  */
 export function resolvePessoaAvatarUrl(
   nome: string | null | undefined,

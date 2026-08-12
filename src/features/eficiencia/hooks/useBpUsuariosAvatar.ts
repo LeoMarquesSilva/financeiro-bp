@@ -18,16 +18,96 @@ function normalizeNomeChave(nome: string): string {
     .replace(/\s+/g, ' ')
 }
 
+type ColaboradorAvatarRow = {
+  full_name: string
+  email: string | null
+  avatar_url: string | null
+}
+
+type BpAvatarRow = {
+  nome: string
+  email: string | null
+  avatar_url: string | null
+  nome_chave: string
+}
+
+function toCatalogEntry(
+  nome: string,
+  email: string | null | undefined,
+  avatar_url: string | null | undefined,
+): BpUsuarioAvatar | null {
+  const n = String(nome ?? '').trim()
+  if (!n) return null
+  const url = typeof avatar_url === 'string' && avatar_url.trim() ? avatar_url.trim() : null
+  return {
+    nome: n,
+    email: email ? String(email).trim().toLowerCase() : null,
+    avatar_url: url,
+    nome_chave: normalizeNomeChave(n),
+  }
+}
+
+/**
+ * Mescla catálogos priorizando foto do módulo Colaboradores (ORQUESTRAI).
+ * Inclui inativos: rankings de eficiência ainda listam desligados com desvio histórico.
+ */
+function mergeAvatarCatalog(
+  colaboradores: ColaboradorAvatarRow[],
+  ticketRows: BpAvatarRow[],
+): BpUsuarioAvatar[] {
+  const byKey = new Map<string, BpUsuarioAvatar>()
+
+  const upsert = (entry: BpUsuarioAvatar | null, preferPhoto: boolean) => {
+    if (!entry?.nome_chave) return
+    const prev = byKey.get(entry.nome_chave)
+    if (!prev) {
+      byKey.set(entry.nome_chave, entry)
+      return
+    }
+    if (preferPhoto && !prev.avatar_url && entry.avatar_url) {
+      byKey.set(entry.nome_chave, { ...prev, ...entry, avatar_url: entry.avatar_url })
+      return
+    }
+    if (!preferPhoto && !prev.avatar_url && entry.avatar_url) {
+      byKey.set(entry.nome_chave, { ...prev, avatar_url: entry.avatar_url })
+    }
+  }
+
+  // 1) Fonte principal: colaboradores (espelho ORQUESTRAI)
+  for (const c of colaboradores) {
+    upsert(toCatalogEntry(c.full_name, c.email, c.avatar_url), true)
+  }
+
+  // 2) Fallback ticket-bp / RESPONSUM (bp_usuarios_avatar), inclusive inativos com foto
+  for (const u of ticketRows) {
+    upsert(
+      toCatalogEntry(u.nome, u.email, u.avatar_url ?? null),
+      false,
+    )
+  }
+
+  return [...byKey.values()]
+}
+
 export function useBpUsuariosAvatar() {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['bp_usuarios_avatar'],
+    queryKey: ['bp_usuarios_avatar', 'colaboradores'],
     queryFn: async () => {
-      const { data: rows, error: err } = await supabase
-        .from('bp_usuarios_avatar')
-        .select('nome, email, avatar_url, nome_chave')
-        .eq('ativo', true)
-      if (err) throw err
-      return (rows ?? []) as BpUsuarioAvatar[]
+      const [colabRes, ticketRes] = await Promise.all([
+        supabase
+          .from('colaboradores' as never)
+          .select('full_name, email, avatar_url'),
+        supabase
+          .from('bp_usuarios_avatar')
+          .select('nome, email, avatar_url, nome_chave'),
+      ])
+      if (colabRes.error) throw colabRes.error
+      if (ticketRes.error) throw ticketRes.error
+
+      return mergeAvatarCatalog(
+        (colabRes.data ?? []) as ColaboradorAvatarRow[],
+        (ticketRes.data ?? []) as BpAvatarRow[],
+      )
     },
     staleTime: 1000 * 60 * 30,
   })
@@ -72,7 +152,8 @@ export function resolveAvatarFromCatalog(
   const prefix = usuarios.find(
     (u) =>
       u.avatar_url &&
-      (u.nome_chave.startsWith(chave) || chave.startsWith(u.nome_chave.split(' ').slice(0, 2).join(' '))),
+      (u.nome_chave.startsWith(chave) ||
+        chave.startsWith(u.nome_chave.split(' ').slice(0, 2).join(' '))),
   )
   return prefix?.avatar_url ?? null
 }
