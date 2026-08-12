@@ -36,15 +36,21 @@ export function useApresentacaoMatrix(
       const area = areaKeyFromColuna(col)
       return {
         queryKey: ['eficiencia', 'overview', ano, area] as const,
-        queryFn: () => eficienciaService.getOverview(ano, area),
+        queryFn: (): Promise<EficienciaOverview> =>
+          eficienciaService.getOverview(ano, area),
         enabled,
         staleTime: 1000 * 60,
       }
     }),
   })
 
-  const loading = enabled && queries.some((q) => q.isLoading || q.isPending)
-  const error = queries.find((q) => q.error)?.error ?? null
+  const loading =
+    enabled &&
+    queries.some(
+      (q: { isLoading: boolean; isPending: boolean }) => q.isLoading || q.isPending,
+    )
+  const error =
+    queries.find((q: { error: Error | null }) => q.error)?.error ?? null
 
   const byKey = new Map<ApresentacaoColunaKey, EficienciaOverview | null>()
   APRESENTACAO_COLUNAS.forEach((col, i) => {

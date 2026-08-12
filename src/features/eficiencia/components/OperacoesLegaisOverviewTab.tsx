@@ -32,6 +32,7 @@ import type {
   OpsLegaisIniciativasItem,
   OpsLegaisIniciativasProjeto,
   RacionalIndicador,
+  TreinamentosMesRow,
 } from '../types/eficiencia.types'
 import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
 import { RacionalSheet } from './RacionalSheet'
@@ -105,11 +106,13 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     queryFn: () => eficienciaService.fetchTurnoverAtivosArea(ano, EFICIENCIA_AREA_OPS_LEGAIS),
   })
 
-  const { data: treinoMensal = [], isLoading: loadingTreinoMensal } = useQuery({
+  const treinoMensalQuery = useQuery({
     queryKey: ['eficiencia', 'treinamentos-mensal', ano, EFICIENCIA_AREA_OPS_LEGAIS],
-    queryFn: () =>
+    queryFn: (): Promise<TreinamentosMesRow[]> =>
       eficienciaService.fetchTreinamentosMensal(ano, EFICIENCIA_AREA_OPS_LEGAIS),
   })
+  const treinoMensal: TreinamentosMesRow[] = treinoMensalQuery.data ?? []
+  const loadingTreinoMensal = treinoMensalQuery.isLoading
 
   const { mensal: pdiMensal, loading: loadingPdi } = useGestaoPdi(
     ano,
