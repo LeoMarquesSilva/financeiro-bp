@@ -146,6 +146,7 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
           showAvatars
           loading={loadingDesvio}
           maxItems={9}
+          scrollAll
           emptyLabel={emptyDesvio}
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
         />
@@ -168,6 +169,7 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
           compact
           loading={loadingDesvio}
           maxItems={9}
+          scrollAll
           emptyLabel={emptyDesvio}
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
         />
@@ -185,6 +187,7 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
           compact
           loading={loadingDesvio}
           maxItems={9}
+          scrollAll
           emptyLabel={emptyDesvio}
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
         />

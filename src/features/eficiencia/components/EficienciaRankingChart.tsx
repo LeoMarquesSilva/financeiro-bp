@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { BarChart3 } from 'lucide-react'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
+import { getInitials } from '@/shared/components/Avatar'
 import { formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
@@ -19,6 +20,8 @@ import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { toPriMaiuscula } from '../utils/textFormat'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
+
+type AvatarTickInfo = { url: string | null; fullName: string }
 
 export type RankingChartRow = Record<string, unknown>
 
@@ -42,7 +45,7 @@ type Props = {
   maxItems?: number
   /**
    * Mostra todos os itens na altura de `maxItems` linhas, com barra de rolagem.
-   * Não exibe "Top N de X".
+   * Não exibe "Top N de X". Default: true (todos os rankings com maxItems rolam).
    */
   scrollAll?: boolean
   /** Se false, exibe o nome completo no eixo (sem truncar). Default: true. */
@@ -66,42 +69,84 @@ function AvatarYTick({
   payload,
   avatarByLabel,
   compact,
+  labelMaxWidth,
 }: {
   x?: number | string
   y?: number | string
   payload?: { value?: string | number }
-  avatarByLabel: Map<string, string | null>
+  avatarByLabel: Map<string, AvatarTickInfo>
   compact?: boolean
+  /** Largura máxima do texto (px), à esquerda do avatar — evita estourar a section. */
+  labelMaxWidth: number
 }) {
   const label = String(payload?.value ?? '')
-  const url = avatarByLabel.get(label) ?? null
+  const info = avatarByLabel.get(label)
+  const url = info?.url ?? null
+  const fullName = info?.fullName?.trim() || label
+  const [imgFailed, setImgFailed] = useState(false)
+  const reactId = useId().replace(/:/g, '')
   const size = compact ? 20 : 24
   const tx = Number(x ?? 0)
   const ty = Number(y ?? 0)
+  const cx = -(size / 2 + 1)
+  const showImg = Boolean(url) && !imgFailed
+  const initials = getInitials(fullName)
+  const fontSize = compact ? 8 : 9
+  const textX = -(size + 10)
+  const clipW = Math.max(24, labelMaxWidth)
+  const clipId = `avatar-tick-${reactId}-${Math.round(ty)}`
+
+  useEffect(() => {
+    setImgFailed(false)
+  }, [url])
+
   return (
     <g transform={`translate(${Number.isFinite(tx) ? tx : 0},${Number.isFinite(ty) ? ty : 0})`}>
-      <text
-        x={url ? -(size + 10) : -4}
-        y={0}
-        dy="0.35em"
-        textAnchor="end"
-        fill="#1e293b"
-        fontSize={compact ? 11 : 12}
-        fontWeight={600}
-      >
-        {label}
-      </text>
-      {url ? (
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={textX - clipW} y={-10} width={clipW} height={20} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
+        <text
+          x={textX}
+          y={0}
+          dy="0.35em"
+          textAnchor="end"
+          fill="#1e293b"
+          fontSize={compact ? 11 : 12}
+          fontWeight={600}
+        >
+          {label}
+        </text>
+      </g>
+      {/* Sempre reserva o círculo: foto quando houver URL válida; senão iniciais. */}
+      <circle cx={cx} cy={0} r={size / 2} fill="#cbd5e1" />
+      {showImg ? (
         <image
-          href={url}
+          href={url!}
           x={-(size + 2)}
           y={-size / 2}
           width={size}
           height={size}
           preserveAspectRatio="xMidYMid slice"
           style={{ clipPath: 'circle(50%)' }}
+          onError={() => setImgFailed(true)}
         />
-      ) : null}
+      ) : (
+        <text
+          x={cx}
+          y={0}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="#475569"
+          fontSize={fontSize}
+          fontWeight={700}
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
+        >
+          {initials}
+        </text>
+      )}
     </g>
   )
 }
@@ -112,13 +157,24 @@ function shortLabel(name: string, max = 22): string {
   return `${t.slice(0, max - 1)}…`
 }
 
+/** px médios por caractere (fonte 11–12 / semibold). */
+function pxPerChar(compact: boolean): number {
+  return compact ? 5.9 : 6.6
+}
+
 function estimateYAxisWidth(labels: string[], truncate: boolean, compact: boolean): number {
   if (truncate) return compact ? 110 : 132
   const maxLen = labels.reduce((m, l) => Math.max(m, l.length), 0)
-  const px = compact ? 5.9 : 6.6
+  const px = pxPerChar(compact)
   const cap = compact ? 185 : 240
   const floor = compact ? 120 : 140
   return Math.min(cap, Math.max(floor, Math.ceil(maxLen * px) + 6))
+}
+
+/** Quantos caracteres cabem na faixa de texto do eixo (já descontando avatar). */
+function maxCharsForTextWidth(textWidthPx: number, compact: boolean): number {
+  const usable = Math.max(48, textWidthPx - 10)
+  return Math.max(8, Math.floor(usable / pxPerChar(compact)))
 }
 
 function RankingTooltip({
@@ -211,7 +267,7 @@ export function EficienciaRankingChart({
   loading,
   emptyLabel = 'Sem dados no período.',
   maxItems = 20,
-  scrollAll = false,
+  scrollAll = true,
   truncateLabels = true,
   yAxisWidth,
   biStyle = false,
@@ -231,7 +287,7 @@ export function EficienciaRankingChart({
 
   const chartData = useMemo(() => {
     const source = scrollAll ? rows : rows.slice(0, maxItems)
-    return source.map((row, i) => {
+    const prepared = source.map((row, i) => {
       const rawLabel = String(row[labelKey] ?? '').trim()
       const full = showAvatars
         ? resolvePessoaDisplayNome(rawLabel, teamMembers, avatarCatalog)
@@ -244,12 +300,31 @@ export function EficienciaRankingChart({
       return {
         ...row,
         _rank: i + 1,
-        _label: truncateLabels ? shortLabel(full, compact ? 28 : 22) : full,
         _labelFull: full,
         _value: Number.isFinite(value) ? value : 0,
         _avatarUrl: avatarUrl,
       }
     })
+
+    // Largura do eixo (com teto) e só então corta o rótulo para caber — evita estourar a section.
+    const textAxisWidth =
+      yAxisWidth ??
+      estimateYAxisWidth(
+        prepared.map((d) => d._labelFull),
+        truncateLabels,
+        compact,
+      )
+    const maxChars = truncateLabels
+      ? compact
+        ? 28
+        : 22
+      : maxCharsForTextWidth(textAxisWidth, compact)
+
+    return prepared.map((d) => ({
+      ...d,
+      _label: shortLabel(d._labelFull, maxChars),
+      _textAxisWidth: textAxisWidth,
+    }))
   }, [
     rows,
     labelKey,
@@ -259,23 +334,25 @@ export function EficienciaRankingChart({
     truncateLabels,
     compact,
     showAvatars,
+    yAxisWidth,
     teamMembers,
     avatarCatalog,
   ])
 
   const avatarByLabel = useMemo(() => {
-    const map = new Map<string, string | null>()
-    for (const d of chartData) map.set(d._label, d._avatarUrl ?? null)
+    const map = new Map<string, AvatarTickInfo>()
+    for (const d of chartData) {
+      map.set(d._label, {
+        url: d._avatarUrl ?? null,
+        fullName: String(d._labelFull ?? d._label),
+      })
+    }
     return map
   }, [chartData])
 
-  const resolvedYWidth =
-    (yAxisWidth ??
-      estimateYAxisWidth(
-        chartData.map((d) => d._label),
-        truncateLabels,
-        compact,
-      )) + (showAvatars ? 30 : 0)
+  const textAxisWidth = chartData[0]?._textAxisWidth ?? (compact ? 120 : 140)
+  const resolvedYWidth = textAxisWidth + (showAvatars ? 30 : 0)
+  const labelMaxWidth = Math.max(40, textAxisWidth - 4)
   const chartHeight = Math.max(
     compact ? 140 : 180,
     chartData.length * rowH + (compact ? 20 : 40),
@@ -292,7 +369,7 @@ export function EficienciaRankingChart({
   return (
     <section
       className={cn(
-        'relative rounded-xl border border-slate-200/60 bg-white shadow-sm',
+        'relative overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm',
         compact ? 'p-2.5 sm:p-3' : 'p-3 sm:p-4',
         className,
       )}
@@ -372,103 +449,100 @@ export function EficienciaRankingChart({
       ) : (
         /* ref no wrapper; data-chart-plot no filho — copyChartImage usa querySelector nos descendentes */
         <div ref={chartExportRef} className="w-full">
-          <div
-            data-chart-plot
-            className="w-full"
-            style={plotViewportStyle}
-          >
+          <div data-chart-plot className="w-full" style={plotViewportStyle}>
             <div style={{ height: chartHeight, minHeight: chartHeight }}>
               <ResponsiveContainer
                 width="100%"
                 height="100%"
                 minHeight={compact ? 140 : 180}
               >
-              <BarChart
-                data={chartData}
-                layout="vertical"
-                margin={{
-                  left: 2,
-                  right: compact ? 44 : 56,
-                  top: 2,
-                  bottom: 2,
-                }}
-                barCategoryGap={compact ? '12%' : '18%'}
-              >
-                <CartesianGrid
-                  horizontal={false}
-                  strokeDasharray="3 3"
-                  stroke="rgba(148,163,184,0.28)"
-                />
-                <XAxis
-                  type="number"
-                  tick={axisTick}
-                  axisLine={false}
-                  tickLine={false}
-                  allowDecimals={false}
-                  hide={biStyle}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="_label"
-                  width={resolvedYWidth}
-                  tick={
-                    showAvatars
-                      ? (props) => (
-                          <AvatarYTick
-                            x={props.x}
-                            y={props.y}
-                            payload={props.payload as { value?: string | number }}
-                            avatarByLabel={avatarByLabel}
-                            compact={compact}
-                          />
-                        )
-                      : {
-                          fontSize: compact ? 10 : 11,
-                          fill: biStyle ? '#1e293b' : '#64748b',
-                          fontWeight: biStyle ? 600 : 400,
-                        }
-                  }
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                />
-                <Tooltip
-                  cursor={{ fill: 'rgba(148,163,184,0.12)' }}
-                  content={
-                    <RankingTooltip
-                      valueLabel={valueLabel}
-                      formatValue={formatValue}
-                      pctKey={pctKey}
-                    />
-                  }
-                />
-                <Bar
-                  dataKey="_value"
-                  name={valueLabel}
-                  fill={color}
-                  radius={[0, 2, 2, 0]}
-                  maxBarSize={compact ? 14 : biStyle ? 18 : 20}
+                <BarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{
+                    left: 2,
+                    right: compact ? 44 : 56,
+                    top: 2,
+                    bottom: 2,
+                  }}
+                  barCategoryGap={compact ? '12%' : '18%'}
                 >
-                  <LabelList
-                    dataKey="_value"
-                    content={(props) => (
-                      <BarValueLabel
-                        x={props.x}
-                        y={props.y}
-                        width={props.width}
-                        height={props.height}
-                        value={
-                          props.value == null || typeof props.value === 'boolean'
-                            ? null
-                            : (props.value as number | string)
-                        }
-                        formatValue={formatValue}
-                        compact={compact}
-                      />
-                    )}
+                  <CartesianGrid
+                    horizontal={false}
+                    strokeDasharray="3 3"
+                    stroke="rgba(148,163,184,0.28)"
                   />
-                </Bar>
-              </BarChart>
+                  <XAxis
+                    type="number"
+                    tick={axisTick}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                    hide={biStyle}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="_label"
+                    width={resolvedYWidth}
+                    tick={
+                      showAvatars
+                        ? (props) => (
+                            <AvatarYTick
+                              x={props.x}
+                              y={props.y}
+                              payload={props.payload as { value?: string | number }}
+                              avatarByLabel={avatarByLabel}
+                              compact={compact}
+                              labelMaxWidth={labelMaxWidth}
+                            />
+                          )
+                        : {
+                            fontSize: compact ? 10 : 11,
+                            fill: biStyle ? '#1e293b' : '#64748b',
+                            fontWeight: biStyle ? 600 : 400,
+                          }
+                    }
+                    axisLine={false}
+                    tickLine={false}
+                    interval={0}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(148,163,184,0.12)' }}
+                    content={
+                      <RankingTooltip
+                        valueLabel={valueLabel}
+                        formatValue={formatValue}
+                        pctKey={pctKey}
+                      />
+                    }
+                  />
+                  <Bar
+                    dataKey="_value"
+                    name={valueLabel}
+                    fill={color}
+                    radius={[0, 2, 2, 0]}
+                    maxBarSize={compact ? 14 : biStyle ? 18 : 20}
+                  >
+                    <LabelList
+                      dataKey="_value"
+                      content={(props) => (
+                        <BarValueLabel
+                          x={props.x}
+                          y={props.y}
+                          width={props.width}
+                          height={props.height}
+                          value={
+                            props.value == null || typeof props.value === 'boolean'
+                              ? null
+                              : (props.value as number | string)
+                          }
+                          formatValue={formatValue}
+                          compact={compact}
+                        />
+                      )}
+                    />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>

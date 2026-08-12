@@ -137,6 +137,7 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
           showAvatars
           loading={loadingRanking}
           maxItems={9}
+          scrollAll
           emptyLabel={
             indisponivel
               ? 'Indicador não se aplica a Operações Legais'
@@ -158,6 +159,7 @@ export function AgendamentoTab({ ano, mesFiltro }: Props) {
           showAvatars
           loading={loadingRanking}
           maxItems={9}
+          scrollAll
           emptyLabel={
             indisponivel
               ? 'Indicador não se aplica a Operações Legais'
