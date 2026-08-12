@@ -137,6 +137,8 @@ const PUBLICACOES_FIELD_SELECT = [
   'field_19',
   'TIPODOAGENDAMENTO',
   'PRIORIDADEDEAGENDAMENTO',
+  // PUBLICAÇÃO - ESOCIAL (nome interno truncado no SharePoint)
+  'PUBLICA_x00c7__x00c3_O_x002d_ESO',
   'STATUSDAPUBLICA_x00c7__x00c3_O',
   'DATARECEBIMENTOKURIER',
   'INCONSIST_x00ca_NCIAS_x002d_TIPO',
@@ -762,6 +764,13 @@ const FONTES = {
             area: mapAreaDePara(escritorio),
             tipo_agendamento: pick(f, ['TIPO DO AGENDAMENTO', 'TIPODOAGENDAMENTO']),
             prioridade_agendamento: pick(f, ['PRIORIDADE DE AGENDAMENTO', 'PRIORIDADEDEAGENDAMENTO']),
+            publicacao_esocial: strOrNull(
+              pick(f, [
+                'PUBLICAÇÃO - ESOCIAL',
+                'PUBLICACAOESOCIAL',
+                'PUBLICA_x00c7__x00c3_O_x002d_ESO',
+              ]),
+            ),
             agendado_por: expandUserField(pick(f, ['AGENDADO POR', 'AGENDADOPOR'])),
             vistado_por: expandUserField(pick(f, ['VISTADO POR', 'VISTADOPOR'])),
             area_vistador: null, // derivada no BI; painel usa area (De-Para)

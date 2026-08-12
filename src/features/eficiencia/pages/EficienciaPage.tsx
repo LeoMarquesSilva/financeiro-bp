@@ -52,6 +52,9 @@ const TAB_RACIONAL: Partial<
     titulo: 'Desenvolvimento Equipe',
   },
   'retencao-talentos': { indicador: 'retencao_talentos', titulo: 'Retenção de Talentos' },
+  'gestao-pdi': { indicador: 'gestao_pdi', titulo: 'Gestão de PDI' },
+  'receita-bruta': { indicador: 'receita_bruta', titulo: 'Receita Bruta' },
+  inadimplencia: { indicador: 'indice_inadimplencia', titulo: 'Índice de Inadimplência' },
 }
 
 function EficienciaTabPanel({

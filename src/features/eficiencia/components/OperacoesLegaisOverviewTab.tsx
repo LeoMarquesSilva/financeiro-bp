@@ -442,6 +442,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           anoLabel={String(ano)}
           cells={[]}
           acumulado={acumTreino}
+          onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
         />
         <OverviewKpiHeatRow
           title="Retenção de Talentos"
@@ -450,6 +451,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           anoLabel={String(ano)}
           cells={[]}
           acumulado={acumRetencao}
+          onRacionalClick={() => setRacionalAberto('retencao_talentos')}
         />
         <OverviewKpiHeatRow
           title="Gestão de PDI"
@@ -461,6 +463,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsPdi
           }
           acumulado={loadingPdi ? { value: null, label: '…' } : acumPdi}
+          onRacionalClick={() => setRacionalAberto('gestao_pdi')}
         />
         <OverviewKpiHeatRow
           title="Iniciativas Estratégicas"
@@ -473,6 +476,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsIniciativas
           }
           acumulado={acumIniciativas}
+          onRacionalClick={() => setRacionalAberto('ops_legais_iniciativas')}
         />
         <OverviewKpiHeatRow
           title="MKT - Posts Anuais"
@@ -485,6 +489,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsMarketingPosts
           }
           acumulado={acumMarketingPosts}
+          onRacionalClick={() => setRacionalAberto('ops_legais_marketing')}
         />
         <OverviewKpiHeatRow
           title="MKT - Engajamento"
@@ -497,6 +502,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsMarketingEngaj
           }
           acumulado={acumMarketingEngaj}
+          onRacionalClick={() => setRacionalAberto('ops_legais_marketing')}
         />
         <OverviewKpiHeatRow
           title="MKT - Pautas Anuais"
@@ -509,6 +515,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsMarketingPautas
           }
           acumulado={acumMarketingPautas}
+          onRacionalClick={() => setRacionalAberto('ops_legais_marketing')}
         />
         <OverviewKpiHeatRow
           title="MKT - Alcance Mensal"
@@ -521,6 +528,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsMarketingAlcance
           }
           acumulado={acumMarketingAlcance}
+          onRacionalClick={() => setRacionalAberto('ops_legais_marketing')}
         />
       </div>
 
@@ -543,11 +551,46 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
                   ? 'Eficiência Agendamento'
                   : racionalAberto === 'ops_legais_cadastro'
                     ? 'Eficiência Cadastro'
-                    : ''
+                    : racionalAberto === 'desenvolvimento_equipe'
+                      ? 'Desenvolvimento Contínuo'
+                      : racionalAberto === 'retencao_talentos'
+                        ? 'Retenção de Talentos'
+                        : racionalAberto === 'gestao_pdi'
+                          ? 'Gestão de PDI'
+                          : racionalAberto === 'ops_legais_iniciativas'
+                            ? 'Iniciativas Estratégicas'
+                            : racionalAberto === 'ops_legais_marketing'
+                              ? 'Marketing Instagram'
+                              : ''
         }
         ano={ano}
-        mes={mesFiltro}
-        area={null}
+        mes={
+          racionalAberto === 'desenvolvimento_equipe' || racionalAberto === 'retencao_talentos'
+            ? mesFiltro === 'resultado'
+              ? null
+              : mesFiltro
+            : mesFiltro
+        }
+        area={
+          racionalAberto === 'desenvolvimento_equipe' ||
+          racionalAberto === 'retencao_talentos' ||
+          racionalAberto === 'gestao_pdi'
+            ? EFICIENCIA_AREA_OPS_LEGAIS
+            : null
+        }
+        resultado={
+          racionalAberto === 'desenvolvimento_equipe'
+            ? acumTreino
+            : racionalAberto === 'retencao_talentos'
+              ? acumRetencao
+              : racionalAberto === 'gestao_pdi'
+                ? acumPdi
+                : racionalAberto === 'ops_legais_iniciativas'
+                  ? acumIniciativas
+                  : racionalAberto === 'ops_legais_marketing'
+                    ? acumMarketingPosts
+                    : null
+        }
         metaAcumulado={
           racionalAberto === 'ops_legais_sla_protocolo'
             ? EFICIENCIA_META_OPS_SLA_PROTOCOLO
@@ -555,9 +598,30 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               ? EFICIENCIA_META_OPS_EFICIENCIA
               : racionalAberto === 'ops_legais_cadastro'
                 ? EFICIENCIA_META_OPS_CADASTRO
-                : racionalAberto != null
-                  ? EFICIENCIA_META_OPS_PUBLICACOES
-                  : null
+                : racionalAberto === 'desenvolvimento_equipe'
+                  ? 100
+                  : racionalAberto === 'retencao_talentos'
+                    ? (turnAnual?.meta_pct_retencao_minima ?? 90)
+                    : racionalAberto === 'gestao_pdi'
+                      ? EFICIENCIA_META_PDI
+                      : racionalAberto === 'ops_legais_iniciativas'
+                        ? 100
+                        : racionalAberto === 'ops_legais_marketing'
+                          ? 100
+                          : racionalAberto != null
+                            ? EFICIENCIA_META_OPS_PUBLICACOES
+                            : null
+        }
+        metaLabel={
+          racionalAberto === 'desenvolvimento_equipe' &&
+          equipeResumo &&
+          equipeResumo.qtdPessoas > 0
+            ? `Meta: ${equipeResumo.qtdPessoas * 14}h (${equipeResumo.qtdPessoas} × 14h)`
+            : racionalAberto === 'ops_legais_iniciativas'
+              ? `Meta: ${EFICIENCIA_META_OPS_INICIATIVAS} projetos`
+              : racionalAberto === 'ops_legais_marketing'
+                ? 'Meta: 144 posts/ano'
+                : undefined
         }
         onClose={() => setRacionalAberto(null)}
       />

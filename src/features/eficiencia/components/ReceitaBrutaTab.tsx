@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { TrendingUp } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import type { GestaoVistaMesRow } from '@/features/receita/types/receita.types'
@@ -12,6 +13,7 @@ import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
 import { buildOverviewReceitaBruta } from '../utils/overviewFinanceiroKpis'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { RacionalSheet } from './RacionalSheet'
 
 type Props = {
   ano: number
@@ -19,6 +21,7 @@ type Props = {
 }
 
 export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
+  const [racionalAberto, setRacionalAberto] = useState(false)
   const { data, isLoading } = useOverviewFinanceiroKpis(ano)
   const overview = data
     ? buildOverviewReceitaBruta(data.meses, data.rows, ano, mesFiltro)
@@ -100,6 +103,18 @@ export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
         data={chartData}
         color="#059669"
         metaFixa={EFICIENCIA_META_RECEITA_BRUTA}
+        onRacionalClick={() => setRacionalAberto(true)}
+      />
+
+      <RacionalSheet
+        indicador={racionalAberto ? 'receita_bruta' : null}
+        titulo="Receita Bruta"
+        ano={ano}
+        mes={mesFiltro}
+        area={null}
+        resultado={overview?.acumulado ?? null}
+        metaAcumulado={EFICIENCIA_META_RECEITA_BRUTA}
+        onClose={() => setRacionalAberto(false)}
       />
     </div>
   )

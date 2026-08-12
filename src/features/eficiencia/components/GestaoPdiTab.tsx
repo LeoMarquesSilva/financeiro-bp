@@ -23,6 +23,7 @@ import { toPriMaiuscula } from '../utils/textFormat'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { AreaFilterButtons } from './AreaFilterButtons'
+import { RacionalSheet } from './RacionalSheet'
 
 type Props = {
   ano: number
@@ -39,6 +40,7 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
     useEficienciaAreaFilter()
   const area = areaFixa ?? areaSlicer
   const [exportando, setExportando] = useState(false)
+  const [racionalAberto, setRacionalAberto] = useState(false)
   const { mensal, detalhe, loading } = useGestaoPdi(ano, mesFiltro, area)
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
@@ -134,6 +136,7 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
           .map((m) => ({ mes: m.mes, valor: m.pct_aptas!, meta: EFICIENCIA_META_PDI }))}
         color="#059669"
         metaFixa={EFICIENCIA_META_PDI}
+        onRacionalClick={() => setRacionalAberto(true)}
       />
 
       <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
@@ -248,6 +251,17 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
           </div>
         )}
       </section>
+
+      <RacionalSheet
+        indicador={racionalAberto ? 'gestao_pdi' : null}
+        titulo="Gestão de PDI"
+        ano={ano}
+        mes={mesFiltro}
+        area={area}
+        resultado={acumulado}
+        metaAcumulado={EFICIENCIA_META_PDI}
+        onClose={() => setRacionalAberto(false)}
+      />
     </div>
   )
 }

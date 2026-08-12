@@ -401,11 +401,16 @@ export type RacionalIndicador =
   | 'ops_legais_pub_analise'
   | 'ops_legais_pub_agendamento'
   | 'ops_legais_cadastro'
+  | 'ops_legais_iniciativas'
+  | 'ops_legais_marketing'
   | 'sla_ciencia_agendamentos'
   | 'sla_vistagem_risco'
   | 'sla_vistagem_normal'
   | 'desenvolvimento_equipe'
   | 'retencao_talentos'
+  | 'gestao_pdi'
+  | 'receita_bruta'
+  | 'indice_inadimplencia'
 
 /**
  * Escopo opcional do Racional.

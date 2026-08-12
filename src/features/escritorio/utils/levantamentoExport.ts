@@ -1,4 +1,5 @@
 import { formatHorasDuracao } from '@/shared/utils/format'
+import { stripJsonArrayDecorators } from '@/features/eficiencia/utils/textFormat'
 import {
   BLOCO_LABELS,
   type LevantamentoBloco,
@@ -21,7 +22,11 @@ function cellToString(value: unknown): string {
   if (value == null) return ''
   if (typeof value === 'number') return String(value)
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não'
-  return String(value)
+  const raw = String(value)
+  if (raw.includes('[') || raw.includes('"')) {
+    return stripJsonArrayDecorators(raw)
+  }
+  return raw
 }
 
 function rowsFromRacional(racional: LevantamentoRacional): Array<Record<string, string>> {

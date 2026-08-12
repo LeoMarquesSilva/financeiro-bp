@@ -1,7 +1,14 @@
 import { supabase } from '@/lib/supabaseClient'
+import { mesMaxDisponivelInadimplencia } from '@/features/receita/constants'
+import { receitaInadimplenciaService } from '@/features/receita/services/receitaInadimplenciaService'
+import { receitaMetasService } from '@/features/receita/services/receitaMetasService'
+import { receitaService } from '@/features/receita/services/receitaService'
+import { computePostEngagementRate } from '@/features/operacoes-legais/marketing/instagramAnalytics'
+import { instagramService } from '@/features/operacoes-legais/marketing/instagramService'
 import {
   EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO,
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
+  MES_INICIO_RESULTADO,
   OPS_LEGAIS_CADASTRO_CONTROLADORIA,
   OPS_LEGAIS_CADASTRO_TIPOS_ABERTURA,
   areaFiltroParaIndicador,
@@ -10,6 +17,7 @@ import {
   rangePeriodoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
+import { buildGestaoConsolidadoFromInadDashboard } from '../utils/overviewFinanceiroKpis'
 import type {
   AgendamentoMesRow,
   AgendamentoUsuarioRow,
@@ -403,6 +411,86 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'admissao', label: 'Admissão' },
       { key: 'desligamento', label: 'Desligamento' },
       { key: 'tipo_desligamento', label: 'Tipo de Desligamento' },
+    ],
+  },
+  /** Base via fetchGestaoPdiDetalhe — não usa query genérica da tabela. */
+  gestao_pdi: {
+    tabela: 'sp_gestao_pdi_elegiveis',
+    dataColuna: 'mes',
+    areaColuna: 'area',
+    colunas: [
+      { key: 'mes', label: 'Mês' },
+      { key: 'colaborador', label: 'Colaborador' },
+      { key: 'area', label: 'Área' },
+      { key: 'estrutura', label: 'Estrutura' },
+      { key: 'progresso', label: 'Progresso' },
+      { key: 'progresso_anterior', label: 'Progresso anterior' },
+      { key: 'evidencias_execucao', label: 'Evidências' },
+      { key: 'one_a_one', label: '1:1' },
+      { key: 'mudou_progresso', label: 'Mudou progresso' },
+      { key: 'tem_evidencia', label: 'Tem evidência' },
+      { key: 'tem_1a1', label: 'Tem 1:1' },
+      { key: 'status', label: 'Status' },
+      { key: 'desvio_criterio_apuracao', label: 'Critério apuração' },
+    ],
+  },
+  receita_bruta: {
+    tabela: 'receita_overview',
+    dataColuna: 'mes',
+    areaColuna: null,
+    colunas: [
+      { key: 'mes', label: 'Mês' },
+      { key: 'meta', label: 'Meta R$' },
+      { key: 'previsto', label: 'Previsto R$' },
+      { key: 'recebido', label: 'Recebido R$' },
+      { key: 'pct_meta', label: '% Meta' },
+      { key: 'pct_previsto', label: '% Previsto' },
+    ],
+  },
+  indice_inadimplencia: {
+    tabela: 'receita_overview',
+    dataColuna: 'mes',
+    areaColuna: null,
+    colunas: [
+      { key: 'mes', label: 'Mês' },
+      { key: 'previsto', label: 'Previsto R$' },
+      { key: 'inadimplencia', label: 'Inadimplência R$' },
+      { key: 'inadimplencia_pct', label: 'Índice %' },
+      { key: 'congelado', label: 'Snapshot congelado' },
+    ],
+  },
+  ops_legais_iniciativas: {
+    tabela: 'ops_legais_iniciativas',
+    dataColuna: 'data',
+    areaColuna: null,
+    colunas: [
+      { key: 'status', label: 'Status' },
+      { key: 'nome', label: 'Projeto' },
+      { key: 'tipo', label: 'Tipo' },
+      { key: 'extensao', label: 'Extensão' },
+      { key: 'responsavel', label: 'Responsável' },
+      { key: 'data', label: 'Data' },
+      { key: 'sub_concluidas', label: 'Sub concluídas' },
+      { key: 'total_sub', label: 'Total sub' },
+      { key: 'url', label: 'URL' },
+    ],
+  },
+  ops_legais_marketing: {
+    tabela: 'instagram_posts',
+    dataColuna: 'published_at',
+    areaColuna: null,
+    colunas: [
+      { key: 'published_at', label: 'Publicado em' },
+      { key: 'caption', label: 'Legenda' },
+      { key: 'media_product_type', label: 'Formato' },
+      { key: 'areas', label: 'Áreas' },
+      { key: 'reach', label: 'Alcance' },
+      { key: 'likes', label: 'Likes' },
+      { key: 'comments', label: 'Comentários' },
+      { key: 'saves', label: 'Saves' },
+      { key: 'shares', label: 'Shares' },
+      { key: 'engajamento_pct', label: 'Engajamento %' },
+      { key: 'permalink', label: 'Link' },
     ],
   },
 }
@@ -889,6 +977,153 @@ export const eficienciaService = {
     }))
   },
 
+  async fetchGestaoPdiRacional(
+    ano: number,
+    area: string | null = null,
+    mes: MesFiltroEficiencia = null,
+  ): Promise<RacionalResultado> {
+    const cfg = RACIONAL_CONFIG.gestao_pdi
+    const detalhe = await this.fetchGestaoPdiDetalhe(ano, mes, area)
+    const linhas: Array<Record<string, unknown>> = detalhe.map((d) => ({
+      mes: d.mes,
+      colaborador: d.colaborador,
+      area: d.area,
+      estrutura: d.estrutura,
+      progresso: d.progresso,
+      progresso_anterior: d.progresso_anterior,
+      evidencias_execucao: d.evidencias_execucao,
+      one_a_one: d.one_a_one,
+      mudou_progresso: d.mudou_progresso ? 'Sim' : 'Não',
+      tem_evidencia: d.tem_evidencia ? 'Sim' : 'Não',
+      tem_1a1: d.tem_1a1 ? 'Sim' : 'Não',
+      status: d.status,
+      desvio_criterio_apuracao: d.desvio_criterio_apuracao ?? null,
+    }))
+    const aptas = detalhe.filter((d) => d.apta).length
+    const desvios = detalhe.length - aptas
+    return {
+      colunas: cfg.colunas,
+      linhas,
+      truncado: false,
+      resumo: {
+        qtd_d1: aptas,
+        qtd_fatal: desvios,
+      },
+    }
+  },
+
+  async fetchOverviewFinanceiroRacional(
+    indicador: 'receita_bruta' | 'indice_inadimplencia',
+    ano: number,
+    mes: MesFiltroEficiencia = null,
+  ): Promise<RacionalResultado> {
+    const cfg = RACIONAL_CONFIG[indicador]
+    const metas = await receitaMetasService.getMetas()
+    const { rows } = await receitaService.buildDashboard(metas)
+    const mesMax = mesMaxDisponivelInadimplencia(ano)
+    const inadDashboard = await receitaInadimplenciaService.fetchDashboard({
+      ano,
+      mesInicio: 1,
+      mesFim: mesMax > 0 ? mesMax : 12,
+    })
+    const { meses } = buildGestaoConsolidadoFromInadDashboard(rows, inadDashboard, ano)
+    const mesesFiltro = mesesEfetivosFiltro(mes, ano)
+    const filtrados = meses.filter((m) => {
+      if (m.mes < MES_INICIO_RESULTADO) return false
+      if (mesesFiltro && !mesesFiltro.includes(m.mes)) return false
+      return true
+    })
+    const linhas: Array<Record<string, unknown>> = filtrados.map((m) => ({
+      mes: m.mesLabel,
+      meta: m.meta,
+      previsto: m.previsto,
+      recebido: m.recebido,
+      pct_meta: m.pctMeta,
+      pct_previsto: m.pctPrevisto,
+      inadimplencia: m.inadimplencia,
+      inadimplencia_pct: m.inadimplenciaPct,
+      congelado: m.congelado ? 'Sim' : 'Não',
+    }))
+    return { colunas: cfg.colunas, linhas, truncado: false }
+  },
+
+  async fetchOpsLegaisIniciativasRacional(
+    ano: number,
+    mes: MesFiltroEficiencia = null,
+  ): Promise<RacionalResultado> {
+    const cfg = RACIONAL_CONFIG.ops_legais_iniciativas
+    const dash = await this.fetchOpsLegaisIniciativas(ano, mes)
+    const concluidos = (dash.painel?.concluidos ?? []).map((p) => ({
+      status: 'Concluído',
+      nome: p.nome,
+      tipo: p.tipo,
+      extensao: p.extensao,
+      responsavel: p.responsavel,
+      data: p.data,
+      sub_concluidas: p.sub_concluidas,
+      total_sub: p.total_sub,
+      url: p.url,
+    }))
+    const andamento = (dash.painel?.andamento ?? []).map((p) => ({
+      status: 'Andamento',
+      nome: p.nome,
+      tipo: p.tipo,
+      extensao: p.extensao,
+      responsavel: p.responsavel,
+      data: p.data,
+      sub_concluidas: p.sub_concluidas,
+      total_sub: p.total_sub,
+      url: p.url,
+    }))
+    const fallback =
+      concluidos.length === 0 && andamento.length === 0
+        ? (dash.itens ?? []).map((p) => ({
+            status: 'Item',
+            nome: p.nome,
+            tipo: (p.tags ?? []).join(', '),
+            extensao: '',
+            responsavel: '',
+            data: p.data,
+            sub_concluidas: null,
+            total_sub: null,
+            url: p.url,
+          }))
+        : []
+    const linhas = [...concluidos, ...andamento, ...fallback]
+    return { colunas: cfg.colunas, linhas, truncado: false }
+  },
+
+  async fetchOpsLegaisMarketingRacional(
+    ano: number,
+    mes: MesFiltroEficiencia = null,
+  ): Promise<RacionalResultado> {
+    const cfg = RACIONAL_CONFIG.ops_legais_marketing
+    const dash = await instagramService.getDashboard()
+    const { inicio, fimExclusivo } = rangePeriodoFiltro(ano, mes)
+    const inicioMs = new Date(`${inicio}T00:00:00`).getTime()
+    const fimMs = new Date(`${fimExclusivo}T00:00:00`).getTime()
+    const linhas = dash.posts
+      .filter((p) => {
+        if (!p.published_at) return false
+        const t = new Date(p.published_at).getTime()
+        return Number.isFinite(t) && t >= inicioMs && t < fimMs
+      })
+      .map((p) => ({
+        published_at: p.published_at,
+        caption: (p.caption ?? '').slice(0, 200),
+        media_product_type: p.media_product_type ?? p.media_type,
+        areas: (p.areas?.length ? p.areas : p.area ? [p.area] : []).join(', '),
+        reach: p.reach,
+        likes: p.likes,
+        comments: p.comments,
+        saves: p.saves,
+        shares: p.shares,
+        engajamento_pct: Number(computePostEngagementRate(p).toFixed(2)),
+        permalink: p.permalink,
+      }))
+    return { colunas: cfg.colunas, linhas, truncado: false }
+  },
+
   async fetchBeneficioEconomicoAnual(ano: number): Promise<BeneficioEconomicoRow | null> {
     const rows = await rpc<BeneficioEconomicoRow[]>('eficiencia_beneficio_economico_anual', {
       p_ano: ano,
@@ -985,6 +1220,22 @@ export const eficienciaService = {
       return fetchDesenvolvimentoRacional(cfg, ano, area, mes)
     }
 
+    if (indicador === 'gestao_pdi') {
+      return this.fetchGestaoPdiRacional(ano, area, mes)
+    }
+
+    if (indicador === 'receita_bruta' || indicador === 'indice_inadimplencia') {
+      return this.fetchOverviewFinanceiroRacional(indicador, ano, mes)
+    }
+
+    if (indicador === 'ops_legais_iniciativas') {
+      return this.fetchOpsLegaisIniciativasRacional(ano, mes)
+    }
+
+    if (indicador === 'ops_legais_marketing') {
+      return this.fetchOpsLegaisMarketingRacional(ano, mes)
+    }
+
     const areaEfetiva = areaFiltroParaIndicador(indicador, area)
 
     let query = buildRacionalBaseQuery(
@@ -1059,6 +1310,22 @@ export const eficienciaService = {
 
     if (indicador === 'desenvolvimento_equipe') {
       return fetchDesenvolvimentoRacional(cfg, ano, area, mes)
+    }
+
+    if (indicador === 'gestao_pdi') {
+      return this.fetchGestaoPdiRacional(ano, area, mes)
+    }
+
+    if (indicador === 'receita_bruta' || indicador === 'indice_inadimplencia') {
+      return this.fetchOverviewFinanceiroRacional(indicador, ano, mes)
+    }
+
+    if (indicador === 'ops_legais_iniciativas') {
+      return this.fetchOpsLegaisIniciativasRacional(ano, mes)
+    }
+
+    if (indicador === 'ops_legais_marketing') {
+      return this.fetchOpsLegaisMarketingRacional(ano, mes)
     }
 
     const areaEfetiva = areaFiltroParaIndicador(indicador, area)

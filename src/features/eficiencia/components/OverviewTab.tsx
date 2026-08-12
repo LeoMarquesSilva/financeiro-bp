@@ -57,6 +57,11 @@ const RACIONAL_TITULOS: Record<RacionalIndicador, string> = {
   sla_vistagem_normal: 'SLA Vistagem Normal',
   desenvolvimento_equipe: 'Desenvolvimento Equipe',
   retencao_talentos: 'Retenção de Talentos',
+  gestao_pdi: 'Gestão de PDI',
+  receita_bruta: 'Receita Bruta',
+  indice_inadimplencia: 'Índice de Inadimplência',
+  ops_legais_iniciativas: 'Iniciativas Estratégicas',
+  ops_legais_marketing: 'Marketing Instagram',
 }
 
 const PCT0 = (v: number) => `${v.toFixed(2)}%`
@@ -281,6 +286,15 @@ export function OverviewTab({
   const acumuladoInadimplencia: HeatCell =
     inadimplenciaOverview?.acumulado ?? { value: null, label: '-' }
 
+  const cellsGestaoPdi = aplicarCelulasFiltro(
+    data ? buildGestaoPdiCells(data.gestaoPdiMensal ?? []) : CELULAS_VAZIAS,
+    mesFiltro,
+    ano,
+  )
+  const acumuladoGestaoPdiCell: HeatCell = data
+    ? acumuladoGestaoPdi(data.gestaoPdiMensal ?? [], mesFiltro, ano)
+    : ACUMULADO_VAZIO
+
   const resultadosRacional: Record<RacionalIndicador, HeatCell> = {
     sla_protocolo: acumuladoSlaProtocolo,
     eficiencia_protocolo: acumuladoEficienciaProtocolo,
@@ -294,6 +308,11 @@ export function OverviewTab({
     sla_vistagem_normal: acumuladoVistagemComumExibicao,
     desenvolvimento_equipe: acumuladoTreinamentos,
     retencao_talentos: retencaoCell,
+    gestao_pdi: acumuladoGestaoPdiCell,
+    receita_bruta: acumuladoReceitaBruta,
+    indice_inadimplencia: acumuladoInadimplencia,
+    ops_legais_iniciativas: ACUMULADO_VAZIO,
+    ops_legais_marketing: ACUMULADO_VAZIO,
   }
 
   const slaProtocoloMetasFiltradas = (() => {
@@ -336,6 +355,11 @@ export function OverviewTab({
       retencao_talentos: {
         metaAcumulado: data.turnover?.meta_pct_retencao_minima ?? 90,
       },
+      gestao_pdi: { metaAcumulado: 100 },
+      receita_bruta: { metaAcumulado: 100 },
+      indice_inadimplencia: { metaAcumulado: Infinity, metaLabel: 'Meta x' },
+      ops_legais_iniciativas: { metaAcumulado: 100 },
+      ops_legais_marketing: { metaAcumulado: 100 },
     }
 
   const handleCopiarOverview = async () => {
@@ -367,15 +391,6 @@ export function OverviewTab({
 
   const CopyIcon =
     copyStatus === 'loading' ? Loader2 : copyStatus === 'done' ? Check : Copy
-
-  const cellsGestaoPdi = aplicarCelulasFiltro(
-    data ? buildGestaoPdiCells(data.gestaoPdiMensal ?? []) : CELULAS_VAZIAS,
-    mesFiltro,
-    ano,
-  )
-  const acumuladoGestaoPdiCell: HeatCell = data
-    ? acumuladoGestaoPdi(data.gestaoPdiMensal ?? [], mesFiltro, ano)
-    : ACUMULADO_VAZIO
 
   return (
     <div className="space-y-5">
@@ -499,6 +514,7 @@ export function OverviewTab({
           mesDestaque={mesDestaque}
           cells={cellsGestaoPdi}
           acumulado={acumuladoGestaoPdiCell}
+          onRacionalClick={() => setRacionalAberto('gestao_pdi')}
         />
         <OverviewKpiHeatRow
           title="Receita Bruta"
@@ -510,6 +526,7 @@ export function OverviewTab({
               : cellsReceitaBruta
           }
           acumulado={loadingFinanceiroKpis ? { value: null, label: '…' } : acumuladoReceitaBruta}
+          onRacionalClick={() => setRacionalAberto('receita_bruta')}
         />
         <OverviewKpiHeatRow
           title="Índice de Inadimplência"
@@ -524,6 +541,7 @@ export function OverviewTab({
           acumulado={
             loadingFinanceiroKpis ? { value: null, label: '…' } : acumuladoInadimplencia
           }
+          onRacionalClick={() => setRacionalAberto('indice_inadimplencia')}
         />
       </div>
 

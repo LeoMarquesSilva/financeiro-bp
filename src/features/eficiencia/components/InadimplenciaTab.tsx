@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import type { GestaoVistaMesRow } from '@/features/receita/types/receita.types'
@@ -11,6 +12,7 @@ import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
 import { buildOverviewInadimplencia } from '../utils/overviewFinanceiroKpis'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { RacionalSheet } from './RacionalSheet'
 
 type Props = {
   ano: number
@@ -18,6 +20,7 @@ type Props = {
 }
 
 export function InadimplenciaTab({ ano, mesFiltro }: Props) {
+  const [racionalAberto, setRacionalAberto] = useState(false)
   const { data, isLoading } = useOverviewFinanceiroKpis(ano)
   const overview = data ? buildOverviewInadimplencia(data.meses, mesFiltro, ano) : null
   const filtroGav = filtroEfetivoGestaoAVista(ano)
@@ -88,6 +91,19 @@ export function InadimplenciaTab({ ano, mesFiltro }: Props) {
         subtitle="% saldo congelado ÷ previsto (a partir de junho)"
         data={chartData}
         color="#d97706"
+        onRacionalClick={() => setRacionalAberto(true)}
+      />
+
+      <RacionalSheet
+        indicador={racionalAberto ? 'indice_inadimplencia' : null}
+        titulo="Índice de Inadimplência"
+        ano={ano}
+        mes={mesFiltro}
+        area={null}
+        resultado={overview?.acumulado ?? null}
+        metaAcumulado={Infinity}
+        metaLabel="Meta x"
+        onClose={() => setRacionalAberto(false)}
       />
     </div>
   )
