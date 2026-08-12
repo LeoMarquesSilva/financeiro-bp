@@ -21,6 +21,11 @@ import type {
   RacionalResultado,
 } from '../types/eficiencia.types'
 import { isVistadoD1Sim, isOpsLegaisCadastroDeParaOk } from './racionalFormat'
+import {
+  RACIONAL_COLUNA_RESPONSAVEL,
+  significantResponsavelTokens,
+  nomesResponsavelMatch,
+} from './responsavelMatch'
 
 const RACIONAL_LIMITE = 500
 
@@ -56,6 +61,19 @@ export type RacionalConfig = {
 }
 
 type AnyQuery = SupabaseQuery
+
+/**
+ * Select do racional: colunas da UI + dataColuna (se faltar).
+ * Sem a data base, agregações client-side (série por responsável) ficam vazias
+ * e o gráfico de linha pode manter o estado anterior do Recharts.
+ */
+export function buildRacionalSelect(cfg: RacionalConfig): string {
+  const keys = cfg.colunas.map((c) => c.key)
+  if (cfg.dataColuna && !keys.includes(cfg.dataColuna)) {
+    keys.push(cfg.dataColuna)
+  }
+  return keys.join(',')
+}
 
 function quoteInList(valores: string[]): string {
   return `(${valores.map((v) => `"${v.replace(/"/g, '\\"')}"`).join(',')})`
@@ -183,6 +201,7 @@ export async function fetchDesenvolvimentoRacional(
   ano: number,
   area: string | null,
   mes: MesFiltroEficiencia,
+  responsavel: string | null = null,
 ): Promise<RacionalResultado> {
   // Indicador anual: filtro Resultado = ano todo (mesmos minutos/meta do KPI).
   const mesPeriodo: MesFiltroEficiencia = mes === 'resultado' ? null : mes
@@ -237,6 +256,11 @@ export async function fetchDesenvolvimentoRacional(
 
   const linhas = ((trainingRows ?? []) as Array<Record<string, unknown>>)
     .filter((row) => nomesElegiveis.has(normalizeNomeChave(String(row.colaborador ?? ''))))
+    .filter((row) =>
+      responsavel
+        ? nomesResponsavelMatch(String(row.colaborador ?? ''), responsavel)
+        : true,
+    )
     .map((row) => {
       const tv = porNome.get(normalizeNomeChave(String(row.colaborador ?? '')))
       return { ...row, area: tv?.area ?? null }
@@ -337,6 +361,26 @@ export function applyRacionalEscopo(
   return query
 }
 
+/** Recorte por responsável (gestão individual) — ILIKE por tokens significativos. */
+export function applyRacionalResponsavel(
+  query: AnyQuery,
+  indicador: RacionalIndicador,
+  responsavel: string | null | undefined,
+): AnyQuery {
+  const coluna = RACIONAL_COLUNA_RESPONSAVEL[indicador]
+  const nome = responsavel?.trim()
+  if (!coluna || !nome) return query
+  const tokens = significantResponsavelTokens(nome)
+  if (tokens.length === 0) {
+    return query.ilike(coluna, `%${nome}%`)
+  }
+  let next = query
+  for (const token of tokens) {
+    next = next.ilike(coluna, `%${token}%`)
+  }
+  return next
+}
+
 export function buildRacionalBaseQuery(
   cfg: RacionalConfig,
   indicador: RacionalIndicador,
@@ -345,6 +389,7 @@ export function buildRacionalBaseQuery(
   mes: MesFiltroEficiencia,
   select: string,
   escopo: RacionalEscopo = 'default',
+  responsavel: string | null = null,
 ): AnyQuery {
   let query = supabase.from(cfg.tabela as never).select(select)
 
@@ -426,6 +471,7 @@ export function buildRacionalBaseQuery(
   }
 
   query = applyRacionalEscopo(query, indicador, escopo)
+  query = applyRacionalResponsavel(query, indicador, responsavel)
 
   return query
 }
@@ -440,6 +486,7 @@ export async function fetchRacionalLinhasCompletas(
   mes: MesFiltroEficiencia,
   select: string,
   escopo: RacionalEscopo = 'default',
+  responsavel: string | null = null,
 ): Promise<Array<Record<string, unknown>>> {
   const linhas: Array<Record<string, unknown>> = []
   let offset = 0
@@ -453,6 +500,7 @@ export async function fetchRacionalLinhasCompletas(
       mes,
       select,
       escopo,
+      responsavel,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
 
     const { data, error } = await query
@@ -478,6 +526,7 @@ export async function fetchSlaProtocoloRacionalResumo(
   area: string | null,
   mes: MesFiltroEficiencia,
   escopo: RacionalEscopo = 'default',
+  responsavel: string | null = null,
 ): Promise<RacionalResultado['resumo']> {
   const d1Cis = new Set<string>()
   const fatalCis = new Set<string>()
@@ -495,6 +544,7 @@ export async function fetchSlaProtocoloRacionalResumo(
       mes,
       'ci,fatal_apos18,excludente',
       escopo,
+      responsavel,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
 
     const { data, error } = await query
@@ -543,6 +593,7 @@ export async function fetchEficienciaProtocoloRacionalResumo(
   ano: number,
   area: string | null,
   mes: MesFiltroEficiencia,
+  responsavel: string | null = null,
 ): Promise<RacionalResultado['resumo']> {
   let qtd_eficiencia = 0
   let qtd_inconsistencia = 0
@@ -556,6 +607,8 @@ export async function fetchEficienciaProtocoloRacionalResumo(
       area,
       mes,
       'status_inconsistencia',
+      'default',
+      responsavel,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
 
     const { data, error } = await query
@@ -755,6 +808,7 @@ export async function fetchSlaVistagemRacionalResumo(
   ano: number,
   area: string | null,
   mes: MesFiltroEficiencia,
+  responsavel: string | null = null,
 ): Promise<RacionalResultado['resumo']> {
   let qtd_vistado_sim = 0
   let qtd_vistado_nao = 0
@@ -768,6 +822,8 @@ export async function fetchSlaVistagemRacionalResumo(
       area,
       mes,
       'vistado_d1',
+      'default',
+      responsavel,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
 
     const { data, error } = await query

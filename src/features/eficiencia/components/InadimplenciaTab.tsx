@@ -12,14 +12,26 @@ import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
 import { buildOverviewInadimplencia } from '../utils/overviewFinanceiroKpis'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 
 type Props = {
   ano: number
   mesFiltro: MesFiltroEficiencia
+  responsavel?: string | null
+  onResponsavelChange?: (nome: string | null) => void
+  responsavelEnabled?: boolean
+  responsavelHintDisabled?: string
 }
 
-export function InadimplenciaTab({ ano, mesFiltro }: Props) {
+export function InadimplenciaTab({
+  ano,
+  mesFiltro,
+  responsavel,
+  onResponsavelChange,
+  responsavelEnabled,
+  responsavelHintDisabled,
+}: Props) {
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { data, isLoading } = useOverviewFinanceiroKpis(ano)
   const overview = data ? buildOverviewInadimplencia(data.meses, mesFiltro, ano) : null
@@ -39,6 +51,15 @@ export function InadimplenciaTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
+      <EficienciaDetailFilters
+        ano={ano}
+        showArea={false}
+        responsavel={responsavel ?? null}
+        onResponsavelChange={onResponsavelChange ?? (() => undefined)}
+        responsavelEnabled={responsavelEnabled ?? false}
+        responsavelHintDisabled={responsavelHintDisabled}
+      />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="Índice de Inadimplência Gestão a Vista"

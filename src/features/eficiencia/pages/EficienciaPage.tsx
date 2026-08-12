@@ -27,6 +27,7 @@ import { InadimplenciaTab } from '../components/InadimplenciaTab'
 import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab'
 import { ReportarIndicadorButton } from '../components/ReportarIndicadorButton'
 import type { RacionalIndicador } from '../types/eficiencia.types'
+import { EFICIENCIA_TABS_COM_RESPONSAVEL } from '../utils/responsavelMatch'
 
 /** Ano padrão da tela (sempre o corrente). 2025 fica disponível só para comparativo anual. */
 const ANO_PADRAO = 2026
@@ -61,38 +62,51 @@ function EficienciaTabPanel({
   tab,
   ano,
   mesFiltro,
+  responsavel,
+  onResponsavelChange,
 }: {
   tab: EficienciaTabId
   ano: number
   mesFiltro: MesFiltroEficiencia
+  responsavel: string | null
+  onResponsavelChange: (nome: string | null) => void
 }) {
+  const responsavelProps = {
+    responsavel,
+    onResponsavelChange,
+    responsavelEnabled: EFICIENCIA_TABS_COM_RESPONSAVEL.has(tab),
+    responsavelHintDisabled: 'Este indicador não tem recorte por responsável.',
+  }
+
   switch (tab) {
     case 'overview':
       return null
     case 'sla-protocolo':
-      return <SlaProtocoloTab ano={ano} mesFiltro={mesFiltro} />
+      return <SlaProtocoloTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'eficiencia-protocolo':
-      return <EficienciaProtocoloTab ano={ano} mesFiltro={mesFiltro} />
+      return <EficienciaProtocoloTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'sla-ciencia-agendamentos':
-      return <AgendamentoTab ano={ano} mesFiltro={mesFiltro} />
+      return <AgendamentoTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'sla-vistagem-risco':
-      return <SlaVistagemTab ano={ano} risco mesFiltro={mesFiltro} />
+      return <SlaVistagemTab ano={ano} risco mesFiltro={mesFiltro} {...responsavelProps} />
     case 'sla-vistagem-normal':
-      return <SlaVistagemTab ano={ano} risco={false} mesFiltro={mesFiltro} />
+      return (
+        <SlaVistagemTab ano={ano} risco={false} mesFiltro={mesFiltro} {...responsavelProps} />
+      )
     case 'desenvolvimento-equipe':
-      return <TreinamentosTab ano={ano} mesFiltro={mesFiltro} />
+      return <TreinamentosTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'retencao-talentos':
-      return <TurnoverTab ano={ano} mesFiltro={mesFiltro} />
+      return <TurnoverTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'gestao-pdi':
-      return <GestaoPdiTab ano={ano} mesFiltro={mesFiltro} />
+      return <GestaoPdiTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'nps':
       return (
         <EficienciaPlaceholderTab title="NPS" icon={Smile} meta="Meta 85%" hint="Sem dado no Overview (BI)." />
       )
     case 'receita-bruta':
-      return <ReceitaBrutaTab ano={ano} mesFiltro={mesFiltro} />
+      return <ReceitaBrutaTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'inadimplencia':
-      return <InadimplenciaTab ano={ano} mesFiltro={mesFiltro} />
+      return <InadimplenciaTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'reputacao':
       return (
         <EficienciaPlaceholderTab
@@ -133,6 +147,7 @@ export function EficienciaPage() {
   const [tab, setTab] = useState<EficienciaTabId>('overview')
   const [areaOverview, setAreaOverview] = useState<string | null>(null)
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
+  const [responsavel, setResponsavel] = useState<string | null>(null)
 
   // Overview: admin/sócio filtram qualquer área; coordenador só Todas ↔ área dele.
   const overviewAllowedAreas = access.canFilterAreas
@@ -267,7 +282,13 @@ export function EficienciaPage() {
           .filter((t) => t.id !== 'overview')
           .map(({ id }) => (
             <TabsContent key={id} value={id} className="mt-5">
-              <EficienciaTabPanel tab={id} ano={ano} mesFiltro={mesFiltro} />
+              <EficienciaTabPanel
+                tab={id}
+                ano={ano}
+                mesFiltro={mesFiltro}
+                responsavel={responsavel}
+                onResponsavelChange={setResponsavel}
+              />
             </TabsContent>
           ))}
       </Tabs>

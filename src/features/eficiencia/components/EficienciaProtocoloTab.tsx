@@ -8,22 +8,35 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { useEficienciaProtocolo, useEficienciaProtocoloRanking } from '../hooks/useEficiencia'
+import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
-import { AreaFilterButtons } from './AreaFilterButtons'
+import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 import type { HeatCell } from './OverviewKpiHeatRow'
+import { filtrarPorResponsavel } from '../utils/responsavelMatch'
 
 const BI_BAR = '#94a3b8'
 
 type Props = {
   ano: number
   mesFiltro: MesFiltroEficiencia
+  responsavel?: string | null
+  onResponsavelChange?: (nome: string | null) => void
+  responsavelEnabled?: boolean
+  responsavelHintDisabled?: string
 }
 
-export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
+export function EficienciaProtocoloTab({
+  ano,
+  mesFiltro,
+  responsavel = null,
+  onResponsavelChange,
+  responsavelEnabled,
+  responsavelHintDisabled,
+}: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { data: mensal, loading } = useEficienciaProtocolo(ano, area)
@@ -34,9 +47,17 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
     mesFiltro,
     area,
   )
+  const rankingFiltrado = filtrarPorResponsavel(ranking, (r) => r.usuario, responsavel)
+  const {
+    chartData: evolucaoResp,
+    acumulado: acumResp,
+    loading: loadingEvol,
+  } = useEvolucaoPorResponsavel('eficiencia_protocolo', ano, area, responsavel, mesFiltro)
 
-  const semInconsistencia = mensalFiltrado.reduce((s, m) => s + m.sem_inconsistencia, 0)
-  const total = mensalFiltrado.reduce((s, m) => s + m.total, 0)
+  const semInconsistenciaArea = mensalFiltrado.reduce((s, m) => s + m.sem_inconsistencia, 0)
+  const totalArea = mensalFiltrado.reduce((s, m) => s + m.total, 0)
+  const semInconsistencia = responsavel ? acumResp.ok : semInconsistenciaArea
+  const total = responsavel ? acumResp.total : totalArea
   const inconsistentes = Math.max(0, total - semInconsistencia)
   const pctGeral = total > 0 ? (semInconsistencia / total) * 100 : 0
 
@@ -44,6 +65,11 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
   const totalGav = mensalGestaoVista.reduce((s, m) => s + m.total, 0)
   const pctGestaoVista = totalGav > 0 ? (semInconsistenciaGav / totalGav) * 100 : null
   const areaHint = area ? `Área ${area}` : undefined
+  const loadingPeriodo = loading || Boolean(responsavel && loadingEvol)
+
+  const chartData = responsavel
+    ? evolucaoResp
+    : mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia }))
 
   const resultadoRacional: HeatCell = {
     value: pctGeral,
@@ -52,13 +78,17 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
-      <AreaFilterButtons
-        value={area}
-        onChange={setArea}
-        allowedAreas={allowedAreas}
-        allowTodas={allowTodas}
+      <EficienciaDetailFilters
         ano={ano}
         mesFiltro={mesFiltro}
+        area={area}
+        onAreaChange={setArea}
+        allowedAreas={allowedAreas}
+        allowTodas={allowTodas}
+        responsavel={responsavel}
+        onResponsavelChange={onResponsavelChange ?? (() => undefined)}
+        responsavelEnabled={responsavelEnabled}
+        responsavelHintDisabled={responsavelHintDisabled}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -76,7 +106,7 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
           hint="Protocolos sem inconsistência ÷ total · meses filtrados"
           icon={ClipboardCheck}
           accentClass="bg-emerald-100 text-emerald-700"
-          loading={loading}
+          loading={loadingPeriodo}
         />
         <EficienciaKpiCard
           title="Protocolos no período selecionado"
@@ -88,14 +118,18 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
           }
           icon={ClipboardCheck}
           accentClass="bg-slate-100 text-slate-700"
-          loading={loading}
+          loading={loadingPeriodo}
         />
       </div>
 
       <EficienciaEvolucaoChart
         title="Eficiência de Protocolo"
-        subtitle="% de protocolos sem inconsistência jurídica"
-        data={mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia }))}
+        subtitle={
+          responsavel
+            ? `% sem inconsistência · ${responsavel}`
+            : '% de protocolos sem inconsistência jurídica'
+        }
+        data={chartData}
         color="#059669"
         metaFixa={EFICIENCIA_META_EFICIENCIA_PROTOCOLO}
         onRacionalClick={() => setRacionalAberto(true)}
@@ -105,7 +139,7 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
         <EficienciaRankingChart
           title="% Desvio Responsáveis"
           subtitle={areaHint}
-          rows={ranking}
+          rows={rankingFiltrado}
           valueKey="pct_do_total"
           valueLabel="% do total"
           formatValue={(v) => formatPercent(v)}
@@ -123,7 +157,7 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
         <EficienciaRankingChart
           title="Qtd Desvio Responsáveis"
           subtitle={areaHint}
-          rows={ranking}
+          rows={rankingFiltrado}
           valueKey="qtd_inconsistencia"
           valueLabel="Inconsistências"
           pctKey={null}
@@ -145,6 +179,7 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
         ano={ano}
         mes={mesFiltro}
         area={area}
+        responsavel={responsavel}
         resultado={resultadoRacional}
         metaAcumulado={95}
         onClose={() => setRacionalAberto(false)}

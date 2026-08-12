@@ -226,7 +226,11 @@ export function EficienciaEvolucaoChart({
         )}
         <div data-chart-plot className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%" minHeight={300}>
-            <LineChart data={chartData} margin={{ left: 4, right: 20, top: 28, bottom: 8 }}>
+            <LineChart
+              key={chartData.map((d) => `${d.mesLabel}:${d.valor}`).join('|')}
+              data={chartData}
+              margin={{ left: 4, right: 20, top: 28, bottom: 8 }}
+            >
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
               <XAxis dataKey="mesLabel" tick={AXIS_TICK_X} axisLine={false} tickLine={false} />
               <YAxis

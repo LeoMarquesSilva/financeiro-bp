@@ -13,14 +13,26 @@ import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
 import { buildOverviewReceitaBruta } from '../utils/overviewFinanceiroKpis'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 
 type Props = {
   ano: number
   mesFiltro: MesFiltroEficiencia
+  responsavel?: string | null
+  onResponsavelChange?: (nome: string | null) => void
+  responsavelEnabled?: boolean
+  responsavelHintDisabled?: string
 }
 
-export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
+export function ReceitaBrutaTab({
+  ano,
+  mesFiltro,
+  responsavel,
+  onResponsavelChange,
+  responsavelEnabled,
+  responsavelHintDisabled,
+}: Props) {
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { data, isLoading } = useOverviewFinanceiroKpis(ano)
   const overview = data
@@ -46,6 +58,15 @@ export function ReceitaBrutaTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
+      <EficienciaDetailFilters
+        ano={ano}
+        showArea={false}
+        responsavel={responsavel ?? null}
+        onResponsavelChange={onResponsavelChange ?? (() => undefined)}
+        responsavelEnabled={responsavelEnabled ?? false}
+        responsavelHintDisabled={responsavelHintDisabled}
+      />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="Receita Bruta Gestão a Vista"

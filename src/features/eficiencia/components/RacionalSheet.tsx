@@ -32,6 +32,8 @@ type Props = {
   area: string | null
   /** Recorte da base (ex.: só FATAL não-excludente dos gráficos de ranking). */
   escopo?: RacionalEscopo
+  /** Gestão individual — filtra pela coluna de responsável do indicador. */
+  responsavel?: string | null
   /** Valor exibido na coluna Acum. da Overview (mesmos filtros). */
   resultado?: HeatCell | null
   /** Meta usada na coluna Acum. da Overview (mesmos filtros). */
@@ -47,6 +49,7 @@ export function RacionalSheet({
   mes = null,
   area,
   escopo = 'default',
+  responsavel = null,
   resultado = null,
   metaAcumulado = null,
   metaLabel,
@@ -56,9 +59,11 @@ export function RacionalSheet({
   const fatalEscopo = escopo === 'sla_protocolo_fatal'
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['eficiencia', 'racional', indicador, ano, mes, area, escopo],
+    queryKey: ['eficiencia', 'racional', indicador, ano, mes, area, escopo, responsavel],
     queryFn: () =>
-      eficienciaService.fetchRacional(indicador as RacionalIndicador, ano, area, mes, escopo),
+      eficienciaService.fetchRacional(indicador as RacionalIndicador, ano, area, mes, escopo, {
+        responsavel,
+      }),
     enabled: indicador != null,
   })
   const colunas: RacionalColuna[] = data?.colunas ?? []
@@ -68,6 +73,7 @@ export function RacionalSheet({
   const resumoLabel = resumo != null ? formatRacionalResumoLabel(resumo) : null
   const periodoLabel = formatRacionalPeriodoLabel(ano, mes)
   const areaLabel = area ?? 'todas as áreas'
+  const responsavelLabel = responsavel?.trim() || null
   const metaTexto =
     !fatalEscopo && metaAcumulado != null
       ? resolveMetaTexto(metaAcumulado, metaLabel)
@@ -97,6 +103,7 @@ export function RacionalSheet({
         area,
         mes,
         escopo,
+        responsavel,
       )
       await exportRacionalExcel(exportData.colunas, exportData.linhas, exportData.resumo, exportMeta)
     } finally {
@@ -121,6 +128,7 @@ export function RacionalSheet({
                     : indicador === 'sla_protocolo'
                       ? `Base do KPI + Excludentes (fora da %) · ${periodoLabel} · ${areaLabel}`
                       : `Mesma base do KPI · ${periodoLabel} · ${areaLabel}`}
+                  {responsavelLabel ? ` · ${responsavelLabel}` : ''}
                 </span>
                 {!fatalEscopo && (metaTexto != null || resultado != null) && (
                   <span className="flex flex-wrap items-center gap-2 pt-0.5">

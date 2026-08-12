@@ -9,8 +9,9 @@ import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
+import { filtrarPorResponsavel } from '../utils/responsavelMatch'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
-import { AreaFilterButtons } from './AreaFilterButtons'
+import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 import { RacionalSheet } from './RacionalSheet'
 import type { HeatCell } from './OverviewKpiHeatRow'
@@ -27,9 +28,20 @@ type Props = {
   ano: number
   /** Indicador anual: Resultado = ano todo (mesma regra do Overview). */
   mesFiltro: MesFiltroEficiencia
+  responsavel?: string | null
+  onResponsavelChange?: (nome: string | null) => void
+  responsavelEnabled?: boolean
+  responsavelHintDisabled?: string
 }
 
-export function TurnoverTab({ ano, mesFiltro }: Props) {
+export function TurnoverTab({
+  ano,
+  mesFiltro,
+  responsavel = null,
+  onResponsavelChange,
+  responsavelEnabled,
+  responsavelHintDisabled,
+}: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { anual, desligamentos, top5, loading } = useTurnover(ano, area)
@@ -37,8 +49,16 @@ export function TurnoverTab({ ano, mesFiltro }: Props) {
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const mesRacional: MesFiltroEficiencia =
     mesFiltro === 'resultado' ? null : mesFiltro
-  const desligamentosFiltrados = area ? desligamentos.filter((d) => d.area === area) : desligamentos
-  const top5Filtrado = area ? top5.filter((p) => p.area === area) : top5
+  const desligamentosFiltrados = filtrarPorResponsavel(
+    area ? desligamentos.filter((d) => d.area === area) : desligamentos,
+    (d) => d.nome,
+    responsavel,
+  )
+  const top5Filtrado = filtrarPorResponsavel(
+    area ? top5.filter((p) => p.area === area) : top5,
+    (p) => p.nome,
+    responsavel,
+  )
 
   const resultadoRacional: HeatCell | null = anual
     ? { value: anual.pct_retencao, label: formatPercent(anual.pct_retencao) }
@@ -46,15 +66,19 @@ export function TurnoverTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <AreaFilterButtons
-            value={area}
-            onChange={setArea}
-            allowedAreas={allowedAreas}
-            allowTodas={allowTodas}
+          <EficienciaDetailFilters
             ano={ano}
             mesFiltro={mesFiltro}
+            area={area}
+            onAreaChange={setArea}
+            allowedAreas={allowedAreas}
+            allowTodas={allowTodas}
+            responsavel={responsavel}
+            onResponsavelChange={onResponsavelChange ?? (() => undefined)}
+            responsavelEnabled={responsavelEnabled}
+            responsavelHintDisabled={responsavelHintDisabled}
           />
         </div>
         <OverviewRacionalButton onClick={() => setRacionalAberto(true)} className="w-auto" />
@@ -179,6 +203,7 @@ export function TurnoverTab({ ano, mesFiltro }: Props) {
         ano={ano}
         mes={mesRacional}
         area={area}
+        responsavel={responsavel}
         resultado={resultadoRacional}
         metaAcumulado={anual?.meta_pct_retencao_minima ?? 90}
         onClose={() => setRacionalAberto(false)}

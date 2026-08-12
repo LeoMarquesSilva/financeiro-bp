@@ -13,14 +13,16 @@ import {
   useSlaProtocoloJustificativaFatal,
   useSlaProtocoloRankingFatal,
 } from '../hooks/useEficiencia'
+import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
-import { AreaFilterButtons } from './AreaFilterButtons'
+import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 import type { HeatCell } from './OverviewKpiHeatRow'
 import type { RacionalEscopo } from '../types/eficiencia.types'
+import { filtrarPorResponsavel } from '../utils/responsavelMatch'
 
 /** Cor das barras no visual BI (cinza). */
 const BI_BAR = '#94a3b8'
@@ -28,9 +30,20 @@ const BI_BAR = '#94a3b8'
 type Props = {
   ano: number
   mesFiltro: MesFiltroEficiencia
+  responsavel?: string | null
+  onResponsavelChange?: (nome: string | null) => void
+  responsavelEnabled?: boolean
+  responsavelHintDisabled?: string
 }
 
-export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
+export function SlaProtocoloTab({
+  ano,
+  mesFiltro,
+  responsavel = null,
+  onResponsavelChange,
+  responsavelEnabled = true,
+  responsavelHintDisabled,
+}: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalEscopo, setRacionalEscopo] = useState<RacionalEscopo>('default')
   const [racionalAberto, setRacionalAberto] = useState(false)
@@ -46,11 +59,23 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
   const { data: justificativas, loading: loadingJustificativas } =
     useSlaProtocoloJustificativaFatal(ano, mesFiltro, area)
 
+  const rankingFiltrado = filtrarPorResponsavel(ranking, (r) => r.usuario, responsavel)
+
+  const {
+    chartData: evolucaoResp,
+    acumulado: acumResp,
+    loading: loadingEvol,
+  } = useEvolucaoPorResponsavel('sla_protocolo', ano, area, responsavel, mesFiltro)
+
   const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
-  const qtdD1 = mensalFiltrado.reduce((s, m) => s + m.qtd_d1, 0)
-  const qtdTotal = mensalFiltrado.reduce((s, m) => s + m.qtd_total, 0)
-  const qtdFatal = mensalFiltrado.reduce((s, m) => s + m.qtd_fatal, 0)
+  const qtdD1Area = mensalFiltrado.reduce((s, m) => s + m.qtd_d1, 0)
+  const qtdTotalArea = mensalFiltrado.reduce((s, m) => s + m.qtd_total, 0)
+  const qtdFatalArea = mensalFiltrado.reduce((s, m) => s + m.qtd_fatal, 0)
   const qtdExcludente = mensalFiltrado.reduce((s, m) => s + (m.qtd_excludente ?? 0), 0)
+
+  const qtdD1 = responsavel ? acumResp.ok : qtdD1Area
+  const qtdTotal = responsavel ? acumResp.total : qtdTotalArea
+  const qtdFatal = responsavel ? Math.max(0, acumResp.total - acumResp.ok) : qtdFatalArea
   const pctGeral = qtdTotal > 0 ? (qtdD1 / qtdTotal) * 100 : 0
   const metaAtual = mensalFiltrado.length
     ? mensalFiltrado[mensalFiltrado.length - 1]!.meta
@@ -64,6 +89,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
     : null
 
   const areaHint = area ? `Área ${area}` : undefined
+  const loadingPeriodo = loading || Boolean(responsavel && loadingEvol)
 
   function openRacional(escopo: RacionalEscopo = 'default') {
     setRacionalEscopo(escopo)
@@ -77,15 +103,27 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
 
   const metaRacional = metaAtual ?? EFICIENCIA_META_SLA_PROTOCOLO
 
+  const chartData = responsavel
+    ? evolucaoResp.map((p) => ({
+        mes: p.mes,
+        valor: p.valor,
+        meta: mensal.find((m) => m.mes === p.mes)?.meta ?? metaRacional,
+      }))
+    : mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia, meta: m.meta }))
+
   return (
     <div className="space-y-5">
-      <AreaFilterButtons
-        value={area}
-        onChange={setArea}
-        allowedAreas={allowedAreas}
-        allowTodas={allowTodas}
+      <EficienciaDetailFilters
         ano={ano}
         mesFiltro={mesFiltro}
+        area={area}
+        onAreaChange={setArea}
+        allowedAreas={allowedAreas}
+        allowTodas={allowTodas}
+        responsavel={responsavel}
+        onResponsavelChange={onResponsavelChange ?? (() => undefined)}
+        responsavelEnabled={responsavelEnabled}
+        responsavelHintDisabled={responsavelHintDisabled}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -111,22 +149,30 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
           atingiuMeta={metaAtual != null ? pctGeral >= metaAtual : null}
           icon={FileCheck2}
           accentClass="bg-violet-100 text-violet-700"
-          loading={loading}
+          loading={loadingPeriodo}
         />
         <EficienciaKpiCard
           title="FATAL no período selecionado"
           value={String(qtdFatal)}
-          hint={`${qtdExcludente} excludente${qtdExcludente === 1 ? '' : 's'}`}
+          hint={
+            responsavel
+              ? 'FATAL do responsável no período'
+              : `${qtdExcludente} excludente${qtdExcludente === 1 ? '' : 's'}`
+          }
           icon={FileCheck2}
           accentClass="bg-rose-100 text-rose-700"
-          loading={loading}
+          loading={loadingPeriodo}
         />
       </div>
 
       <EficienciaEvolucaoChart
         title="SLA de Protocolo (D-1 vs FATAL)"
-        subtitle="% de CIs concluídos dentro do prazo D-1, com meta vigente no período"
-        data={mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia, meta: m.meta }))}
+        subtitle={
+          responsavel
+            ? `% D-1 do responsável · ${responsavel}`
+            : '% de CIs concluídos dentro do prazo D-1, com meta vigente no período'
+        }
+        data={chartData}
         color="#7c3aed"
         metaFixa={metaRacional}
         onRacionalClick={() => openRacional('default')}
@@ -156,7 +202,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
         <EficienciaRankingChart
           title="% Desvio Responsáveis"
           subtitle={areaHint}
-          rows={ranking}
+          rows={rankingFiltrado}
           valueKey="pct_do_total"
           valueLabel="% do total"
           formatValue={(v) => formatPercent(v)}
@@ -174,7 +220,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
         <EficienciaRankingChart
           title="Qtd Desvio Responsáveis"
           subtitle={areaHint}
-          rows={ranking}
+          rows={rankingFiltrado}
           valueKey="qtd_fatal"
           valueLabel="Desvio"
           pctKey={null}
@@ -201,6 +247,7 @@ export function SlaProtocoloTab({ ano, mesFiltro }: Props) {
         mes={mesFiltro}
         area={area}
         escopo={racionalEscopo}
+        responsavel={responsavel}
         resultado={racionalEscopo === 'default' ? resultadoRacional : null}
         metaAcumulado={racionalEscopo === 'default' ? metaRacional : null}
         onClose={() => setRacionalAberto(false)}

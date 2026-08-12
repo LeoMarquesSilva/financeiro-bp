@@ -66,6 +66,7 @@ import {
 } from '../utils/amostraChamados'
 import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
 import { agregarGestaoPdiMensal, avaliarGestaoPdi } from '../utils/gestaoPdiCalc'
+import { nomesResponsavelMatch, RACIONAL_COLUNA_RESPONSAVEL } from '../utils/responsavelMatch'
 
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.rpc(name as never, args as never)
@@ -75,6 +76,7 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
 
 import {
   buildRacionalBaseQuery,
+  buildRacionalSelect,
   fetchDesenvolvimentoRacional,
   fetchEficienciaProtocoloRacionalResumo,
   fetchOpsLegaisCadastroRacionalResumo,
@@ -101,12 +103,13 @@ async function fetchRacionalResumo(
   area: string | null,
   mes: MesFiltroEficiencia,
   escopo: RacionalEscopo = 'default',
+  responsavel: string | null = null,
 ): Promise<RacionalResultado['resumo']> {
   if (indicador === 'sla_protocolo') {
-    return fetchSlaProtocoloRacionalResumo(cfg, ano, area, mes, escopo)
+    return fetchSlaProtocoloRacionalResumo(cfg, ano, area, mes, escopo, responsavel)
   }
   if (indicador === 'eficiencia_protocolo') {
-    return fetchEficienciaProtocoloRacionalResumo(cfg, ano, area, mes)
+    return fetchEficienciaProtocoloRacionalResumo(cfg, ano, area, mes, responsavel)
   }
   if (indicador === 'ops_legais_sla_protocolo') {
     return fetchOpsLegaisSlaProtocoloRacionalResumo(cfg, ano, area, mes)
@@ -121,7 +124,14 @@ async function fetchRacionalResumo(
     return fetchOpsLegaisCadastroRacionalResumo(cfg, ano, area, mes)
   }
   if (indicador === 'sla_vistagem_risco' || indicador === 'sla_vistagem_normal') {
-    return fetchSlaVistagemRacionalResumo(cfg, indicador, ano, areaFiltroParaIndicador(indicador, area), mes)
+    return fetchSlaVistagemRacionalResumo(
+      cfg,
+      indicador,
+      ano,
+      areaFiltroParaIndicador(indicador, area),
+      mes,
+      responsavel,
+    )
   }
   return undefined
 }
@@ -173,6 +183,8 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'criado_por', label: 'Criado por' },
       { key: 'cliente', label: 'Cliente' },
       { key: 'tipo_protocolo', label: 'Tipo de Protocolo' },
+      // data_criada = base do KPI/RPC mensal (obrigatória também p/ série por responsável)
+      { key: 'data_criada', label: 'Data criada' },
       { key: 'protocolado_em', label: 'Protocolado em' },
       { key: 'status_inconsistencia', label: 'Status' },
       { key: 'inconsistencia_juridico_motivo', label: 'Motivo Inconsistência' },
@@ -981,9 +993,13 @@ export const eficienciaService = {
     ano: number,
     area: string | null = null,
     mes: MesFiltroEficiencia = null,
+    responsavel: string | null = null,
   ): Promise<RacionalResultado> {
     const cfg = RACIONAL_CONFIG.gestao_pdi
-    const detalhe = await this.fetchGestaoPdiDetalhe(ano, mes, area)
+    let detalhe = await this.fetchGestaoPdiDetalhe(ano, mes, area)
+    if (responsavel?.trim()) {
+      detalhe = detalhe.filter((d) => nomesResponsavelMatch(d.colaborador, responsavel))
+    }
     const linhas: Array<Record<string, unknown>> = detalhe.map((d) => ({
       mes: d.mes,
       colaborador: d.colaborador,
@@ -1180,10 +1196,11 @@ export const eficienciaService = {
     area: string | null = null,
     mes: MesFiltroEficiencia = null,
     escopo: RacionalEscopo = 'default',
+    responsavel: string | null = null,
   ): Promise<RacionalResultado['resumo']> {
     const cfg = RACIONAL_CONFIG[indicador]
     const areaEfetiva = areaFiltroParaIndicador(indicador, area)
-    return fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo)
+    return fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo, responsavel)
   },
 
   /** Linhas brutas que compõem o cálculo de um indicador (drill-down "Racional"). */
@@ -1193,8 +1210,9 @@ export const eficienciaService = {
     area: string | null = null,
     mes: MesFiltroEficiencia = null,
     escopo: RacionalEscopo = 'default',
-    opts?: { somenteDesvios?: boolean },
+    opts?: { somenteDesvios?: boolean; responsavel?: string | null },
   ): Promise<RacionalResultado> {
+    const responsavel = opts?.responsavel ?? null
     if (
       indicador === 'sla_vistagem_normal' &&
       area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
@@ -1217,11 +1235,11 @@ export const eficienciaService = {
     const cfg = RACIONAL_CONFIG[indicador]
 
     if (indicador === 'desenvolvimento_equipe') {
-      return fetchDesenvolvimentoRacional(cfg, ano, area, mes)
+      return fetchDesenvolvimentoRacional(cfg, ano, area, mes, responsavel)
     }
 
     if (indicador === 'gestao_pdi') {
-      return this.fetchGestaoPdiRacional(ano, area, mes)
+      return this.fetchGestaoPdiRacional(ano, area, mes, responsavel)
     }
 
     if (indicador === 'receita_bruta' || indicador === 'indice_inadimplencia') {
@@ -1244,8 +1262,9 @@ export const eficienciaService = {
       ano,
       areaEfetiva,
       mes,
-      cfg.colunas.map((c) => c.key).join(','),
+      buildRacionalSelect(cfg),
       escopo,
+      responsavel,
     )
 
     if (opts?.somenteDesvios) {
@@ -1264,11 +1283,15 @@ export const eficienciaService = {
 
     const { data, error } = await query.limit(RACIONAL_LIMITE + 1)
     if (error) throw error
-    const linhas = (data ?? []) as unknown as Array<Record<string, unknown>>
+    let linhas = (data ?? []) as unknown as Array<Record<string, unknown>>
+
+    if (indicador === 'retencao_talentos' && responsavel?.trim()) {
+      linhas = linhas.filter((row) => nomesResponsavelMatch(String(row.nome ?? ''), responsavel))
+    }
 
     const resumo = opts?.somenteDesvios
       ? undefined
-      : await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo)
+      : await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo, responsavel)
 
     return {
       colunas: cfg.colunas,
@@ -1285,6 +1308,7 @@ export const eficienciaService = {
     area: string | null = null,
     mes: MesFiltroEficiencia = null,
     escopo: RacionalEscopo = 'default',
+    responsavel: string | null = null,
   ): Promise<RacionalResultado> {
     if (
       indicador === 'sla_vistagem_normal' &&
@@ -1309,11 +1333,11 @@ export const eficienciaService = {
     const cfg = RACIONAL_CONFIG[indicador]
 
     if (indicador === 'desenvolvimento_equipe') {
-      return fetchDesenvolvimentoRacional(cfg, ano, area, mes)
+      return fetchDesenvolvimentoRacional(cfg, ano, area, mes, responsavel)
     }
 
     if (indicador === 'gestao_pdi') {
-      return this.fetchGestaoPdiRacional(ano, area, mes)
+      return this.fetchGestaoPdiRacional(ano, area, mes, responsavel)
     }
 
     if (indicador === 'receita_bruta' || indicador === 'indice_inadimplencia') {
@@ -1330,18 +1354,35 @@ export const eficienciaService = {
 
     const areaEfetiva = areaFiltroParaIndicador(indicador, area)
 
-    const select = cfg.colunas.map((c) => c.key).join(',')
-    const linhas = await fetchRacionalLinhasCompletas(
+    let linhas = await fetchRacionalLinhasCompletas(
       cfg,
       indicador,
       ano,
       areaEfetiva,
       mes,
-      select,
+      buildRacionalSelect(cfg),
       escopo,
+      responsavel,
     )
 
-    const resumo = await fetchRacionalResumo(indicador, cfg, ano, areaEfetiva, mes, escopo)
+    if (responsavel?.trim()) {
+      const col = RACIONAL_COLUNA_RESPONSAVEL[indicador]
+      if (col) {
+        linhas = linhas.filter((row) =>
+          nomesResponsavelMatch(String(row[col] ?? ''), responsavel),
+        )
+      }
+    }
+
+    const resumo = await fetchRacionalResumo(
+      indicador,
+      cfg,
+      ano,
+      areaEfetiva,
+      mes,
+      escopo,
+      responsavel,
+    )
 
     return {
       colunas: cfg.colunas,

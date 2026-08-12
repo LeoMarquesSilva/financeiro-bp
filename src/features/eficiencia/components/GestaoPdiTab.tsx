@@ -13,17 +13,20 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { useGestaoPdi } from '../hooks/useEficiencia'
+import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { acumuladoGestaoPdi } from '../utils/gestaoPdiCalc'
 import { exportGestaoPdiDesviosExcel } from '../utils/gestaoPdiExport'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
+import { filtrarPorResponsavel } from '../utils/responsavelMatch'
 import { toPriMaiuscula } from '../utils/textFormat'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
-import { AreaFilterButtons } from './AreaFilterButtons'
+import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
+import type { HeatCell } from './OverviewKpiHeatRow'
 
 type Props = {
   ano: number
@@ -33,9 +36,21 @@ type Props = {
    * reaproveita a mesma base do módulo jurídico.
    */
   areaFixa?: string
+  responsavel?: string | null
+  onResponsavelChange?: (nome: string | null) => void
+  responsavelEnabled?: boolean
+  responsavelHintDisabled?: string
 }
 
-export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
+export function GestaoPdiTab({
+  ano,
+  mesFiltro,
+  areaFixa,
+  responsavel = null,
+  onResponsavelChange,
+  responsavelEnabled,
+  responsavelHintDisabled,
+}: Props) {
   const { area: areaSlicer, setArea, allowedAreas, allowTodas } =
     useEficienciaAreaFilter()
   const area = areaFixa ?? areaSlicer
@@ -45,6 +60,12 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
+  const detalheFiltrado = filtrarPorResponsavel(detalhe, (d) => d.colaborador, responsavel)
+  const {
+    chartData: evolucaoResp,
+    acumulado: acumResp,
+    loading: loadingEvol,
+  } = useEvolucaoPorResponsavel('gestao_pdi', ano, area, responsavel, mesFiltro)
   const acumulado = acumuladoGestaoPdi(mensal, mesFiltro, ano)
   const acumuladoGestaoVista = acumuladoGestaoPdi(
     mensal,
@@ -52,9 +73,24 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
     ano,
   )
 
-  const aptas = mensalFiltrado.reduce((s, m) => s + m.aptas, 0)
-  const desvios = mensalFiltrado.reduce((s, m) => s + m.desvios, 0)
-  const desviosLista = detalhe.filter((d) => !d.apta)
+  const aptas = responsavel
+    ? acumResp.ok
+    : mensalFiltrado.reduce((s, m) => s + m.aptas, 0)
+  const desvios = responsavel
+    ? Math.max(0, acumResp.total - acumResp.ok)
+    : mensalFiltrado.reduce((s, m) => s + m.desvios, 0)
+  const desviosLista = detalheFiltrado.filter((d) => !d.apta)
+  const pctPeriodo = responsavel
+    ? acumResp.pct
+    : acumulado.value
+  const resultadoRacional: HeatCell | null =
+    pctPeriodo != null ? { value: pctPeriodo, label: formatPercent(pctPeriodo) } : null
+  const chartData = responsavel
+    ? evolucaoResp.map((p) => ({ ...p, meta: EFICIENCIA_META_PDI }))
+    : mensalFiltrado
+        .filter((m) => m.pct_aptas != null)
+        .map((m) => ({ mes: m.mes, valor: m.pct_aptas!, meta: EFICIENCIA_META_PDI }))
+  const loadingPeriodo = loading || Boolean(responsavel && loadingEvol)
 
   const handleExportarExcel = async () => {
     if (desviosLista.length === 0) return
@@ -76,16 +112,19 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
 
   return (
     <div className="space-y-5">
-      {areaFixa == null ? (
-        <AreaFilterButtons
-          value={areaSlicer}
-          onChange={setArea}
-          allowedAreas={allowedAreas}
-          allowTodas={allowTodas}
-          ano={ano}
-          mesFiltro={mesFiltro}
-        />
-      ) : null}
+      <EficienciaDetailFilters
+        ano={ano}
+        mesFiltro={mesFiltro}
+        area={areaSlicer}
+        onAreaChange={setArea}
+        allowedAreas={allowedAreas}
+        allowTodas={allowTodas}
+        showArea={areaFixa == null}
+        responsavel={responsavel}
+        onResponsavelChange={onResponsavelChange ?? (() => undefined)}
+        responsavelEnabled={responsavelEnabled}
+        responsavelHintDisabled={responsavelHintDisabled}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <EficienciaKpiCard
@@ -102,13 +141,13 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
         />
         <EficienciaKpiCard
           title="Gestão de PDI no período selecionado"
-          value={acumulado.value != null ? formatPercent(acumulado.value) : '—'}
+          value={pctPeriodo != null ? formatPercent(pctPeriodo) : '—'}
           hint="Aptas ÷ elegíveis (prog.+evid.+1:1) · meses filtrados"
           meta="Meta 100%"
-          atingiuMeta={acumulado.value != null ? acumulado.value >= 100 : null}
+          atingiuMeta={pctPeriodo != null ? pctPeriodo >= 100 : null}
           icon={Target}
           accentClass="bg-emerald-100 text-emerald-700"
-          loading={loading}
+          loading={loadingPeriodo}
         />
         <EficienciaKpiCard
           title="Aptas"
@@ -116,7 +155,7 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
           hint="Progresso alterou + evidência Sim + 1:1 ≥ 1"
           icon={Target}
           accentClass="bg-slate-100 text-slate-700"
-          loading={loading}
+          loading={loadingPeriodo}
         />
         <EficienciaKpiCard
           title="Desvios"
@@ -124,16 +163,18 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
           hint="Faltou ao menos 1 dos 3 requisitos"
           icon={Target}
           accentClass="bg-rose-100 text-rose-700"
-          loading={loading}
+          loading={loadingPeriodo}
         />
       </div>
 
       <EficienciaEvolucaoChart
         title="Gestão de PDI"
-        subtitle="Junho = 100% (baseline). Julho+ = % aptas (3 requisitos)."
-        data={mensalFiltrado
-          .filter((m) => m.pct_aptas != null)
-          .map((m) => ({ mes: m.mes, valor: m.pct_aptas!, meta: EFICIENCIA_META_PDI }))}
+        subtitle={
+          responsavel
+            ? `% aptas · ${responsavel}`
+            : 'Junho = 100% (baseline). Julho+ = % aptas (3 requisitos).'
+        }
+        data={chartData}
         color="#059669"
         metaFixa={EFICIENCIA_META_PDI}
         onRacionalClick={() => setRacionalAberto(true)}
@@ -258,7 +299,8 @@ export function GestaoPdiTab({ ano, mesFiltro, areaFixa }: Props) {
         ano={ano}
         mes={mesFiltro}
         area={area}
-        resultado={acumulado}
+        responsavel={responsavel}
+        resultado={resultadoRacional}
         metaAcumulado={EFICIENCIA_META_PDI}
         onClose={() => setRacionalAberto(false)}
       />

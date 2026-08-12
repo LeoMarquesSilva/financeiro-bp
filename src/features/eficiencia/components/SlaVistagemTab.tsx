@@ -10,12 +10,17 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { stripJsonArrayDecorators, toPriMaiuscula } from '../utils/textFormat'
-import { useSlaVistagem, useSlaVistagemDesvioRankings } from '../hooks/useEficiencia'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
+import {
+  useSlaVistagem,
+  useSlaVistagemDesvioRankings,
+} from '../hooks/useEficiencia'
+import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
+import { filtrarPorResponsavel } from '../utils/responsavelMatch'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
-import { AreaFilterButtons } from './AreaFilterButtons'
+import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 import type { HeatCell } from './OverviewKpiHeatRow'
 import type { RacionalIndicador } from '../types/eficiencia.types'
@@ -26,9 +31,21 @@ type Props = {
   ano: number
   risco: boolean
   mesFiltro: MesFiltroEficiencia
+  responsavel?: string | null
+  onResponsavelChange?: (nome: string | null) => void
+  responsavelEnabled?: boolean
+  responsavelHintDisabled?: string
 }
 
-export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
+export function SlaVistagemTab({
+  ano,
+  risco,
+  mesFiltro,
+  responsavel = null,
+  onResponsavelChange,
+  responsavelEnabled,
+  responsavelHintDisabled,
+}: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { data: mensal, loading } = useSlaVistagem(ano, risco, area)
@@ -39,6 +56,14 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
     risco,
     area,
   )
+  const porUsuarioFiltrado = filtrarPorResponsavel(porUsuario, (r) => r.usuario, responsavel)
+
+  const indicador: RacionalIndicador = risco ? 'sla_vistagem_risco' : 'sla_vistagem_normal'
+  const {
+    chartData: evolucaoResp,
+    acumulado: acumResp,
+    loading: loadingEvol,
+  } = useEvolucaoPorResponsavel(indicador, ano, area, responsavel, mesFiltro)
 
   const indisponivelOps = isAgendamentoVistagemIndisponivelPorArea(area)
   const indisponivelNormal =
@@ -46,8 +71,16 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
   const indisponivel = indisponivelOps || indisponivelNormal
 
   const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
-  const totalPublicacoes = indisponivel ? 0 : mensalFiltrado.reduce((s, m) => s + m.total, 0)
-  const totalVistadoD1 = indisponivel ? 0 : mensalFiltrado.reduce((s, m) => s + m.vistado_d1, 0)
+  const totalPublicacoes = indisponivel
+    ? 0
+    : responsavel
+      ? acumResp.total
+      : mensalFiltrado.reduce((s, m) => s + m.total, 0)
+  const totalVistadoD1 = indisponivel
+    ? 0
+    : responsavel
+      ? acumResp.ok
+      : mensalFiltrado.reduce((s, m) => s + m.vistado_d1, 0)
   const pctGeral =
     !indisponivel && totalPublicacoes > 0 ? (totalVistadoD1 / totalPublicacoes) * 100 : null
 
@@ -63,7 +96,6 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
       : null
   const areaHint = area ? `Área ${area}` : undefined
 
-  const indicador: RacionalIndicador = risco ? 'sla_vistagem_risco' : 'sla_vistagem_normal'
   const resultadoRacional: HeatCell | null =
     pctGeral != null ? { value: pctGeral, label: formatPercent(pctGeral) } : null
 
@@ -73,15 +105,24 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
       ? 'Trabalhista não possui SLA Vistagem Normal'
       : 'Sem desvios no período.'
 
+  const loadingKpi = loading || Boolean(responsavel && loadingEvol)
+  const chartData = responsavel
+    ? evolucaoResp
+    : mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_d1 }))
+
   return (
     <div className="space-y-5">
-      <AreaFilterButtons
-        value={area}
-        onChange={setArea}
-        allowedAreas={allowedAreas}
-        allowTodas={allowTodas}
+      <EficienciaDetailFilters
         ano={ano}
         mesFiltro={mesFiltro}
+        area={area}
+        onAreaChange={setArea}
+        allowedAreas={allowedAreas}
+        allowTodas={allowTodas}
+        responsavel={responsavel}
+        onResponsavelChange={onResponsavelChange ?? (() => undefined)}
+        responsavelEnabled={responsavelEnabled}
+        responsavelHintDisabled={responsavelHintDisabled}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -109,21 +150,25 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
           }
           icon={ShieldCheck}
           accentClass="bg-sky-100 text-sky-700"
-          loading={loading}
+          loading={loadingKpi}
         />
         <EficienciaKpiCard
           title="Publicações no período selecionado"
           value={String(totalPublicacoes)}
           icon={ShieldCheck}
           accentClass="bg-slate-100 text-slate-700"
-          loading={loading}
+          loading={loadingKpi}
         />
       </div>
 
       <EficienciaEvolucaoChart
         title={`SLA de Vistagem D+1 — ${risco ? 'Demanda de Risco' : 'Demanda Comum'}`}
-        subtitle="% de publicações vistadas até o próximo dia útil + 12h"
-        data={mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_d1 }))}
+        subtitle={
+          responsavel
+            ? `% D+1 · ${responsavel}`
+            : '% de publicações vistadas até o próximo dia útil + 12h'
+        }
+        data={chartData}
         color={risco ? '#dc2626' : '#0ea5e9'}
         metaFixa={EFICIENCIA_META_VISTAGEM}
         onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
@@ -133,7 +178,7 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
         <EficienciaRankingChart
           title="% Desvio Responsável"
           subtitle={areaHint}
-          rows={porUsuario}
+          rows={porUsuarioFiltrado}
           labelKey="usuario"
           valueKey="pct_do_total"
           valueLabel="% do total"
@@ -199,6 +244,7 @@ export function SlaVistagemTab({ ano, risco, mesFiltro }: Props) {
         ano={ano}
         mes={mesFiltro}
         area={area}
+        responsavel={responsavel}
         resultado={resultadoRacional}
         metaAcumulado={98}
         onClose={() => setRacionalAberto(false)}
