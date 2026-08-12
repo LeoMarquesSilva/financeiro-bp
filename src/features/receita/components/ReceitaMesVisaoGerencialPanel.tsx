@@ -151,20 +151,19 @@ export function ReceitaMesVisaoGerencialPanel({
                       <p className="mt-0.5 pl-5 text-[10px] leading-snug text-slate-500">
                         {linha.hint}
                       </p>
-                      <div className="mt-2 flex items-center gap-2 pl-5">
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/80">
-                          <div
-                            className={cn('h-full rounded-full', linha.barClassName)}
-                            style={{ width: `${Math.max(Math.min(pct, 100), 2)}%` }}
-                          />
-                        </div>
-                        <span className="w-12 text-right text-[10px] font-medium tabular-nums text-slate-500">
-                          {formatPercent(pct)}
-                        </span>
-                      </div>
                     </div>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-800">
-                      <span className={linha.valorClassName}>{formatCurrency(valor)}</span>
+                    <span className="flex shrink-0 flex-col items-end gap-0.5">
+                      <span
+                        className={cn(
+                          'text-sm font-semibold tabular-nums',
+                          linha.valorClassName,
+                        )}
+                      >
+                        {formatCurrency(valor)}
+                      </span>
+                      <span className="text-[10px] font-medium tabular-nums text-slate-500">
+                        {formatPercent(pct)}
+                      </span>
                     </span>
                   </div>
                 </button>

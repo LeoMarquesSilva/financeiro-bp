@@ -12,7 +12,6 @@ import {
   ReceitaGestaoAVistaTabela,
   type GestaoVistaMesClickColuna,
 } from './ReceitaGestaoAVistaTabela'
-import { ReceitaGestaoAVistaTrendChart } from './ReceitaGestaoAVistaTrendChart'
 import { ReceitaRecebidoClassificacaoSheet } from './ReceitaRecebidoClassificacaoSheet'
 
 type Props = {
@@ -91,18 +90,14 @@ export function ReceitaGestaoAVistaSection({
               <LayoutDashboard className="h-5 w-5 shrink-0 text-slate-500" aria-hidden />
               Gestão à vista · {ano}
             </h2>
-            {expandido ? (
-              <p className="mt-1 text-sm text-slate-500">
-                Previsto = vencimento · Recebido = caixa · Inad. = snapshot congelado por mês
-              </p>
-            ) : (
+            {!expandido && (
               <p className="mt-0.5 text-xs text-slate-400">Clique para expandir</p>
             )}
           </div>
         </button>
 
         {expandido && (
-          <div className="flex flex-wrap items-center gap-2 pl-8">
+          <div className="flex w-full flex-wrap items-center justify-center gap-2">
             <button
               type="button"
               onClick={() => setAreaKey(null)}
@@ -162,14 +157,16 @@ export function ReceitaGestaoAVistaSection({
 
       {expandido && (
         <>
-          <ReceitaGestaoAVistaKpis
-            resumo={resumo}
-            areaLabel={areaSelecionada?.label}
-            loading={loading}
-          />
-
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-            <div className="xl:col-span-3">
+            <div className="xl:col-span-2">
+              <ReceitaGestaoAVistaKpis
+                resumo={resumo}
+                areaLabel={areaSelecionada?.label}
+                loading={loading}
+                layout="column"
+              />
+            </div>
+            <div className="min-w-0 xl:col-span-3">
               <ReceitaGestaoAVistaTabela
                 meses={meses}
                 totalYtd={totalYtd}
@@ -178,13 +175,10 @@ export function ReceitaGestaoAVistaSection({
               />
               <p className="mt-2 text-[11px] text-slate-500">
                 Clique em <strong className="font-medium text-slate-600">Previsto</strong> ou{' '}
-                <strong className="font-medium text-slate-600">Recebido</strong> para abrir a
-                visão do mês
+                <strong className="font-medium text-slate-600">Recebido</strong> para abrir a visão
+                do mês
                 {areaKey ? ` (${areaSelecionada?.label})` : ''}.
               </p>
-            </div>
-            <div className="xl:col-span-2">
-              <ReceitaGestaoAVistaTrendChart meses={meses} loading={loading} />
             </div>
           </div>
         </>

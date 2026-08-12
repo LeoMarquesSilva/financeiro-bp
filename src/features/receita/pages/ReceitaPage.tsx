@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { TrendingUp, Cloud, RefreshCw, Settings2 } from 'lucide-react'
+import { TrendingUp, RefreshCw, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useReceitaMetas } from '../hooks/useReceitaMetas'
@@ -72,13 +72,6 @@ export function ReceitaPage() {
             <TrendingUp className={cn('h-6 w-6 shrink-0', RECEITA_COLORS.meta.text)} aria-hidden />
             Receita
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Metas, projeções e realizados por mês (cota de honorários). Recebido é líquido (sem encargos de boleto/juros); previsto e recebido incluem todos os clientes.
-          </p>
-          <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
-            <Cloud className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Metas e cores das áreas salvas globalmente no Supabase — todos os usuários veem a mesma configuração.
-          </p>
         </div>
         <Button
           type="button"

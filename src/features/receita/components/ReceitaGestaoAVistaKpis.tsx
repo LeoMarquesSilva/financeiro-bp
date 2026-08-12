@@ -8,6 +8,8 @@ type Props = {
   resumo: GestaoVistaResumo | null
   areaLabel?: string | null
   loading?: boolean
+  /** `row` = faixa horizontal; `column` = pilha ao lado da tabela */
+  layout?: 'row' | 'column'
 }
 
 function KPISkeleton() {
@@ -77,10 +79,20 @@ function KPIItem({
   )
 }
 
-export function ReceitaGestaoAVistaKpis({ resumo, areaLabel, loading }: Props) {
+export function ReceitaGestaoAVistaKpis({
+  resumo,
+  areaLabel,
+  loading,
+  layout = 'row',
+}: Props) {
+  const gridClassName =
+    layout === 'column'
+      ? 'flex flex-col gap-3'
+      : 'grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
+
   if (loading || !resumo) {
     return (
-      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className={gridClassName}>
         {[1, 2, 3, 4, 5].map((i) => (
           <KPISkeleton key={i} />
         ))}
@@ -105,7 +117,7 @@ export function ReceitaGestaoAVistaKpis({ resumo, areaLabel, loading }: Props) {
   const escopo = areaLabel ? `${areaLabel} · ` : ''
 
   return (
-    <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <div className={gridClassName}>
       <KPIItem
         icon={Target}
         label="Meta acumulada"
