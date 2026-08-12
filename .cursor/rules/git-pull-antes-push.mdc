@@ -1,0 +1,39 @@
+---
+description: Sempre fazer git pull antes de commit/push — repositório compartilhado
+alwaysApply: true
+---
+
+# Git — pull antes de subir
+
+O repositório é **compartilhado** (mais de uma pessoa trabalhando). Antes de **qualquer** commit ou push:
+
+## Fluxo obrigatório
+
+1. **`git pull --rebase origin main`** (ou a branch de trabalho atual) **antes** de commitar ou empurrar.
+2. Resolver conflitos, se houver, e validar o projeto.
+3. **`git add`** + **`git commit`** (somente quando o usuário pedir).
+4. **`git pull --rebase`** de novo se passou tempo ou houve push remoto entre o pull e o push.
+5. **`git push`** somente após o pull ter sucesso.
+
+## O que evitar
+
+```bash
+# ❌ BAD — push direto sem atualizar com o remoto
+git commit -m "..." && git push origin main
+
+# ✅ GOOD — pull primeiro, depois commit/push
+git pull --rebase origin main
+git add ...
+git commit -m "..."
+git pull --rebase origin main   # re-sync se necessário
+git push origin main
+```
+
+## Se o push for rejeitado
+
+- **Nunca** `git push --force` em `main`/`master` sem pedido explícito do usuário.
+- Fazer `git pull --rebase`, corrigir conflitos, commitar de novo se preciso, e tentar push outra vez.
+
+## Escopo
+
+Vale para commits e PRs pedidos pelo usuário, e sempre que o agente for subir alterações ao GitHub.
