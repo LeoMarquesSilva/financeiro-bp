@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -45,7 +45,7 @@ type Props = {
   maxItems?: number
   /**
    * Mostra todos os itens na altura de `maxItems` linhas, com barra de rolagem.
-   * Não exibe "Top N de X".
+   * Não exibe "Top N de X". Default: true (todos os rankings com maxItems rolam).
    */
   scrollAll?: boolean
   /** Se false, exibe o nome completo no eixo (sem truncar). Default: true. */
@@ -69,18 +69,22 @@ function AvatarYTick({
   payload,
   avatarByLabel,
   compact,
+  labelMaxWidth,
 }: {
   x?: number | string
   y?: number | string
   payload?: { value?: string | number }
   avatarByLabel: Map<string, AvatarTickInfo>
   compact?: boolean
+  /** Largura máxima do texto (px), à esquerda do avatar — evita estourar a section. */
+  labelMaxWidth: number
 }) {
   const label = String(payload?.value ?? '')
   const info = avatarByLabel.get(label)
   const url = info?.url ?? null
   const fullName = info?.fullName?.trim() || label
   const [imgFailed, setImgFailed] = useState(false)
+  const reactId = useId().replace(/:/g, '')
   const size = compact ? 20 : 24
   const tx = Number(x ?? 0)
   const ty = Number(y ?? 0)
@@ -88,6 +92,9 @@ function AvatarYTick({
   const showImg = Boolean(url) && !imgFailed
   const initials = getInitials(fullName)
   const fontSize = compact ? 8 : 9
+  const textX = -(size + 10)
+  const clipW = Math.max(24, labelMaxWidth)
+  const clipId = `avatar-tick-${reactId}-${Math.round(ty)}`
 
   useEffect(() => {
     setImgFailed(false)
@@ -95,17 +102,24 @@ function AvatarYTick({
 
   return (
     <g transform={`translate(${Number.isFinite(tx) ? tx : 0},${Number.isFinite(ty) ? ty : 0})`}>
-      <text
-        x={-(size + 10)}
-        y={0}
-        dy="0.35em"
-        textAnchor="end"
-        fill="#1e293b"
-        fontSize={compact ? 11 : 12}
-        fontWeight={600}
-      >
-        {label}
-      </text>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={textX - clipW} y={-10} width={clipW} height={20} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
+        <text
+          x={textX}
+          y={0}
+          dy="0.35em"
+          textAnchor="end"
+          fill="#1e293b"
+          fontSize={compact ? 11 : 12}
+          fontWeight={600}
+        >
+          {label}
+        </text>
+      </g>
       {/* Sempre reserva o círculo: foto quando houver URL válida; senão iniciais. */}
       <circle cx={cx} cy={0} r={size / 2} fill="#cbd5e1" />
       {showImg ? (
@@ -143,13 +157,24 @@ function shortLabel(name: string, max = 22): string {
   return `${t.slice(0, max - 1)}…`
 }
 
+/** px médios por caractere (fonte 11–12 / semibold). */
+function pxPerChar(compact: boolean): number {
+  return compact ? 5.9 : 6.6
+}
+
 function estimateYAxisWidth(labels: string[], truncate: boolean, compact: boolean): number {
   if (truncate) return compact ? 110 : 132
   const maxLen = labels.reduce((m, l) => Math.max(m, l.length), 0)
-  const px = compact ? 5.9 : 6.6
+  const px = pxPerChar(compact)
   const cap = compact ? 185 : 240
   const floor = compact ? 120 : 140
   return Math.min(cap, Math.max(floor, Math.ceil(maxLen * px) + 6))
+}
+
+/** Quantos caracteres cabem na faixa de texto do eixo (já descontando avatar). */
+function maxCharsForTextWidth(textWidthPx: number, compact: boolean): number {
+  const usable = Math.max(48, textWidthPx - 10)
+  return Math.max(8, Math.floor(usable / pxPerChar(compact)))
 }
 
 function RankingTooltip({
@@ -242,7 +267,7 @@ export function EficienciaRankingChart({
   loading,
   emptyLabel = 'Sem dados no período.',
   maxItems = 20,
-  scrollAll = false,
+  scrollAll = true,
   truncateLabels = true,
   yAxisWidth,
   biStyle = false,
@@ -262,7 +287,7 @@ export function EficienciaRankingChart({
 
   const chartData = useMemo(() => {
     const source = scrollAll ? rows : rows.slice(0, maxItems)
-    return source.map((row, i) => {
+    const prepared = source.map((row, i) => {
       const rawLabel = String(row[labelKey] ?? '').trim()
       const full = showAvatars
         ? resolvePessoaDisplayNome(rawLabel, teamMembers, avatarCatalog)
@@ -275,12 +300,31 @@ export function EficienciaRankingChart({
       return {
         ...row,
         _rank: i + 1,
-        _label: truncateLabels ? shortLabel(full, compact ? 28 : 22) : full,
         _labelFull: full,
         _value: Number.isFinite(value) ? value : 0,
         _avatarUrl: avatarUrl,
       }
     })
+
+    // Largura do eixo (com teto) e só então corta o rótulo para caber — evita estourar a section.
+    const textAxisWidth =
+      yAxisWidth ??
+      estimateYAxisWidth(
+        prepared.map((d) => d._labelFull),
+        truncateLabels,
+        compact,
+      )
+    const maxChars = truncateLabels
+      ? compact
+        ? 28
+        : 22
+      : maxCharsForTextWidth(textAxisWidth, compact)
+
+    return prepared.map((d) => ({
+      ...d,
+      _label: shortLabel(d._labelFull, maxChars),
+      _textAxisWidth: textAxisWidth,
+    }))
   }, [
     rows,
     labelKey,
@@ -290,6 +334,7 @@ export function EficienciaRankingChart({
     truncateLabels,
     compact,
     showAvatars,
+    yAxisWidth,
     teamMembers,
     avatarCatalog,
   ])
@@ -305,13 +350,9 @@ export function EficienciaRankingChart({
     return map
   }, [chartData])
 
-  const resolvedYWidth =
-    (yAxisWidth ??
-      estimateYAxisWidth(
-        chartData.map((d) => d._label),
-        truncateLabels,
-        compact,
-      )) + (showAvatars ? 30 : 0)
+  const textAxisWidth = chartData[0]?._textAxisWidth ?? (compact ? 120 : 140)
+  const resolvedYWidth = textAxisWidth + (showAvatars ? 30 : 0)
+  const labelMaxWidth = Math.max(40, textAxisWidth - 4)
   const chartHeight = Math.max(
     compact ? 140 : 180,
     chartData.length * rowH + (compact ? 20 : 40),
@@ -328,7 +369,7 @@ export function EficienciaRankingChart({
   return (
     <section
       className={cn(
-        'relative rounded-xl border border-slate-200/60 bg-white shadow-sm',
+        'relative overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm',
         compact ? 'p-2.5 sm:p-3' : 'p-3 sm:p-4',
         className,
       )}
@@ -452,6 +493,7 @@ export function EficienciaRankingChart({
                               payload={props.payload as { value?: string | number }}
                               avatarByLabel={avatarByLabel}
                               compact={compact}
+                              labelMaxWidth={labelMaxWidth}
                             />
                           )
                         : {

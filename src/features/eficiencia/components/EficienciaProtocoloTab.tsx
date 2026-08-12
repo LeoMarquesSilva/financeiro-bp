@@ -117,6 +117,7 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
           showAvatars
           loading={loadingRanking}
           maxItems={9}
+          scrollAll
           onRacionalClick={() => setRacionalAberto(true)}
         />
         <EficienciaRankingChart
@@ -133,6 +134,7 @@ export function EficienciaProtocoloTab({ ano, mesFiltro }: Props) {
           showAvatars
           loading={loadingRanking}
           maxItems={9}
+          scrollAll
           onRacionalClick={() => setRacionalAberto(true)}
         />
       </div>
