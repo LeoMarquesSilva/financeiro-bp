@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Briefcase,
   CalendarCheck2,
@@ -27,6 +27,7 @@ import { ReportarIndicadorButton } from '@/features/eficiencia/components/Report
 import { useEficienciaOverview } from '@/features/eficiencia/hooks/useEficiencia'
 import {
   EFICIENCIA_AREA_OPS_LEGAIS,
+  isDiaFiltro,
   type MesFiltroEficiencia,
 } from '@/features/eficiencia/constants'
 import type {
@@ -136,6 +137,16 @@ export function OperacoesLegaisPage() {
   const [ano, setAno] = useState(ANO_PADRAO)
   const [tab, setTab] = useState<TabId>('overview')
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
+
+  // Desenvolvimento / Retenção: indicador anual — sem recorte De/Até.
+  useEffect(() => {
+    if (
+      (tab === 'treinamentos' || tab === 'turnover') &&
+      isDiaFiltro(mesFiltro)
+    ) {
+      setMesFiltro(null)
+    }
+  }, [tab, mesFiltro])
   const { data: overview } = useEficienciaOverview(ano, null)
 
   const atualizacoes: UltimaAtualizacaoRow[] = overview?.ultimaAtualizacao ?? []
@@ -252,7 +263,9 @@ export function OperacoesLegaisPage() {
               value={mesFiltro}
               onChange={setMesFiltro}
               showResultado={false}
-              showDiaPicker={tab !== 'overview'}
+              showDiaPicker={
+                tab !== 'overview' && tab !== 'treinamentos' && tab !== 'turnover'
+              }
               ano={ano}
             />
           </div>

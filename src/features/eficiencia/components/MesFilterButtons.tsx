@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Calendar as CalendarIcon, X } from 'lucide-react'
@@ -32,6 +32,8 @@ type Props = {
   showDiaPicker?: boolean
   /** Ano de referência do calendário (restringe seleção). */
   ano?: number
+  /** Conteúdo à direita dos chips (ex.: botão Apresentação). */
+  trailing?: ReactNode
 }
 
 const BTN =
@@ -114,6 +116,7 @@ export function MesFilterButtons({
   showResultado = true,
   showDiaPicker = false,
   ano,
+  trailing,
 }: Props) {
   let valueEfetivo: MesFiltroEficiencia = value
   if (!showSemanas && isSemanaFiltro(valueEfetivo)) valueEfetivo = null
@@ -261,6 +264,7 @@ export function MesFilterButtons({
           ) : null}
         </>
       ) : null}
+      {trailing}
     </div>
   )
 }

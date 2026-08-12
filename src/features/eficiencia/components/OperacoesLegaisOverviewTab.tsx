@@ -72,6 +72,12 @@ function somaRazaoPct(nums: number[], dens: number[]): HeatCell {
   return { value: v, label: PCT0(v) }
 }
 
+function formatMinutosTreino(min: number): string {
+  const h = Math.floor(min / 60)
+  const m = Math.round(min % 60)
+  return `${h}:${String(m).padStart(2, '0')}`
+}
+
 export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
@@ -89,11 +95,20 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     ano,
     EFICIENCIA_AREA_OPS_LEGAIS,
   )
-  const { itens, loading: loadingTreino } = useTreinamentos(ano, EFICIENCIA_AREA_OPS_LEGAIS)
+  const { anual: treinoAnual, itens, loading: loadingTreino } = useTreinamentos(
+    ano,
+    EFICIENCIA_AREA_OPS_LEGAIS,
+  )
 
   const { data: ativos = [], isLoading: loadingAtivos } = useQuery({
     queryKey: ['eficiencia', 'ops-turnover-ativos', ano],
     queryFn: () => eficienciaService.fetchTurnoverAtivosArea(ano, EFICIENCIA_AREA_OPS_LEGAIS),
+  })
+
+  const { data: treinoMensal = [], isLoading: loadingTreinoMensal } = useQuery({
+    queryKey: ['eficiencia', 'treinamentos-mensal', ano, EFICIENCIA_AREA_OPS_LEGAIS],
+    queryFn: () =>
+      eficienciaService.fetchTreinamentosMensal(ano, EFICIENCIA_AREA_OPS_LEGAIS),
   })
 
   const { mensal: pdiMensal, loading: loadingPdi } = useGestaoPdi(
@@ -114,6 +129,27 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     [ativos, itens],
   )
   const equipeResumo = treinoResumos.find((r) => r.categoria === 'Equipe')
+  const metaTreinoLabel =
+    treinoAnual && treinoAnual.pessoas_ativas > 0
+      ? `Meta: ${Math.floor(Number(treinoAnual.meta_minutos) / 60)}h (${treinoAnual.pessoas_ativas} × 14h)`
+      : equipeResumo && equipeResumo.qtdPessoas > 0
+        ? `Meta: ${equipeResumo.qtdPessoas * 14}h (${equipeResumo.qtdPessoas} × 14h)`
+        : 'Meta 100%'
+
+  const cellsTreino: HeatCell[] = aplicarCelulasFiltro(
+    Array.from({ length: 12 }, (_, i) => {
+      const row = treinoMensal.find((r) => r.mes === i + 1)
+      if (!row) return { value: null, label: '-' }
+      const minutos = Number(row.minutos_lancados)
+      const pct = Number(row.pct_atingimento)
+      return {
+        value: pct,
+        label: `${formatMinutosTreino(minutos)} (${formatPercent(pct)})`,
+      }
+    }),
+    mesFiltro,
+    ano,
+  )
 
   const protFiltrado = filtrarMensalPorMesFiltro(protocoloMensal, mesFiltro, ano)
   const analiseFiltrado = filtrarMensalPorMesFiltro(publicacoesAnalise, mesFiltro, ano)
@@ -169,13 +205,30 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   )
   const acumPdi = acumuladoGestaoPdi(pdiMensal, mesFiltro, ano)
 
-  const acumTreino: HeatCell =
-    equipeResumo?.pctAtingimento != null
-      ? {
-          value: equipeResumo.pctAtingimento,
-          label: formatPercent(equipeResumo.pctAtingimento),
-        }
-      : { value: null, label: '-' }
+  const acumTreino: HeatCell = (() => {
+    if (loadingTreino || loadingTreinoMensal) return { value: null, label: '…' }
+    // Ano todo: atingimento anual (pessoas × 14h).
+    if (mesFiltro == null) {
+      if (!treinoAnual) return { value: null, label: '-' }
+      const minutos = Number(treinoAnual.minutos_lancados)
+      const pct = Number(treinoAnual.pct_atingimento)
+      return {
+        value: pct,
+        label: `${formatMinutosTreino(minutos)} (${formatPercent(pct)})`,
+      }
+    }
+    const rows = filtrarMensalPorMesFiltro(treinoMensal, mesFiltro, ano)
+    if (rows.length === 0) return { value: null, label: '-' }
+    const minutos = rows.reduce((s, r) => s + Number(r.minutos_lancados), 0)
+    const metaAno =
+      Number(treinoAnual?.meta_minutos) || Number(rows[0]?.meta_minutos) || 0
+    const pct =
+      metaAno > 0 ? (minutos / metaAno) * 100 : Number(rows[0]?.pct_atingimento)
+    return {
+      value: pct,
+      label: `${formatMinutosTreino(minutos)} (${formatPercent(pct)})`,
+    }
+  })()
 
   const acumRetencao: HeatCell = turnAnual
     ? { value: turnAnual.pct_retencao, label: formatPercent(turnAnual.pct_retencao) }
@@ -433,14 +486,13 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
         <OverviewKpiHeatRow
           title="Desenvolvimento Contínuo"
           meta={100}
-          metaLabel={
-            equipeResumo && equipeResumo.qtdPessoas > 0
-              ? `Meta: ${equipeResumo.qtdPessoas * 14}h (${equipeResumo.qtdPessoas} × 14h)`
-              : 'Meta 100%'
+          metaLabel={metaTreinoLabel}
+          mesDestaque={mesDestaque}
+          cells={
+            loadingTreino || loadingTreinoMensal
+              ? Array.from({ length: 12 }, () => ({ value: null, label: '…' }))
+              : cellsTreino
           }
-          modoAnual
-          anoLabel={String(ano)}
-          cells={[]}
           acumulado={acumTreino}
           onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
         />

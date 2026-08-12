@@ -456,11 +456,26 @@ function inlineNodeStyles(source: Element, target: Element): void {
   }
 }
 
+function isTransparentCssColor(value: string): boolean {
+  const v = value.trim().toLowerCase()
+  return (
+    !v ||
+    v === 'transparent' ||
+    v === 'rgba(0, 0, 0, 0)' ||
+    v === 'rgba(0,0,0,0)' ||
+    v === 'none'
+  )
+}
+
 function isColorSwatch(el: HTMLElement): boolean {
-  const inline = el.style.backgroundColor
-  if (inline && inline !== 'transparent') return true
+  const inline = el.style.backgroundColor || el.style.backgroundImage || el.style.background
+  if (inline && !isTransparentCssColor(inline) && !inline.includes('gradient')) {
+    // background shorthand com cor sólida
+    if (el.style.backgroundColor || /^#|^rgb|^hsl/i.test(inline.trim())) return true
+  }
+  if (el.style.backgroundColor && !isTransparentCssColor(el.style.backgroundColor)) return true
   const bg = window.getComputedStyle(el).backgroundColor
-  return bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)'
+  return !isTransparentCssColor(bg)
 }
 
 type HtmlExportOptions = {
@@ -1757,6 +1772,125 @@ export async function copyElementImageToClipboard(
 ): Promise<void> {
   const blob = await htmlElementToPngBlob(element, scale, options)
   await copyPngBlobToClipboard(blob, 96 * scale)
+}
+
+/**
+ * Export da Apresentação: mantém fundos/cores dos cards (áreas, metas, valores),
+ * mas deixa o fundo do slide transparente para colar no PPT.
+ * Não usa applyExportHtmlColors (que zerava os backgrounds no PNG).
+ */
+function prepareApresentacaoExportElement(source: HTMLElement): HTMLElement {
+  const clone = source.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
+  inlineNodeStyles(source, clone)
+
+  const sourceStyle = window.getComputedStyle(source)
+  const sourceWidth = Math.max(1, Math.ceil(source.getBoundingClientRect().width))
+
+  clone.style.setProperty('background', 'transparent', 'important')
+  clone.style.setProperty('background-color', 'transparent', 'important')
+  clone.style.setProperty('box-shadow', 'none', 'important')
+  clone.style.setProperty('border', 'none', 'important')
+  clone.style.setProperty('outline', 'none', 'important')
+  clone.style.setProperty('margin', '0', 'important')
+  clone.style.setProperty('padding', sourceStyle.padding, 'important')
+  clone.style.setProperty('box-sizing', 'border-box', 'important')
+  clone.style.setProperty('overflow', 'visible', 'important')
+  clone.style.setProperty('width', 'max-content', 'important')
+  clone.style.setProperty('min-width', `${sourceWidth}px`, 'important')
+  clone.style.setProperty('max-width', 'none', 'important')
+  clone.style.setProperty('height', 'auto', 'important')
+  clone.style.setProperty('min-height', '0', 'important')
+  clone.style.setProperty('max-height', 'none', 'important')
+
+  // foreignObject/SVG costuma ignorar `background` shorthand — força background-color.
+  const lockBg = (el: HTMLElement) => {
+    const computed =
+      el.style.backgroundColor ||
+      (el !== clone ? window.getComputedStyle(el).backgroundColor : '')
+    // No clone detached, prefer inline já copiado por inlineNodeStyles
+    const inline = el.style.backgroundColor
+    const color = inline || computed
+    if (!color || isTransparentCssColor(color)) return
+    el.style.setProperty('background-color', color, 'important')
+    el.style.setProperty('print-color-adjust', 'exact', 'important')
+    el.style.setProperty('-webkit-print-color-adjust', 'exact', 'important')
+  }
+
+  lockBg(clone)
+  clone.querySelectorAll<HTMLElement>('*').forEach(lockBg)
+
+  // Rótulos das áreas: quebra só nas linhas explícitas (não no meio da palavra).
+  clone.querySelectorAll<HTMLElement>('[data-apresentacao-area-label]').forEach((el) => {
+    el.style.setProperty('overflow', 'visible', 'important')
+    el.style.setProperty('word-break', 'keep-all', 'important')
+    el.style.setProperty('overflow-wrap', 'normal', 'important')
+    el.style.setProperty('hyphens', 'none', 'important')
+  })
+  clone.querySelectorAll<HTMLElement>('[data-apresentacao-area-label] span').forEach((el) => {
+    el.style.setProperty('display', 'block', 'important')
+    el.style.setProperty('white-space', 'nowrap', 'important')
+    el.style.setProperty('overflow', 'visible', 'important')
+  })
+  clone.querySelectorAll<HTMLElement>('[data-apresentacao-area-header]').forEach((el) => {
+    el.style.setProperty('overflow', 'visible', 'important')
+  })
+
+  return clone
+}
+
+/**
+ * Slide Apresentação Jurídico → PNG no tamanho físico do PPT
+ * (33,87 cm × 16,32 cm). Conteúdo esticado para ocupar 100% do canvas + DPI.
+ */
+export async function copyApresentacaoSlideToClipboard(
+  element: HTMLElement,
+  scale = DEFAULT_SCALE,
+): Promise<void> {
+  /** Dimensão física do slide (cm). */
+  const SLIDE_CM_W = 33.87
+  const SLIDE_CM_H = 16.32
+  /** Pixels lógicos proporcionais (~2,076:1). */
+  const SLIDE_W = 1920
+  const SLIDE_H = Math.round((SLIDE_W * SLIDE_CM_H) / SLIDE_CM_W) // ≈ 925
+  const SLIDE_IN_W = SLIDE_CM_W / 2.54
+  const SLIDE_IN_H = SLIDE_CM_H / 2.54
+
+  const prepared = prepareApresentacaoExportElement(element)
+  const { width, height } = measurePreparedElement(prepared)
+  if (width === 0 || height === 0) {
+    throw new Error('Slide ainda não renderizado')
+  }
+
+  const contentBlob = await renderPreparedElementToPngBlob(prepared, width, height, scale)
+  const part = await measureBlobPart(contentBlob)
+  const img = await blobToImage(part.blob)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = SLIDE_W * scale
+  canvas.height = SLIDE_H * scale
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas não suportado neste navegador')
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  // Contain: mantém proporção (não estica/quebra o texto das áreas).
+  const fit = Math.min(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight)
+  const dw = img.naturalWidth * fit
+  const dh = img.naturalHeight * fit
+  const dx = (canvas.width - dw) / 2
+  const dy = (canvas.height - dh) / 2
+  ctx.drawImage(img, dx, dy, dw, dh)
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (value) => (value ? resolve(value) : reject(new Error('Falha ao gerar imagem PNG'))),
+      'image/png',
+    )
+  })
+
+  const dpi = Math.round((SLIDE_W * scale) / SLIDE_IN_W)
+  void SLIDE_IN_H
+  await copyPngBlobToClipboard(blob, dpi)
 }
 
 /** Cards KPI do Overview — snapshot fiel (cores das células alinhadas ao card branco). */
