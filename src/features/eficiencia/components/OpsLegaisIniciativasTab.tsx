@@ -22,7 +22,6 @@ import { eficienciaService } from '../services/eficienciaService'
 import type {
   OpsLegaisIniciativasDashboard,
   OpsLegaisIniciativasItemSemana,
-  OpsLegaisIniciativasPainel,
   OpsLegaisIniciativasProjeto,
   OpsLegaisIniciativasSubtarefa,
 } from '../types/eficiencia.types'

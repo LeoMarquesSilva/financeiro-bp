@@ -919,12 +919,18 @@ type Props = {
   rows: ReceitaMesRow[]
   ano: number
   departamentoCores?: ReceitaDepartamentoCoresConfig
+  /**
+   * Modo Apresentação: só o gráfico consolidado (sem toggles, tabela ou drill).
+   * Usado no Bloco 3 da Apresentação Jurídico.
+   */
+  apresentacaoMode?: boolean
 }
 
 export function ReceitaComparativoChart({
   rows,
   ano,
   departamentoCores = RECEITA_DEPARTAMENTO_CORES,
+  apresentacaoMode = false,
 }: Props) {
   const [detalheMes, setDetalheMes] = useState<ReceitaMesRow | null>(null)
   const [areaMesDetalhe, setAreaMesDetalhe] = useState<{
@@ -1327,9 +1333,20 @@ export function ReceitaComparativoChart({
     return `${labels[0]}–${labels[labels.length - 1]} / ${ano}`
   }, [areaMesesSelecionados, rows, ano])
 
+  const porAreaAtivo = !apresentacaoMode && porAreaMode
+
   return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
+    <div className={apresentacaoMode ? undefined : 'space-y-6'}>
+      <section
+        className={
+          apresentacaoMode
+            ? 'rounded-xl border border-slate-200/60 bg-white p-3'
+            : 'rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5'
+        }
+        data-overview-copy-card={apresentacaoMode ? true : undefined}
+        data-chart-export-preserve-bg={apresentacaoMode ? true : undefined}
+      >
+        {!apresentacaoMode ? (
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             <span
@@ -1386,7 +1403,13 @@ export function ReceitaComparativoChart({
             </Button>
           </div>
         </div>
+        ) : (
+          <div className="mb-2 text-xs font-semibold text-slate-800">
+            Comparativo mensal — Meta · Previsto · Recebido · Inadimplência
+          </div>
+        )}
 
+        {!apresentacaoMode ? (
         <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
@@ -1418,7 +1441,9 @@ export function ReceitaComparativoChart({
             {porAreaMode ? 'Ver consolidado' : 'Ver por área'}
           </button>
         </div>
+        ) : null}
 
+        {!apresentacaoMode ? (
         <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
           {metaAreaSlices.map((area) => {
             const ativo = areaLinhaSelecionada === area.key
@@ -1445,8 +1470,9 @@ export function ReceitaComparativoChart({
             )
           })}
         </div>
+        ) : null}
 
-        {porAreaMode && areaLinhaSelecionada == null && (
+        {porAreaAtivo && areaLinhaSelecionada == null && (
           <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
             <span className="text-[11px] font-medium text-slate-500">
               Período <span className="font-normal text-slate-400">(multi-seleção)</span>:
@@ -1482,7 +1508,7 @@ export function ReceitaComparativoChart({
         )}
 
         <div ref={chartExportRef} className="flex flex-col">
-          {porAreaMode ? (
+          {porAreaAtivo ? (
           areaLinhaSelecionada != null ? (
           deptLoading || previstoDeptLoading || inadDeptLoading || (inadEvolucaoEnabled && !inadEvolucao) ? (
             <div className="flex h-[300px] items-center justify-center gap-2 text-sm text-slate-500">
@@ -2087,7 +2113,7 @@ export function ReceitaComparativoChart({
           </div>
           )}
 
-          {!porAreaMode && (
+          {!porAreaAtivo && (
             <>
               <div data-chart-legend className="mt-3">
                 <ReceitaChartLegend
@@ -2101,6 +2127,8 @@ export function ReceitaComparativoChart({
         </div>
       </section>
 
+      {!apresentacaoMode ? (
+      <>
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -2345,6 +2373,8 @@ export function ReceitaComparativoChart({
         periodoLabel={semAreaPeriodoLabel}
         totalSemArea={areaGapRecebidoSemDepartamento}
       />
+      </>
+      ) : null}
     </div>
   )
 }
