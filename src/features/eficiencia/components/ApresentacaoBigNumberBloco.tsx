@@ -123,118 +123,122 @@ function KpiCard({
   const down = pct != null && pct < 0
   const trendColor = up ? '#16A34A' : down ? '#DC2626' : '#64748B'
   const deltaLabel = formatDeltaPctLabel(par.atual, par.anterior)
-  const soPct = def.kind === 'pct_yoy'
+  const kind = def.kind
+
+  const header = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+      <span
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 999,
+          background: '#F5F0E6',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: GOLD_DARK,
+          flexShrink: 0,
+        }}
+      >
+        <Icon size={14} aria-hidden />
+      </span>
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: '#64748B',
+        }}
+      >
+        {def.label}
+      </span>
+    </div>
+  )
+
+  const cardStyle = {
+    borderRadius: 10,
+    border: '1px solid #E2E8F0',
+    background: '#FFFFFF',
+    padding: '10px 12px',
+    minWidth: 0,
+    printColorAdjust: 'exact' as const,
+    WebkitPrintColorAdjust: 'exact' as const,
+  }
+
+  if (kind === 'pct_yoy') {
+    return (
+      <div
+        data-overview-copy-card
+        data-chart-export-preserve-bg
+        style={cardStyle}
+      >
+        {header}
+        <div
+          style={{
+            fontSize: 18,
+            fontWeight: 800,
+            color: trendColor,
+            fontVariantNumeric: 'tabular-nums',
+            lineHeight: 1.15,
+          }}
+        >
+          {up ? '↑ ' : down ? '↓ ' : ''}
+          {deltaLabel}
+        </div>
+        <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 6 }}>
+          {ano} vs {anoAnterior}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
       data-overview-copy-card
       data-chart-export-preserve-bg
-      style={{
-        borderRadius: 10,
-        border: '1px solid #E2E8F0',
-        background: '#FFFFFF',
-        padding: '10px 12px',
-        minWidth: 0,
-        printColorAdjust: 'exact',
-        WebkitPrintColorAdjust: 'exact',
-      }}
+      style={cardStyle}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 999,
-            background: '#F5F0E6',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: GOLD_DARK,
-            flexShrink: 0,
-          }}
-        >
-          <Icon size={14} aria-hidden />
-        </span>
-        <span
-          style={{
-            fontSize: 9,
-            fontWeight: 700,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            color: '#64748B',
-          }}
-        >
-          {def.label}
+      {header}
+      <div
+        style={{
+          fontSize: kind === 'moeda' ? 13 : 16,
+          fontWeight: 800,
+          color: def.accentAtual ?? '#0F172A',
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1.15,
+        }}
+      >
+        {formatValorKpi(kind, par.atual)}
+      </div>
+      <div
+        style={{
+          marginTop: 2,
+          fontSize: 10,
+          color: '#64748B',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {anoAnterior}: {formatValorKpi(kind, par.anterior)}
+      </div>
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 11,
+          fontWeight: 700,
+          color: trendColor,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {up ? '↑ ' : down ? '↓ ' : ''}
+        {deltaLabel}{' '}
+        <span style={{ fontWeight: 500, color: '#64748B' }}>
+          ({formatDeltaAbs(kind, par.atual, par.anterior)})
         </span>
       </div>
-
-      {soPct ? (
-        <>
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 800,
-              color: trendColor,
-              fontVariantNumeric: 'tabular-nums',
-              lineHeight: 1.15,
-            }}
-          >
-            {up ? '↑ ' : down ? '↓ ' : ''}
-            {deltaLabel}
-          </div>
-          <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 6 }}>
-            {ano} vs {anoAnterior}
-          </div>
-        </>
-      ) : (
-        <>
-          <div
-            style={{
-              fontSize: def.kind === 'moeda' ? 13 : 16,
-              fontWeight: 800,
-              color: def.accentAtual ?? '#0F172A',
-              fontVariantNumeric: 'tabular-nums',
-              lineHeight: 1.15,
-            }}
-          >
-            {formatValorKpi(def.kind, par.atual)}
-          </div>
-          <div
-            style={{
-              marginTop: 2,
-              fontSize: 10,
-              color: '#64748B',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {anoAnterior}: {formatValorKpi(def.kind, par.anterior)}
-          </div>
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 11,
-              fontWeight: 700,
-              color: trendColor,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {up ? '↑ ' : down ? '↓ ' : ''}
-            {deltaLabel}{' '}
-            <span style={{ fontWeight: 500, color: '#64748B' }}>
-              (
-              {formatDeltaAbs(
-                def.kind as 'horas' | 'count' | 'moeda',
-                par.atual,
-                par.anterior,
-              )}
-              )
-            </span>
-          </div>
-          <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2 }}>
-            {ano} vs {anoAnterior}
-          </div>
-        </>
-      )}
+      <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2 }}>
+        {ano} vs {anoAnterior}
+      </div>
     </div>
   )
 }
