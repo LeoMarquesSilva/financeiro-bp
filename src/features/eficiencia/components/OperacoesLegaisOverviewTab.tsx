@@ -14,6 +14,9 @@ import {
   EFICIENCIA_META_OPS_SLA_PROTOCOLO,
   EFICIENCIA_META_PDI,
   filtrarMensalPorMesFiltro,
+  isMesesFiltro,
+  isPeriodoCurtoFiltro,
+  mesesEfetivosFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import {
@@ -29,8 +32,6 @@ import { aplicarCelulasFiltro } from '../utils/overviewFinanceiroKpis'
 import { toPriMaiuscula } from '../utils/textFormat'
 import type {
   OpsLegaisIniciativasDashboard,
-  OpsLegaisIniciativasItem,
-  OpsLegaisIniciativasProjeto,
   RacionalIndicador,
   TreinamentosMesRow,
 } from '../types/eficiencia.types'
@@ -124,6 +125,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     queryKey: ['eficiencia', 'ops-legais-iniciativas', ano],
     queryFn: (): Promise<OpsLegaisIniciativasDashboard> =>
       eficienciaService.fetchOpsLegaisIniciativas(ano, null),
+    staleTime: 5 * 60_000,
   })
 
   const { data: marketingDash, isLoading: loadingMarketing } = useInstagramMarketing()
@@ -239,11 +241,21 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
 
   const iniciativasPorMes = useMemo(() => {
     const counts = Array.from({ length: 12 }, () => 0)
-    const fontes: Array<string | null> =
-      iniciativas?.painel?.concluidos?.length
-        ? iniciativas.painel.concluidos.map((p: OpsLegaisIniciativasProjeto) => p.data)
-        : (iniciativas?.itens ?? []).map((p: OpsLegaisIniciativasItem) => p.data)
-    for (const data of fontes) {
+    // Mesma base do KPI Total: `itens` (tarefas topo com tag Projetos/Melhorias).
+    // Não usar painel.concluidos — agrega por subtarefa e infla o %.
+    const tagOk = (tags: string[]) => {
+      const norms = tags.map((t) =>
+        t
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .toLowerCase(),
+      )
+      return norms.includes('projetos') || norms.includes('melhorias')
+    }
+    for (const item of iniciativas?.itens ?? []) {
+      if (!tagOk(item.tags ?? [])) continue
+      const data = item.data
       if (!data || !data.startsWith(`${ano}-`)) continue
       const mes = Number(data.slice(5, 7))
       if (mes >= 1 && mes <= 12) counts[mes - 1]! += 1
@@ -257,7 +269,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           : 0
       return { mes: i + 1, qtd, ytd, pctYtd }
     })
-  }, [iniciativas?.painel?.concluidos, iniciativas?.itens, ano])
+  }, [iniciativas?.itens, ano])
 
   const cellsIniciativas = aplicarCelulasFiltro(
     iniciativasPorMes.map((r) =>
@@ -271,15 +283,11 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
 
   const acumIniciativas: HeatCell = (() => {
     if (loadingIniciativas) return { value: null, label: '…' }
-    if (mesFiltro == null) {
-      const pct = iniciativas?.pct_progresso
-      if (pct == null || (iniciativas?.projetos_concluidos ?? 0) <= 0) {
-        return { value: null, label: '-' }
-      }
-      return { value: pct, label: formatPercent(pct) }
-    }
-    const filtrados = filtrarMensalPorMesFiltro(iniciativasPorMes, mesFiltro, ano)
-    const qtd = filtrados.reduce((s, r) => s + r.qtd, 0)
+    const serie =
+      mesFiltro == null
+        ? iniciativasPorMes
+        : filtrarMensalPorMesFiltro(iniciativasPorMes, mesFiltro, ano)
+    const qtd = serie.reduce((s, r) => s + r.qtd, 0)
     if (qtd <= 0) return { value: null, label: '-' }
     const pct = (qtd / EFICIENCIA_META_OPS_INICIATIVAS) * 100
     return { value: pct, label: formatPercent(pct) }
@@ -378,8 +386,14 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     }
   })()
 
-  const mesDestaque =
-    Array.isArray(mesFiltro) && mesFiltro.length === 1 ? mesFiltro[0]! : null
+  /** Destaca/atenua meses no heat row (igual Overview jurídico — multi-mês incluso). */
+  const mesDestaque: number | number[] | null = (() => {
+    if (isMesesFiltro(mesFiltro)) return mesFiltro
+    if (mesFiltro === 'resultado' || isPeriodoCurtoFiltro(mesFiltro)) {
+      return mesesEfetivosFiltro(mesFiltro, ano)
+    }
+    return null
+  })()
 
   const busy =
     loading ||

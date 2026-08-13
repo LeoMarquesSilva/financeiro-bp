@@ -42,11 +42,99 @@ export type ApresentacaoKpiId =
   | 'gestao_pdi'
   | 'desenvolvimento'
   | 'retencao'
+  | 'crescimento_receita'
+  | 'indice_inadimplencia'
 
 export type ApresentacaoSecaoId =
   | 'eficiencia_operacional'
   | 'satisfacao_cliente'
   | 'desenvolver_equipe'
+  | 'resultado_financeiro'
+
+/** Bloco 1–8: jurídico, financeiro, composição, big numbers, controladoria, iniciativas, marketing, financeiro ops. */
+export type ApresentacaoBlocoId =
+  | 'juridico'
+  | 'financeiro'
+  | 'composicao'
+  | 'bignumber'
+  | 'controladoria'
+  | 'iniciativas'
+  | 'marketing'
+  | 'financeiro_ops'
+
+export const APRESENTACAO_BLOCOS: {
+  id: ApresentacaoBlocoId
+  label: string
+  secoes: ApresentacaoSecaoId[]
+  /** Sem grade por área (layout próprio). */
+  semGradeAreas?: boolean
+}[] = [
+  {
+    id: 'juridico',
+    label: 'Bloco 1 — Operacional',
+    secoes: ['eficiencia_operacional', 'satisfacao_cliente', 'desenvolver_equipe'],
+  },
+  {
+    id: 'financeiro',
+    label: 'Bloco 2 — Financeiro',
+    secoes: ['resultado_financeiro'],
+  },
+  {
+    id: 'composicao',
+    label: 'Bloco 3 — Composição',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'bignumber',
+    label: 'Bloco 4 — Big Numbers',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'controladoria',
+    label: 'Bloco 5 — Controladoria',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'iniciativas',
+    label: 'Bloco 6 — Iniciativas',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'marketing',
+    label: 'Bloco 7 — Marketing',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'financeiro_ops',
+    label: 'Bloco 8 — Financeiro Ops',
+    secoes: [],
+    semGradeAreas: true,
+  },
+]
+
+/**
+ * Coluna da apresentação → chave de área meta da Receita.
+ * `undefined` = consolidado; `null` = sem KPI financeiro (ex.: Ops Legais).
+ */
+export function receitaAreaKeyFromColuna(
+  colKey: ApresentacaoColunaKey,
+): string | null | undefined {
+  if (colKey === '__consolidado__') return undefined
+  if (colKey === EFICIENCIA_AREA_OPS_LEGAIS) return null
+  const map: Partial<Record<ApresentacaoColunaKey, string>> = {
+    Reestruturação: 'insolvencia',
+    Cível: 'civel',
+    'Recuperação de Crédito': 'recuperacao_de_credito',
+    Trabalhista: 'trabalhista',
+    Contratos: 'contratos',
+  }
+  return map[colKey] ?? null
+}
 
 export type ApresentacaoCell = {
   label: string
@@ -72,6 +160,7 @@ export const APRESENTACAO_SECOES: {
   { id: 'eficiencia_operacional', label: '1. Eficiência Operacional' },
   { id: 'satisfacao_cliente', label: '2. Satisfação do Cliente' },
   { id: 'desenvolver_equipe', label: '3. Desenvolver e Engajar a Equipe' },
+  { id: 'resultado_financeiro', label: '4. Resultado Financeiro' },
 ]
 
 export const APRESENTACAO_KPIS: ApresentacaoKpiDef[] = [
@@ -137,6 +226,20 @@ export const APRESENTACAO_KPIS: ApresentacaoKpiDef[] = [
     title: 'Retenção de Talentos',
     metaLabel: '90%',
     meta: 90,
+  },
+  {
+    id: 'crescimento_receita',
+    secao: 'resultado_financeiro',
+    title: 'Crescimento de Receita',
+    metaLabel: '100%',
+    meta: 100,
+  },
+  {
+    id: 'indice_inadimplencia',
+    secao: 'resultado_financeiro',
+    title: 'Índice de Inadimplência',
+    metaLabel: 'x',
+    meta: Number.POSITIVE_INFINITY,
   },
 ]
 

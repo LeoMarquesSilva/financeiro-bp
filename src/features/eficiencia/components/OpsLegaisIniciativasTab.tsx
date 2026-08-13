@@ -571,27 +571,116 @@ function projetoNoFiltro(
   return mesNoFiltro(mes, mesFiltro, ano)
 }
 
+function tagNorm(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function hasTagItem(tags: string[], tag: string): boolean {
+  const target = tagNorm(tag)
+  return tags.some((t) => tagNorm(t) === target)
+}
+
+/** Meta anual só conta tag Projetos ou Melhorias. */
+function contaNaMeta(tags: string[]): boolean {
+  return hasTagItem(tags, 'Projetos') || hasTagItem(tags, 'Melhorias')
+}
+
+function progressColor(pct01: number): string {
+  if (pct01 >= 1) return '#059669'
+  if (pct01 >= 0.75) return '#0284C7'
+  if (pct01 >= 0.5) return '#EAB308'
+  return '#B91C1C'
+}
+
+function formatHorasGanhas(horas: number): string {
+  const h = Math.floor(horas)
+  const m = Math.round((horas - h) * 60)
+  return `${h}:${String(m).padStart(2, '0')}`
+}
+
+/** Recalcula KPIs + painel.concluidos no client a partir do payload anual (sem novo ClickUp). */
+function deriveIniciativasFiltrado(
+  base: OpsLegaisIniciativasDashboard,
+  mesFiltro: MesFiltroEficiencia,
+  ano: number,
+): OpsLegaisIniciativasDashboard {
+  const itensMeta = base.itens.filter((i) => contaNaMeta(i.tags))
+  const itens =
+    mesFiltro == null
+      ? itensMeta
+      : itensMeta.filter((i) => projetoNoFiltro(i.data, mesFiltro, ano))
+
+  const projetosConcluidos = itens.length
+  const projetosFinalizados = itens.filter((i) => hasTagItem(i.tags, 'Projetos')).length
+  const melhoriasFinalizadas = itens.filter((i) => hasTagItem(i.tags, 'Melhorias')).length
+  const horasGanhas = itens.reduce((s, i) => s + (Number(i.horas) || 0), 0)
+  const diasUteis = horasGanhas / 8
+  const meta = base.meta_anual || 24
+  const pctProgresso = meta > 0 ? projetosConcluidos / meta : 0
+
+  const { inicio, fimExclusivo } =
+    mesFiltro == null
+      ? { inicio: base.inicio, fimExclusivo: base.fim }
+      : rangePeriodoFiltro(ano, mesFiltro)
+
+  const concluidos =
+    base.painel?.concluidos.filter((p) => {
+      const tipoOk = p.tipo === 'Projetos' || p.tipo === 'Melhorias'
+      if (!tipoOk) return false
+      if (mesFiltro == null) return true
+      return projetoTemAtividadeNoFiltro(p, mesFiltro, ano)
+    }) ?? []
+
+  return {
+    ...base,
+    projetos_concluidos: projetosConcluidos,
+    projetos_finalizados: projetosFinalizados,
+    melhorias_finalizadas: melhoriasFinalizadas,
+    pct_progresso: Math.round(pctProgresso * 10000) / 100,
+    pct_contribuicao_projetos:
+      projetosConcluidos > 0
+        ? Math.round((projetosFinalizados / projetosConcluidos) * 10000) / 100
+        : 0,
+    pct_contribuicao_melhorias:
+      projetosConcluidos > 0
+        ? Math.round((melhoriasFinalizadas / projetosConcluidos) * 10000) / 100
+        : 0,
+    horas_ganhas: Math.round(horasGanhas * 100) / 100,
+    horas_formatadas: formatHorasGanhas(horasGanhas),
+    dias_uteis: Math.round(diasUteis * 10) / 10,
+    dias_uteis_mensal: Math.round((diasUteis / 12) * 10) / 10,
+    cor_progresso: progressColor(pctProgresso),
+    inicio,
+    fim: fimExclusivo,
+    itens,
+    painel: base.painel
+      ? {
+          ...base.painel,
+          concluidos,
+        }
+      : undefined,
+  }
+}
+
 export function OpsLegaisIniciativasTab({ ano, mesFiltro }: Props) {
-  /** KPIs do topo = acumulado do ano (ignora MesFilterButtons), como no BI. */
-  const { data, isLoading, isError, error } = useQuery({
+  /** Uma chamada ClickUp por ano; filtro de mês é só no client. */
+  const { data: anoData, isLoading, isError, error } = useQuery({
     queryKey: ['eficiencia', 'ops-legais-iniciativas', ano],
     queryFn: (): Promise<OpsLegaisIniciativasDashboard> =>
       eficienciaService.fetchOpsLegaisIniciativas(ano, null),
+    staleTime: 5 * 60_000,
   })
 
-  const d = data
+  const d = useMemo(
+    () => (anoData ? deriveIniciativasFiltrado(anoData, mesFiltro, ano) : undefined),
+    [anoData, mesFiltro, ano],
+  )
   const loading = isLoading
-
-  const painelFiltrado = useMemo((): OpsLegaisIniciativasPainel | undefined => {
-    const painel = d?.painel
-    if (!painel) return undefined
-    return {
-      ...painel,
-      concluidos: painel.concluidos.filter((p: OpsLegaisIniciativasProjeto) =>
-        projetoTemAtividadeNoFiltro(p, mesFiltro, ano),
-      ),
-    }
-  }, [d?.painel, mesFiltro, ano])
+  const painelFiltrado = d?.painel
 
   return (
     <div className="space-y-5">

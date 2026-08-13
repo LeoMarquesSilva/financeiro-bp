@@ -410,7 +410,9 @@ Deno.serve(async (req: Request) => {
       return isConcluidoStatus(t) && inPeriod(taskDate(t), inicio, fim)
     })
 
-    const unicos = concluidosPeriodo
+    /** Meta anual = só tarefas com tag Projetos ou Melhorias (não conta “Outro”). */
+    const contaNaMeta = (t: ClickUpTask) => hasTag(t, 'Projetos') || hasTag(t, 'Melhorias')
+    const unicos = concluidosPeriodo.filter(contaNaMeta)
     const projetosConcluidos = unicos.length
     const projetosFinalizados = unicos.filter((t) => hasTag(t, 'Projetos')).length
     const melhoriasFinalizadas = unicos.filter((t) => hasTag(t, 'Melhorias')).length
@@ -439,7 +441,7 @@ Deno.serve(async (req: Request) => {
       return isConcluidoStatus(t) && inInclusive(taskDate(t), semana.inicio, semana.fim)
     }).length
 
-    // Painel: agrega pela TAREFA (pai), com todas as subtarefas concluídas
+    // Painel: agrega pela TAREFA (pai); só Projetos/Melhorias entram no racional da meta
     const concluidosPainel = buildPainelPorTarefa(
       all,
       byId,
@@ -447,7 +449,7 @@ Deno.serve(async (req: Request) => {
       inicio,
       fim,
       false,
-    )
+    ).filter((p) => p.tipo === 'Projetos' || p.tipo === 'Melhorias')
 
     const semanaAgrupada = buildPainelPorTarefa(
       all,

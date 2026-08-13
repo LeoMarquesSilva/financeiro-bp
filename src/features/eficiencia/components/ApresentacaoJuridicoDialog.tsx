@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Check, Copy, Loader2, Presentation } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,14 @@ import { copyApresentacaoSlideToClipboard } from '@/shared/utils/copyChartImage'
 import { MesFilterButtons } from './MesFilterButtons'
 import { ApresentacaoJuridicoSlide } from './ApresentacaoJuridicoSlide'
 import { useApresentacaoMatrix } from '../hooks/useApresentacaoMatrix'
+import {
+  APRESENTACAO_BLOCOS,
+  type ApresentacaoBlocoId,
+} from '../utils/apresentacaoMatrix'
+import { mesesRangeBigNumber } from '../utils/apresentacaoBigNumber'
 import type { MesFiltroEficiencia } from '../constants'
+
+type CopyStatus = 'idle' | 'loading' | 'done'
 
 type Props = {
   open: boolean
@@ -30,31 +37,118 @@ export function ApresentacaoJuridicoDialog({
   onMesFiltroChange,
 }: Props) {
   const slideRef = useRef<HTMLDivElement>(null)
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
-  const { rows, colunas, loading } = useApresentacaoMatrix(ano, mesFiltro, open)
+  const [copyStatus, setCopyStatus] = useState<Partial<Record<ApresentacaoBlocoId, CopyStatus>>>(
+    {},
+  )
+  /** Período exclusivo do Bloco 4 (YoY). Default Jan–Jun. */
+  const [bnMesInicio, setBnMesInicio] = useState(1)
+  const [bnMesFim, setBnMesFim] = useState(6)
+  const bigNumberMeses = useMemo(
+    () => mesesRangeBigNumber(bnMesInicio, bnMesFim),
+    [bnMesInicio, bnMesFim],
+  )
+  /** Período exclusivo do Bloco 6 (Iniciativas) — alinhado à aba Ops Legais. */
+  const [iniciativasMesFiltro, setIniciativasMesFiltro] =
+    useState<MesFiltroEficiencia>(null)
+  /** Período exclusivo do Bloco 7 (Marketing). */
+  const [marketingMesFiltro, setMarketingMesFiltro] =
+    useState<MesFiltroEficiencia>(null)
+  /** Período exclusivo do Bloco 8 (Financeiro Ops). */
+  const [financeiroOpsMesFiltro, setFinanceiroOpsMesFiltro] =
+    useState<MesFiltroEficiencia>(null)
 
-  const handleCopy = async () => {
-    const el = slideRef.current
-    if (!el || loading) {
+  const {
+    rows,
+    colunas,
+    composicao,
+    receitaRows,
+    bigNumber,
+    controladoria,
+    iniciativas,
+    marketing,
+    financeiroOps,
+    loading,
+    loadingComposicao,
+    loadingBigNumber,
+    loadingControladoria,
+    loadingIniciativas,
+    loadingMarketing,
+    loadingFinanceiroOps,
+    bigNumberError,
+    controladoriaError,
+    iniciativasError,
+    marketingError,
+    financeiroOpsError,
+  } = useApresentacaoMatrix(
+    ano,
+    mesFiltro,
+    open,
+    bigNumberMeses,
+    iniciativasMesFiltro,
+    marketingMesFiltro,
+    financeiroOpsMesFiltro,
+  )
+
+  const handleCopyBloco = async (blocoId: ApresentacaoBlocoId) => {
+    const root = slideRef.current
+    if (!root) {
       toast.error('Conteúdo não disponível para cópia')
       return
     }
-    setCopyStatus('loading')
+    if (blocoId === 'bignumber' && (loadingBigNumber || !bigNumber)) {
+      toast.error('Big Numbers ainda carregando')
+      return
+    }
+    if (blocoId === 'controladoria' && (loadingControladoria || !controladoria)) {
+      toast.error('Controladoria ainda carregando')
+      return
+    }
+    if (blocoId === 'iniciativas' && (loadingIniciativas || !iniciativas)) {
+      toast.error('Iniciativas ainda carregando')
+      return
+    }
+    if (blocoId === 'marketing' && (loadingMarketing || !marketing)) {
+      toast.error('Marketing ainda carregando')
+      return
+    }
+    if (blocoId === 'financeiro_ops' && (loadingFinanceiroOps || !financeiroOps)) {
+      toast.error('Financeiro Ops ainda carregando')
+      return
+    }
+    if (blocoId === 'composicao' && (loadingComposicao || !composicao)) {
+      toast.error('Composição ainda carregando')
+      return
+    }
+    if (
+      (blocoId === 'juridico' || blocoId === 'financeiro') &&
+      loading
+    ) {
+      toast.error('Conteúdo ainda carregando')
+      return
+    }
+    const el = root.querySelector<HTMLElement>(`[data-apresentacao-export="${blocoId}"]`)
+    if (!el) {
+      toast.error('Bloco não encontrado')
+      return
+    }
+
+    setCopyStatus((prev) => ({ ...prev, [blocoId]: 'loading' }))
     try {
       await copyApresentacaoSlideToClipboard(el)
-      setCopyStatus('done')
-      toast.success('Slide 33,87×16,32 cm copiado — cole com Ctrl+V')
-      window.setTimeout(() => setCopyStatus('idle'), 2000)
+      setCopyStatus((prev) => ({ ...prev, [blocoId]: 'done' }))
+      const label =
+        APRESENTACAO_BLOCOS.find((b) => b.id === blocoId)?.label ?? 'Bloco'
+      toast.success(`${label} copiado (33,87×16,32 cm) — cole com Ctrl+V`)
+      window.setTimeout(() => {
+        setCopyStatus((prev) => ({ ...prev, [blocoId]: 'idle' }))
+      }, 2000)
     } catch (error) {
-      setCopyStatus('idle')
+      setCopyStatus((prev) => ({ ...prev, [blocoId]: 'idle' }))
       const message =
         error instanceof Error ? error.message : 'Não foi possível copiar o conteúdo'
       toast.error(message)
     }
   }
-
-  const CopyIcon =
-    copyStatus === 'loading' ? Loader2 : copyStatus === 'done' ? Check : Copy
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -70,26 +164,51 @@ export function ApresentacaoJuridicoDialog({
                 Apresentação — Jurídico
               </DialogTitle>
               <p className="mt-1 text-xs text-slate-500">
-                3 blocos · áreas com ícone · cópia 33,87 × 16,32 cm
+                Bloco 1–3: filtro abaixo · Bloco 4: YoY · Bloco 5: ano · Bloco
+                6–8: filtro próprio · cópia 33,87 × 16,32 cm
               </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 shrink-0 gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700"
-              onClick={handleCopy}
-              disabled={copyStatus === 'loading' || loading}
-              aria-label="Copiar slide para PowerPoint"
-            >
-              <CopyIcon
-                className={
-                  copyStatus === 'loading' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'
-                }
-                aria-hidden
-              />
-              COPIAR
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {APRESENTACAO_BLOCOS.map((bloco, index) => {
+                const status = copyStatus[bloco.id] ?? 'idle'
+                const CopyIcon =
+                  status === 'loading' ? Loader2 : status === 'done' ? Check : Copy
+                const blocoBusy =
+                  bloco.id === 'bignumber'
+                    ? loadingBigNumber || !bigNumber
+                    : bloco.id === 'controladoria'
+                      ? loadingControladoria || !controladoria
+                      : bloco.id === 'iniciativas'
+                        ? loadingIniciativas || !iniciativas
+                        : bloco.id === 'marketing'
+                          ? loadingMarketing || !marketing
+                          : bloco.id === 'financeiro_ops'
+                            ? loadingFinanceiroOps || !financeiroOps
+                            : bloco.id === 'composicao'
+                              ? loadingComposicao || !composicao
+                              : loading
+                return (
+                  <Button
+                    key={bloco.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0 gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700"
+                    onClick={() => handleCopyBloco(bloco.id)}
+                    disabled={status === 'loading' || blocoBusy}
+                    aria-label={`Copiar ${bloco.label} para PowerPoint`}
+                  >
+                    <CopyIcon
+                      className={
+                        status === 'loading' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'
+                      }
+                      aria-hidden
+                    />
+                    Copiar bloco {index + 1}
+                  </Button>
+                )
+              })}
+            </div>
           </div>
           <div className="mt-3">
             <MesFilterButtons
@@ -108,7 +227,36 @@ export function ApresentacaoJuridicoDialog({
               ref={slideRef}
               colunas={colunas}
               rows={rows}
+              composicao={composicao}
+              receitaRows={receitaRows}
+              bigNumber={bigNumber}
+              controladoria={controladoria}
+              iniciativas={iniciativas}
+              marketing={marketing}
+              financeiroOps={financeiroOps}
+              ano={ano}
               loading={loading}
+              loadingComposicao={loadingComposicao}
+              loadingBigNumber={loadingBigNumber}
+              loadingControladoria={loadingControladoria}
+              loadingIniciativas={loadingIniciativas}
+              loadingMarketing={loadingMarketing}
+              loadingFinanceiroOps={loadingFinanceiroOps}
+              bigNumberError={bigNumberError}
+              controladoriaError={controladoriaError}
+              iniciativasError={iniciativasError}
+              marketingError={marketingError}
+              financeiroOpsError={financeiroOpsError}
+              bigNumberMesInicio={bnMesInicio}
+              bigNumberMesFim={bnMesFim}
+              onBigNumberMesInicioChange={setBnMesInicio}
+              onBigNumberMesFimChange={setBnMesFim}
+              iniciativasMesFiltro={iniciativasMesFiltro}
+              onIniciativasMesFiltroChange={setIniciativasMesFiltro}
+              marketingMesFiltro={marketingMesFiltro}
+              onMarketingMesFiltroChange={setMarketingMesFiltro}
+              financeiroOpsMesFiltro={financeiroOpsMesFiltro}
+              onFinanceiroOpsMesFiltroChange={setFinanceiroOpsMesFiltro}
             />
           </div>
         </div>

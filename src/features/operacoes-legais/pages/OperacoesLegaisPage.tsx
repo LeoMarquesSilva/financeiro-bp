@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Lightbulb,
   Newspaper,
+  Presentation,
   RefreshCcw,
   Target,
   UserMinus,
@@ -16,7 +17,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/AuthContext'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ApresentacaoJuridicoDialog } from '@/features/eficiencia/components/ApresentacaoJuridicoDialog'
 import { GestaoPdiTab } from '@/features/eficiencia/components/GestaoPdiTab'
 import { MesFilterButtons } from '@/features/eficiencia/components/MesFilterButtons'
 import { OperacoesLegaisOverviewTab } from '@/features/eficiencia/components/OperacoesLegaisOverviewTab'
@@ -133,10 +136,13 @@ function OpsLegaisTabTrigger({ tab }: { tab: TabDef }) {
 }
 
 export function OperacoesLegaisPage() {
-  const { loading: authLoading } = useAuth()
+  const { loading: authLoading, role } = useAuth()
+  /** Apresentação Jurídico — somente admin (coordenador Ops não vê). */
+  const canVerApresentacao = role === 'admin'
   const [ano, setAno] = useState(ANO_PADRAO)
   const [tab, setTab] = useState<TabId>('overview')
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
+  const [apresentacaoOpen, setApresentacaoOpen] = useState(false)
 
   // Desenvolvimento / Retenção: indicador anual — sem recorte De/Até.
   useEffect(() => {
@@ -267,9 +273,33 @@ export function OperacoesLegaisPage() {
                 tab !== 'overview' && tab !== 'treinamentos' && tab !== 'turnover'
               }
               ano={ano}
+              trailing={
+                canVerApresentacao ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-[30px] gap-1.5 rounded-full border-slate-800 bg-slate-800 px-3 text-xs font-bold text-white hover:bg-slate-700 hover:text-white"
+                    onClick={() => setApresentacaoOpen(true)}
+                  >
+                    <Presentation className="h-3.5 w-3.5" aria-hidden />
+                    Apresentação
+                  </Button>
+                ) : null
+              }
             />
           </div>
         )}
+
+        {canVerApresentacao ? (
+          <ApresentacaoJuridicoDialog
+            open={apresentacaoOpen}
+            onOpenChange={setApresentacaoOpen}
+            ano={ano}
+            mesFiltro={mesFiltro}
+            onMesFiltroChange={setMesFiltro}
+          />
+        ) : null}
 
         <TabsContent value="overview" className="mt-5">
           <OperacoesLegaisOverviewTab ano={ano} mesFiltro={mesFiltro} />

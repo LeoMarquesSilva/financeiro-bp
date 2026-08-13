@@ -21,6 +21,8 @@ type Props = {
   data: OpsLegaisResponsumDashboard | null
   loading?: boolean
   error?: Error | null
+  /** Listas Concluídos / Pendentes (default true). Desligar na Apresentação. */
+  showListas?: boolean
 }
 
 function formatInt(n: number): string {
@@ -41,7 +43,12 @@ function gaugeColor(media: number): string {
   return '#EF4444'
 }
 
-export function OpsLegaisResponsumPanel({ data, loading, error }: Props) {
+export function OpsLegaisResponsumPanel({
+  data,
+  loading,
+  error,
+  showListas = true,
+}: Props) {
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const [openPend, setOpenPend] = useState<string | null>(null)
@@ -214,6 +221,7 @@ export function OpsLegaisResponsumPanel({ data, loading, error }: Props) {
         </section>
       </div>
 
+      {showListas ? (
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
@@ -342,6 +350,7 @@ export function OpsLegaisResponsumPanel({ data, loading, error }: Props) {
           </div>
         </section>
       </div>
+      ) : null}
     </div>
   )
 }

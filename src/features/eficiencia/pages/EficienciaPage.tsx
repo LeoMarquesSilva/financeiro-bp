@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Smile, Award, Trophy, Presentation } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Smile, Award, Trophy } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useAuth } from '@/lib/AuthContext'
 import { useEficienciaOverview } from '../hooks/useEficiencia'
@@ -27,7 +26,6 @@ import { ReceitaBrutaTab } from '../components/ReceitaBrutaTab'
 import { InadimplenciaTab } from '../components/InadimplenciaTab'
 import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab'
 import { ReportarIndicadorButton } from '../components/ReportarIndicadorButton'
-import { ApresentacaoJuridicoDialog } from '../components/ApresentacaoJuridicoDialog'
 import type { RacionalIndicador } from '../types/eficiencia.types'
 import { EFICIENCIA_TABS_COM_RESPONSAVEL } from '../utils/responsavelMatch'
 
@@ -150,7 +148,6 @@ export function EficienciaPage() {
   const [areaOverview, setAreaOverview] = useState<string | null>(null)
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
   const [responsavel, setResponsavel] = useState<string | null>(null)
-  const [apresentacaoOpen, setApresentacaoOpen] = useState(false)
 
   // Overview: admin/sócio filtram qualquer área; coordenador só Todas ↔ área dele.
   const overviewAllowedAreas = access.canFilterAreas
@@ -264,32 +261,8 @@ export function EficienciaPage() {
             showSemanas={false}
             showDiaPicker={tab !== 'overview'}
             ano={ano}
-            trailing={
-              access.canUseIndicadoresAdmin ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-[30px] gap-1.5 rounded-full border-slate-800 bg-slate-800 px-3 text-xs font-bold text-white hover:bg-slate-700 hover:text-white"
-                  onClick={() => setApresentacaoOpen(true)}
-                >
-                  <Presentation className="h-3.5 w-3.5" aria-hidden />
-                  Apresentação
-                </Button>
-              ) : null
-            }
           />
         </div>
-
-        {access.canUseIndicadoresAdmin ? (
-          <ApresentacaoJuridicoDialog
-            open={apresentacaoOpen}
-            onOpenChange={setApresentacaoOpen}
-            ano={ano}
-            mesFiltro={mesFiltro}
-            onMesFiltroChange={setMesFiltro}
-          />
-        ) : null}
 
         <TabsContent value="overview" className="mt-5">
           <OverviewTab

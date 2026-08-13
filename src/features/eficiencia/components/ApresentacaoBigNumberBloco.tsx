@@ -1,0 +1,590 @@
+import {
+  Banknote,
+  Clock3,
+  FileText,
+  FolderOpen,
+  ListChecks,
+  Scale,
+  Users,
+} from 'lucide-react'
+import { MESES_ABREV, MESES_NOME } from '@/features/receita/constants'
+import { formatCurrency } from '@/shared/utils/format'
+import {
+  deltaPct,
+  formatCount,
+  formatDeltaAbs,
+  formatDeltaPctLabel,
+  formatHorasBigNumberKpi,
+  formatHorasBigNumberTop,
+  labelPeriodoBigNumber,
+  type ApresentacaoBigNumberData,
+  type BigNumberPar,
+  type BigNumberTopPar,
+} from '../utils/apresentacaoBigNumber'
+
+const GOLD = '#D5B170'
+const GOLD_DARK = '#C6A361'
+const HEADER_BG = '#333f48'
+
+type Props = {
+  data: ApresentacaoBigNumberData | null
+  loading?: boolean
+  error?: Error | null
+  ano: number
+  mesInicio: number
+  mesFim: number
+  onMesInicioChange: (mes: number) => void
+  onMesFimChange: (mes: number) => void
+}
+
+type KpiDef = {
+  key: keyof ApresentacaoBigNumberData['kpis']
+  label: string
+  icon: typeof Clock3
+  kind: 'horas' | 'count' | 'moeda'
+  accentAtual?: string
+}
+
+const KPI_DEFS: KpiDef[] = [
+  { key: 'timesheet', label: 'Total Timesheet', icon: Clock3, kind: 'horas' },
+  { key: 'pastas_ativas', label: 'Pastas Ativas', icon: FolderOpen, kind: 'count' },
+  { key: 'publicacoes', label: 'Publicações', icon: FileText, kind: 'count' },
+  { key: 'protocolos', label: 'Protocolos', icon: Users, kind: 'count' },
+  { key: 'providencias', label: 'Providências', icon: ListChecks, kind: 'count' },
+  {
+    key: 'receita_bruta',
+    label: 'Receita Bruta',
+    icon: Banknote,
+    kind: 'moeda',
+    accentAtual: '#16A34A',
+  },
+]
+
+type TopDef = {
+  key: keyof ApresentacaoBigNumberData['top5']
+  title: string
+  valorLabel: string
+  icon: typeof Clock3
+  formatValor: (v: number) => string
+}
+
+const TOP_DEFS: TopDef[] = [
+  {
+    key: 'timesheet',
+    title: 'TOP 5 Clientes com mais Timesheet',
+    valorLabel: 'Tempo',
+    icon: Users,
+    formatValor: formatHorasBigNumberTop,
+  },
+  {
+    key: 'publicacoes',
+    title: 'TOP 5 Clientes com mais Publicações',
+    valorLabel: 'Publicações',
+    icon: FileText,
+    formatValor: formatCount,
+  },
+  {
+    key: 'protocolos',
+    title: 'TOP 5 Clientes com mais Protocolos',
+    valorLabel: 'Protocolos',
+    icon: Scale,
+    formatValor: formatCount,
+  },
+  {
+    key: 'providencias',
+    title: 'TOP 5 Clientes com mais Providências',
+    valorLabel: 'Providências',
+    icon: ListChecks,
+    formatValor: formatCount,
+  },
+]
+
+function formatValorKpi(kind: KpiDef['kind'], v: number): string {
+  if (kind === 'horas') return formatHorasBigNumberKpi(v)
+  if (kind === 'moeda') return formatCurrency(v)
+  return formatCount(v)
+}
+
+function KpiCard({
+  def,
+  par,
+  ano,
+  anoAnterior,
+}: {
+  def: KpiDef
+  par: BigNumberPar
+  ano: number
+  anoAnterior: number
+}) {
+  const Icon = def.icon
+  const pct = deltaPct(par.atual, par.anterior)
+  const up = pct != null && pct > 0
+  const down = pct != null && pct < 0
+  const trendColor = up ? '#16A34A' : down ? '#DC2626' : '#64748B'
+  const deltaLabel = formatDeltaPctLabel(par.atual, par.anterior)
+  const absLabel = formatDeltaAbs(def.kind, par.atual, par.anterior)
+
+  return (
+    <div
+      data-overview-copy-card
+      data-chart-export-preserve-bg
+      style={{
+        borderRadius: 10,
+        border: '1px solid #E2E8F0',
+        background: '#FFFFFF',
+        padding: '10px 12px',
+        minWidth: 0,
+        printColorAdjust: 'exact',
+        WebkitPrintColorAdjust: 'exact',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 999,
+            background: '#F5F0E6',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: GOLD_DARK,
+            flexShrink: 0,
+          }}
+        >
+          <Icon size={14} aria-hidden />
+        </span>
+        <span
+          style={{
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            color: '#64748B',
+          }}
+        >
+          {def.label}
+        </span>
+      </div>
+
+      <div
+        style={{
+          fontSize: def.kind === 'moeda' ? 13 : 16,
+          fontWeight: 800,
+          color: def.accentAtual ?? '#0F172A',
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1.15,
+        }}
+      >
+        {formatValorKpi(def.kind, par.atual)}
+      </div>
+      <div
+        style={{
+          marginTop: 2,
+          fontSize: 10,
+          color: '#64748B',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {anoAnterior}: {formatValorKpi(def.kind, par.anterior)}
+      </div>
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 11,
+          fontWeight: 700,
+          color: trendColor,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {up ? '↑ ' : down ? '↓ ' : ''}
+        {deltaLabel}{' '}
+        <span style={{ fontWeight: 500, color: '#64748B' }}>({absLabel})</span>
+      </div>
+      <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2 }}>{ano} vs {anoAnterior}</div>
+    </div>
+  )
+}
+
+function TopTable({
+  ano,
+  valorLabel,
+  rows,
+  formatValor,
+}: {
+  ano: number
+  valorLabel: string
+  rows: { grupo: string; valor: number }[]
+  formatValor: (v: number) => string
+}) {
+  const filled = [...rows]
+  while (filled.length < 5) {
+    filled.push({ grupo: '—', valor: NaN })
+  }
+
+  return (
+    <div style={{ minWidth: 0, flex: 1 }}>
+      <div
+        style={{
+          textAlign: 'center',
+          fontSize: 11,
+          fontWeight: 700,
+          color: '#334155',
+          marginBottom: 4,
+        }}
+      >
+        {ano}
+      </div>
+      <table
+        style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontSize: 10,
+          border: '1px solid #CBD5E1',
+          borderRadius: 6,
+          overflow: 'hidden',
+        }}
+      >
+        <thead>
+          <tr style={{ background: GOLD_DARK, color: '#fff' }}>
+            <th
+              style={{
+                textAlign: 'left',
+                padding: '5px 8px',
+                fontWeight: 700,
+              }}
+            >
+              Grupo
+            </th>
+            <th
+              style={{
+                textAlign: 'right',
+                padding: '5px 8px',
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {valorLabel}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {filled.map((row, i) => (
+            <tr
+              key={`${ano}-${i}`}
+              style={{ background: i % 2 === 1 ? '#F8FAFC' : '#FFFFFF' }}
+            >
+              <td
+                style={{
+                  padding: '4px 8px',
+                  color: '#334155',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: 160,
+                }}
+              >
+                {row.grupo}
+              </td>
+              <td
+                style={{
+                  padding: '4px 8px',
+                  textAlign: 'right',
+                  fontWeight: 600,
+                  fontVariantNumeric: 'tabular-nums',
+                  color: '#0F172A',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {Number.isFinite(row.valor) ? formatValor(row.valor) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TopBlock({
+  def,
+  par,
+  ano,
+  anoAnterior,
+}: {
+  def: TopDef
+  par: BigNumberTopPar
+  ano: number
+  anoAnterior: number
+}) {
+  const Icon = def.icon
+  return (
+    <div
+      data-overview-copy-card
+      data-chart-export-preserve-bg
+      style={{
+        borderRadius: 12,
+        border: '1px solid #E2E8F0',
+        background: '#FFFFFF',
+        padding: '12px 12px 14px',
+        printColorAdjust: 'exact',
+        WebkitPrintColorAdjust: 'exact',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 10,
+        }}
+      >
+        <span
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 999,
+            background: HEADER_BG,
+            color: '#fff',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <Icon size={14} aria-hidden />
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            textTransform: 'uppercase',
+            letterSpacing: '0.02em',
+            color: '#0F172A',
+          }}
+        >
+          {def.title}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <TopTable
+          ano={anoAnterior}
+          valorLabel={def.valorLabel}
+          rows={par.anterior}
+          formatValor={def.formatValor}
+        />
+        <TopTable
+          ano={ano}
+          valorLabel={def.valorLabel}
+          rows={par.atual}
+          formatValor={def.formatValor}
+        />
+      </div>
+    </div>
+  )
+}
+
+function MesSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (mes: number) => void
+}) {
+  return (
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+      <span style={{ fontWeight: 600, color: '#64748B' }}>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{
+          height: 28,
+          borderRadius: 6,
+          border: '1px solid #CBD5E1',
+          background: '#fff',
+          padding: '0 8px',
+          fontSize: 11,
+          fontWeight: 600,
+          color: '#0F172A',
+        }}
+      >
+        {MESES_NOME.map((nome, i) => (
+          <option key={nome} value={i + 1}>
+            {MESES_ABREV[i]} — {nome}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+export function ApresentacaoBigNumberBloco({
+  data,
+  loading,
+  error,
+  ano,
+  mesInicio,
+  mesFim,
+  onMesInicioChange,
+  onMesFimChange,
+}: Props) {
+  const periodoPreview = labelPeriodoBigNumber(
+    [
+      ...Array.from(
+        { length: Math.abs(mesFim - mesInicio) + 1 },
+        (_, i) => Math.min(mesInicio, mesFim) + i,
+      ),
+    ],
+    ano,
+    ano - 1,
+  )
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        minWidth: 1100,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        fontFamily: 'Segoe UI, system-ui, sans-serif',
+      }}
+    >
+      {/* Controles — fora do export PPT */}
+      <div
+        data-chart-export-ignore
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 12,
+          padding: '8px 10px',
+          borderRadius: 8,
+          border: '1px solid #E2E8F0',
+          background: '#FFFFFF',
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
+          Período Big Numbers (YoY)
+        </span>
+        <MesSelect label="De" value={mesInicio} onChange={onMesInicioChange} />
+        <MesSelect label="Até" value={mesFim} onChange={onMesFimChange} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: GOLD_DARK }}>
+          {periodoPreview}
+        </span>
+      </div>
+
+      <div
+        data-apresentacao-export="bignumber"
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          backgroundColor: 'transparent',
+          padding: 4,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'baseline',
+          gap: 10,
+        }}
+      >
+        <div
+          data-overview-copy-card
+          data-chart-export-preserve-bg
+          style={{
+            display: 'inline-block',
+            borderRadius: 5,
+            backgroundColor: GOLD,
+            color: '#fff',
+            padding: '3px 10px',
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.03em',
+            whiteSpace: 'nowrap',
+            printColorAdjust: 'exact',
+            WebkitPrintColorAdjust: 'exact',
+          }}
+        >
+          6. Big Numbers Operação
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 700, color: GOLD_DARK }}>
+          {data?.periodoLabel ?? periodoPreview}
+        </span>
+      </div>
+
+      {error && !data ? (
+        <div
+          style={{
+            borderRadius: 8,
+            border: '1px solid #FECACA',
+            background: '#FEF2F2',
+            padding: '12px 14px',
+            fontSize: 12,
+            color: '#B91C1C',
+          }}
+        >
+          Não foi possível carregar o Big Numbers
+          {error.message ? `: ${error.message}` : '.'}
+        </div>
+      ) : loading || !data ? (
+        <div style={{ display: 'grid', gap: 6 }}>
+          <div style={{ fontSize: 11, color: '#64748B' }}>Carregando Big Numbers…</div>
+          {Array.from({ length: 4 }, (_, i) => (
+            <div
+              key={i}
+              style={{ height: 40, borderRadius: 8, background: 'rgba(0,0,0,0.06)' }}
+            />
+          ))}
+        </div>
+      ) : (
+        <>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+              gap: 8,
+            }}
+          >
+            {KPI_DEFS.map((def) => (
+              <KpiCard
+                key={def.key}
+                def={def}
+                par={data.kpis[def.key]}
+                ano={data.ano}
+                anoAnterior={data.anoAnterior}
+              />
+            ))}
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 10,
+            }}
+          >
+            {TOP_DEFS.map((def) => (
+              <TopBlock
+                key={def.key}
+                def={def}
+                par={data.top5[def.key]}
+                ano={data.ano}
+                anoAnterior={data.anoAnterior}
+              />
+            ))}
+          </div>
+        </>
+      )}
+      </div>
+    </div>
+  )
+}
