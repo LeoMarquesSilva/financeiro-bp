@@ -52,8 +52,8 @@ export function ReceitaMesVisaoGerencialPanel({
   const [inadGrupoExpandido, setInadGrupoExpandido] = useState(false)
   const [vencExpandidoRecebido, setVencExpandidoRecebido] = useState<string | null>(null)
   const [vencExpandidoInad, setVencExpandidoInad] = useState<string | null>(null)
-  const composicaoRecebidoRef = useRef<HTMLElement>(null)
-  const inadExportRef = useRef<HTMLElement>(null)
+  const composicaoRecebidoRef = useRef<HTMLDivElement>(null)
+  const inadExportRef = useRef<HTMLDivElement>(null)
 
   const totalRecebido = fechamento.recebido_classificado
   const inadMes = inadimplenciaMesFaturadoNaoPago(fechamento)
