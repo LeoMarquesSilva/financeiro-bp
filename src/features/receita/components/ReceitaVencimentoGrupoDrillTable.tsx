@@ -16,6 +16,8 @@ type VencRowProps = {
   vencExpandido: string | null
   onToggleVenc: (key: string) => void
   accent?: 'sky' | 'red'
+  /** Exportação: exibe todos os vencimentos abertos com grupos visíveis */
+  expandAllVencimentos?: boolean
 }
 
 type RecebidoProps = VencRowProps & {
@@ -149,6 +151,7 @@ function InadGrupoRow({
 
 export function ReceitaVencimentoGrupoDrillTable(props: Props) {
   const accent = props.variant === 'recebido' ? (props.accent ?? 'sky') : 'red'
+  const expandAll = props.expandAllVencimentos ?? false
 
   if (props.vencimentos.length === 0) {
     return <p className="py-4 text-center text-xs text-slate-500">Nenhum item nesta linha.</p>
@@ -174,7 +177,7 @@ export function ReceitaVencimentoGrupoDrillTable(props: Props) {
         <tbody>
           {props.variant === 'recebido'
             ? props.vencimentos.map((venc) => {
-                const expandido = props.vencExpandido === venc.vencimentoKey
+                const expandido = expandAll || props.vencExpandido === venc.vencimentoKey
                 return (
                   <Fragment key={venc.vencimentoKey}>
                     <VencimentoHeaderRow
@@ -200,7 +203,7 @@ export function ReceitaVencimentoGrupoDrillTable(props: Props) {
                 )
               })
             : props.vencimentos.map((venc) => {
-                const expandido = props.vencExpandido === venc.vencimentoKey
+                const expandido = expandAll || props.vencExpandido === venc.vencimentoKey
                 return (
                   <Fragment key={venc.vencimentoKey}>
                     <VencimentoHeaderRow

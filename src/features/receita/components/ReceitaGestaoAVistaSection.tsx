@@ -195,6 +195,7 @@ export function ReceitaGestaoAVistaSection({
           mesLabel={detalheMes.mesLabel}
           totalRecebido={detalheMes.recebido ?? rowConsolidado?.recebido ?? 0}
           totalPrevisto={detalheMes.previsto}
+          metaMes={detalheMes.meta}
           areaKey={areaSelecionada?.key ?? null}
           areaLabel={areaSelecionada?.label ?? null}
         />

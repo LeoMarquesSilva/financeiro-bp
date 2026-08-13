@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowLeft,
@@ -66,6 +66,7 @@ import {
 } from '../utils/receitaPrevistoFechamento'
 import { filtrarClassificacaoPorArea } from '../utils/receitaInadimplenciaAreaFilter'
 import { ReceitaMesVisaoGerencialPanel } from './ReceitaMesVisaoGerencialPanel'
+import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 
 type Props = {
   open: boolean
@@ -75,6 +76,8 @@ type Props = {
   mesLabel: string
   totalRecebido: number
   totalPrevisto: number
+  /** Meta do mês (já rateada por área quando `areaKey` está ativo). */
+  metaMes?: number | null
   areaKey?: string | null
   areaLabel?: string | null
 }
@@ -104,6 +107,7 @@ export function ReceitaRecebidoClassificacaoSheet({
   mesLabel,
   totalRecebido,
   totalPrevisto,
+  metaMes = null,
   areaKey = null,
   areaLabel = null,
 }: Props) {
@@ -130,6 +134,7 @@ export function ReceitaRecebidoClassificacaoSheet({
     [],
   )
   const buscaDebounced = useDebounce(busca, 250)
+  const sheetExportRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) {
@@ -569,10 +574,10 @@ export function ReceitaRecebidoClassificacaoSheet({
 
   const recebidoHeader = somaCategorias > 0 ? somaCategorias : totalRecebido
   const inadHeader = fechamento ? inadimplenciaMesFaturadoNaoPago(fechamento) : null
-  const pctPrevistoCaixaHeader =
-    fechamento && fechamento.previsto > 0
-      ? (fechamento.recebido_previsto_caixa / fechamento.previsto) * 100
-      : null
+  const pctMetaMesHeader =
+    metaMes != null && metaMes > 0 ? (recebidoHeader / metaMes) * 100 : null
+  const pctInadPrevistoHeader =
+    inadHeader != null && totalPrevisto > 0 ? (inadHeader / totalPrevisto) * 100 : null
 
   const abrirFechamentoDrill = (key: FechamentoDrillKey) => {
     setFechamentoDrill(key)
@@ -650,6 +655,12 @@ export function ReceitaRecebidoClassificacaoSheet({
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="flex w-full max-w-2xl flex-col p-0 sm:max-w-2xl">
+        <div
+          ref={sheetExportRef}
+          data-chart-export-fit-content
+          data-chart-export-preserve-bg
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
         <SheetHeader className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-sky-600 to-sky-700 px-6 py-4 pr-14 text-left">
           {view === 'fechamento' && fechamentoDrill ? (
             <>
@@ -760,19 +771,28 @@ export function ReceitaRecebidoClassificacaoSheet({
             </>
           ) : (
             <>
-              <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white">
-                  <Banknote className="h-5 w-5" aria-hidden />
-                </span>
-                <div className="min-w-0">
-                  <SheetTitle className="text-base font-semibold text-white">
-                    Visão do mês
-                    {areaLabel ? ` — ${areaLabel}` : ''} · {mesLabel} / {ano}
-                  </SheetTitle>
-                  <SheetDescription className="mt-1 text-xs text-sky-100">
-                    Previsto · Recebido · Inadimplência
-                    {areaLabel ? ` · filtro ${areaLabel}` : ''}
-                  </SheetDescription>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white">
+                    <Banknote className="h-5 w-5" aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <SheetTitle className="text-base font-semibold text-white">
+                      Visão do mês
+                      {areaLabel ? ` — ${areaLabel}` : ''} · {mesLabel} / {ano}
+                    </SheetTitle>
+                    <SheetDescription className="mt-1 text-xs text-sky-100">
+                      Previsto · Recebido · Inadimplência
+                      {areaLabel ? ` · filtro ${areaLabel}` : ''}
+                    </SheetDescription>
+                  </div>
+                </div>
+                <div className="shrink-0 pt-1" data-chart-export-ignore>
+                  <ElementCopyButton
+                    containerRef={sheetExportRef}
+                    preserveBackground
+                    className="border-white/30 bg-white/15 text-white shadow-none hover:bg-white/25 hover:text-white"
+                  />
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-3">
@@ -799,22 +819,23 @@ export function ReceitaRecebidoClassificacaoSheet({
                   <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight text-white">
                     {formatCurrency(recebidoHeader)}
                   </p>
-                  <p className="mt-0.5 text-[10px] leading-snug text-sky-100/90">Caixa do mês</p>
-                  {pctPrevistoCaixaHeader != null ? (
-                    <p className="mt-0.5 text-[10px] font-medium tabular-nums text-sky-100">
-                      {formatPercent(pctPrevistoCaixaHeader)} do previsto (venc. mês)
-                    </p>
-                  ) : null}
+                  <p className="mt-0.5 text-[10px] font-medium tabular-nums text-sky-100">
+                    {pctMetaMesHeader != null
+                      ? `${formatPercent(pctMetaMesHeader)} da meta${areaLabel ? ` (${areaLabel})` : ''}`
+                      : '—'}
+                  </p>
                 </div>
-                <div className="rounded-lg bg-red-950/25 px-2 py-2 ring-1 ring-red-300/20">
+                <div className="flex min-h-[72px] flex-col justify-between rounded-lg bg-red-950/25 px-3 py-2.5 ring-1 ring-red-300/20">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-red-100/90">
                     Inad. mês
                   </p>
-                  <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight text-red-100">
+                  <p className="mt-1 text-xl font-bold tabular-nums leading-none tracking-tight text-red-400">
                     {inadHeader != null ? formatCurrency(inadHeader) : '—'}
                   </p>
-                  <p className="mt-0.5 text-[10px] leading-snug text-red-100/80">
-                    Vencido, não pago
+                  <p className="mt-1.5 text-[10px] font-medium tabular-nums text-red-100/90">
+                    {pctInadPrevistoHeader != null
+                      ? `${formatPercent(pctInadPrevistoHeader)} do previsto`
+                      : '—'}
                   </p>
                 </div>
               </div>
@@ -871,6 +892,8 @@ export function ReceitaRecebidoClassificacaoSheet({
                 clienteGrupoMap={clienteGrupoMap}
                 ano={ano}
                 mes={mes}
+                mesLabel={mesLabel}
+                areaLabel={areaLabel}
                 onDrillContabil={abrirFechamentoDrill}
               />
             )}
@@ -1596,6 +1619,7 @@ export function ReceitaRecebidoClassificacaoSheet({
               </div>
             </div>
           )}
+        </div>
         </div>
       </SheetContent>
     </Sheet>

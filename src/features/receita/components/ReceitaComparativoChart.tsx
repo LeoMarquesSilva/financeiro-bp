@@ -2332,6 +2332,7 @@ export function ReceitaComparativoChart({
           mesLabel={detalheMes.mesLabel}
           totalRecebido={detalheMes.recebido}
           totalPrevisto={detalheMes.previsto}
+          metaMes={detalheMes.meta > 0 ? detalheMes.meta : null}
         />
       )}
 

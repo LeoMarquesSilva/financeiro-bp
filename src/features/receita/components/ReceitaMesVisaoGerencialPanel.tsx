@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
+import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import type {
   ReceitaPrevistoFechamentoItemRow,
   ReceitaPrevistoFechamentoMes,
@@ -28,6 +29,8 @@ type Props = {
   clienteGrupoMap: Map<string, string>
   ano: number
   mes: number
+  mesLabel: string
+  areaLabel?: string | null
   onDrillContabil?: (key: FechamentoDrillKey) => void
 }
 
@@ -38,6 +41,8 @@ export function ReceitaMesVisaoGerencialPanel({
   clienteGrupoMap,
   ano,
   mes,
+  mesLabel,
+  areaLabel = null,
   onDrillContabil,
 }: Props) {
   const [contabilAberto, setContabilAberto] = useState(false)
@@ -47,6 +52,8 @@ export function ReceitaMesVisaoGerencialPanel({
   const [inadGrupoExpandido, setInadGrupoExpandido] = useState(false)
   const [vencExpandidoRecebido, setVencExpandidoRecebido] = useState<string | null>(null)
   const [vencExpandidoInad, setVencExpandidoInad] = useState<string | null>(null)
+  const composicaoRecebidoRef = useRef<HTMLElement>(null)
+  const inadExportRef = useRef<HTMLElement>(null)
 
   const totalRecebido = fechamento.recebido_classificado
   const inadMes = inadimplenciaMesFaturadoNaoPago(fechamento)
@@ -98,18 +105,87 @@ export function ReceitaMesVisaoGerencialPanel({
     })
   }
 
+  const contextoMesAreas = `${mesLabel} / ${ano} · ${areaLabel ?? 'Todas as áreas'}`
+
+  const inadHeaderConteudo = (options: { interactive?: boolean } = {}) => (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        {options.interactive ? (
+          <button
+            type="button"
+            onClick={toggleInadGrupo}
+            className="group min-w-0 flex-1 text-left"
+            aria-expanded={inadGrupoExpandido}
+          >
+            <div className="flex items-center gap-1.5">
+              {inadGrupoExpandido ? (
+                <ChevronDown className="h-4 w-4 shrink-0 text-red-700" aria-hidden />
+              ) : (
+                <ChevronRight
+                  className="h-4 w-4 shrink-0 text-red-400 group-hover:text-red-600"
+                  aria-hidden
+                />
+              )}
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-red-900">
+                Inadimplência do mês — por grupo
+              </h3>
+            </div>
+          </button>
+        ) : (
+          <h3 className="min-w-0 text-sm font-semibold uppercase tracking-wide text-red-900">
+            Inadimplência do mês — por grupo
+          </h3>
+        )}
+        {options.interactive ? (
+          <div className="shrink-0" data-chart-export-ignore>
+            <ElementCopyButton
+              containerRef={inadExportRef}
+              preserveBackground
+              className="border-red-200/80 bg-white/80 hover:bg-white"
+            />
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <p className="min-w-0 text-xs font-medium text-red-800">{contextoMesAreas}</p>
+        {pctInadPrevisto != null ? (
+          <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-medium tabular-nums text-red-900">
+            {formatPercent(pctInadPrevisto)} do previsto
+          </span>
+        ) : null}
+      </div>
+    </>
+  )
+
+  const inadTotalRodape = (
+    <div className="mt-2 flex items-center justify-between border-t border-red-200/60 pt-2 text-xs font-semibold text-red-900">
+      <span>= Total inad. mês</span>
+      <span className="tabular-nums">{formatCurrency(inadMes)}</span>
+    </div>
+  )
+
   return (
     <div className="mb-4 space-y-4">
-      <section className="rounded-xl border border-sky-200/70 bg-sky-50/40 p-3">
+      <section
+        ref={composicaoRecebidoRef}
+        data-chart-export-preserve-bg
+        data-chart-export-bg="#eff6ff"
+        className="rounded-xl border border-sky-200/70 bg-sky-50/40 p-3"
+      >
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-sky-900">
-              Composição do recebido
-            </h3>
-            <p className="mt-1 text-[11px] leading-snug text-sky-800/80">
-              Caixa líquido do mês — clique para expandir por vencimento e grupo
-            </p>
+          <h3 className="min-w-0 text-sm font-semibold uppercase tracking-wide text-sky-900">
+            Composição do recebido
+          </h3>
+          <div className="shrink-0" data-chart-export-ignore>
+            <ElementCopyButton
+              containerRef={composicaoRecebidoRef}
+              preserveBackground
+              className="border-sky-200/80 bg-white/80 hover:bg-white"
+            />
           </div>
+        </div>
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <p className="min-w-0 text-xs font-medium text-sky-800">{contextoMesAreas}</p>
           {pctPrevistoCaixa != null ? (
             <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-medium tabular-nums text-sky-900">
               {formatPercent(pctPrevistoCaixa)} do previsto (venc. mês)
@@ -199,42 +275,7 @@ export function ReceitaMesVisaoGerencialPanel({
       </section>
 
       <section className="rounded-xl border border-red-200/80 bg-red-50/60 p-3">
-        <button
-          type="button"
-          onClick={toggleInadGrupo}
-          className="group w-full text-left"
-          aria-expanded={inadGrupoExpandido}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                {inadGrupoExpandido ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-red-700" aria-hidden />
-                ) : (
-                  <ChevronRight
-                    className="h-4 w-4 shrink-0 text-red-400 group-hover:text-red-600"
-                    aria-hidden
-                  />
-                )}
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-red-900">
-                  Inadimplência do mês — por grupo
-                </h3>
-              </div>
-              <p className="mt-1 pl-5 text-[11px] leading-snug text-red-800/80">
-                Somente vencimentos já vencidos até hoje, não quitados no mês — item a item, sem
-                compensação entre razões sociais.
-              </p>
-              {pctInadPrevisto != null ? (
-                <p className="mt-1.5 pl-5 text-[10px] font-medium tabular-nums text-red-800/70">
-                  {formatPercent(pctInadPrevisto)} do previsto
-                </p>
-              ) : null}
-            </div>
-            <span className="text-lg font-bold tabular-nums text-red-800">
-              {formatCurrency(inadMes)}
-            </span>
-          </div>
-        </button>
+        {inadHeaderConteudo({ interactive: true })}
         {inadGrupoExpandido ? (
           <div className="mt-3">
             <ReceitaVencimentoGrupoDrillTable
@@ -247,7 +288,30 @@ export function ReceitaMesVisaoGerencialPanel({
             />
           </div>
         ) : null}
+        {inadTotalRodape}
       </section>
+
+      <div
+        ref={inadExportRef}
+        aria-hidden
+        data-chart-export-preserve-bg
+        data-chart-export-bg="#fef2f2"
+        data-chart-export-fit-content
+        className="pointer-events-none fixed top-0 -left-[10000px] z-[-1] w-[640px] rounded-xl border border-red-200/80 p-3"
+        style={{ backgroundColor: '#fef2f2' }}
+      >
+        {inadHeaderConteudo()}
+        <div className="mt-3">
+          <ReceitaVencimentoGrupoDrillTable
+            variant="inad"
+            vencimentos={inadVencimentos}
+            vencExpandido={null}
+            onToggleVenc={() => {}}
+            expandAllVencimentos
+          />
+        </div>
+        {inadTotalRodape}
+      </div>
 
       <section className="rounded-xl border border-slate-200/80 bg-slate-50/40">
         <button
