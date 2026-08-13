@@ -18,6 +18,7 @@ import {
   atingiuMetaKpi,
   resolveMetaTexto,
   resultadoKpiBadgeClass,
+  type MetaComparacaoKpi,
 } from '../utils/overviewKpiMeta'
 import type { MesFiltroEficiencia } from '../constants'
 import type { RacionalColuna, RacionalEscopo, RacionalIndicador } from '../types/eficiencia.types'
@@ -39,6 +40,7 @@ type Props = {
   /** Meta usada na coluna Acum. da Overview (mesmos filtros). */
   metaAcumulado?: number | null
   metaLabel?: string
+  metaComparacao?: MetaComparacaoKpi
   onClose: () => void
 }
 
@@ -53,6 +55,7 @@ export function RacionalSheet({
   resultado = null,
   metaAcumulado = null,
   metaLabel,
+  metaComparacao = 'minimo',
   onClose,
 }: Props) {
   const [exportando, setExportando] = useState(false)
@@ -80,7 +83,7 @@ export function RacionalSheet({
       : null
   const atingiuMeta =
     !fatalEscopo && metaAcumulado != null && resultado != null
-      ? atingiuMetaKpi(resultado.value, metaAcumulado)
+      ? atingiuMetaKpi(resultado.value, metaAcumulado, metaComparacao)
       : null
 
   const exportMeta = {

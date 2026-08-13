@@ -2,7 +2,11 @@ import type { CSSProperties } from 'react'
 import { FileSearch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MESES_EFICIENCIA } from '../constants'
-import { atingiuMetaKpi, resolveMetaTexto } from '../utils/overviewKpiMeta'
+import {
+  atingiuMetaKpi,
+  resolveMetaTexto,
+  type MetaComparacaoKpi,
+} from '../utils/overviewKpiMeta'
 import { toPriMaiuscula } from '../utils/textFormat'
 
 const COL_TITLE_WIDTH = 150
@@ -61,6 +65,8 @@ type Props = {
   metaAcumulado?: number
   /** Sobrescreve o texto "Meta X%" gerado automaticamente (ex.: "Meta x" quando ainda não definida). */
   metaLabel?: string
+  /** `maximo` = menor valor atinge a meta (ex.: inadimplência). Default `minimo`. */
+  metaComparacao?: MetaComparacaoKpi
   /** Meses (1–12) em destaque no filtro; null/[] = nenhum. */
   mesDestaque?: number | number[] | null
   /**
@@ -80,11 +86,16 @@ function mesesDestaqueSet(mesDestaque: number | number[] | null): Set<number> | 
   return list.length > 0 ? new Set(list) : null
 }
 
-function cellStyle(cell: HeatCell, meta: number, bold: boolean): CSSProperties {
+function cellStyle(
+  cell: HeatCell,
+  meta: number,
+  bold: boolean,
+  comparacao: MetaComparacaoKpi = 'minimo',
+): CSSProperties {
   if (cell.value == null) {
     return { background: '#FFFFFF', color: '#6B7280', fontWeight: bold ? 700 : 600 }
   }
-  const atingiu = atingiuMetaKpi(cell.value, meta) === true
+  const atingiu = atingiuMetaKpi(cell.value, meta, comparacao) === true
   return {
     background: atingiu ? '#ECFDF3' : '#FEE2E2',
     color: atingiu ? '#059669' : '#DC2626',
@@ -111,6 +122,7 @@ export function OverviewKpiHeatCard({
   metasPorMes,
   metaAcumulado,
   metaLabel,
+  metaComparacao = 'minimo',
   mesDestaque = null,
   modoAnual = false,
   anoLabel,
@@ -224,7 +236,7 @@ export function OverviewKpiHeatCard({
                     padding: 4,
                     textAlign: 'center',
                     fontSize: 11,
-                    ...cellStyle(acumulado, metaFallbackAcum, true),
+                    ...cellStyle(acumulado, metaFallbackAcum, true, metaComparacao),
                   }}
                 >
                   {acumulado.value == null ? '-' : acumulado.label}
@@ -239,7 +251,7 @@ export function OverviewKpiHeatCard({
                         padding: 4,
                         textAlign: 'center',
                         fontSize: 11,
-                        ...cellStyle(cell, metaForCell(i), destacado),
+                        ...cellStyle(cell, metaForCell(i), destacado, metaComparacao),
                         ...(destaque != null && !destacado ? { opacity: 0.4 } : null),
                         ...(destacado ? { outline: '2px solid #0F172A', outlineOffset: -2 } : null),
                       }}
@@ -255,7 +267,7 @@ export function OverviewKpiHeatCard({
                   textAlign: 'center',
                   fontSize: 11,
                   borderLeft: '2px solid #E5E7EB',
-                  ...cellStyle(acumulado, metaFallbackAcum, true),
+                  ...cellStyle(acumulado, metaFallbackAcum, true, metaComparacao),
                 }}
               >
                 {acumulado.value == null ? '-' : acumulado.label}

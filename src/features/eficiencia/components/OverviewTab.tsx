@@ -9,6 +9,7 @@ import { AreaFilterButtons } from './AreaFilterButtons'
 import { RacionalSheet } from './RacionalSheet'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
+  EFICIENCIA_META_INDICE_INADIMPLENCIA,
   EFICIENCIA_META_OPS_CADASTRO,
   EFICIENCIA_META_OPS_EFICIENCIA,
   EFICIENCIA_META_OPS_PUBLICACOES,
@@ -329,8 +330,14 @@ export function OverviewTab({
 
   const metaDesenvolvimentoEquipe = formatMetaDesenvolvimentoEquipe(data.treinamentos)
 
-  const metasRacional: Record<RacionalIndicador, { metaAcumulado: number; metaLabel?: string }> =
+  const metasRacional: Record<
+    RacionalIndicador,
     {
+      metaAcumulado: number
+      metaLabel?: string
+      metaComparacao?: 'minimo' | 'maximo'
+    }
+  > = {
       sla_protocolo: {
         metaAcumulado: slaProtocoloMetaAcumulado,
         metaLabel: resolveMetaTexto(
@@ -357,7 +364,11 @@ export function OverviewTab({
       },
       gestao_pdi: { metaAcumulado: 100 },
       receita_bruta: { metaAcumulado: 100 },
-      indice_inadimplencia: { metaAcumulado: Infinity, metaLabel: 'Meta x' },
+      indice_inadimplencia: {
+        metaAcumulado: EFICIENCIA_META_INDICE_INADIMPLENCIA,
+        metaLabel: `Meta ${EFICIENCIA_META_INDICE_INADIMPLENCIA}%`,
+        metaComparacao: 'maximo' as const,
+      },
       ops_legais_iniciativas: { metaAcumulado: 100 },
       ops_legais_marketing: { metaAcumulado: 100 },
     }
@@ -530,8 +541,9 @@ export function OverviewTab({
         />
         <OverviewKpiHeatRow
           title="Índice de Inadimplência"
-          meta={Infinity}
-          metaLabel="Meta x"
+          meta={EFICIENCIA_META_INDICE_INADIMPLENCIA}
+          metaLabel={`Meta ${EFICIENCIA_META_INDICE_INADIMPLENCIA}%`}
+          metaComparacao="maximo"
           mesDestaque={mesDestaque}
           cells={
             loadingFinanceiroKpis
@@ -588,6 +600,9 @@ export function OverviewTab({
         resultado={racionalAberto ? resultadosRacional[racionalAberto] : null}
         metaAcumulado={racionalAberto ? metasRacional[racionalAberto].metaAcumulado : null}
         metaLabel={racionalAberto ? metasRacional[racionalAberto].metaLabel : undefined}
+        metaComparacao={
+          racionalAberto ? metasRacional[racionalAberto].metaComparacao : undefined
+        }
         onClose={() => setRacionalAberto(null)}
       />
     </div>

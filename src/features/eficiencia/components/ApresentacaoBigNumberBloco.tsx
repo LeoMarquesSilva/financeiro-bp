@@ -41,7 +41,8 @@ type KpiDef = {
   key: keyof ApresentacaoBigNumberData['kpis']
   label: string
   icon: typeof Clock3
-  kind: 'horas' | 'count' | 'moeda'
+  /** `pct_yoy` = só variação % ano vs ano (sem R$). */
+  kind: 'horas' | 'count' | 'moeda' | 'pct_yoy'
   accentAtual?: string
 }
 
@@ -55,7 +56,7 @@ const KPI_DEFS: KpiDef[] = [
     key: 'receita_bruta',
     label: 'Receita Bruta',
     icon: Banknote,
-    kind: 'moeda',
+    kind: 'pct_yoy',
     accentAtual: '#16A34A',
   },
 ]
@@ -99,7 +100,7 @@ const TOP_DEFS: TopDef[] = [
   },
 ]
 
-function formatValorKpi(kind: KpiDef['kind'], v: number): string {
+function formatValorKpi(kind: Exclude<KpiDef['kind'], 'pct_yoy'>, v: number): string {
   if (kind === 'horas') return formatHorasBigNumberKpi(v)
   if (kind === 'moeda') return formatCurrency(v)
   return formatCount(v)
@@ -122,7 +123,7 @@ function KpiCard({
   const down = pct != null && pct < 0
   const trendColor = up ? '#16A34A' : down ? '#DC2626' : '#64748B'
   const deltaLabel = formatDeltaPctLabel(par.atual, par.anterior)
-  const absLabel = formatDeltaAbs(def.kind, par.atual, par.anterior)
+  const soPct = def.kind === 'pct_yoy'
 
   return (
     <div
@@ -167,41 +168,73 @@ function KpiCard({
         </span>
       </div>
 
-      <div
-        style={{
-          fontSize: def.kind === 'moeda' ? 13 : 16,
-          fontWeight: 800,
-          color: def.accentAtual ?? '#0F172A',
-          fontVariantNumeric: 'tabular-nums',
-          lineHeight: 1.15,
-        }}
-      >
-        {formatValorKpi(def.kind, par.atual)}
-      </div>
-      <div
-        style={{
-          marginTop: 2,
-          fontSize: 10,
-          color: '#64748B',
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {anoAnterior}: {formatValorKpi(def.kind, par.anterior)}
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 11,
-          fontWeight: 700,
-          color: trendColor,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {up ? '↑ ' : down ? '↓ ' : ''}
-        {deltaLabel}{' '}
-        <span style={{ fontWeight: 500, color: '#64748B' }}>({absLabel})</span>
-      </div>
-      <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2 }}>{ano} vs {anoAnterior}</div>
+      {soPct ? (
+        <>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 800,
+              color: trendColor,
+              fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1.15,
+            }}
+          >
+            {up ? '↑ ' : down ? '↓ ' : ''}
+            {deltaLabel}
+          </div>
+          <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 6 }}>
+            {ano} vs {anoAnterior}
+          </div>
+        </>
+      ) : (
+        <>
+          <div
+            style={{
+              fontSize: def.kind === 'moeda' ? 13 : 16,
+              fontWeight: 800,
+              color: def.accentAtual ?? '#0F172A',
+              fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1.15,
+            }}
+          >
+            {formatValorKpi(def.kind, par.atual)}
+          </div>
+          <div
+            style={{
+              marginTop: 2,
+              fontSize: 10,
+              color: '#64748B',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {anoAnterior}: {formatValorKpi(def.kind, par.anterior)}
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              color: trendColor,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {up ? '↑ ' : down ? '↓ ' : ''}
+            {deltaLabel}{' '}
+            <span style={{ fontWeight: 500, color: '#64748B' }}>
+              (
+              {formatDeltaAbs(
+                def.kind as 'horas' | 'count' | 'moeda',
+                par.atual,
+                par.anterior,
+              )}
+              )
+            </span>
+          </div>
+          <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2 }}>
+            {ano} vs {anoAnterior}
+          </div>
+        </>
+      )}
     </div>
   )
 }

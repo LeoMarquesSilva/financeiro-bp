@@ -4,6 +4,7 @@ import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
   EFICIENCIA_META_AGENDAMENTO,
   EFICIENCIA_META_EFICIENCIA_PROTOCOLO,
+  EFICIENCIA_META_INDICE_INADIMPLENCIA,
   EFICIENCIA_META_PDI,
   EFICIENCIA_META_SLA_PROTOCOLO,
   EFICIENCIA_META_VISTAGEM,
@@ -238,8 +239,8 @@ export const APRESENTACAO_KPIS: ApresentacaoKpiDef[] = [
     id: 'indice_inadimplencia',
     secao: 'resultado_financeiro',
     title: 'Índice de Inadimplência',
-    metaLabel: 'x',
-    meta: Number.POSITIVE_INFINITY,
+    metaLabel: `${EFICIENCIA_META_INDICE_INADIMPLENCIA}%`,
+    meta: EFICIENCIA_META_INDICE_INADIMPLENCIA,
   },
 ]
 

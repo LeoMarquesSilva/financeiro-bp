@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import type { GestaoVistaMesRow } from '@/features/receita/types/receita.types'
 import {
+  EFICIENCIA_META_INDICE_INADIMPLENCIA,
   MES_INICIO_RESULTADO,
   filtroEfetivoGestaoAVista,
   mesNoFiltro,
@@ -122,8 +123,9 @@ export function InadimplenciaTab({
         mes={mesFiltro}
         area={null}
         resultado={overview?.acumulado ?? null}
-        metaAcumulado={Infinity}
-        metaLabel="Meta x"
+        metaAcumulado={EFICIENCIA_META_INDICE_INADIMPLENCIA}
+        metaLabel={`Meta ${EFICIENCIA_META_INDICE_INADIMPLENCIA}%`}
+        metaComparacao="maximo"
         onClose={() => setRacionalAberto(false)}
       />
     </div>

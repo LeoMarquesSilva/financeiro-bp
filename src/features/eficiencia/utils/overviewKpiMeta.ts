@@ -24,9 +24,17 @@ export function resolveMetaTexto(
   return 'Meta D-1 (variável)'
 }
 
-export function atingiuMetaKpi(value: number | null, meta: number): boolean | null {
+/** `minimo` = value ≥ meta; `maximo` = value ≤ meta (ex.: inadimplência). */
+export type MetaComparacaoKpi = 'minimo' | 'maximo'
+
+export function atingiuMetaKpi(
+  value: number | null,
+  meta: number,
+  comparacao: MetaComparacaoKpi = 'minimo',
+): boolean | null {
   if (value == null) return null
-  return value >= meta
+  if (!Number.isFinite(meta)) return null
+  return comparacao === 'maximo' ? value <= meta : value >= meta
 }
 
 export function resultadoKpiTextClass(atingiu: boolean | null): string {

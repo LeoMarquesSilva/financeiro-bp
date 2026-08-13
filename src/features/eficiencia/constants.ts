@@ -155,6 +155,8 @@ export function isTreinamentoLideranca(nome: string | null | undefined): boolean
 }
 export const EFICIENCIA_META_PDI = 100
 export const EFICIENCIA_META_RECEITA_BRUTA = 100
+/** Índice de inadimplência: meta máxima (menor é melhor). */
+export const EFICIENCIA_META_INDICE_INADIMPLENCIA = 14
 
 /**
  * Aliases de colaborador (chave normalizada → nome canônico no turnover).

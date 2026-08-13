@@ -11,8 +11,11 @@ import {
   buildGestaoVistaConsolidado,
 } from '@/features/receita/utils/receitaGestaoVista'
 import { formatPercent } from '@/shared/utils/format'
-import type { MesFiltroEficiencia } from '../constants'
-import { atingiuMetaKpi } from './overviewKpiMeta'
+import {
+  EFICIENCIA_META_INDICE_INADIMPLENCIA,
+  type MesFiltroEficiencia,
+} from '../constants'
+import { atingiuMetaKpi, type MetaComparacaoKpi } from './overviewKpiMeta'
 import {
   buildOverviewInadimplencia,
   buildOverviewReceitaBruta,
@@ -99,10 +102,13 @@ function fromHeat(
   value: number | null,
   label: string,
   meta: number | null,
+  comparacao: MetaComparacaoKpi = 'minimo',
 ): ApresentacaoCell {
   if (value == null) return cellVazio()
   const atingiu =
-    meta == null || !Number.isFinite(meta) ? null : atingiuMetaKpi(value, meta)
+    meta == null || !Number.isFinite(meta)
+      ? null
+      : atingiuMetaKpi(value, meta, comparacao)
   return {
     value,
     label: label.includes('%') ? formatPercent(value) : label,
@@ -142,6 +148,10 @@ export function cellApresentacaoIndiceInadimplencia(
   const meses = bundle.mesesPorArea.get(areaKey === undefined ? null : areaKey)
   if (!meses?.length) return cellVazio()
   const { acumulado } = buildOverviewInadimplencia(meses, mesFiltro, ano)
-  // Sem meta numérica definida no BI ("Meta x") — só exibe o valor.
-  return fromHeat(acumulado.value, acumulado.label, null)
+  return fromHeat(
+    acumulado.value,
+    acumulado.label,
+    EFICIENCIA_META_INDICE_INADIMPLENCIA,
+    'maximo',
+  )
 }
