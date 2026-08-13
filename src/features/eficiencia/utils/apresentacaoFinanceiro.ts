@@ -63,15 +63,10 @@ export async function fetchApresentacaoFinanceiroBundle(
   }
 
   const mesesPorArea = new Map<string | null, GestaoVistaMesRow[]>()
-  const previstoPeriodo = inadDashboard.evolucao
-    .filter((m) => m.mes <= mesMax)
-    .reduce((s, m) => s + (m.previsto ?? 0), 0)
-
   const consolidado = buildGestaoVistaConsolidado(
     rows,
     inadDashboard.evolucao,
     inadDashboard.valor_total_periodo,
-    previstoPeriodo,
     ano,
   )
   mesesPorArea.set(null, consolidado.meses)

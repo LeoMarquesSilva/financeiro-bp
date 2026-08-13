@@ -50,21 +50,29 @@ export type GestaoVistaMesRow = {
   congelado: boolean
 }
 
-/** KPIs acumulados do período Jan–mês atual na Gestão à vista. */
+/** KPIs acumulados na Gestão à vista (referência Jun–Dez / meses com meta). */
 export type GestaoVistaResumo = {
   metaAcumulada: number
   previstoAcumulado: number
-  /** Caixa acumulado no período Jan–mês atual. */
+  /** Caixa acumulado nos meses com meta já decorridos. */
   recebidoAcumulado: number
-  /** Caixa só nos meses com meta (ex.: Jul–Dez) — base do atingimento. */
+  /** Caixa nos meses com meta — base do atingimento (igual a recebidoAcumulado). */
   recebidoAtingimento: number
   pctMeta: number | null
   inadimplenciaPeriodo: number
   inadimplenciaPctPeriodo: number | null
+  /** Inad. vencida e não paga — Jan–Dez, item a item (mesma regra da visão do mês). */
+  inadimplenciaVencidoAno: number
+  inadimplenciaVencidoPctAno: number | null
+  /** Período acumulado Jan–mês atual (ex.: Jan–Ago/2026). */
+  periodoAnoLabel: string
+  /** Referência anual Jan–Dez. */
+  periodoAnualLabel: string
+  /** Meses com meta já decorridos (ex.: Jun–Ago/2026). */
   periodoLabel: string
-  /** Período dos meses com meta já decorridos (ex.: Jul/2026). */
+  /** Período dos meses com meta já decorridos (ex.: Jun–Ago/2026). */
   periodoMetaLabel: string
-  /** Vigência da meta no ano (ex.: Jul–Dez/2026). */
+  /** Vigência da meta no ano (ex.: Jun–Dez/2026). */
   periodoMetaAnualLabel: string
   mesesNoPeriodo: number[]
   mesesMetaNoPeriodo: number[]

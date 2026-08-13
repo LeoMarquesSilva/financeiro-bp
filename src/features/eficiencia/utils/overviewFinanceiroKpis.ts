@@ -1,4 +1,3 @@
-import { mesMaxDisponivelInadimplencia } from '@/features/receita/constants'
 import { calcularAtingimentoMetaKpi } from '@/features/receita/utils/receitaAcumuladoChart'
 import { buildGestaoVistaConsolidado } from '@/features/receita/utils/receitaGestaoVista'
 import { calcularPctInadimplencia } from '@/features/receita/utils/receitaInadimplenciaCalc'
@@ -124,15 +123,10 @@ export function buildGestaoConsolidadoFromInadDashboard(
   inadDashboard: ReceitaInadimplenciaDashboard,
   ano: number,
 ) {
-  const mesMax = mesMaxDisponivelInadimplencia(ano)
-  const previstoPeriodo = inadDashboard.evolucao
-    .filter((m) => m.mes <= mesMax)
-    .reduce((s, m) => s + (m.previsto ?? 0), 0)
   return buildGestaoVistaConsolidado(
     rows,
     inadDashboard.evolucao,
     inadDashboard.valor_total_periodo,
-    previstoPeriodo,
     ano,
   )
 }

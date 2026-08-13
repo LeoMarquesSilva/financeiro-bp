@@ -137,6 +137,20 @@ export function inadimplenciaMesFaturadoNaoPago(fechamento: ReceitaPrevistoFecha
   return Math.max(0, fechamento.inadimplencia_kpi)
 }
 
+/** Soma inad. do mês — vencido até a data de corte, não quitado no mês (item a item). */
+export function calcularInadVencidoNaoPagoMes(
+  itens: PrevistoItemFechamento[],
+  ano: number,
+  mes: number,
+  ref = new Date(),
+): number {
+  let total = 0
+  for (const item of itens) {
+    total += inadimplenciaItemMesFaturadoNaoPago(item, ano, mes, ref)
+  }
+  return total
+}
+
 /** Monta KPIs de fechamento a partir de itens previsto + classificação (visão por área). */
 export function buildPrevistoFechamentoMesFromDados(
   previstoItens: PrevistoItemFechamento[],

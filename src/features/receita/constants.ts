@@ -169,6 +169,9 @@ export const RECEITA_META_CONTRIBUICAO_AREA: { key: string; pct: number }[] = [
   { key: 'recuperacao_de_credito', pct: 9.96 },
 ]
 
+/** Meta de inadimplência (% do previsto) — quanto menor, melhor. */
+export const RECEITA_META_INADIMPLENCIA_PCT = 10
+
 /** Cores para segmentos por plano de contas no gráfico (%). */
 export const RECEITA_PLANO_PALETTE = [
   '#2563eb',

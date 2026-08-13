@@ -11,9 +11,15 @@ import type {
 import { findMetaAreaSlice, type ReceitaMetaAreaSlice } from '../utils/departamentoAreaCores'
 import { inadimplenciaAreaPeriodo } from '../utils/receitaInadimplenciaAreaFilter'
 import {
+  calcularInadVencidoNaoPagoMes,
+  filtrarPrevistoMesItensPorCiItens,
+} from '../utils/receitaPrevistoFechamento'
+import {
   buildGestaoVistaArea,
   buildGestaoVistaConsolidado,
   buildGestaoVistaTotalYtd,
+  enrichGestaoVistaResumoInadVencidoAno,
+  mesInicioMetaGestao,
 } from '../utils/receitaGestaoVista'
 
 export type UseReceitaGestaoVistaResult = {
@@ -33,6 +39,7 @@ export function useReceitaGestaoVista(
 ): UseReceitaGestaoVistaResult {
   const meses = useMemo(() => rows.map((r) => r.mes), [rows])
   const mesMax = mesMaxDisponivelInadimplencia(ano)
+  const mesInicioMeta = mesInicioMetaGestao(rows)
   const areaSelecionada = areaKey ? findMetaAreaSlice(metaAreaSlices, areaKey) : null
 
   const {
@@ -60,11 +67,11 @@ export function useReceitaGestaoVista(
     isLoading: inadDashLoading,
     error: inadDashError,
   } = useQuery({
-    queryKey: ['receita-inadimplencia', 'gestao-vista-dashboard', ano, mesMax],
+    queryKey: ['receita-inadimplencia', 'gestao-vista-dashboard', ano, mesInicioMeta, mesMax],
     queryFn: () =>
       receitaInadimplenciaService.fetchDashboard({
         ano,
-        mesInicio: 1,
+        mesInicio: mesInicioMeta,
         mesFim: mesMax,
       }),
     enabled: mesMax > 0,
@@ -93,10 +100,48 @@ export function useReceitaGestaoVista(
     isLoading: gruposDeptLoading,
     error: gruposDeptError,
   } = useQuery({
-    queryKey: ['receita-inadimplencia', 'gestao-vista-grupos-dept-periodo', ano, mesMax],
+    queryKey: ['receita-inadimplencia', 'gestao-vista-grupos-dept-periodo', ano, mesInicioMeta, mesMax],
     queryFn: () =>
-      receitaInadimplenciaService.fetchGruposDepartamentoPeriodo(ano, 1, mesMax, true),
+      receitaInadimplenciaService.fetchGruposDepartamentoPeriodo(ano, mesInicioMeta, mesMax, true),
     enabled: areaKey != null && mesMax > 0,
+  })
+
+  const {
+    data: inadVencidoAno,
+    isLoading: inadVencidoLoading,
+    error: inadVencidoError,
+  } = useQuery({
+    queryKey: ['receita', 'gestao-vista', 'inad-vencido-ano', ano, mesMax, areaKey],
+    queryFn: async () => {
+      const mesesAno = Array.from({ length: mesMax }, (_, i) => i + 1)
+      if (!areaKey) {
+        const fechamentos = await Promise.all(
+          mesesAno.map((m) => receitaService.fetchPrevistoFechamentoMes(ano, m)),
+        )
+        return {
+          valor: fechamentos.reduce((s, f) => s + f.inadimplencia_kpi, 0),
+          previsto: fechamentos.reduce((s, f) => s + f.previsto, 0),
+        }
+      }
+      const porMes = await Promise.all(
+        mesesAno.map(async (m) => {
+          const [prevAll, prevArea] = await Promise.all([
+            receitaService.fetchPrevistoMesItens(ano, m),
+            receitaService.fetchPrevistoItensPorArea(ano, m, areaKey),
+          ])
+          const itens = filtrarPrevistoMesItensPorCiItens(prevAll, prevArea)
+          return {
+            inad: calcularInadVencidoNaoPagoMes(itens, ano, m),
+            previsto: itens.reduce((s, i) => s + i.valor_item, 0),
+          }
+        }),
+      )
+      return {
+        valor: porMes.reduce((s, r) => s + r.inad, 0),
+        previsto: porMes.reduce((s, r) => s + r.previsto, 0),
+      }
+    },
+    enabled: mesMax > 0,
   })
 
   const mesesCongelados = useMemo(() => {
@@ -107,7 +152,7 @@ export function useReceitaGestaoVista(
     return set
   }, [inadDashboard])
 
-  const { meses: mesesGestao, resumo } = useMemo(() => {
+  const { meses: mesesGestao, resumo: resumoBase } = useMemo(() => {
     if (!inadDashboard || mesMax <= 0) {
       return { meses: [] as GestaoVistaMesRow[], resumo: null as GestaoVistaResumo | null }
     }
@@ -136,7 +181,6 @@ export function useReceitaGestaoVista(
       rows,
       evolucao,
       inadDashboard.valor_total_periodo,
-      evolucao.filter((m) => m.mes <= mesMax).reduce((s, m) => s + (m.previsto ?? 0), 0),
       ano,
     )
     return built
@@ -154,6 +198,16 @@ export function useReceitaGestaoVista(
     ano,
   ])
 
+  const resumo = useMemo(() => {
+    if (!resumoBase) return null
+    if (!inadVencidoAno) return resumoBase
+    return enrichGestaoVistaResumoInadVencidoAno(
+      resumoBase,
+      inadVencidoAno.valor,
+      inadVencidoAno.previsto,
+    )
+  }, [resumoBase, inadVencidoAno])
+
   const totalYtd = useMemo(() => {
     if (mesesGestao.length === 0 || !resumo) return null
     return buildGestaoVistaTotalYtd(
@@ -170,6 +224,7 @@ export function useReceitaGestaoVista(
     previstoLoading ||
     inadDashLoading ||
     inadDeptLoading ||
+    inadVencidoLoading ||
     (areaKey != null && gruposDeptLoading)
 
   const error =
@@ -177,6 +232,7 @@ export function useReceitaGestaoVista(
     previstoError ??
     inadDashError ??
     inadDeptError ??
+    inadVencidoError ??
     gruposDeptError ??
     null
 
