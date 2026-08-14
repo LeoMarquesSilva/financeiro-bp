@@ -22,7 +22,7 @@ export const COMPOSICAO_RECEBIDO_LINHAS = [
   {
     key: 'inad_recebida',
     label: 'Inadimplência recebida',
-    hint: 'Recebimentos classificados como inadimplência no mês',
+    hint: 'Receita recuperada de outros vencimentos',
     color: '#dc2626',
     bar: '#ef4444',
   },
