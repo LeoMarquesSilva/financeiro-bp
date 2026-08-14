@@ -11,7 +11,7 @@ export const RH_AREA_TO_RECEITA_KEY: Record<string, string> = {
 }
 
 export const LIDERANCA_GESTAO_VISTA = [
-  { nome: 'Samuel Willian Silva', email: 'samuel@bismarchipires.com.br' },
+  { nome: 'Samuel Willian Silva', email: 'controladoria@bpplaw.com.br' },
   { nome: 'Gustavo Bismarchi', email: 'gustavo@bismarchipires.com.br' },
   { nome: 'Ricardo Viscardi Pires', email: 'ricardo@bismarchipires.com.br' },
   { nome: 'Felipe Camargo', email: 'felipe@bismarchipires.com.br' },
