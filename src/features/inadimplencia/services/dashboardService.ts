@@ -147,11 +147,17 @@ function normKey(value: string[] | string | null | undefined): string {
 }
 
 async function fetchClientListRows(): Promise<ClientListRow[]> {
-  const { data, error } = await supabase
-    .from('clients_inadimplencia_list')
-    .select('id, valor_em_aberto, status_classe, gestor, area, pessoa_id, resolvido_at')
-  if (error) return []
-  return (data ?? []) as ClientListRow[]
+  try {
+    return await collectPaginatedRows<ClientListRow>(async (from, to) =>
+      supabase
+        .from('clients_inadimplencia_list')
+        .select('id, valor_em_aberto, status_classe, gestor, area, pessoa_id, resolvido_at')
+        .order('id', { ascending: true })
+        .range(from, to),
+    )
+  } catch {
+    return []
+  }
 }
 
 function getActiveClients(rows: ClientListRow[]): ClientListRow[] {

@@ -53,7 +53,7 @@ O agente deve adotar a mentalidade de um **gestor financeiro** em um escritório
 | Grupo cadastrado | `max(0, Σ faturado − Σ recebido)` das empresas (ex. CDA) |
 | Sem grupo | Cada razão social isolada (ex. Engforce) |
 | Evolução mensal | Snapshots congelados = histórico |
-| Card Resultado R$ | Saldo líquido do período (`grupos_periodo`), **≠** soma da evolução |
+| Card Resultado R$ | Saldo líquido ao vivo (`grupos_periodo`): só vencidos + baixa se pagou depois; **≠** evolução congelada |
 | Por área meta | Departamento VIOS do item, sem rateio |
 
 ### Tabelas principais

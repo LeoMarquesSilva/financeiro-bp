@@ -42,6 +42,12 @@ inadimplência = max(0, Σ faturado − Σ recebido)
 - Fonte: `receita_inadimplencia_periodo_net_clientes` + `receita_inadimplencia_chave_grupo`.
 - Compensa pagamento de uma razão social contra faturamento de outra **no mesmo grupo**
   (troca de cadastro VIOS).
+- **Só títulos vencidos:** faturado usa `data_vencimento <= receita_inadimplencia_corte_vencimento`
+  (`min(último dia do mês fim, hoje)`). Título a vencer **não entra** no KPI nem no modal.
+- **Card ao vivo (`grupos_periodo`):** recebido = caixa do intervalo **+** pagamento
+  posterior do título daquele mês (`data_pagamento > corte`). Se pagou em jul um
+  vencimento de jun, o Resultado R$ de JUN dá baixa — a evolução congelada **não**.
+- **Evolução / `grupo_mes`:** snapshot do mês, **sem** baixa posterior.
 
 **Proibido:**
 
@@ -55,7 +61,7 @@ inadimplência = max(0, Σ faturado − Σ recebido)
 | UI | Função / origem | Regra |
 |----|-----------------|-------|
 | **Tabela evolução** | `valorExibicaoEvolucao` | Snapshots **congelados** mês a mês (histórico) |
-| **Card Resultado R$** | `finalizarKpiPeriodo` → `grupos_periodo` | Saldo **líquido do intervalo** (ao vivo) |
+| **Card Resultado R$** | `finalizarKpiPeriodo` → `grupos_periodo` | Saldo **líquido ao vivo** (inclui baixa se pagou depois) |
 | **Card Resultado %** | `valor_total_periodo ÷ previsto acumulado` | Mesma base do card R$ |
 | **SQL dashboard** | `receita_inadimplencia_dashboard` | `SUM(grupos_periodo)`, não `SUM(evolucao)` |
 
@@ -99,6 +105,8 @@ Frontend (`receitaInadimplenciaCalc.ts`):
 | `20260720160000_receita_inadimplencia_sem_grupo_por_cliente.sql` | Sem grupo → razão social |
 | `20260720170000_receita_inadimplencia_kpi_saldo_periodo.sql` | Dashboard KPI = grupos_periodo |
 | `20260720180000_receita_inadimplencia_area_periodo_liquido.sql` | Área/grupo×dept = saldo líquido período |
+| `20260814170000_receita_inadimplencia_periodo_somente_vencidos.sql` | KPI/grupos_periodo: faturado só vencido (corte) |
+| `20260814180000_receita_inadimplencia_baixa_posterior_periodo.sql` | Card ao vivo: baixa título pago depois do mês |
 
 Nova migração nesse domínio: **estender ou chamar** estas funções — não reimplementar.
 
@@ -109,11 +117,13 @@ Nova migração nesse domínio: **estender ou chamar** estas funções — não 
 | Caso | Período | Esperado |
 |------|---------|----------|
 | Grupo CDA | Jan/26 | ~**R$ 26.002,34** (netting entre razões sociais) |
-| Engforce Construtora Ltda | Jun/26 | **R$ 769,54** visível em "todas as áreas" |
+| Engforce Construtora Ltda | Jun/26 | **R$ 769,54** na evolução/snapshot (sem grupo = razão social); card ao vivo **R$ 0** (pagou em 14/jul) |
 | Rec. Crédito (filtro área) | Jun/26 | Engforce aparece na área |
-| KPI vs evolução | Jan–Jun/26 | KPI ≈ **R$ 1.281.841** (grupos_periodo); soma evolução congelada ≈ **R$ 1.826.182** — **devem diferir** |
+| KPI vs evolução | Jan–Jun/26 | KPI ao vivo **<** soma evolução congelada (≈ **R$ 1.826.182**); card inclui baixa posterior — **devem diferir** |
 | Modal vs card | Qualquer | Mesmo total com mesma seleção de grupos |
 | Baptistella Trabalhista | Jun–Jul/26 | **R$ 0** no top5/KPI período (pagou em jul) |
+| AGO/26 em 14/ago | Só AGO | KPI **≠** faturado do mês inteiro; exclui vencimento > hoje (~R$ 790 mil a vencer fora) |
+| JUN/26 card vs evolução | Só JUN | Evolução congelada **R$ 241.711,99**; card ao vivo **menor** (baixa jul/ago) |
 
 ---
 
