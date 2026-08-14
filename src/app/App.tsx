@@ -19,25 +19,19 @@ import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
 import { OpexPage } from '@/features/opex/pages/OpexPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
+import { RacionalExportPage } from '@/features/eficiencia/pages/RacionalExportPage'
 import { OperacoesLegaisPage } from '@/features/operacoes-legais/pages/OperacoesLegaisPage'
-import {
-  useCaptureRacionalExportFromUrl,
-  useRacionalExportFromUrl,
-} from '@/features/eficiencia/hooks/useRacionalExportFromUrl'
+import { readRacionalExportParams } from '@/features/eficiencia/utils/racionalExportParams'
+import { RACIONAL_EXPORT_PATH } from '@/features/eficiencia/utils/racionalExportUrl'
 
-function RacionalExportFromUrlEffect() {
-  const { loading, user } = useAuth()
-  useRacionalExportFromUrl(!loading && Boolean(user))
-  return null
-}
-
-function UnauthenticatedRoutes() {
-  useCaptureRacionalExportFromUrl()
+function EficienciaEntryRoute() {
+  if (readRacionalExportParams()) {
+    return <RacionalExportPage />
+  }
   return (
-    <Routes>
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="*" element={<Login />} />
-    </Routes>
+    <ProtectedRoute routePath="/financeiro/eficiencia" moduleKey="eficiencia">
+      <EficienciaPage />
+    </ProtectedRoute>
   )
 }
 
@@ -81,133 +75,128 @@ function AppRoutes() {
 
   if (!user || (!role && moduleAccess.length === 0)) {
     return (
-      <BrowserRouter>
-        <UnauthenticatedRoutes />
-      </BrowserRouter>
+      <Routes>
+        <Route path={RACIONAL_EXPORT_PATH} element={<RacionalExportPage />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="*" element={<Login />} />
+      </Routes>
     )
   }
 
   return (
-    <BrowserRouter>
-      <RacionalExportFromUrlEffect />
-      <Routes>
-        <Route path="/" element={<Navigate to={homePath} replace />} />
-        <Route path="/financeiro" element={<FinanceiroLayout />}>
-          <Route index element={<Navigate to={homePath} replace />} />
-          <Route
-            path="inadimplencia"
-            element={
-              <ProtectedRoute
-                routePath="/financeiro/inadimplencia"
-                moduleKey="inadimplencia"
-              >
-                <InadimplenciaPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="inadimplencia/dashboard"
-            element={
-              <ProtectedRoute
-                routePath="/financeiro/inadimplencia/dashboard"
-                moduleKey="inadimplencia"
-              >
-                <InadimplenciaDashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="inadimplencia/judicializada"
-            element={
-              <ProtectedRoute routePath="/financeiro/inadimplencia/judicializada">
-                <InadimplenciaJudicializadaPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="escritorio"
-            element={
-              <ProtectedRoute routePath="/financeiro/escritorio" moduleKey="escritorio">
-                <EscritorioPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="escritorio/financeiro/:metrica"
-            element={<Navigate to="/financeiro/escritorio" replace />}
-          />
-          <Route
-            path="cobranca"
-            element={
-              <ProtectedRoute routePath="/financeiro/cobranca" moduleKey="cobranca">
-                <CobrancaPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="cobranca/seguimento"
-            element={
-              <ProtectedRoute routePath="/financeiro/cobranca/seguimento" moduleKey="cobranca">
-                <CobrancaSeguimentoPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="usuarios"
-            element={
-              <ProtectedRoute routePath="/financeiro/usuarios" moduleKey="gestores">
-                <UsuariosPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="gestores" element={<Navigate to="/financeiro/usuarios" replace />} />
-          <Route path="colaboradores" element={<Navigate to="/financeiro/usuarios" replace />} />
-          <Route
-            path="receita"
-            element={
-              <ProtectedRoute routePath="/financeiro/receita" moduleKey="receita">
-                <ReceitaPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="opex"
-            element={
-              <ProtectedRoute routePath="/financeiro/opex" moduleKey="opex">
-                <OpexPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="eficiencia"
-            element={
-              <ProtectedRoute routePath="/financeiro/eficiencia" moduleKey="eficiencia">
-                <EficienciaPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="operacoes-legais"
-            element={
-              <ProtectedRoute routePath="/financeiro/operacoes-legais" moduleKey="operacoes-legais">
-                <OperacoesLegaisPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="configuracoes"
-            element={
-              <ProtectedRoute routePath="/financeiro/configuracoes" moduleKey="configuracoes">
-                <ConfiguracoesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="perfil" element={<PerfilPage />} />
-        </Route>
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="*" element={<Navigate to={homePath} replace />} />
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/" element={<Navigate to={homePath} replace />} />
+      <Route path="/financeiro" element={<FinanceiroLayout />}>
+        <Route index element={<Navigate to={homePath} replace />} />
+        <Route
+          path="inadimplencia"
+          element={
+            <ProtectedRoute
+              routePath="/financeiro/inadimplencia"
+              moduleKey="inadimplencia"
+            >
+              <InadimplenciaPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="inadimplencia/dashboard"
+          element={
+            <ProtectedRoute
+              routePath="/financeiro/inadimplencia/dashboard"
+              moduleKey="inadimplencia"
+            >
+              <InadimplenciaDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="inadimplencia/judicializada"
+          element={
+            <ProtectedRoute routePath="/financeiro/inadimplencia/judicializada">
+              <InadimplenciaJudicializadaPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="escritorio"
+          element={
+            <ProtectedRoute routePath="/financeiro/escritorio" moduleKey="escritorio">
+              <EscritorioPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="escritorio/financeiro/:metrica"
+          element={<Navigate to="/financeiro/escritorio" replace />}
+        />
+        <Route
+          path="cobranca"
+          element={
+            <ProtectedRoute routePath="/financeiro/cobranca" moduleKey="cobranca">
+              <CobrancaPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="cobranca/seguimento"
+          element={
+            <ProtectedRoute
+              routePath="/financeiro/cobranca/seguimento"
+              moduleKey="cobranca"
+            >
+              <CobrancaSeguimentoPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="usuarios"
+          element={
+            <ProtectedRoute routePath="/financeiro/usuarios" moduleKey="gestores">
+              <UsuariosPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="gestores" element={<Navigate to="/financeiro/usuarios" replace />} />
+        <Route path="colaboradores" element={<Navigate to="/financeiro/usuarios" replace />} />
+        <Route
+          path="receita"
+          element={
+            <ProtectedRoute routePath="/financeiro/receita" moduleKey="receita">
+              <ReceitaPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="opex"
+          element={
+            <ProtectedRoute routePath="/financeiro/opex" moduleKey="opex">
+              <OpexPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="eficiencia" element={<EficienciaEntryRoute />} />
+        <Route
+          path="operacoes-legais"
+          element={
+            <ProtectedRoute routePath="/financeiro/operacoes-legais" moduleKey="operacoes-legais">
+              <OperacoesLegaisPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="configuracoes"
+          element={
+            <ProtectedRoute routePath="/financeiro/configuracoes" moduleKey="configuracoes">
+              <ConfiguracoesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="perfil" element={<PerfilPage />} />
+      </Route>
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="*" element={<Navigate to={homePath} replace />} />
+    </Routes>
   )
 }
 
@@ -215,7 +204,9 @@ function App() {
   return (
     <AuthProvider>
       <RoleAccessDefaultsProvider>
-        <AppRoutes />
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
       </RoleAccessDefaultsProvider>
     </AuthProvider>
   )

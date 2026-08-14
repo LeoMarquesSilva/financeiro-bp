@@ -1,5 +1,5 @@
 import { MESES_NOME, areaLabel } from './constants.ts'
-import { escapeHtml } from './format.ts'
+import { escapeHtml, formatPercent } from './format.ts'
 import {
   buildRacionalExportUrl,
   renderDetalheComLink,
@@ -30,7 +30,12 @@ export type IndicadoresOperacionaisInput = {
   agendamento: { dentro: number; fora: number } | null
   vistagemRisco: { sim: number; nao: number } | null
   vistagemNormal: { sim: number; nao: number } | null
-  desenvolvimentoLancamentos: number
+  desenvolvimentoEquipe: {
+    minutos_lancados: number
+    meta_minutos: number
+    pct_atingimento: number
+    pessoas_ativas: number
+  } | null
   gestaoPdi: { aptas: number; desvios: number; elegiveis: number; pct_aptas: number | null } | null
   retencao: {
     pct_retencao: number
@@ -43,6 +48,13 @@ export type IndicadoresOperacionaisInput = {
 function pctLabel(num: number, den: number): string {
   if (den <= 0) return '—'
   return `${((num / den) * 100).toFixed(2).replace('.', ',')}%`
+}
+
+function formatMinutosHoras(minutos: number): string {
+  const total = Math.max(0, Math.round(minutos))
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return `${h}:${String(m).padStart(2, '0')}`
 }
 
 export function buildIndicadoresOperacionaisRows(data: IndicadoresOperacionaisInput): IndicadorOperacionalRow[] {
@@ -108,29 +120,34 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresOperacionaisIn
     })
   }
 
+  const dev = data.desenvolvimentoEquipe
+  const devResultado =
+    dev && dev.meta_minutos > 0
+      ? `${formatMinutosHoras(dev.minutos_lancados)}h / ${formatMinutosHoras(dev.meta_minutos)}h (${formatPercent(dev.pct_atingimento)})`
+      : dev
+        ? `${formatMinutosHoras(dev.minutos_lancados)}h`
+        : '—'
   rows.push({
     indicador: 'Desenvolvimento Equipe',
-    resultado: `${data.desenvolvimentoLancamentos} lançamentos`,
-    detalhe: 'Baixar racional (Excel)',
-    bgColor: BRAND_SOFT,
+    resultado: devResultado,
+    detalhe:
+      dev && dev.pessoas_ativas > 0
+        ? `Meta ${dev.pessoas_ativas} × 14h · Baixar racional (Excel)`
+        : 'Baixar racional (Excel)',
+    bgColor:
+      dev && dev.meta_minutos > 0
+        ? dev.pct_atingimento >= 100
+          ? GREEN_SOFT
+          : RED_SOFT
+        : BRAND_SOFT,
     racionalSlug: 'desenvolvimento_equipe',
   })
 
-  const gp = data.gestaoPdi
-  const gpPct =
-    gp?.pct_aptas != null
-      ? `${gp.pct_aptas.toFixed(2).replace('.', ',')}%`
-      : gp && gp.elegiveis > 0
-        ? pctLabel(gp.aptas, gp.elegiveis)
-        : '—'
   rows.push({
     indicador: 'Gestão de PDI',
-    resultado: gpPct,
-    detalhe: gp
-      ? `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`
-      : 'Baixar racional (Excel)',
-    bgColor: gp && gp.pct_aptas != null && gp.pct_aptas >= 100 ? GREEN_SOFT : gp ? RED_SOFT : BRAND_SOFT,
-    racionalSlug: 'gestao_pdi',
+    resultado: 'Ciclo não fechado',
+    detalhe: '',
+    bgColor: BRAND_SOFT,
   })
 
   const rt = data.retencao

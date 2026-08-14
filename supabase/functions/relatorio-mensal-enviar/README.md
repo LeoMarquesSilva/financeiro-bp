@@ -1,6 +1,6 @@
 # relatorio-mensal-enviar
 
-Edge Function que envia **gestão à vista** diária SIOE (mês corrente, dia 1 até hoje) por e-mail via **Microsoft Graph**.
+Edge Function que envia **gestão à vista** diária SIOE (mês corrente, dia 1 até ontem) por e-mail via **Microsoft Graph**.
 
 ## Secrets (mesmos da cobrança + cron)
 
@@ -11,7 +11,7 @@ Edge Function que envia **gestão à vista** diária SIOE (mês corrente, dia 1 
 | `MS_CLIENT_SECRET` | Client secret |
 | `MS_SENDER` | E-mail remetente (usuário Graph) |
 | `RELATORIO_MENSAL_CRON_SECRET` | Header `x-cron-secret` para pg_cron |
-| `SIOE_PUBLIC_URL` | Link no corpo do e-mail (opcional) |
+| `SIOE_PUBLIC_URL` | URL pública do SIOE nos links do e-mail (padrão: `https://financeiro-bp.vercel.app`) |
 
 ## Vault (cron)
 

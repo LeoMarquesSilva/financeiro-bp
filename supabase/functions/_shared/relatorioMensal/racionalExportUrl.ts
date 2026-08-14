@@ -16,7 +16,6 @@ export const INDICADOR_OPERACIONAL_RACIONAL: Record<string, RacionalIndicadorSlu
   'SLA Vistagem Risco': 'sla_vistagem_risco',
   'SLA Vistagem Normal': 'sla_vistagem_normal',
   'Desenvolvimento Equipe': 'desenvolvimento_equipe',
-  'Gestão de PDI': 'gestao_pdi',
   'Retenção de Talentos': 'retencao_talentos',
 }
 
@@ -32,7 +31,10 @@ function resolveEficienciaDeepLinkOrigin(sioeBaseUrl: string): string {
   }
 }
 
-/** Deep link SIOE — abre Eficiência e baixa o Excel do racional. */
+/** Rota do deep link — mesma URL da aba Eficiência no SIOE. */
+export const RACIONAL_EXPORT_PATH = '/financeiro/eficiencia'
+
+/** Deep link SIOE — dispara download do Excel do racional. */
 export function buildRacionalExportUrl(
   sioeBaseUrl: string,
   indicador: RacionalIndicadorSlug,
@@ -40,7 +42,7 @@ export function buildRacionalExportUrl(
   mes: number,
   areaKey: string | null = null,
 ): string {
-  const u = new URL('/financeiro/eficiencia', resolveEficienciaDeepLinkOrigin(sioeBaseUrl))
+  const u = new URL(RACIONAL_EXPORT_PATH, resolveEficienciaDeepLinkOrigin(sioeBaseUrl))
   u.searchParams.set('racionalExport', indicador)
   u.searchParams.set('ano', String(ano))
   u.searchParams.set('mes', String(mes))

@@ -47,6 +47,8 @@ export type RelatorioDadosBase = {
   mes: number
   /** Dia incluso no recorte parcial (gestão à vista). */
   diaReferencia: number
+  /** ISO YYYY-MM-DD — data de corte (ontem no fuso para mês parcial). */
+  corteIso: string
   periodoLabel: string
   periodoCurto: string
   parcial: boolean
@@ -110,6 +112,7 @@ async function fetchIndicadores(
   ano: number,
   mes: number,
   areaKey: string | null,
+  corteIso: string,
 ): Promise<IndicadoresOperacionaisInput> {
   const area = areaEficienciaParam(areaKey)
 
@@ -121,7 +124,7 @@ async function fetchIndicadores(
     vnRows,
     pdiRows,
     retRows,
-    devCount,
+    devRows,
   ] = await Promise.all([
     supabase.rpc('eficiencia_sla_protocolo_mensal', { p_ano: ano, p_area: area }),
     supabase.rpc('eficiencia_protocolo_mensal', { p_ano: ano, p_area: area }),
@@ -132,11 +135,11 @@ async function fetchIndicadores(
       : supabase.rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: false, p_area: area }),
     supabase.rpc('eficiencia_gestao_pdi_mensal', { p_ano: ano, p_area: area }),
     supabase.rpc('eficiencia_turnover_anual', { p_ano: ano, p_area: area }),
-    supabase
-      .from('sp_treinamentos_presenca')
-      .select('sp_id', { count: 'exact', head: true })
-      .gte('data', `${ano}-${String(mes).padStart(2, '0')}-01`)
-      .lt('data', mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, '0')}-01`),
+    supabase.rpc('eficiencia_treinamentos_acumulado_ate', {
+      p_ano: ano,
+      p_data_corte: corteIso,
+      p_area: area,
+    }),
   ])
 
   if (slaRows.error) rpcError('eficiencia_sla_protocolo_mensal', slaRows.error)
@@ -146,7 +149,7 @@ async function fetchIndicadores(
   if (vnRows.error) rpcError('eficiencia_sla_vistagem_mensal normal', vnRows.error)
   if (pdiRows.error) rpcError('eficiencia_gestao_pdi_mensal', pdiRows.error)
   if (retRows.error) rpcError('eficiencia_turnover_anual', retRows.error)
-  if (devCount.error) rpcError('sp_treinamentos_presenca count', devCount.error)
+  if (devRows.error) rpcError('eficiencia_treinamentos_acumulado_ate', devRows.error)
 
   const sla = rowMes((slaRows.data ?? []) as Array<Record<string, unknown>>, mes)
   const ef = rowMes((efRows.data ?? []) as Array<Record<string, unknown>>, mes)
@@ -162,6 +165,7 @@ async function fetchIndicadores(
   const vrD1 = Number(vr?.vistado_d1) || 0
   const vnTotal = Number(vn?.total) || 0
   const vnD1 = Number(vn?.vistado_d1) || 0
+  const dev = ((devRows.data ?? []) as Array<Record<string, unknown>>)[0]
 
   return {
     ano,
@@ -184,7 +188,14 @@ async function fetchIndicadores(
       : null,
     vistagemRisco: vr ? { sim: vrD1, nao: vrTotal - vrD1 } : null,
     vistagemNormal: vn ? { sim: vnD1, nao: vnTotal - vnD1 } : null,
-    desenvolvimentoLancamentos: devCount.count ?? 0,
+    desenvolvimentoEquipe: dev
+      ? {
+        minutos_lancados: Number(dev.minutos_lancados) || 0,
+        meta_minutos: Number(dev.meta_minutos) || 0,
+        pct_atingimento: Number(dev.pct_atingimento) || 0,
+        pessoas_ativas: Number(dev.pessoas_ativas) || 0,
+      }
+      : null,
     gestaoPdi: pdi
       ? {
         aptas: Number(pdi.aptas) || 0,
@@ -210,14 +221,51 @@ async function fetchFechamentoPorArea(
   mes: number,
   areaKey: string | null,
   ref = new Date(),
+  corteIso?: string,
+  parcial = false,
 ): Promise<ReceitaFechamentoMes> {
+  type PrevistoRow = {
+    ci_item: number
+    valor_item: number
+    data_vencimento?: string | null
+    data_pagamento?: string | null
+  }
+
+  type ClassRow = Record<string, unknown>
+
+  const mapClassificacao = (rows: ClassRow[]) =>
+    rows.map((i) => ({
+      categoria: String(i.categoria ?? ''),
+      valor_recebido: Number(i.valor_recebido) || 0,
+      data_vencimento: i.data_vencimento != null ? String(i.data_vencimento) : null,
+      data_pagamento: i.data_pagamento != null ? String(i.data_pagamento) : null,
+    }))
+
   if (!areaKey) {
-    const { data, error } = await supabase.rpc('receita_previsto_fechamento_mes', {
-      p_ano: ano,
-      p_mes: mes,
-    })
-    if (error) rpcError('receita_previsto_fechamento_mes', error)
-    return parseFechamento(data)
+    if (!parcial) {
+      const { data, error } = await supabase.rpc('receita_previsto_fechamento_mes', {
+        p_ano: ano,
+        p_mes: mes,
+      })
+      if (error) rpcError('receita_previsto_fechamento_mes', error)
+      return parseFechamento(data)
+    }
+
+    const [{ data: prevMesAll, error: e1 }, { data: classAll, error: e2 }] = await Promise.all([
+      supabase.rpc('receita_previsto_mes_itens', { p_ano: ano, p_mes: mes }),
+      supabase.rpc('receita_recebido_classificacao_mes', { p_ano: ano, p_mes: mes }),
+    ])
+    if (e1) rpcError('receita_previsto_mes_itens consolidado', e1)
+    if (e2) rpcError('receita_recebido_classificacao_mes consolidado', e2)
+
+    return buildFechamentoPorAreaItens(
+      (prevMesAll ?? []) as PrevistoRow[],
+      mapClassificacao((classAll ?? []) as ClassRow[]),
+      ano,
+      mes,
+      ref,
+      corteIso,
+    )
   }
 
   const [{ data: prevMesAll, error: e1 }, { data: prevArea, error: e2 }, { data: classAll, error: e3 }] =
@@ -235,32 +283,22 @@ async function fetchFechamentoPorArea(
   if (e2) rpcError('receita_previsto_itens_area', e2)
   if (e3) rpcError('receita_recebido_classificacao_mes area', e3)
 
-  type PrevistoRow = {
-    ci_item: number
-    valor_item: number
-    data_vencimento?: string | null
-    data_pagamento?: string | null
-  }
-
   const previstoItens = filtrarPrevistoMesItensPorCiItens(
     (prevMesAll ?? []) as PrevistoRow[],
     (prevArea ?? []) as Array<{ ci_item: number }>,
   )
 
-  const classFiltrado = ((classAll ?? []) as Array<Record<string, unknown>>).filter(
+  const classFiltrado = ((classAll ?? []) as ClassRow[]).filter(
     (i) => i.departamento && departamentoMatchesAreaKey(String(i.departamento), areaKey),
   )
 
   return buildFechamentoPorAreaItens(
     previstoItens,
-    classFiltrado.map((i) => ({
-      categoria: String(i.categoria ?? ''),
-      valor_recebido: Number(i.valor_recebido) || 0,
-      data_vencimento: i.data_vencimento != null ? String(i.data_vencimento) : null,
-    })),
+    mapClassificacao(classFiltrado),
     ano,
     mes,
     ref,
+    corteIso,
   )
 }
 
@@ -270,8 +308,9 @@ async function fetchTopGruposInad(
   mes: number,
   areaKey: string | null,
   ref = new Date(),
+  corteIso?: string,
 ): Promise<Array<{ grupo: string; valor: number; data_vencimento: string }>> {
-  return fetchTopGruposInadComVencimento(supabase, ano, mes, areaKey, ref)
+  return fetchTopGruposInadComVencimento(supabase, ano, mes, areaKey, ref, corteIso)
 }
 
 async function fetchResumoMensal(
@@ -527,7 +566,10 @@ export async function fetchRelatorioDados(
   ano: number,
   mes: number,
   areaKey: string | null,
-  periodo: Pick<RelatorioDadosBase, 'diaReferencia' | 'periodoLabel' | 'periodoCurto' | 'parcial'>,
+  periodo: Pick<
+    RelatorioDadosBase,
+    'diaReferencia' | 'periodoLabel' | 'periodoCurto' | 'parcial' | 'corteIso'
+  >,
 ): Promise<RelatorioDadosBase> {
   const metas = await fetchMetas(supabase)
   const mesesMeta = metas.meses_meta ?? [6, 7, 8, 9, 10, 11, 12]
@@ -537,10 +579,12 @@ export async function fetchRelatorioDados(
     if (slice) metaMes = Math.round(metas.meta * (slice.pct / 100) * 100) / 100
   }
 
+  const refCorte = new Date(`${periodo.corteIso}T12:00:00`)
+
   const [indicadores, fechamento, topGruposInad, resumoMensal] = await Promise.all([
-    fetchIndicadores(supabase, ano, mes, areaKey),
-    fetchFechamentoPorArea(supabase, ano, mes, areaKey),
-    fetchTopGruposInad(supabase, ano, mes, areaKey, new Date()),
+    fetchIndicadores(supabase, ano, mes, areaKey, periodo.corteIso),
+    fetchFechamentoPorArea(supabase, ano, mes, areaKey, refCorte, periodo.corteIso, periodo.parcial),
+    fetchTopGruposInad(supabase, ano, mes, areaKey, refCorte, periodo.corteIso),
     fetchResumoMensal(supabase, ano, mes, metas.meta, mesesMeta),
   ])
 
@@ -552,6 +596,7 @@ export async function fetchRelatorioDados(
     ano,
     mes,
     diaReferencia: periodo.diaReferencia,
+    corteIso: periodo.corteIso,
     periodoLabel: periodo.periodoLabel,
     periodoCurto: periodo.periodoCurto,
     parcial: periodo.parcial,

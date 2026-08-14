@@ -73,8 +73,11 @@ export function parseSecoesConfig(raw: Record<string, unknown> | null | undefine
   return { secoes, ordem }
 }
 
+/** Rótulo do recorte consolidado (escritório inteiro) no e-mail gestão à vista. */
+export const ESCRITORIO_GESTAO_VISTA_LABEL = 'Bismarchi Pires'
+
 export function areaLabel(areaKey: string | null | undefined): string {
-  if (!areaKey) return 'Consolidado (escritório)'
+  if (!areaKey) return ESCRITORIO_GESTAO_VISTA_LABEL
   return META_AREAS.find((a) => a.key === areaKey)?.label ?? areaKey
 }
 

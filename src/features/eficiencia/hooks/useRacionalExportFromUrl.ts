@@ -92,7 +92,7 @@ export function useRacionalExportFromUrl(authReady: boolean): void {
   }, [authReady])
 }
 
-/** Captura parâmetros na tela de login (antes da autenticação). */
+/** Compat — captura antecipada está em main.tsx; mantido para chamadas legadas. */
 export function useCaptureRacionalExportFromUrl(): void {
   useEffect(() => {
     persistRacionalExportSearch(window.location.search)

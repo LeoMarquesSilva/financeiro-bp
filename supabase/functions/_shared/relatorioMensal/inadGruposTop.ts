@@ -131,6 +131,7 @@ export async function fetchTopGruposInadComVencimento(
   mes: number,
   areaKey: string | null,
   ref = new Date(),
+  corteIso?: string,
 ): Promise<TopGrupoInadRow[]> {
   const [itens, clienteGrupoMap] = await Promise.all([
     fetchPrevistoMesItens(supabase, ano, mes, areaKey),
@@ -143,7 +144,7 @@ export async function fetchTopGruposInadComVencimento(
     const data_vencimento = normalizeVencimentoKey(item.data_vencimento)
     if (!data_vencimento) continue
 
-    const inad = inadimplenciaItemMesFaturadoNaoPago(item, ano, mes, ref)
+    const inad = inadimplenciaItemMesFaturadoNaoPago(item, ano, mes, ref, corteIso)
     if (inad <= 0) continue
 
     const grupo = resolverGrupoCliente(item.cliente, clienteGrupoMap)

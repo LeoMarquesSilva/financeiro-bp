@@ -1,4 +1,5 @@
 import {
+  ESCRITORIO_GESTAO_VISTA_LABEL,
   META_AREAS,
   MESES_NOME,
   areaLabel,
@@ -16,7 +17,7 @@ import type { RelatorioDadosBase } from './fetchData.ts'
 import { escapeHtml } from './format.ts'
 import type { PeriodoGestaoVista } from './periodoGestaoVista.ts'
 
-const SIOE_URL = Deno.env.get('SIOE_PUBLIC_URL') ?? 'https://sioe.bplaw.com.br'
+const SIOE_URL = Deno.env.get('SIOE_PUBLIC_URL') ?? 'https://financeiro-bp.vercel.app'
 
 export function variantesParaDestinatario(areaKey: string | null): (string | null)[] {
   if (!areaKey) {
@@ -94,16 +95,19 @@ export function buildEmailHtmlForVariant(
 function digestTitle(
   periodo: PeriodoGestaoVista,
   areaKeys: (string | null)[],
-  focusAreaKey: string | null,
 ): string {
   const mesLabel = MESES_NOME[periodo.mes - 1] ?? String(periodo.mes)
-  if (focusAreaKey) {
-    return `Gestão à vista — ${areaLabel(focusAreaKey)} · ${mesLabel}/${periodo.ano}`
+  if (areaKeys.includes(null)) {
+    return `Gestão à vista — ${ESCRITORIO_GESTAO_VISTA_LABEL} · ${mesLabel}/${periodo.ano}`
   }
   if (areaKeys.length === 1) {
     return `Gestão à vista — ${areaLabel(areaKeys[0] ?? null)} · ${mesLabel}/${periodo.ano}`
   }
   return `Gestão à vista SIOE — ${mesLabel}/${periodo.ano}`
+}
+
+function variantSectionHeading(areaKey: string | null): string {
+  return areaLabel(areaKey)
 }
 
 export function buildDigestEmail(
@@ -121,12 +125,16 @@ export function buildDigestEmail(
       const divider = index > 0
         ? 'margin-top:28px;padding-top:24px;border-top:1px solid #E2E8F0;'
         : ''
-      return `<div style="${divider}">${html}</div>`
+      const sectionLabel = escapeHtml(variantSectionHeading(k))
+      const heading = areaKeys.length > 1
+        ? `<p style="margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:#64748B;">${sectionLabel}</p>`
+        : ''
+      return `<div style="${divider}">${heading}${html}</div>`
     })
     .filter(Boolean)
     .join('\n')
 
-  const titulo = digestTitle(periodo, areaKeys, focusAreaKey)
+  const titulo = digestTitle(periodo, areaKeys)
 
   return `<!DOCTYPE html><html><body style="margin:0;padding:16px;background:#F1F5F9;">
 <div style="max-width:920px;margin:0 auto;background:#fff;padding:20px;border-radius:8px;">

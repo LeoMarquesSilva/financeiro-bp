@@ -1,4 +1,3 @@
-import { formatPercent } from '@/shared/utils/format'
 import { MESES_EFICIENCIA } from '../constants'
 import type { IndicadoresResultadoMes } from '../types/indicadoresResultado.types'
 import type { RacionalIndicador, RacionalResumo } from '../types/eficiencia.types'
@@ -103,20 +102,11 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresResultadoMes):
     bgColor: BRAND_SOFT,
   })
 
-  const gp = data.gestaoPdiMensal
-  const gpPct =
-    gp?.pct_aptas != null
-      ? `${gp.pct_aptas.toFixed(2).replace('.', ',')}%`
-      : gp && gp.elegiveis > 0
-        ? formatPercent(Math.round((gp.aptas / gp.elegiveis) * 10000) / 100)
-        : '—'
   rows.push({
     indicador: 'Gestão de PDI',
-    resultado: gpPct,
-    detalhe: gp
-      ? `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`
-      : 'Baixar racional (Excel)',
-    bgColor: gp && gp.pct_aptas != null && gp.pct_aptas >= 100 ? GREEN_SOFT : gp ? RED_SOFT : BRAND_SOFT,
+    resultado: 'Ciclo não fechado',
+    detalhe: '',
+    bgColor: BRAND_SOFT,
   })
 
   const rt = data.retencaoAnual

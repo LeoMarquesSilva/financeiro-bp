@@ -10,10 +10,12 @@ import {
 import { buildResumoMensalSvgChart } from './svgResumoMensalChart.ts'
 
 export function buildReceitaVisaoMesHtml(dados: RelatorioDadosBase, areaKey: string | null): string {
-  const { fechamento, metaMes, inadMes, ano, mes, periodoLabel, parcial } = dados
+  const { fechamento, metaMes, inadMes, ano, mes, periodoLabel, periodoCurto, parcial } = dados
   const mesLabel = MESES_NOME[mes - 1] ?? String(mes)
   const contexto = `${periodoLabel} · ${areaLabel(areaKey)}`
-  const subtituloPeriodo = parcial ? 'Dia 1 até hoje · previsto · recebido · inad.' : 'Previsto · Recebido · Inadimplência'
+  const subtituloPeriodo = parcial
+    ? `Dia 1 ${periodoCurto} · previsto · recebido · inad.`
+    : 'Previsto · Recebido · Inadimplência'
   const pctMeta =
     metaMes > 0 ? (fechamento.recebido_classificado / metaMes) * 100 : null
   const pctInadPrev =
@@ -25,7 +27,7 @@ export function buildReceitaVisaoMesHtml(dados: RelatorioDadosBase, areaKey: str
     <div style="display:flex;align-items:flex-start;gap:12px;">
       <div style="width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;">💰</div>
       <div>
-        <h2 style="margin:0;font-size:16px;font-weight:700;">Gestão à vista${areaKey ? ` — ${areaLabel(areaKey)}` : ''} · ${mesLabel} / ${ano}</h2>
+        <h2 style="margin:0;font-size:16px;font-weight:700;">Gestão à vista — ${escapeHtml(areaLabel(areaKey))} · ${mesLabel} / ${ano}</h2>
         <p style="margin:4px 0 0;font-size:12px;color:#e0f2fe;">${subtituloPeriodo}</p>
       </div>
     </div>

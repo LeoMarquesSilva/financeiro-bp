@@ -21,8 +21,8 @@ import { formatDate } from '@/shared/utils/format'
 const SECAO_LABELS: Record<keyof RelatorioMensalSecoes, string> = {
   indicadores_operacionais: 'Indicadores operacionais (tabela)',
   receita_visao_mes: 'Gestão à vista — previsto, recebido, meta, inad.',
-  receita_composicao: 'Composição do recebido (até hoje)',
-  receita_inad_grupos: 'Inad. por grupo — top 5 (até hoje)',
+  receita_composicao: 'Composição do recebido (até ontem)',
+  receita_inad_grupos: 'Inad. por grupo — top 5 (até ontem)',
   receita_grafico_resumo: 'Resumo mensal — gráfico (removido do e-mail)',
   eficiencia_overview: 'Overview eficiência (KPIs)',
 }
@@ -56,7 +56,7 @@ function SectionHeader() {
         Envio automático de e-mail
       </h3>
       <p className="mt-1 text-xs text-slate-500">
-        Gestão à vista diária: recorte do mês corrente (dia 1 até hoje) — receita e eficiência —
+        Gestão à vista diária: recorte do mês corrente (dia 1 até ontem) — receita e eficiência —
         via Microsoft Graph. Somente administradores.
       </p>
     </div>

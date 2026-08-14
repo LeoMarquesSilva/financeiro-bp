@@ -20,6 +20,7 @@ type ClassificacaoItem = {
   categoria: string
   valor_recebido: number
   data_vencimento?: string | null
+  data_pagamento?: string | null
 }
 
 export function filtrarPrevistoMesItensPorCiItens<T extends { ci_item: number }>(
@@ -38,7 +39,13 @@ function formatDateIsoLocal(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-function refDateCorteInadMes(ano: number, mes: number, ref = new Date()): string {
+function refDateCorteInadMes(ano: number, mes: number, ref = new Date(), corteIso?: string): string {
+  const mesFimIso = formatDateIsoLocal(new Date(ano, mes, 0))
+  if (corteIso) {
+    const mesInicioIso = `${ano}-${String(mes).padStart(2, '0')}-01`
+    if (corteIso < mesInicioIso) return corteIso
+    return corteIso <= mesFimIso ? corteIso : mesFimIso
+  }
   const mesFim = new Date(ano, mes, 0)
   const hoje = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate())
   const corte = mesFim.getTime() < hoje.getTime() ? mesFim : hoje
@@ -53,14 +60,26 @@ function itemVencimentoVencidoAteCorte(
   return data_vencimento.trim().slice(0, 10) <= corteIso
 }
 
-/** Vencido até hoje no mês e não quitado no mês — mesma regra do SIOE (visão por área). */
+function filtrarClassificacaoAteCorte(
+  itens: ClassificacaoItem[],
+  corteIso: string | undefined,
+): ClassificacaoItem[] {
+  if (!corteIso) return itens
+  return itens.filter((item) => {
+    const pg = item.data_pagamento?.trim()?.slice(0, 10)
+    return pg != null && pg !== '' && pg <= corteIso
+  })
+}
+
+/** Vencido até a data de corte no mês e não quitado no mês — mesma regra do SIOE (visão por área). */
 export function inadimplenciaItemMesFaturadoNaoPago(
   item: PrevistoItem,
   ano: number,
   mes: number,
   ref = new Date(),
+  corteIso?: string,
 ): number {
-  const corte = refDateCorteInadMes(ano, mes, ref)
+  const corte = refDateCorteInadMes(ano, mes, ref, corteIso)
   if (!itemVencimentoVencidoAteCorte(item.data_vencimento, corte)) return 0
 
   const pg = item.data_pagamento
@@ -117,7 +136,9 @@ export function buildFechamentoPorAreaItens(
   ano: number,
   mes: number,
   ref = new Date(),
+  corteIso?: string,
 ): ReceitaFechamentoMes {
+  const classificacaoCorte = filtrarClassificacaoAteCorte(classificacaoItens, corteIso)
   const mesInicio = new Date(ano, mes - 1, 1)
   const mesFim = new Date(ano, mes, 0)
 
@@ -141,16 +162,16 @@ export function buildFechamentoPorAreaItens(
     else if (d > mesFim) quitado_pago_depois += valor
   }
 
-  const inad_recebida = somaClassificacaoDetalhe(classificacaoItens, 'inadimplencia', ano, mes)
-  const receita_mes_caixa = somaClassificacaoDetalhe(classificacaoItens, 'receita_mes', ano, mes)
+  const inad_recebida = somaClassificacaoDetalhe(classificacaoCorte, 'inadimplencia', ano, mes)
+  const receita_mes_caixa = somaClassificacaoDetalhe(classificacaoCorte, 'receita_mes', ano, mes)
   const novos_vencimento_mes = somaClassificacaoDetalhe(
-    classificacaoItens,
+    classificacaoCorte,
     'novos_vencimento_mes',
     ano,
     mes,
   )
   const novos_vencimento_anterior = somaClassificacaoDetalhe(
-    classificacaoItens,
+    classificacaoCorte,
     'novos_vencimento_anterior',
     ano,
     mes,
@@ -161,7 +182,7 @@ export function buildFechamentoPorAreaItens(
 
   let inadimplencia_kpi = 0
   for (const item of previstoItens) {
-    inadimplencia_kpi += inadimplenciaItemMesFaturadoNaoPago(item, ano, mes, ref)
+    inadimplencia_kpi += inadimplenciaItemMesFaturadoNaoPago(item, ano, mes, ref, corteIso)
   }
 
   return {

@@ -182,7 +182,13 @@ Deno.serve(async (req: Request) => {
 
   const dadosMap = new Map<string | null, Awaited<ReturnType<typeof fetchRelatorioDados>>>()
   for (const key of allVariantKeys) {
-    dadosMap.set(key, await fetchRelatorioDados(admin, ano, mes, key, periodo))
+    dadosMap.set(key, await fetchRelatorioDados(admin, ano, mes, key, {
+      diaReferencia: periodo.dia,
+      corteIso: periodo.corteIso,
+      periodoLabel: periodo.periodoLabel,
+      periodoCurto: periodo.periodoCurto,
+      parcial: periodo.parcial,
+    }))
   }
 
   let token: string
