@@ -59,6 +59,7 @@ export type ApresentacaoBlocoId =
   | 'composicao'
   | 'bignumber'
   | 'controladoria'
+  | 'lideranca'
   | 'iniciativas'
   | 'marketing'
   | 'financeiro_ops'
@@ -76,43 +77,49 @@ export const APRESENTACAO_BLOCOS: {
     secoes: ['eficiencia_operacional', 'satisfacao_cliente', 'desenvolver_equipe'],
   },
   {
+    id: 'lideranca',
+    label: 'Bloco 2 — Liderança',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
     id: 'financeiro',
-    label: 'Bloco 2 — Financeiro',
+    label: 'Bloco 3 — Financeiro',
     secoes: ['resultado_financeiro'],
   },
   {
     id: 'composicao',
-    label: 'Bloco 3 — Composição',
+    label: 'Bloco 4 — Composição',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'bignumber',
-    label: 'Bloco 4 — Big Numbers',
+    label: 'Bloco 5 — Big Numbers',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'controladoria',
-    label: 'Bloco 5 — Controladoria',
+    label: 'Bloco 6 — Controladoria',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'iniciativas',
-    label: 'Bloco 6 — Iniciativas',
+    label: 'Bloco 7 — Iniciativas',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'marketing',
-    label: 'Bloco 7 — Marketing',
+    label: 'Bloco 8 — Marketing',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'financeiro_ops',
-    label: 'Bloco 8 — Financeiro Ops',
+    label: 'Bloco 9 — Financeiro Ops',
     secoes: [],
     semGradeAreas: true,
   },

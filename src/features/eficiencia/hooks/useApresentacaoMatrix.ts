@@ -29,6 +29,7 @@ import { fetchApresentacaoControladoria } from '../utils/apresentacaoControlador
 import { buildApresentacaoIniciativas } from '../utils/apresentacaoIniciativas'
 import { buildApresentacaoMarketing } from '../utils/apresentacaoMarketing'
 import { buildApresentacaoFinanceiroOps } from '../utils/apresentacaoFinanceiroOps'
+import { fetchApresentacaoLideranca } from '../utils/apresentacaoLideranca'
 import { instagramService } from '@/features/operacoes-legais/marketing/instagramService'
 import { cobrancaService } from '@/features/cobranca/services/cobrancaService'
 import type { MesFiltroEficiencia } from '../constants'
@@ -107,6 +108,14 @@ export function useApresentacaoMatrix(
     retry: 1,
   })
 
+  const liderancaQuery = useQuery({
+    queryKey: ['eficiencia', 'apresentacao-lideranca', ano, mesFiltro] as const,
+    queryFn: () => fetchApresentacaoLideranca(ano, mesFiltro),
+    enabled,
+    staleTime: 60_000,
+    retry: 1,
+  })
+
   /** Mesmo cache da aba Ops Legais — ClickUp uma vez por ano. */
   const iniciativasAnoQuery = useQuery({
     queryKey: ['eficiencia', 'ops-legais-iniciativas', ano] as const,
@@ -163,6 +172,9 @@ export function useApresentacaoMatrix(
   const loadingControladoria =
     enabled && (controladoriaQuery.isLoading || controladoriaQuery.isPending)
 
+  const loadingLideranca =
+    enabled && (liderancaQuery.isLoading || liderancaQuery.isPending)
+
   const loadingIniciativas =
     enabled && (iniciativasAnoQuery.isLoading || iniciativasAnoQuery.isPending)
 
@@ -199,6 +211,13 @@ export function useApresentacaoMatrix(
       ? controladoriaQuery.error
       : controladoriaQuery.error
         ? new Error(String(controladoriaQuery.error))
+        : null
+
+  const liderancaError =
+    liderancaQuery.error instanceof Error
+      ? liderancaQuery.error
+      : liderancaQuery.error
+        ? new Error(String(liderancaQuery.error))
         : null
 
   const iniciativasError =
@@ -293,6 +312,7 @@ export function useApresentacaoMatrix(
     receitaRows: financeiroQuery.data?.rows ?? null,
     bigNumber: bigNumberQuery.data ?? null,
     controladoria: controladoriaQuery.data ?? null,
+    lideranca: liderancaQuery.data ?? null,
     iniciativas,
     marketing,
     financeiroOps,
@@ -301,12 +321,14 @@ export function useApresentacaoMatrix(
     loadingComposicao,
     loadingBigNumber,
     loadingControladoria,
+    loadingLideranca,
     loadingIniciativas,
     loadingMarketing,
     loadingFinanceiroOps,
     error,
     bigNumberError,
     controladoriaError,
+    liderancaError,
     iniciativasError,
     marketingError,
     financeiroOpsError,

@@ -1,6 +1,6 @@
 /** Remove envelope JSON de listas, ex.: `["PRAZO"]` → `PRAZO`. */
-export function stripJsonArrayDecorators(value: string): string {
-  const trimmed = value.trim()
+export function stripJsonArrayDecorators(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim()
   if (!trimmed) return trimmed
   // Tenta parse JSON array
   if (trimmed.startsWith('[')) {
@@ -64,7 +64,7 @@ const ACRONYMS = new Set([
 ])
 
 /** Title Case pt-BR (PriMaiuscula): primeira letra de cada palavra, artigos/preposições minúsculos. */
-export function toPriMaiuscula(value: string): string {
+export function toPriMaiuscula(value: string | null | undefined): string {
   const cleaned = stripJsonArrayDecorators(value)
   if (!cleaned) return cleaned
   const words = cleaned

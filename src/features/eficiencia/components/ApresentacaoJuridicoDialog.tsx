@@ -64,6 +64,7 @@ export function ApresentacaoJuridicoDialog({
     receitaRows,
     bigNumber,
     controladoria,
+    lideranca,
     iniciativas,
     marketing,
     financeiroOps,
@@ -71,11 +72,13 @@ export function ApresentacaoJuridicoDialog({
     loadingComposicao,
     loadingBigNumber,
     loadingControladoria,
+    loadingLideranca,
     loadingIniciativas,
     loadingMarketing,
     loadingFinanceiroOps,
     bigNumberError,
     controladoriaError,
+    liderancaError,
     iniciativasError,
     marketingError,
     financeiroOpsError,
@@ -97,6 +100,10 @@ export function ApresentacaoJuridicoDialog({
     }
     if (blocoId === 'bignumber' && (loadingBigNumber || !bigNumber)) {
       toast.error('Big Numbers ainda carregando')
+      return
+    }
+    if (blocoId === 'lideranca' && (loadingLideranca || !lideranca)) {
+      toast.error('Liderança ainda carregando')
       return
     }
     if (blocoId === 'controladoria' && (loadingControladoria || !controladoria)) {
@@ -164,8 +171,8 @@ export function ApresentacaoJuridicoDialog({
                 Apresentação — Jurídico
               </DialogTitle>
               <p className="mt-1 text-xs text-slate-500">
-                Bloco 1–3: filtro abaixo · Bloco 4: YoY · Bloco 5: ano · Bloco
-                6–8: filtro próprio · cópia 33,87 × 16,32 cm
+                Bloco 1–4: filtro abaixo · Bloco 5: YoY · Bloco 6: ano · Bloco
+                7–9: filtro próprio · cópia 33,87 × 16,32 cm
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -174,19 +181,21 @@ export function ApresentacaoJuridicoDialog({
                 const CopyIcon =
                   status === 'loading' ? Loader2 : status === 'done' ? Check : Copy
                 const blocoBusy =
-                  bloco.id === 'bignumber'
-                    ? loadingBigNumber || !bigNumber
-                    : bloco.id === 'controladoria'
-                      ? loadingControladoria || !controladoria
-                      : bloco.id === 'iniciativas'
-                        ? loadingIniciativas || !iniciativas
-                        : bloco.id === 'marketing'
-                          ? loadingMarketing || !marketing
-                          : bloco.id === 'financeiro_ops'
-                            ? loadingFinanceiroOps || !financeiroOps
-                            : bloco.id === 'composicao'
-                              ? loadingComposicao || !composicao
-                              : loading
+                  bloco.id === 'lideranca'
+                    ? loadingLideranca || !lideranca
+                    : bloco.id === 'bignumber'
+                      ? loadingBigNumber || !bigNumber
+                      : bloco.id === 'controladoria'
+                        ? loadingControladoria || !controladoria
+                        : bloco.id === 'iniciativas'
+                          ? loadingIniciativas || !iniciativas
+                          : bloco.id === 'marketing'
+                            ? loadingMarketing || !marketing
+                            : bloco.id === 'financeiro_ops'
+                              ? loadingFinanceiroOps || !financeiroOps
+                              : bloco.id === 'composicao'
+                                ? loadingComposicao || !composicao
+                                : loading
                 return (
                   <Button
                     key={bloco.id}
@@ -231,6 +240,7 @@ export function ApresentacaoJuridicoDialog({
               receitaRows={receitaRows}
               bigNumber={bigNumber}
               controladoria={controladoria}
+              lideranca={lideranca}
               iniciativas={iniciativas}
               marketing={marketing}
               financeiroOps={financeiroOps}
@@ -239,11 +249,13 @@ export function ApresentacaoJuridicoDialog({
               loadingComposicao={loadingComposicao}
               loadingBigNumber={loadingBigNumber}
               loadingControladoria={loadingControladoria}
+              loadingLideranca={loadingLideranca}
               loadingIniciativas={loadingIniciativas}
               loadingMarketing={loadingMarketing}
               loadingFinanceiroOps={loadingFinanceiroOps}
               bigNumberError={bigNumberError}
               controladoriaError={controladoriaError}
+              liderancaError={liderancaError}
               iniciativasError={iniciativasError}
               marketingError={marketingError}
               financeiroOpsError={financeiroOpsError}

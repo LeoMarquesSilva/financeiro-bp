@@ -28,8 +28,8 @@ export type OpsTreinamentoCategoriaResumo = {
   horasLabel: string
 }
 
-function normalizeNome(s: string): string {
-  return s
+function normalizeNome(s: string | null | undefined): string {
+  return String(s ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()

@@ -14,6 +14,7 @@ import type { ApresentacaoControladoriaData } from '../utils/apresentacaoControl
 import type { ApresentacaoIniciativasData } from '../utils/apresentacaoIniciativas'
 import type { ApresentacaoMarketingData } from '../utils/apresentacaoMarketing'
 import type { ApresentacaoFinanceiroOpsData } from '../utils/apresentacaoFinanceiroOps'
+import type { ApresentacaoLiderancaData } from '../utils/apresentacaoLideranca'
 import type { MesFiltroEficiencia } from '../constants'
 import { ApresentacaoBigNumberBloco } from './ApresentacaoBigNumberBloco'
 import { ApresentacaoComposicaoBloco } from './ApresentacaoComposicaoBloco'
@@ -21,6 +22,7 @@ import { ApresentacaoControladoriaBloco } from './ApresentacaoControladoriaBloco
 import { ApresentacaoIniciativasBloco } from './ApresentacaoIniciativasBloco'
 import { ApresentacaoMarketingBloco } from './ApresentacaoMarketingBloco'
 import { ApresentacaoFinanceiroOpsBloco } from './ApresentacaoFinanceiroOpsBloco'
+import { ApresentacaoLiderancaBloco } from './ApresentacaoLiderancaBloco'
 import { toPriMaiuscula } from '../utils/textFormat'
 
 const FENIX_URL = '/team/fenix-bismarchi.png'
@@ -78,6 +80,7 @@ type Props = {
   receitaRows?: ReceitaMesRow[] | null
   bigNumber?: ApresentacaoBigNumberData | null
   controladoria?: ApresentacaoControladoriaData | null
+  lideranca?: ApresentacaoLiderancaData | null
   iniciativas?: ApresentacaoIniciativasData | null
   marketing?: ApresentacaoMarketingData | null
   financeiroOps?: ApresentacaoFinanceiroOpsData | null
@@ -86,11 +89,13 @@ type Props = {
   loadingComposicao?: boolean
   loadingBigNumber?: boolean
   loadingControladoria?: boolean
+  loadingLideranca?: boolean
   loadingIniciativas?: boolean
   loadingMarketing?: boolean
   loadingFinanceiroOps?: boolean
   bigNumberError?: Error | null
   controladoriaError?: Error | null
+  liderancaError?: Error | null
   iniciativasError?: Error | null
   marketingError?: Error | null
   financeiroOpsError?: Error | null
@@ -148,8 +153,9 @@ function cellStyle(cell: ApresentacaoCell, bold: boolean): CSSProperties {
   }
 }
 
-function metaTexto(metaLabel: string): string {
-  const t = metaLabel.trim()
+function metaTexto(metaLabel: string | null | undefined): string {
+  const t = String(metaLabel ?? '').trim()
+  if (!t) return 'Meta —'
   if (/^meta\b/i.test(t)) return t
   return `Meta ${t}`
 }
@@ -487,6 +493,7 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
     receitaRows = null,
     bigNumber = null,
     controladoria = null,
+    lideranca = null,
     iniciativas = null,
     marketing = null,
     financeiroOps = null,
@@ -495,11 +502,13 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
     loadingComposicao = false,
     loadingBigNumber = false,
     loadingControladoria = false,
+    loadingLideranca = false,
     loadingIniciativas = false,
     loadingMarketing = false,
     loadingFinanceiroOps = false,
     bigNumberError = null,
     controladoriaError = null,
+    liderancaError = null,
     iniciativasError = null,
     marketingError = null,
     financeiroOpsError = null,
@@ -537,6 +546,14 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
               receitaRows={receitaRows}
               ano={ano}
               loading={loadingComposicao || !composicao}
+            />
+          )
+        } else if (bloco.id === 'lideranca') {
+          content = (
+            <ApresentacaoLiderancaBloco
+              data={lideranca}
+              loading={loadingLideranca}
+              error={liderancaError}
             />
           )
         } else if (bloco.id === 'bignumber') {
