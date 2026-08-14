@@ -1414,20 +1414,47 @@ export const eficienciaService = {
       retencaoAnual,
       retencaoTalentos,
       retencaoDesligamentos,
+      desenvolvimentoAnual,
     ] = await Promise.all([
       this.fetchRacionalParaExport('sla_protocolo', ano, null, mesFiltro),
       this.fetchRacionalParaExport('eficiencia_protocolo', ano, null, mesFiltro),
       this.fetchRacionalParaExport('sla_ciencia_agendamentos', ano, null, mesFiltro),
       this.fetchRacionalParaExport('sla_vistagem_risco', ano, null, mesFiltro),
       this.fetchRacionalParaExport('sla_vistagem_normal', ano, null, mesFiltro),
-      this.fetchRacionalParaExport('desenvolvimento_equipe', ano, null, mesFiltro),
+      this.fetchRacionalParaExport('desenvolvimento_equipe', ano, null, null),
       this.fetchGestaoPdiMensal(ano, null),
       this.fetchGestaoPdiDetalhe(ano, mesFiltro, null),
       this.fetchTurnoverAnual(ano, null),
       this.fetchRacionalParaExport('retencao_talentos', ano, null, null),
       this.fetchTurnoverDesligamentos(ano),
+      this.fetchTreinamentosAnual(ano, null),
     ])
     const gestaoPdiMensal = gestaoPdiMensalRows.find((r) => r.mes === mes) ?? null
+
+    const metas = await receitaMetasService.getMetas()
+    const { rows: receitaRows } = await receitaService.buildDashboard(metas)
+    const mesMax = mesMaxDisponivelInadimplencia(ano)
+    const inadDashboard = await receitaInadimplenciaService.fetchDashboard({
+      ano,
+      mesInicio: 1,
+      mesFim: mesMax > 0 ? mesMax : 12,
+    })
+    const { meses: gestaoMeses } = buildGestaoConsolidadoFromInadDashboard(
+      receitaRows,
+      inadDashboard,
+      ano,
+    )
+    const mesGestao = gestaoMeses.find((m) => m.mes === mes)
+    const financeiro = mesGestao
+      ? {
+          receitaBrutaPct: mesGestao.pctMeta,
+          recebido: mesGestao.recebido,
+          meta: mesGestao.meta,
+          inadimplenciaPct: mesGestao.inadimplenciaPct,
+          inadimplencia: mesGestao.inadimplencia,
+          previsto: mesGestao.previsto,
+        }
+      : null
 
     const fatalExcludentes = slaProtocolo.linhas
       .map((row) => mapSlaRowToFatalExcludente(row))
@@ -1440,12 +1467,14 @@ export const eficienciaService = {
     return {
       ano,
       mes,
+      financeiro,
       slaProtocolo,
       eficienciaProtocolo,
       agendamento,
       vistagemRisco,
       vistagemNormal,
       desenvolvimento,
+      desenvolvimentoAnual,
       gestaoPdiMensal,
       gestaoPdiDetalhe,
       retencaoAnual,

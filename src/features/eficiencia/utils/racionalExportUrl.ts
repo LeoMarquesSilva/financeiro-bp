@@ -8,6 +8,9 @@ export const INDICADOR_OPERACIONAL_RACIONAL: Record<string, RacionalIndicador> =
   'SLA Vistagem Risco': 'sla_vistagem_risco',
   'SLA Vistagem Normal': 'sla_vistagem_normal',
   'Desenvolvimento Equipe': 'desenvolvimento_equipe',
+  'Gestão de PDI': 'gestao_pdi',
+  'Receita Bruta': 'receita_bruta',
+  'Índice de Inadimplência': 'indice_inadimplencia',
   'Retenção de Talentos': 'retencao_talentos',
 }
 

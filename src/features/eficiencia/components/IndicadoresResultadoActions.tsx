@@ -1,22 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FileSpreadsheet, Ticket } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IndicadoresResultadoDialog } from './IndicadoresResultadoDialog'
 import { AmostraChamadosDialog } from './AmostraChamadosDialog'
+import { mesPadraoIndicadoresResultado } from '../utils/indicadoresOperacionaisBuild'
 
 type Props = {
   ano: number
 }
 
-function mesPadrao(): number {
-  const m = new Date().getMonth() + 1
-  return m
-}
-
 export function IndicadoresResultadoActions({ ano }: Props) {
-  const [mes, setMes] = useState(mesPadrao)
+  const [mes, setMes] = useState(() => mesPadraoIndicadoresResultado(ano))
   const [openExcel, setOpenExcel] = useState(false)
   const [openAmostra, setOpenAmostra] = useState(false)
+
+  useEffect(() => {
+    setMes(mesPadraoIndicadoresResultado(ano))
+  }, [ano])
 
   return (
     <>

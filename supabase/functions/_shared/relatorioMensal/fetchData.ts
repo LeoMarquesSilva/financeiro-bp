@@ -588,6 +588,28 @@ export async function fetchRelatorioDados(
     fetchResumoMensal(supabase, ano, mes, metas.meta, mesesMeta),
   ])
 
+  if (!areaKey) {
+    const mesResumo = resumoMensal.find((r) => r.mes === mes)
+    if (mesResumo) {
+      indicadores.receitaBruta = {
+        pct_meta:
+          mesResumo.meta > 0
+            ? Math.round((mesResumo.recebido / mesResumo.meta) * 10000) / 100
+            : null,
+        recebido: mesResumo.recebido,
+        meta: mesResumo.meta,
+      }
+      indicadores.indiceInadimplencia = {
+        pct:
+          mesResumo.previsto > 0
+            ? Math.round((mesResumo.inadimplencia / mesResumo.previsto) * 10000) / 100
+            : null,
+        inadimplencia: mesResumo.inadimplencia,
+        previsto: mesResumo.previsto,
+      }
+    }
+  }
+
   const inadMes = fechamento.inadimplencia_kpi
   const inadPct = pctInad(inadMes, fechamento.previsto)
   const overviewHeatRows = await fetchOverviewHeatRows(supabase, ano, mes, areaKey, resumoMensal)

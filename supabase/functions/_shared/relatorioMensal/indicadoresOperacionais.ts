@@ -1,5 +1,5 @@
 import { MESES_NOME, areaLabel } from './constants.ts'
-import { escapeHtml, formatPercent } from './format.ts'
+import { escapeHtml, formatCurrency, formatPercent } from './format.ts'
 import {
   buildRacionalExportUrl,
   renderDetalheComLink,
@@ -37,6 +37,12 @@ export type IndicadoresOperacionaisInput = {
     pessoas_ativas: number
   } | null
   gestaoPdi: { aptas: number; desvios: number; elegiveis: number; pct_aptas: number | null } | null
+  receitaBruta: { pct_meta: number | null; recebido: number | null; meta: number | null } | null
+  indiceInadimplencia: {
+    pct: number | null
+    inadimplencia: number | null
+    previsto: number | null
+  } | null
   retencao: {
     pct_retencao: number
     funcionarios_ativos: number
@@ -55,6 +61,54 @@ function formatMinutosHoras(minutos: number): string {
   const h = Math.floor(total / 60)
   const m = total % 60
   return `${h}:${String(m).padStart(2, '0')}`
+}
+
+function isMesCorrenteIndicadores(ano: number, mes: number, ref = new Date()): boolean {
+  return ano === ref.getFullYear() && mes === ref.getMonth() + 1
+}
+
+function buildGestaoPdiRow(
+  gp: IndicadoresOperacionaisInput['gestaoPdi'],
+  ano: number,
+  mes: number,
+): IndicadorOperacionalRow {
+  if (isMesCorrenteIndicadores(ano, mes)) {
+    return {
+      indicador: 'Gestão de PDI',
+      resultado: 'Ciclo não fechado',
+      detalhe: '',
+      bgColor: BRAND_SOFT,
+    }
+  }
+
+  if (gp?.pct_aptas != null) {
+    return {
+      indicador: 'Gestão de PDI',
+      resultado: formatPercent(gp.pct_aptas),
+      detalhe: `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`,
+      bgColor: gp.pct_aptas >= 100 ? GREEN_SOFT : RED_SOFT,
+      racionalSlug: 'gestao_pdi',
+    }
+  }
+
+  if (gp && gp.elegiveis > 0) {
+    const pct = (gp.aptas / gp.elegiveis) * 100
+    return {
+      indicador: 'Gestão de PDI',
+      resultado: formatPercent(pct),
+      detalhe: `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`,
+      bgColor: pct >= 100 ? GREEN_SOFT : RED_SOFT,
+      racionalSlug: 'gestao_pdi',
+    }
+  }
+
+  return {
+    indicador: 'Gestão de PDI',
+    resultado: '—',
+    detalhe: 'Baixar racional (Excel)',
+    bgColor: BRAND_SOFT,
+    racionalSlug: 'gestao_pdi',
+  }
 }
 
 export function buildIndicadoresOperacionaisRows(data: IndicadoresOperacionaisInput): IndicadorOperacionalRow[] {
@@ -143,12 +197,35 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresOperacionaisIn
     racionalSlug: 'desenvolvimento_equipe',
   })
 
-  rows.push({
-    indicador: 'Gestão de PDI',
-    resultado: 'Ciclo não fechado',
-    detalhe: '',
-    bgColor: BRAND_SOFT,
-  })
+  rows.push(buildGestaoPdiRow(data.gestaoPdi, data.ano, data.mes))
+
+  const rb = data.receitaBruta
+  if (rb?.pct_meta != null) {
+    rows.push({
+      indicador: 'Receita Bruta',
+      resultado: formatPercent(rb.pct_meta),
+      detalhe:
+        rb.recebido != null && rb.meta != null
+          ? `${formatCurrency(rb.recebido)} recebido · meta ${formatCurrency(rb.meta)}`
+          : 'Baixar racional (Excel)',
+      bgColor: rb.pct_meta >= 100 ? GREEN_SOFT : RED_SOFT,
+      racionalSlug: 'receita_bruta',
+    })
+  }
+
+  const inad = data.indiceInadimplencia
+  if (inad?.pct != null) {
+    rows.push({
+      indicador: 'Índice de Inadimplência',
+      resultado: formatPercent(inad.pct),
+      detalhe:
+        inad.inadimplencia != null && inad.previsto != null
+          ? `${formatCurrency(inad.inadimplencia)} inad. · previsto ${formatCurrency(inad.previsto)}`
+          : 'Baixar racional (Excel)',
+      bgColor: inad.pct <= 14 ? GREEN_SOFT : RED_SOFT,
+      racionalSlug: 'indice_inadimplencia',
+    })
+  }
 
   const rt = data.retencao
   rows.push({
