@@ -106,10 +106,6 @@ function digestTitle(
   return `Gestão à vista SIOE — ${mesLabel}/${periodo.ano}`
 }
 
-function variantSectionHeading(areaKey: string | null): string {
-  return areaLabel(areaKey)
-}
-
 export function buildDigestEmail(
   dadosMap: Map<string | null, RelatorioDadosBase>,
   periodo: PeriodoGestaoVista,
@@ -125,11 +121,7 @@ export function buildDigestEmail(
       const divider = index > 0
         ? 'margin-top:28px;padding-top:24px;border-top:1px solid #E2E8F0;'
         : ''
-      const sectionLabel = escapeHtml(variantSectionHeading(k))
-      const heading = areaKeys.length > 1
-        ? `<p style="margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:#64748B;">${sectionLabel}</p>`
-        : ''
-      return `<div style="${divider}">${heading}${html}</div>`
+      return `<div style="${divider}">${html}</div>`
     })
     .filter(Boolean)
     .join('\n')
