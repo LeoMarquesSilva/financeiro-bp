@@ -121,7 +121,11 @@ export function buildDigestEmail(
       const divider = index > 0
         ? 'margin-top:28px;padding-top:24px;border-top:1px solid #E2E8F0;'
         : ''
-      return `<div style="${divider}">${html}</div>`
+      const heading =
+        areaKeys.length > 1 && k != null
+          ? `<p style="margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:#64748B;text-align:center;">${escapeHtml(areaLabel(k))}</p>`
+          : ''
+      return `<div style="${divider}">${heading}${html}</div>`
     })
     .filter(Boolean)
     .join('\n')
