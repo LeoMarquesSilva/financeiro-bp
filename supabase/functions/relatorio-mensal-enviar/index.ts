@@ -9,7 +9,7 @@ import {
 } from '../_shared/relatorioMensal/fetchData.ts'
 import { resolverPeriodoGestaoVista } from '../_shared/relatorioMensal/periodoGestaoVista.ts'
 import { getGraphToken, sendGraphMail } from '../_shared/relatorioMensal/graphMail.ts'
-import { parseSecoesConfig } from '../_shared/relatorioMensal/constants.ts'
+import { areaLabel, parseSecoesConfig } from '../_shared/relatorioMensal/constants.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const variantKeys = variantesParaDestinatario(dest.area_key)
-    const assunto = `SIOE — Gestão à vista · ${String(mes).padStart(2, '0')}/${ano} (${periodo.periodoCurto})${dest.area_key ? ` · ${dest.area_key}` : ''}`
+    const assunto = `SIOE — Gestão à vista · ${String(mes).padStart(2, '0')}/${ano} (${periodo.periodoCurto})${dest.area_key ? ` · ${areaLabel(dest.area_key)}` : ''}`
     const corpo = buildDigestEmail(dadosMap, periodo, variantKeys, secoesConfig, dest.area_key)
 
     try {
