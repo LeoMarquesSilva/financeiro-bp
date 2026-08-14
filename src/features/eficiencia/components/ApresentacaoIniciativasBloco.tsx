@@ -3,7 +3,6 @@ import type { MesFiltroEficiencia } from '../constants'
 import type { ApresentacaoIniciativasData } from '../utils/apresentacaoIniciativas'
 import { MesFilterButtons } from './MesFilterButtons'
 
-const GOLD = '#D5B170'
 const GOLD_DARK = '#C6A361'
 const HIGHLIGHT_BG = '#FEF3C7'
 const HIGHLIGHT_BORDER = '#F59E0B'
@@ -78,28 +77,6 @@ export function ApresentacaoIniciativasBloco({
         gap: 10,
       }}
     >
-      <div
-        data-overview-copy-card
-        data-chart-export-preserve-bg
-        style={{
-          display: 'inline-block',
-          alignSelf: 'flex-start',
-          borderRadius: 5,
-          backgroundColor: GOLD,
-          color: '#fff',
-          padding: '3px 10px',
-          fontSize: 10,
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.03em',
-          whiteSpace: 'nowrap',
-          printColorAdjust: 'exact',
-          WebkitPrintColorAdjust: 'exact',
-        }}
-      >
-        8. Iniciativas Estratégicas
-      </div>
-
       {error && !data ? (
         <div
           style={{

@@ -1,14 +1,17 @@
-import type { MesFiltroEficiencia } from '../constants'
-import type { ApresentacaoFinanceiroOpsData } from '../utils/apresentacaoFinanceiroOps'
+import type { CSSProperties } from 'react'
+import { MESES_EFICIENCIA, type MesFiltroEficiencia } from '../constants'
+import type {
+  ApresentacaoFinanceiroOpsData,
+  FinanceiroOpsIndicadorRow,
+} from '../utils/apresentacaoFinanceiroOps'
+import { toPriMaiuscula } from '../utils/textFormat'
 import { MesFilterButtons } from './MesFilterButtons'
 
-const GOLD = '#D5B170'
-const GOLD_SOFT = '#F3E6D0'
-const DARK = '#333F48'
-const OK = '#059669'
-const NOK = '#DC2626'
-const NEUTRO = '#86EFAC'
-const BORDER = '#E2E8F0'
+const COL_TITLE_WIDTH = 150
+const COL_MES_WIDTH = 60
+const COL_ACUM_WIDTH = 72
+const TABLE_MIN_WIDTH =
+  COL_TITLE_WIDTH + MESES_EFICIENCIA.length * COL_MES_WIDTH + COL_ACUM_WIDTH
 
 type Props = {
   data: ApresentacaoFinanceiroOpsData | null
@@ -19,12 +22,147 @@ type Props = {
   onMesFiltroChange: (mes: MesFiltroEficiencia) => void
 }
 
-function cellColor(atingiu: boolean | null): string {
-  if (atingiu == null) return NEUTRO
-  return atingiu ? OK : NOK
+function cellStyle(atingiu: boolean | null, bold: boolean): CSSProperties {
+  if (atingiu == null) {
+    return { background: '#FFFFFF', color: '#6B7280', fontWeight: bold ? 700 : 600 }
+  }
+  return {
+    background: atingiu ? '#ECFDF3' : '#FEE2E2',
+    color: atingiu ? '#059669' : '#DC2626',
+    fontWeight: bold ? 700 : 600,
+  }
 }
 
-/** Bloco 8 — tabela (export PPT estável, igual Marketing). */
+function metaTexto(metaLabel: string): string {
+  const t = metaLabel.trim()
+  if (/^meta\b/i.test(t)) return t
+  return `Meta ${t}`
+}
+
+const thBase: CSSProperties = {
+  padding: 4,
+  textAlign: 'center',
+  fontSize: 12,
+  fontWeight: 700,
+  color: '#334155',
+  borderBottom: '2px solid #E5E7EB',
+}
+
+/** Layout idêntico ao OverviewKpiHeatCard. */
+function FinanceiroOpsHeatCard({ row }: { row: FinanceiroOpsIndicadorRow }) {
+  const byMes = new Map(row.cells.map((c) => [c.mes, c]))
+
+  return (
+    <div
+      data-overview-copy-card
+      data-chart-export-preserve-bg
+      style={{
+        flex: 1,
+        minWidth: 0,
+        background: '#FFFFFF',
+        border: '1px solid #E6E8EB',
+        borderRadius: 8,
+        padding: 8,
+        boxShadow: '0 2px 4px rgba(15,23,42,0.06)',
+        printColorAdjust: 'exact',
+        WebkitPrintColorAdjust: 'exact',
+      }}
+    >
+      <table
+        style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          tableLayout: 'fixed',
+          minWidth: TABLE_MIN_WIDTH,
+        }}
+      >
+        <colgroup>
+          <col style={{ width: COL_TITLE_WIDTH }} />
+          {MESES_EFICIENCIA.map((m) => (
+            <col key={m} style={{ width: COL_MES_WIDTH }} />
+          ))}
+          <col style={{ width: COL_ACUM_WIDTH }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th
+              style={{
+                padding: '4px 6px',
+                textAlign: 'left',
+                fontSize: 11,
+                fontWeight: 600,
+                color: '#1F2937',
+                borderBottom: '2px solid #E5E7EB',
+              }}
+            >
+              {toPriMaiuscula(row.titulo)}
+            </th>
+            {MESES_EFICIENCIA.map((m) => (
+              <th key={m} style={thBase}>
+                {m}
+              </th>
+            ))}
+            <th
+              style={{
+                padding: 4,
+                textAlign: 'center',
+                fontSize: 10,
+                fontWeight: 600,
+                color: '#1F2937',
+                borderBottom: '2px solid #E5E7EB',
+              }}
+            >
+              Acum.
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td
+              style={{
+                padding: '4px 6px',
+                textAlign: 'left',
+                fontSize: 10,
+                fontWeight: 500,
+                color: '#059669',
+              }}
+            >
+              {metaTexto(row.metaLabel)}
+            </td>
+            {MESES_EFICIENCIA.map((_, i) => {
+              const cell = byMes.get(i + 1)
+              return (
+                <td
+                  key={i}
+                  style={{
+                    padding: 4,
+                    textAlign: 'center',
+                    fontSize: 11,
+                    ...cellStyle(cell?.atingiu ?? null, false),
+                  }}
+                >
+                  {cell ? cell.label : '-'}
+                </td>
+              )
+            })}
+            <td
+              style={{
+                padding: 4,
+                textAlign: 'center',
+                fontSize: 11,
+                borderLeft: '2px solid #E5E7EB',
+                ...cellStyle(row.acumAtingiu, true),
+              }}
+            >
+              {row.acumLabel}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export function ApresentacaoFinanceiroOpsBloco({
   data,
   loading,
@@ -33,8 +171,6 @@ export function ApresentacaoFinanceiroOpsBloco({
   mesFiltro,
   onMesFiltroChange,
 }: Props) {
-  const nMeses = data?.meses.length ?? 0
-
   return (
     <div
       style={{
@@ -54,7 +190,7 @@ export function ApresentacaoFinanceiroOpsBloco({
           gap: 6,
           padding: '8px 10px',
           borderRadius: 8,
-          border: `1px solid ${BORDER}`,
+          border: '1px solid #E2E8F0',
           background: '#FFFFFF',
         }}
       >
@@ -75,36 +211,15 @@ export function ApresentacaoFinanceiroOpsBloco({
         data-apresentacao-export="financeiro_ops"
         style={{
           width: '100%',
+          minWidth: 1100,
           boxSizing: 'border-box',
           backgroundColor: 'transparent',
           padding: 4,
           display: 'flex',
           flexDirection: 'column',
-          gap: 10,
+          gap: 8,
         }}
       >
-        <div
-          data-overview-copy-card
-          data-chart-export-preserve-bg
-          style={{
-            display: 'inline-block',
-            alignSelf: 'flex-start',
-            borderRadius: 5,
-            backgroundColor: GOLD,
-            color: '#fff',
-            padding: '3px 10px',
-            fontSize: 10,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.03em',
-            whiteSpace: 'nowrap',
-            printColorAdjust: 'exact',
-            WebkitPrintColorAdjust: 'exact',
-          }}
-        >
-          10. Indicadores Financeiros
-        </div>
-
         {error && !data ? (
           <div
             style={{
@@ -120,174 +235,20 @@ export function ApresentacaoFinanceiroOpsBloco({
             {error.message ? `: ${error.message}` : '.'}
           </div>
         ) : loading || !data ? (
-          <div style={{ display: 'grid', gap: 6 }}>
-            <div style={{ fontSize: 11, color: '#64748B' }}>
-              Carregando Financeiro Ops…
-            </div>
+          <div style={{ display: 'grid', gap: 8, padding: 4 }}>
             {Array.from({ length: 3 }, (_, i) => (
               <div
                 key={i}
-                style={{ height: 52, borderRadius: 8, background: 'rgba(0,0,0,0.06)' }}
+                style={{ height: 56, borderRadius: 8, background: 'rgba(0,0,0,0.06)' }}
               />
             ))}
           </div>
         ) : (
-          <div
-            data-overview-copy-card
-            data-chart-export-preserve-bg
-            style={{
-              width: '100%',
-              printColorAdjust: 'exact',
-              WebkitPrintColorAdjust: 'exact',
-            }}
-          >
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'separate',
-                borderSpacing: '8px 8px',
-                tableLayout: 'fixed',
-              }}
-            >
-              <colgroup>
-                <col style={{ width: 260 }} />
-                {Array.from({ length: nMeses }, (_, i) => (
-                  <col key={i} />
-                ))}
-                <col style={{ width: 120 }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th style={{ padding: 0, border: 'none' }} />
-                  {data.rows[0]!.cells.map((c) => (
-                    <th
-                      key={c.mes}
-                      style={{
-                        backgroundColor: DARK,
-                        color: '#FFFFFF',
-                        borderRadius: 8,
-                        padding: '8px 4px',
-                        textAlign: 'center',
-                        fontSize: 11,
-                        fontWeight: 700,
-                        border: 'none',
-                        printColorAdjust: 'exact',
-                        WebkitPrintColorAdjust: 'exact',
-                      }}
-                    >
-                      {c.mesLabelLong}
-                    </th>
-                  ))}
-                  <th
-                    style={{
-                      backgroundColor: GOLD,
-                      color: '#FFFFFF',
-                      borderRadius: 8,
-                      padding: '8px 6px',
-                      textAlign: 'center',
-                      fontSize: 11,
-                      fontWeight: 800,
-                      letterSpacing: '0.04em',
-                      border: 'none',
-                      printColorAdjust: 'exact',
-                      WebkitPrintColorAdjust: 'exact',
-                    }}
-                  >
-                    ACUMULADO
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((row) => (
-                  <tr key={row.id}>
-                    <td
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: `1px solid ${BORDER}`,
-                        borderLeft: `4px solid ${DARK}`,
-                        borderRadius: 10,
-                        padding: '10px 12px',
-                        verticalAlign: 'middle',
-                        printColorAdjust: 'exact',
-                        WebkitPrintColorAdjust: 'exact',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: '#0F172A',
-                          lineHeight: 1.25,
-                          marginBottom: 6,
-                          whiteSpace: 'normal',
-                        }}
-                      >
-                        {row.titulo}
-                      </div>
-                      <div
-                        style={{
-                          backgroundColor: DARK,
-                          color: '#FFFFFF',
-                          borderRadius: 6,
-                          padding: '3px 8px',
-                          fontSize: 10,
-                          fontWeight: 700,
-                          display: 'inline-block',
-                          whiteSpace: 'nowrap',
-                          printColorAdjust: 'exact',
-                          WebkitPrintColorAdjust: 'exact',
-                        }}
-                      >
-                        {row.metaLabel}
-                      </div>
-                    </td>
-
-                    {row.cells.map((cell) => (
-                      <td
-                        key={cell.mes}
-                        style={{
-                          backgroundColor: '#FFFFFF',
-                          border: `1px solid ${BORDER}`,
-                          borderRadius: 10,
-                          padding: '12px 4px',
-                          textAlign: 'center',
-                          verticalAlign: 'middle',
-                          fontSize: 13,
-                          fontWeight: 800,
-                          fontVariantNumeric: 'tabular-nums',
-                          color: cellColor(cell.atingiu),
-                          printColorAdjust: 'exact',
-                          WebkitPrintColorAdjust: 'exact',
-                        }}
-                      >
-                        {cell.label}
-                      </td>
-                    ))}
-
-                    <td
-                      style={{
-                        backgroundColor: GOLD_SOFT,
-                        border: `1px solid ${GOLD}`,
-                        borderRadius: 10,
-                        padding: '10px 6px',
-                        textAlign: 'center',
-                        verticalAlign: 'middle',
-                        fontSize: 14,
-                        fontWeight: 800,
-                        fontVariantNumeric: 'tabular-nums',
-                        color: cellColor(row.acumAtingiu),
-                        printColorAdjust: 'exact',
-                        WebkitPrintColorAdjust: 'exact',
-                      }}
-                    >
-                      {row.acumLabel}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 4, paddingLeft: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {data.rows.map((row) => (
+              <FinanceiroOpsHeatCard key={row.id} row={row} />
+            ))}
+            <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2, paddingLeft: 4 }}>
               Fechamento: indicador do BI ainda sem fonte no SIOE (exibe &quot;-&quot;).
             </div>
           </div>

@@ -313,6 +313,9 @@ export interface TreinamentosPorPessoaRow {
   colaborador: string
   minutos_lancados: number
   horas_formatadas: string
+  admissao?: string | null
+  meses_elegiveis?: number | null
+  meta_minutos?: number | null
 }
 
 export interface TreinamentoItemRow {

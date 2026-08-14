@@ -10,6 +10,7 @@ import {
   isDiaFiltro,
   MES_INICIO_RESULTADO,
   mesFimResultado,
+  mesFimYtdFechado,
   rangeSemanaFiltro,
   rangeDiaFiltro,
   type MesFiltroEficiencia,
@@ -113,6 +114,18 @@ export function applyRacionalPeriodo(
         : `${ano}-${String(fimMes + 1).padStart(2, '0')}-01`
     return query.gte(dataColuna, inicio).lt(dataColuna, fim)
   }
+  if (mes === 'resultado_ytd') {
+    const inicio = `${ano}-01-01`
+    const fimMes = mesFimYtdFechado(ano)
+    if (fimMes < 1) {
+      return query.gte(dataColuna, inicio).lt(dataColuna, inicio)
+    }
+    const fim =
+      fimMes === 12
+        ? `${ano + 1}-01-01`
+        : `${ano}-${String(fimMes + 1).padStart(2, '0')}-01`
+    return query.gte(dataColuna, inicio).lt(dataColuna, fim)
+  }
   if (isMesesFiltro(mes) && mes.length > 0) {
     if (mes.length === 1) {
       const { inicio, fim } = rangeMes(ano, mes[0]!)
@@ -204,7 +217,8 @@ export async function fetchDesenvolvimentoRacional(
   responsavel: string | null = null,
 ): Promise<RacionalResultado> {
   // Indicador anual: filtro Resultado = ano todo (mesmos minutos/meta do KPI).
-  const mesPeriodo: MesFiltroEficiencia = mes === 'resultado' ? null : mes
+  const mesPeriodo: MesFiltroEficiencia =
+    mes === 'resultado' || mes === 'resultado_ytd' ? null : mes
 
   // Ativo no ano: desligamento nulo ou a partir de 1/jan do ano seguinte (equiv. year > ano).
   const turnoverQuery = supabase
@@ -287,7 +301,13 @@ export function applyRetencaoRacionalPeriodo(
     .lte('admissao', `${ano}-12-31`)
     .or(`desligamento.is.null,desligamento.gte.${ano}-01-01`)
 
-  if (mes === 'resultado' || mes == null || isSemanaFiltro(mes) || isDiaFiltro(mes)) {
+  if (
+    mes === 'resultado' ||
+    mes === 'resultado_ytd' ||
+    mes == null ||
+    isSemanaFiltro(mes) ||
+    isDiaFiltro(mes)
+  ) {
     return query
   }
   if (isMesesFiltro(mes) && mes.length > 0) {
@@ -339,6 +359,14 @@ export function formatRacionalPeriodoLabel(ano: number, mes: MesFiltroEficiencia
     return fim === MES_INICIO_RESULTADO
       ? `resultado (${iniLabel}/${ano})`
       : `resultado (${iniLabel}–${fimLabel}/${ano})`
+  }
+  if (mes === 'resultado_ytd') {
+    const fim = mesFimYtdFechado(ano)
+    if (fim < 1) return `resultado (sem mês fechado/${ano})`
+    const fimLabel = MESES_EFICIENCIA[fim - 1]
+    return fim === 1
+      ? `resultado (Jan/${ano})`
+      : `resultado (Jan–${fimLabel}/${ano})`
   }
   if (isMesesFiltro(mes) && mes.length === 1) {
     return `${String(mes[0]).padStart(2, '0')}/${ano}`

@@ -22,7 +22,6 @@ import {
   type BigNumberTopPar,
 } from '../utils/apresentacaoBigNumber'
 
-const GOLD = '#D5B170'
 const GOLD_DARK = '#C6A361'
 const HEADER_BG = '#333f48'
 
@@ -35,6 +34,8 @@ type Props = {
   mesFim: number
   onMesInicioChange: (mes: number) => void
   onMesFimChange: (mes: number) => void
+  /** Top 5 contratos do escritório (só nomes). */
+  topContratos?: string[]
 }
 
 type KpiDef = {
@@ -466,6 +467,7 @@ export function ApresentacaoBigNumberBloco({
   mesFim,
   onMesInicioChange,
   onMesFimChange,
+  topContratos = [],
 }: Props) {
   const periodoPreview = labelPeriodoBigNumber(
     [
@@ -478,11 +480,17 @@ export function ApresentacaoBigNumberBloco({
     ano - 1,
   )
 
+  const nomesContratos =
+    topContratos.length > 0
+      ? topContratos.slice(0, 5)
+      : Array.from({ length: 5 }, () => '—')
+
   return (
     <div
       style={{
         width: '100%',
-        minWidth: 1100,
+        minWidth: 0,
+        maxWidth: '100%',
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
@@ -515,6 +523,8 @@ export function ApresentacaoBigNumberBloco({
 
       <div
         data-apresentacao-export="bignumber"
+        data-apresentacao-fill-slide
+        data-apresentacao-fill-preserve
         style={{
           width: '100%',
           boxSizing: 'border-box',
@@ -526,33 +536,15 @@ export function ApresentacaoBigNumberBloco({
         }}
       >
       <div
+        data-bn-periodo
         style={{
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'baseline',
           gap: 10,
+          padding: '4px 2px 6px',
         }}
       >
-        <div
-          data-overview-copy-card
-          data-chart-export-preserve-bg
-          style={{
-            display: 'inline-block',
-            borderRadius: 5,
-            backgroundColor: GOLD,
-            color: '#fff',
-            padding: '3px 10px',
-            fontSize: 10,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.03em',
-            whiteSpace: 'nowrap',
-            printColorAdjust: 'exact',
-            WebkitPrintColorAdjust: 'exact',
-          }}
-        >
-          6. Big Numbers Operação
-        </div>
         <span style={{ fontSize: 12, fontWeight: 700, color: GOLD_DARK }}>
           {data?.periodoLabel ?? periodoPreview}
         </span>
@@ -585,10 +577,12 @@ export function ApresentacaoBigNumberBloco({
       ) : (
         <>
           <div
+            data-bn-kpis
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
               gap: 8,
+              width: '100%',
             }}
           >
             {KPI_DEFS.map((def) => (
@@ -603,10 +597,12 @@ export function ApresentacaoBigNumberBloco({
           </div>
 
           <div
+            data-bn-tops
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
               gap: 10,
+              width: '100%',
             }}
           >
             {TOP_DEFS.map((def) => (
@@ -618,6 +614,82 @@ export function ApresentacaoBigNumberBloco({
                 anoAnterior={data.anoAnterior}
               />
             ))}
+          </div>
+
+          <div
+            data-overview-copy-card
+            data-chart-export-preserve-bg
+            data-apresentacao-top-contratos
+            style={{
+              background: '#FFFFFF',
+              border: '1px solid #E6E8EB',
+              borderRadius: 8,
+              padding: '10px 12px',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.05)',
+              flexShrink: 0,
+              width: '100%',
+              boxSizing: 'border-box',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: '#64748B',
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                marginBottom: 8,
+              }}
+            >
+              5 maiores contratos
+            </div>
+            <div
+              data-top-contratos-row
+              style={{
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'stretch',
+                gap: 8,
+                width: '100%',
+              }}
+            >
+              {nomesContratos.map((nome, i) => (
+                <div
+                  key={`${nome}-${i}`}
+                  data-top-contrato-cell
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: 48,
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textAlign: 'center',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <span
+                    data-top-contrato-nome
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: '#1F2937',
+                      lineHeight: 1.3,
+                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
+                      whiteSpace: 'normal',
+                      width: '100%',
+                    }}
+                  >
+                    {nome}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </>
       )}

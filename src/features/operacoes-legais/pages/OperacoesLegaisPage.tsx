@@ -268,7 +268,8 @@ export function OperacoesLegaisPage() {
             <MesFilterButtons
               value={mesFiltro}
               onChange={setMesFiltro}
-              showResultado={false}
+              showResultado
+              resultadoMode="ytd"
               showDiaPicker={
                 tab !== 'overview' && tab !== 'treinamentos' && tab !== 'turnover'
               }

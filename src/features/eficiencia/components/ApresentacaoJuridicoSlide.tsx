@@ -1,4 +1,11 @@
-import { forwardRef, type CSSProperties, type ReactNode, type Ref } from 'react'
+import {
+  forwardRef,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+} from 'react'
 import {
   APRESENTACAO_BLOCOS,
   APRESENTACAO_COLUNAS,
@@ -15,24 +22,29 @@ import type { ApresentacaoIniciativasData } from '../utils/apresentacaoIniciativ
 import type { ApresentacaoMarketingData } from '../utils/apresentacaoMarketing'
 import type { ApresentacaoFinanceiroOpsData } from '../utils/apresentacaoFinanceiroOps'
 import type { ApresentacaoLiderancaData } from '../utils/apresentacaoLideranca'
+import type { ApresentacaoBonusData } from '../utils/apresentacaoBonus'
+import type { ApresentacaoFinanceiroBundle } from '../utils/apresentacaoFinanceiro'
+import type { MesAno } from '../utils/apresentacaoMesAno'
+import type { EficienciaOverview } from '../types/eficiencia.types'
 import type { MesFiltroEficiencia } from '../constants'
 import { ApresentacaoBigNumberBloco } from './ApresentacaoBigNumberBloco'
+import { ApresentacaoBonusBloco } from './ApresentacaoBonusBloco'
 import { ApresentacaoComposicaoBloco } from './ApresentacaoComposicaoBloco'
 import { ApresentacaoControladoriaBloco } from './ApresentacaoControladoriaBloco'
-import { ApresentacaoIniciativasBloco } from './ApresentacaoIniciativasBloco'
-import { ApresentacaoMarketingBloco } from './ApresentacaoMarketingBloco'
 import { ApresentacaoFinanceiroOpsBloco } from './ApresentacaoFinanceiroOpsBloco'
+import { ApresentacaoIniciativasBloco } from './ApresentacaoIniciativasBloco'
+import { ApresentacaoJuridicoUnificadoBloco } from './ApresentacaoJuridicoUnificadoBloco'
 import { ApresentacaoLiderancaBloco } from './ApresentacaoLiderancaBloco'
+import { ApresentacaoMarketingBloco } from './ApresentacaoMarketingBloco'
 import { toPriMaiuscula } from '../utils/textFormat'
 
 const FENIX_URL = '/team/fenix-bismarchi.png'
-const GOLD = '#D5B170'
 const AREA_CARD_BG = '#333f48'
 const AREA_CARD_GOLD = '#D5B170'
-const COL_TITLE_WIDTH = 168
+const COL_TITLE_WIDTH = 200
 const COL_META_WIDTH = 58
-const COL_AREA_WIDTH = 122
-const COL_CONS_WIDTH = 122
+const COL_AREA_WIDTH = 115
+const COL_CONS_WIDTH = 115
 const AREA_ICON_SIZE = 36
 const AREA_HEADER_H = 52
 const CARD_PAD = 4
@@ -76,14 +88,24 @@ const COL_HEADER_LINES: Record<string, string[]> = {
 type Props = {
   colunas: typeof APRESENTACAO_COLUNAS
   rows: ApresentacaoMatrixRow[]
+  overviewByAnoUnificado?: Map<number, EficienciaOverview>
+  financeiroByAnoUnificado?: Map<number, ApresentacaoFinanceiroBundle>
+  loadingUnificado?: boolean
+  unificadoInicio?: MesAno
+  unificadoFim?: MesAno
+  onUnificadoInicioChange?: (v: MesAno) => void
+  onUnificadoFimChange?: (v: MesAno) => void
   composicao?: ApresentacaoComposicaoData | null
   receitaRows?: ReceitaMesRow[] | null
+  /** Top 5 contratos (nomes) — Bloco 1 Operacional. */
+  topContratos?: string[]
   bigNumber?: ApresentacaoBigNumberData | null
   controladoria?: ApresentacaoControladoriaData | null
   lideranca?: ApresentacaoLiderancaData | null
   iniciativas?: ApresentacaoIniciativasData | null
   marketing?: ApresentacaoMarketingData | null
   financeiroOps?: ApresentacaoFinanceiroOpsData | null
+  bonus?: ApresentacaoBonusData | null
   ano: number
   loading?: boolean
   loadingComposicao?: boolean
@@ -103,6 +125,10 @@ type Props = {
   bigNumberMesFim?: number
   onBigNumberMesInicioChange?: (mes: number) => void
   onBigNumberMesFimChange?: (mes: number) => void
+  bonusMesInicio?: number
+  bonusMesFim?: number
+  onBonusMesInicioChange?: (mes: number) => void
+  onBonusMesFimChange?: (mes: number) => void
   iniciativasMesFiltro?: MesFiltroEficiencia
   onIniciativasMesFiltroChange?: (mes: MesFiltroEficiencia) => void
   marketingMesFiltro?: MesFiltroEficiencia
@@ -111,10 +137,11 @@ type Props = {
   onFinanceiroOpsMesFiltroChange?: (mes: MesFiltroEficiencia) => void
 }
 
-/** Separador visual entre blocos (fora do export PPT). */
+/** Separador nomeado entre blocos — só na tela; fora de `data-apresentacao-export`. */
 function BlocoSeparator({ label }: { label: string }) {
   return (
     <div
+      data-chart-export-ignore
       aria-hidden
       style={{
         display: 'flex',
@@ -124,7 +151,13 @@ function BlocoSeparator({ label }: { label: string }) {
         userSelect: 'none',
       }}
     >
-      <div style={{ flex: 1, height: 2, background: 'linear-gradient(90deg, transparent, #C6A361, #D5B170)' }} />
+      <div
+        style={{
+          flex: 1,
+          height: 2,
+          background: 'linear-gradient(90deg, transparent, #C6A361, #D5B170)',
+        }}
+      />
       <span
         style={{
           fontSize: 10,
@@ -137,7 +170,13 @@ function BlocoSeparator({ label }: { label: string }) {
       >
         {label}
       </span>
-      <div style={{ flex: 1, height: 2, background: 'linear-gradient(90deg, #D5B170, #C6A361, transparent)' }} />
+      <div
+        style={{
+          flex: 1,
+          height: 2,
+          background: 'linear-gradient(90deg, #D5B170, #C6A361, transparent)',
+        }}
+      />
     </div>
   )
 }
@@ -158,6 +197,78 @@ function metaTexto(metaLabel: string | null | undefined): string {
   if (!t) return 'Meta —'
   if (/^meta\b/i.test(t)) return t
   return `Meta ${t}`
+}
+
+/** Badge dourado só atrás do texto do título (largura = conteúdo medido). */
+function SecaoTituloBadge({ label }: { label: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const text = label.toLocaleUpperCase('pt-BR')
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const styles = window.getComputedStyle(el)
+    const font = `${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    let textW = el.scrollWidth
+    if (ctx) {
+      ctx.font = font
+      textW = ctx.measureText(text).width
+    }
+    const padX =
+      (Number.parseFloat(styles.paddingLeft) || 0) +
+      (Number.parseFloat(styles.paddingRight) || 0)
+    const padY =
+      (Number.parseFloat(styles.paddingTop) || 0) +
+      (Number.parseFloat(styles.paddingBottom) || 0)
+    const lineH = Number.parseFloat(styles.lineHeight) || Number.parseFloat(styles.fontSize) * 1.3
+    /** Folga horizontal (~1 cm) para o fundo cobrir o texto sem vazamento. */
+    const FOLGA_CM_PX = 38
+    const w = Math.ceil(textW + padX + FOLGA_CM_PX)
+    const h = Math.ceil(lineH + padY)
+
+    el.style.width = `${w}px`
+    el.style.minWidth = `${w}px`
+    el.style.maxWidth = 'none'
+    el.style.height = `${h}px`
+    el.style.minHeight = `${h}px`
+    el.style.whiteSpace = 'nowrap'
+    el.style.overflow = 'visible'
+  }, [text])
+
+  return (
+    <div style={{ display: 'block', width: '100%', overflow: 'visible' }}>
+      <span
+        ref={ref}
+        data-apresentacao-secao-titulo
+        data-chart-export-preserve-bg
+        data-chart-export-bg={AREA_CARD_GOLD}
+        style={{
+          display: 'inline-block',
+          boxSizing: 'border-box',
+          verticalAlign: 'top',
+          backgroundColor: AREA_CARD_GOLD,
+          color: '#ffffff',
+          padding: '5px 12px',
+          borderRadius: 5,
+          fontSize: 10,
+          fontWeight: 700,
+          lineHeight: 1.3,
+          whiteSpace: 'nowrap',
+          width: 'max-content',
+          maxWidth: 'none',
+          height: 'auto',
+          overflow: 'visible',
+          printColorAdjust: 'exact',
+          WebkitPrintColorAdjust: 'exact',
+        }}
+      >
+        {text}
+      </span>
+    </div>
+  )
 }
 
 const cellDivider: CSSProperties = {
@@ -353,9 +464,9 @@ function ApresentacaoKpiHeatCard({
                 fontSize: 10,
                 fontWeight: 600,
                 color: '#1F2937',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                whiteSpace: 'normal',
+                lineHeight: 1.25,
+                overflow: 'visible',
               }}
             >
               {toPriMaiuscula(title)}
@@ -445,29 +556,10 @@ function BlocoExport({
           return (
             <div
               key={secao.id}
+              data-apresentacao-bloco={secao.id}
               style={{ display: 'flex', flexDirection: 'column', gap: 3 }}
             >
-              <div
-                data-overview-copy-card
-                data-chart-export-preserve-bg
-                style={{
-                  display: 'inline-block',
-                  alignSelf: 'flex-start',
-                  borderRadius: 5,
-                  backgroundColor: GOLD,
-                  color: '#fff',
-                  padding: '3px 10px',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.03em',
-                  whiteSpace: 'nowrap',
-                  printColorAdjust: 'exact',
-                  WebkitPrintColorAdjust: 'exact',
-                }}
-              >
-                {secao.label}
-              </div>
+              <SecaoTituloBadge label={secao.label} />
               {secaoRows.map((row) => (
                 <ApresentacaoKpiHeatCard
                   key={row.kpiId}
@@ -489,14 +581,23 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
   {
     colunas,
     rows,
+    overviewByAnoUnificado = new Map(),
+    financeiroByAnoUnificado = new Map(),
+    loadingUnificado = false,
+    unificadoInicio = { ano: 2025, mes: 1 },
+    unificadoFim = { ano: 2026, mes: 1 },
+    onUnificadoInicioChange,
+    onUnificadoFimChange,
     composicao = null,
     receitaRows = null,
+    topContratos = [],
     bigNumber = null,
     controladoria = null,
     lideranca = null,
     iniciativas = null,
     marketing = null,
     financeiroOps = null,
+    bonus = null,
     ano,
     loading,
     loadingComposicao = false,
@@ -516,6 +617,10 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
     bigNumberMesFim = 6,
     onBigNumberMesInicioChange,
     onBigNumberMesFimChange,
+    bonusMesInicio = 6,
+    bonusMesFim = 12,
+    onBonusMesInicioChange,
+    onBonusMesFimChange,
     iniciativasMesFiltro = null,
     onIniciativasMesFiltroChange,
     marketingMesFiltro = null,
@@ -536,10 +641,22 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
         gap: 20,
       }}
     >
-      {APRESENTACAO_BLOCOS.map((bloco, index) => {
+      {APRESENTACAO_BLOCOS.map((bloco) => {
         let content: ReactNode = null
 
-        if (bloco.id === 'composicao') {
+        if (bloco.id === 'juridico_unificado') {
+          content = (
+            <ApresentacaoJuridicoUnificadoBloco
+              overviewByAno={overviewByAnoUnificado}
+              financeiroByAno={financeiroByAnoUnificado}
+              loading={loadingUnificado}
+              inicio={unificadoInicio}
+              fim={unificadoFim}
+              onInicioChange={onUnificadoInicioChange ?? (() => {})}
+              onFimChange={onUnificadoFimChange ?? (() => {})}
+            />
+          )
+        } else if (bloco.id === 'composicao') {
           content = (
             <ApresentacaoComposicaoBloco
               data={composicao}
@@ -567,6 +684,7 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
               mesFim={bigNumberMesFim}
               onMesInicioChange={onBigNumberMesInicioChange ?? (() => {})}
               onMesFimChange={onBigNumberMesFimChange ?? (() => {})}
+              topContratos={topContratos}
             />
           )
         } else if (bloco.id === 'controladoria') {
@@ -610,6 +728,18 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
               onMesFiltroChange={onFinanceiroOpsMesFiltroChange ?? (() => {})}
             />
           )
+        } else if (bloco.id === 'programa_bonus') {
+          content = (
+            <ApresentacaoBonusBloco
+              data={bonus}
+              loading={loading}
+              ano={ano}
+              mesInicio={bonusMesInicio}
+              mesFim={bonusMesFim}
+              onMesInicioChange={onBonusMesInicioChange ?? (() => {})}
+              onMesFimChange={onBonusMesFimChange ?? (() => {})}
+            />
+          )
         } else if (loading) {
           content = (
             <div style={{ display: 'grid', gap: 4, padding: 4 }}>
@@ -633,7 +763,7 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
 
         return (
           <div key={bloco.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {index > 0 ? <BlocoSeparator label={bloco.label} /> : null}
+            <BlocoSeparator label={bloco.label} />
             {content}
           </div>
         )

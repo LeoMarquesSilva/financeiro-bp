@@ -120,10 +120,6 @@ export function OperacoesLegaisRgTab({
   })
   const ativosOps: Array<{ nome: string; cargo: string | null; admissao: string | null }> =
     ativosOpsData ?? []
-  const ativosTreino = useMemo(
-    () => ativosOps.map((a) => ({ nome: a.nome, cargo: a.cargo })),
-    [ativosOps],
-  )
   const loadingAtivosTreino = loadingAtivosOps
   // KPI anual conta só Voluntário; lista segue a mesma regra + área Ops + filtro de mês.
   const desligamentosOps = useMemo(() => {
@@ -146,26 +142,35 @@ export function OperacoesLegaisRgTab({
         return mesNoFiltro(mes, mesFiltro, ano)
       })
   }, [desligamentos, mesFiltro, ano])
-  const top5Ops = useMemo(() => {
+  const ativosOpsComTempo = useMemo(() => {
     const ref = new Date(ano, 11, 31)
-    return [...ativosOps]
-      .map((p) => {
-        const adm = p.admissao ? new Date(`${String(p.admissao).slice(0, 10)}T12:00:00`) : null
-        const meses =
-          adm && !Number.isNaN(adm.getTime())
-            ? (ref.getFullYear() - adm.getFullYear()) * 12 + (ref.getMonth() - adm.getMonth())
-            : 0
-        return {
-          nome: p.nome,
-          area: EFICIENCIA_AREA_OPS_LEGAIS,
-          cargo: p.cargo,
-          admissao: p.admissao,
-          meses_casa: Math.max(0, meses),
-        }
-      })
-      .sort((a, b) => b.meses_casa - a.meses_casa)
-      .slice(0, 5)
+    return [...ativosOps].map((p) => {
+      const adm = p.admissao ? new Date(`${String(p.admissao).slice(0, 10)}T12:00:00`) : null
+      const meses =
+        adm && !Number.isNaN(adm.getTime())
+          ? (ref.getFullYear() - adm.getFullYear()) * 12 + (ref.getMonth() - adm.getMonth())
+          : 0
+      return {
+        nome: p.nome,
+        area: EFICIENCIA_AREA_OPS_LEGAIS,
+        cargo: p.cargo,
+        admissao: p.admissao,
+        meses_casa: Math.max(0, meses),
+      }
+    })
   }, [ativosOps, ano])
+  const top5Ops = useMemo(
+    () => [...ativosOpsComTempo].sort((a, b) => b.meses_casa - a.meses_casa).slice(0, 5),
+    [ativosOpsComTempo],
+  )
+  /** Ordem alfabética por nome. */
+  const pessoasAtivasOps = useMemo(
+    () =>
+      [...ativosOpsComTempo].sort((a, b) =>
+        a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }),
+      ),
+    [ativosOpsComTempo],
+  )
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
 
@@ -560,8 +565,9 @@ export function OperacoesLegaisRgTab({
 
       {secao === 'treinamentos' && (
         <OpsLegaisTreinamentosSection
-          ativos={ativosTreino}
+          ativos={ativosOps}
           itens={itens}
+          ano={ano}
           loading={loadingTreino || loadingAtivosTreino}
         />
       )}
@@ -602,41 +608,128 @@ export function OperacoesLegaisRgTab({
             />
           </div>
 
-          <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-900">Top tempo de casa</h2>
-            {loadingTurn || loadingAtivosOps ? (
-              <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
-            ) : top5Ops.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-400">Sem dados.</p>
-            ) : (
-              <ul className="divide-y divide-slate-50">
-                {top5Ops.map((p) => {
-                  const nome = resolvePessoaDisplayNome(p.nome, teamMembers, avatarCatalog)
-                  const avatarUrl = resolvePessoaAvatarUrl(p.nome, teamMembers, avatarCatalog)
-                  return (
-                    <li key={p.nome} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <Avatar
-                          src={avatarUrl}
-                          fallbackSrc={avatarUrl?.replace(/\.jpg$/i, '.png')}
-                          fullName={nome}
-                          size="md"
-                          className="h-9 w-9 shrink-0 text-xs"
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-slate-900">{nome}</p>
-                          <p className="text-xs text-slate-400">{p.cargo ?? '—'}</p>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
+              <h2 className="mb-3 text-sm font-semibold text-slate-900">Top tempo de casa</h2>
+              {loadingTurn || loadingAtivosOps ? (
+                <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
+              ) : top5Ops.length === 0 ? (
+                <p className="py-4 text-center text-sm text-slate-400">Sem dados.</p>
+              ) : (
+                <ol className="divide-y divide-slate-50">
+                  {top5Ops.map((p, idx) => {
+                    const nome = resolvePessoaDisplayNome(p.nome, teamMembers, avatarCatalog)
+                    const avatarUrl = resolvePessoaAvatarUrl(p.nome, teamMembers, avatarCatalog)
+                    return (
+                      <li
+                        key={p.nome}
+                        className="flex items-center justify-between gap-3 py-2.5 text-sm"
+                      >
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span
+                            className={cn(
+                              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums',
+                              idx === 0
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-slate-100 text-slate-600',
+                            )}
+                          >
+                            {idx + 1}
+                          </span>
+                          <Avatar
+                            src={avatarUrl}
+                            fallbackSrc={avatarUrl?.replace(/\.jpg$/i, '.png')}
+                            fullName={nome}
+                            size="md"
+                            className="h-9 w-9 shrink-0 text-xs"
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-slate-900">{nome}</p>
+                            <p className="truncate text-xs text-slate-400">{p.cargo ?? '—'}</p>
+                          </div>
                         </div>
-                      </div>
-                      <span className="shrink-0 font-semibold tabular-nums text-slate-700">
-                        {formatMeses(p.meses_casa)}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </section>
+                        <span className="shrink-0 font-semibold tabular-nums text-slate-700">
+                          {formatMeses(p.meses_casa)}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ol>
+              )}
+            </section>
+
+            <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
+              <div className="mb-3 flex items-baseline justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">Pessoas Ativas</h2>
+                {pessoasAtivasOps.length > 0 ? (
+                  <span className="text-xs text-slate-400">
+                    {pessoasAtivasOps.length}{' '}
+                    {pessoasAtivasOps.length === 1 ? 'pessoa' : 'pessoas'} · A–Z
+                  </span>
+                ) : null}
+              </div>
+              {loadingTurn || loadingAtivosOps ? (
+                <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
+              ) : pessoasAtivasOps.length === 0 ? (
+                <p className="py-4 text-center text-sm text-slate-400">Sem ativos.</p>
+              ) : (
+                <div className="max-h-[420px] overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-white">
+                      <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
+                        <th className="py-2 pr-2 font-medium tabular-nums">#</th>
+                        <th className="py-2 pr-3 font-medium">Colaborador</th>
+                        <th className="hidden py-2 pr-3 font-medium sm:table-cell">Cargo</th>
+                        <th className="py-2 pl-2 text-right font-medium md:text-left">
+                          Admissão
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {pessoasAtivasOps.map((p, idx) => {
+                        const nome = resolvePessoaDisplayNome(p.nome, teamMembers, avatarCatalog)
+                        const avatarUrl = resolvePessoaAvatarUrl(
+                          p.nome,
+                          teamMembers,
+                          avatarCatalog,
+                        )
+                        return (
+                          <tr key={p.nome} className="text-slate-700">
+                            <td className="py-2 pr-2 align-middle text-xs tabular-nums text-slate-400">
+                              {idx + 1}
+                            </td>
+                            <td className="py-2 pr-3 align-middle">
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <Avatar
+                                  src={avatarUrl}
+                                  fallbackSrc={avatarUrl?.replace(/\.jpg$/i, '.png')}
+                                  fullName={nome}
+                                  size="sm"
+                                  className="h-8 w-8 shrink-0 text-[10px]"
+                                />
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium text-slate-900">{nome}</p>
+                                  <p className="truncate text-[11px] text-slate-400 sm:hidden">
+                                    {p.cargo ?? '—'}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="hidden max-w-[140px] truncate py-2 pr-3 align-middle text-slate-600 sm:table-cell">
+                              {p.cargo ?? '—'}
+                            </td>
+                            <td className="whitespace-nowrap py-2 pl-2 text-right align-middle tabular-nums text-slate-600 md:text-left">
+                              {p.admissao ? formatDate(p.admissao) : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
 
           <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
             <h2 className="mb-3 text-sm font-semibold text-slate-900">Desligamentos no ano</h2>

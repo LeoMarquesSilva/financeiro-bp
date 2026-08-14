@@ -10,6 +10,7 @@ import {
   MESES_EFICIENCIA,
   isDiaFiltro,
   isMesesFiltro,
+  isResultadoFiltro,
   isSemanaFiltro,
   makePeriodoDiaFiltro,
   rangeSemanaFiltro,
@@ -23,8 +24,14 @@ type Props = {
   onChange: (mes: MesFiltroEficiencia) => void
   /** Filtros de semana (Ops Legais). Default true. */
   showSemanas?: boolean
-  /** Botão "Resultado" (jun+ fechados). Default true. */
+  /** Botão "Resultado". Default true. */
   showResultado?: boolean
+  /**
+   * Escopo do Resultado:
+   * - `jun` — jun+ fechados (Receita/Eficiência)
+   * - `ytd` — jan até o último mês fechado (Ops Legais)
+   */
+  resultadoMode?: 'jun' | 'ytd'
   /**
    * Campos De / Até ao lado de Dez.
    * Desligar no Overview. Default false.
@@ -114,13 +121,17 @@ export function MesFilterButtons({
   onChange,
   showSemanas = true,
   showResultado = true,
+  resultadoMode = 'jun',
   showDiaPicker = false,
   ano,
   trailing,
 }: Props) {
+  const resultadoValue: MesFiltroEficiencia =
+    resultadoMode === 'ytd' ? 'resultado_ytd' : 'resultado'
+
   let valueEfetivo: MesFiltroEficiencia = value
   if (!showSemanas && isSemanaFiltro(valueEfetivo)) valueEfetivo = null
-  if (!showResultado && valueEfetivo === 'resultado') valueEfetivo = null
+  if (!showResultado && isResultadoFiltro(valueEfetivo)) valueEfetivo = null
   if (!showDiaPicker && isDiaFiltro(valueEfetivo)) valueEfetivo = null
 
   const periodoAtivo = isDiaFiltro(valueEfetivo) ? valueEfetivo : null
@@ -172,6 +183,11 @@ export function MesFilterButtons({
 
   const deDate = draftDe ? (parseDateAsLocal(draftDe) ?? undefined) : undefined
   const ateDate = draftAte ? (parseDateAsLocal(draftAte) ?? undefined) : undefined
+  const resultadoAtivo = valueEfetivo === resultadoValue
+  const resultadoTitle =
+    resultadoMode === 'ytd'
+      ? 'Janeiro até o último mês fechado — exclui o mês corrente'
+      : 'Junho até o último mês fechado — exclui o mês corrente'
 
   return (
     <div className="flex w-full flex-wrap items-center justify-center gap-2">
@@ -187,10 +203,10 @@ export function MesFilterButtons({
       {showResultado ? (
         <button
           type="button"
-          onClick={() => selectFiltro('resultado')}
-          className={cn(BTN, valueEfetivo === 'resultado' ? BTN_ON : BTN_OFF)}
-          aria-pressed={valueEfetivo === 'resultado'}
-          title="Junho até o último mês fechado — exclui o mês corrente"
+          onClick={() => selectFiltro(resultadoValue)}
+          className={cn(BTN, resultadoAtivo ? BTN_ON : BTN_OFF)}
+          aria-pressed={resultadoAtivo}
+          title={resultadoTitle}
         >
           {toPriMaiuscula('Resultado')}
         </button>

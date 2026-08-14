@@ -156,7 +156,7 @@ export function isTreinamentoLideranca(nome: string | null | undefined): boolean
 export const EFICIENCIA_META_PDI = 100
 export const EFICIENCIA_META_RECEITA_BRUTA = 100
 /** Índice de inadimplência: meta máxima (menor é melhor). */
-export const EFICIENCIA_META_INDICE_INADIMPLENCIA = 14
+export const EFICIENCIA_META_INDICE_INADIMPLENCIA = 10
 
 /**
  * Aliases de colaborador (chave normalizada → nome canônico no turnover).
@@ -247,7 +247,8 @@ export const EFICIENCIA_AMOSTRA_FRACAO = 0.3
  * Filtro de mês do Overview.
  * - `null` — ano inteiro
  * - `number[]` — um ou mais meses (1..12), ordenados
- * - `'resultado'` — jun+ fechados (mês corrente fora; jan–mai em branco)
+ * - `'resultado'` — jun+ fechados (mês corrente fora; jan–mai em branco) — Receita/Eficiência
+ * - `'resultado_ytd'` — jan até o último mês fechado (mês corrente fora) — Ops Legais
  * - `'semana_passada'` / `'semana_retrasada'` — semana civil seg–dom (BRT)
  * - `{ tipo: 'dia', de, ate }` — intervalo civil inclusivo YYYY-MM-DD (BRT)
  */
@@ -257,6 +258,7 @@ export type MesFiltroEficiencia =
   | number[]
   | null
   | 'resultado'
+  | 'resultado_ytd'
   | 'semana_passada'
   | 'semana_retrasada'
   | DiaFiltroEficiencia
@@ -391,17 +393,30 @@ export function rangeDiaFiltro(
   return { inicio, fimExclusivo, label }
 }
 
+/** Último mês fechado do ano (jan…mês anterior em BRT). Ano futuro → 0. */
+export function mesFimYtdFechado(ano: number, ref = new Date()): number {
+  const p = civilPartsBrt(ref)
+  if (ano < p.year) return 12
+  if (ano > p.year) return 0
+  return Math.max(0, p.month - 1)
+}
+
 /**
- * Último mês incluso no filtro Resultado.
- * Ano corrente: mês anterior ao atual (mês em aberto não entra).
+ * Último mês incluso no filtro Resultado (jun+).
+ * Ano corrente: mês anterior ao atual em BRT (mês em aberto não entra).
  * Anos passados: dezembro. Ano futuro: nenhum mês (retorna 5).
  */
 export function mesFimResultado(ano: number, ref = new Date()): number {
-  const anoRef = ref.getFullYear()
-  const mesCorrente = ref.getMonth() + 1
-  if (ano < anoRef) return 12
-  if (ano > anoRef) return MES_INICIO_RESULTADO - 1
-  return Math.min(12, Math.max(MES_INICIO_RESULTADO - 1, mesCorrente - 1))
+  const p = civilPartsBrt(ref)
+  if (ano < p.year) return 12
+  if (ano > p.year) return MES_INICIO_RESULTADO - 1
+  return Math.min(12, Math.max(MES_INICIO_RESULTADO - 1, p.month - 1))
+}
+
+export function isResultadoFiltro(
+  filtro: MesFiltroEficiencia,
+): filtro is 'resultado' | 'resultado_ytd' {
+  return filtro === 'resultado' || filtro === 'resultado_ytd'
 }
 
 /** true se o mês entra no escopo do filtro (Acum. / racional / cards). */
@@ -417,6 +432,10 @@ export function mesNoFiltro(
     const fim = mesFimResultado(ano ?? ref.getFullYear(), ref)
     return mes <= fim
   }
+  if (filtro === 'resultado_ytd') {
+    const fim = mesFimYtdFechado(ano ?? ref.getFullYear(), ref)
+    return fim > 0 && mes >= 1 && mes <= fim
+  }
   if (isSemanaFiltro(filtro) || isDiaFiltro(filtro)) {
     const meses = mesesEfetivosFiltro(filtro, ano ?? civilPartsBrt(ref).year, ref) ?? []
     return meses.includes(mes)
@@ -426,7 +445,12 @@ export function mesNoFiltro(
 
 /** Alterna um mês no filtro (multi-seleção). Desmarcar o último volta para ano inteiro. */
 export function toggleMesFiltro(current: MesFiltroEficiencia, mes: number): MesFiltroEficiencia {
-  if (current == null || current === 'resultado' || isSemanaFiltro(current) || isDiaFiltro(current)) {
+  if (
+    current == null ||
+    isResultadoFiltro(current) ||
+    isSemanaFiltro(current) ||
+    isDiaFiltro(current)
+  ) {
     return [mes]
   }
   if (current.includes(mes)) {
@@ -453,6 +477,11 @@ export function mesesEfetivosFiltro(
       { length: fim - MES_INICIO_RESULTADO + 1 },
       (_, i) => MES_INICIO_RESULTADO + i,
     )
+  }
+  if (filtro === 'resultado_ytd') {
+    const fim = mesFimYtdFechado(ano, ref)
+    if (fim < 1) return []
+    return Array.from({ length: fim }, (_, i) => i + 1)
   }
   if (isSemanaFiltro(filtro)) {
     const { inicio, fimExclusivo } = rangeSemanaFiltro(filtro, ref)
@@ -566,6 +595,16 @@ export function rangePeriodoFiltro(
     const fimMes = mesFimResultado(ano, ref)
     const inicio = `${ano}-${String(MES_INICIO_RESULTADO).padStart(2, '0')}-01`
     if (fimMes < MES_INICIO_RESULTADO) return { inicio, fimExclusivo: inicio }
+    const fimExclusivo =
+      fimMes === 12
+        ? `${ano + 1}-01-01`
+        : `${ano}-${String(fimMes + 1).padStart(2, '0')}-01`
+    return { inicio, fimExclusivo }
+  }
+  if (filtro === 'resultado_ytd') {
+    const fimMes = mesFimYtdFechado(ano, ref)
+    const inicio = `${ano}-01-01`
+    if (fimMes < 1) return { inicio, fimExclusivo: inicio }
     const fimExclusivo =
       fimMes === 12
         ? `${ano + 1}-01-01`

@@ -54,7 +54,7 @@ export function TreinamentosTab({
     ? pessoaUnica.minutos_lancados
     : (anual?.minutos_lancados ?? null)
   const metaMinutos = pessoaUnica
-    ? EFICIENCIA_META_TREINAMENTO_MINUTOS
+    ? Number(pessoaUnica.meta_minutos ?? EFICIENCIA_META_TREINAMENTO_MINUTOS)
     : (anual?.meta_minutos ?? null)
   const pessoasAtivas = pessoaUnica ? 1 : (anual?.pessoas_ativas ?? null)
   const pct =
@@ -130,7 +130,7 @@ export function TreinamentosTab({
                 </div>
               </dl>
               <p className="mt-3 text-center text-xs font-medium text-emerald-700">
-                Meta: 14h/colaborador
+                Meta proporcional à admissão
               </p>
               <p className="mt-2 text-center text-[11px] leading-relaxed text-slate-400">
                 Garantir a realização de pelo menos 14 horas anuais de treinamento por

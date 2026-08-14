@@ -3,7 +3,6 @@ import { GraduationCap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPercent } from '@/shared/utils/format'
 import {
-  EFICIENCIA_META_TREINAMENTO_MINUTOS,
   isTreinamentoLideranca,
   type OpsTreinamentoCategoria,
 } from '../constants'
@@ -12,12 +11,14 @@ import {
   buildOpsTreinamentosCategorias,
   type OpsTurnoverAtivo,
 } from '../utils/opsTreinamentosCategorias'
+import { metaTreinamentoMinutosProporcional } from '../utils/treinamentoMetaProporcional'
 import { toPriMaiuscula } from '../utils/textFormat'
 import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
 
 type Props = {
   ativos: OpsTurnoverAtivo[]
   itens: TreinamentoItemRow[]
+  ano: number
   loading?: boolean
 }
 
@@ -45,11 +46,11 @@ const CARD_STYLE: Record<
   },
 }
 
-export function OpsLegaisTreinamentosSection({ ativos, itens, loading }: Props) {
+export function OpsLegaisTreinamentosSection({ ativos, itens, ano, loading }: Props) {
   const [categoriaAtiva, setCategoriaAtiva] = useState<OpsTreinamentoCategoria>('Equipe')
   const { resumos, pessoas, equipeEmLideranca } = useMemo(
-    () => buildOpsTreinamentosCategorias(ativos, itens),
-    [ativos, itens],
+    () => buildOpsTreinamentosCategorias(ativos, itens, ano),
+    [ativos, itens, ano],
   )
 
   const resumoAtivo = resumos.find((r) => r.categoria === categoriaAtiva)
@@ -62,8 +63,10 @@ export function OpsLegaisTreinamentosSection({ ativos, itens, loading }: Props) 
         colaborador: p.colaborador,
         minutos_lancados: p.minutos,
         horas_formatadas: '',
+        admissao: p.admissao ?? null,
+        meta_minutos: metaTreinamentoMinutosProporcional(p.admissao, ano),
       }))
-  }, [pessoas, categoriaAtiva])
+  }, [pessoas, categoriaAtiva, ano])
 
   const itensFiltrados = itens
 
@@ -118,7 +121,7 @@ export function OpsLegaisTreinamentosSection({ ativos, itens, loading }: Props) 
               <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
                 {r.categoria === 'Gerente'
                   ? toPriMaiuscula('Total de horas realizadas')
-                  : toPriMaiuscula('Meta 14h/colaborador')}
+                  : toPriMaiuscula('Meta proporcional à admissão')}
               </p>
               <p className="mt-1 text-sm font-extrabold text-slate-900">
                 {r.categoria === 'Gerente'
@@ -157,7 +160,10 @@ export function OpsLegaisTreinamentosSection({ ativos, itens, loading }: Props) 
                     />
                   </div>
                   <p className="mt-1.5 text-[10px] text-slate-400">
-                    Meta: {r.qtdPessoas * 14}h total ({r.qtdPessoas} × 14h)
+                    Meta:{' '}
+                    {r.metaMinutos != null
+                      ? `${Math.round(r.metaMinutos / 60)}h total (${r.qtdPessoas} pessoas · proporcional)`
+                      : '—'}
                   </p>
                 </>
               ) : (
@@ -180,9 +186,7 @@ export function OpsLegaisTreinamentosSection({ ativos, itens, loading }: Props) 
         <TreinamentosPessoaCards
           porPessoa={pessoasLista}
           itens={itensFiltrados}
-          metaMinutos={
-            categoriaAtiva === 'Gerente' ? null : EFICIENCIA_META_TREINAMENTO_MINUTOS
-          }
+          metaMinutos={categoriaAtiva === 'Gerente' ? null : undefined}
           badgeLabel={categoriaAtiva === 'Gerente' ? 'Total' : undefined}
           accentClass={
             categoriaAtiva === 'Liderança'

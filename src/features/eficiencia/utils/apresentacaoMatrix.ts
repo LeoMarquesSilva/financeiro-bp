@@ -13,6 +13,7 @@ import {
   isAgendamentoVistagemIndisponivelPorArea,
   isMesesFiltro,
   mesFimResultado,
+  mesFimYtdFechado,
   mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -55,6 +56,7 @@ export type ApresentacaoSecaoId =
 /** Bloco 1–8: jurídico, financeiro, composição, big numbers, controladoria, iniciativas, marketing, financeiro ops. */
 export type ApresentacaoBlocoId =
   | 'juridico'
+  | 'juridico_unificado'
   | 'financeiro'
   | 'composicao'
   | 'bignumber'
@@ -63,6 +65,7 @@ export type ApresentacaoBlocoId =
   | 'iniciativas'
   | 'marketing'
   | 'financeiro_ops'
+  | 'programa_bonus'
 
 export const APRESENTACAO_BLOCOS: {
   id: ApresentacaoBlocoId
@@ -77,49 +80,61 @@ export const APRESENTACAO_BLOCOS: {
     secoes: ['eficiencia_operacional', 'satisfacao_cliente', 'desenvolver_equipe'],
   },
   {
+    id: 'juridico_unificado',
+    label: 'Bloco 2 — Jurídico Unificado',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
     id: 'lideranca',
-    label: 'Bloco 2 — Liderança',
+    label: 'Bloco 3 — Liderança',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'financeiro',
-    label: 'Bloco 3 — Financeiro',
+    label: 'Bloco 4 — Financeiro',
     secoes: ['resultado_financeiro'],
   },
   {
     id: 'composicao',
-    label: 'Bloco 4 — Composição',
+    label: 'Bloco 5 — Composição',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'bignumber',
-    label: 'Bloco 5 — Big Numbers',
+    label: 'Bloco 6 — Big Numbers',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'controladoria',
-    label: 'Bloco 6 — Controladoria',
+    label: 'Bloco 7 — Controladoria',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'iniciativas',
-    label: 'Bloco 7 — Iniciativas',
+    label: 'Bloco 8 — Iniciativas',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'marketing',
-    label: 'Bloco 8 — Marketing',
+    label: 'Bloco 9 — Marketing',
     secoes: [],
     semGradeAreas: true,
   },
   {
     id: 'financeiro_ops',
-    label: 'Bloco 9 — Financeiro Ops',
+    label: 'Bloco 10 — Financeiro Ops',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'programa_bonus',
+    label: 'Bloco 11 — Programa de Bônus',
     secoes: [],
     semGradeAreas: true,
   },
@@ -257,7 +272,7 @@ function somaRazao(
 ): { value: number | null; label: string } {
   const num = numeros.reduce((a, b) => a + b, 0)
   const den = denominadores.reduce((a, b) => a + b, 0)
-  if (den === 0) return { value: null, label: '-' }
+  if (den === 0) return { value: 0, label: formatPercent(0) }
   const v = (num / den) * 100
   return { value: v, label: formatPercent(v) }
 }
@@ -287,6 +302,14 @@ export function formatPeriodoReferenciaApresentacao(
       ? `${titleCaseMes(ini!)} ${ano}`
       : `${titleCaseMes(ini!)}–${titleCaseMes(fimLabel!)} ${ano}`
   }
+  if (mesFiltro === 'resultado_ytd') {
+    const fim = mesFimYtdFechado(ano)
+    if (fim < 1) return `Resultado ${ano}`
+    const fimLabel = MESES_EFICIENCIA_ARQUIVO[fim - 1]
+    return fim === 1
+      ? `Janeiro ${ano}`
+      : `Janeiro–${titleCaseMes(fimLabel!)} ${ano}`
+  }
   if (isMesesFiltro(mesFiltro)) {
     if (mesFiltro.length === 1) {
       const nome = MESES_EFICIENCIA_ARQUIVO[mesFiltro[0]! - 1]
@@ -310,8 +333,21 @@ function cellVazio(): ApresentacaoCell {
   return { label: '-', value: null, atingiu: null }
 }
 
+/** Sem população no período — exibe 0,00% (não usar para indisponibilidade intencional). */
+function cellZeroPct(meta: number): ApresentacaoCell {
+  return {
+    value: 0,
+    label: formatPercent(0),
+    atingiu: atingiuMetaKpi(0, meta),
+  }
+}
+
+function cellZeroHoras(): ApresentacaoCell {
+  return { value: 0, label: '0:00h', atingiu: false }
+}
+
 function cellPct(value: number | null, meta: number): ApresentacaoCell {
-  if (value == null) return cellVazio()
+  if (value == null) return cellZeroPct(meta)
   return {
     value,
     label: formatPercent(value),
@@ -340,6 +376,8 @@ export function cellApresentacaoKpi(
 
   switch (kpi) {
     case 'sla_protocolo': {
+      // Ops Legais: KPI de área não aplica na grade (fica `-`).
+      if (opsOuIndisp) return cellVazio()
       const rows = filterMensal(data.slaProtocolo)
       const { value } = somaRazao(
         rows.map((r) => r.qtd_d1),
@@ -351,6 +389,7 @@ export function cellApresentacaoKpi(
       return cellPct(value, metaOverride ?? meta)
     }
     case 'eficiencia_protocolo': {
+      if (opsOuIndisp) return cellVazio()
       const rows = filterMensal(data.eficienciaProtocolo)
       const { value } = somaRazao(
         rows.map((r) => r.sem_inconsistencia),
@@ -393,36 +432,29 @@ export function cellApresentacaoKpi(
     case 'nps':
       return cellVazio()
     case 'gestao_pdi': {
+      const meta = metaOverride ?? EFICIENCIA_META_PDI
       const cell = acumuladoGestaoPdi(data.gestaoPdiMensal ?? [], mesFiltro, ano)
-      return cellPct(cell.value, metaOverride ?? EFICIENCIA_META_PDI)
+      // Rec. Crédito sem PDI no período permanece `-` (único vazio intencional da seção).
+      if (cell.value == null && areaCanon === 'Recuperação de Crédito') {
+        return cellVazio()
+      }
+      return cellPct(cell.value, meta)
     }
     case 'desenvolvimento': {
-      const metaAno = data.treinamentos?.meta_minutos ?? 0
-
-      if (mesFiltro == null || mesFiltro === 'resultado') {
-        if (!data.treinamentos) return cellVazio()
-        const minutos = data.treinamentos.minutos_lancados
-        const pct = data.treinamentos.pct_atingimento
-        return {
-          value: pct,
-          label: `${formatMinutos(minutos)}h`,
-          atingiu: atingiuMetaKpi(pct, 100),
-        }
-      }
-      const rows = filterMensal(data.treinamentosMensal)
-      if (rows.length === 0) return cellVazio()
-      const minutos = rows.reduce((s, r) => s + r.minutos_lancados, 0)
-      const pct =
-        metaAno > 0 ? (minutos / metaAno) * 100 : (rows[0]?.pct_atingimento ?? null)
+      // Indicador anual: sempre o acumulado do ano (pessoas × 14h), independente do filtro de mês.
+      if (!data.treinamentos) return cellZeroHoras()
+      const minutos = data.treinamentos.minutos_lancados
+      const pct = data.treinamentos.pct_atingimento
       return {
-        value: pct,
+        value: pct ?? 0,
         label: `${formatMinutos(minutos)}h`,
-        atingiu: atingiuMetaKpi(pct, 100),
+        atingiu: atingiuMetaKpi(pct ?? 0, 100),
       }
     }
     case 'retencao': {
-      if (!data.turnover) return cellVazio()
-      const meta = data.turnover.meta_pct_retencao_minima ?? 90
+      // Indicador anual: retenção do ano (não filtra por mês).
+      const meta = data.turnover?.meta_pct_retencao_minima ?? 90
+      if (!data.turnover) return cellZeroPct(metaOverride ?? meta)
       return cellPct(data.turnover.pct_retencao, metaOverride ?? meta)
     }
     default:
@@ -444,7 +476,7 @@ export function rodapeDesenvolvimentoApresentacao(
 ): string | null {
   const t = consolidado?.treinamentos
   if (!t || t.pessoas_ativas <= 0) return null
-  return `* Desenvolvimento contínuo de Equipe, meta de 14hrs. Por pessoa. Calculado em cima de ${t.pessoas_ativas} pessoas ativas elegíveis.`
+  return `* Desenvolvimento contínuo de Equipe, meta de 14hrs/ano proporcional à admissão (dia > 15 → mês seguinte). Calculado em cima de ${t.pessoas_ativas} pessoas ativas elegíveis.`
 }
 
 export function areaKeyFromColuna(col: (typeof APRESENTACAO_COLUNAS)[number]): string | null {

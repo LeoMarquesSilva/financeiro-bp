@@ -1,7 +1,6 @@
 import { formatPercent } from '@/shared/utils/format'
 import {
   EFICIENCIA_AREA_OPS_LEGAIS,
-  EFICIENCIA_META_TREINAMENTO_MINUTOS,
   MESES_EFICIENCIA,
   isMesesFiltro,
   mesNoFiltro,
@@ -13,6 +12,7 @@ import {
   buildOpsTreinamentosCategorias,
   type OpsTreinamentoPessoaDetalhe,
 } from './opsTreinamentosCategorias'
+import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
 
 export type ApresentacaoLiderancaMesCell = {
   mes: number
@@ -161,16 +161,18 @@ function minutosNoFiltro(
 }
 
 export function buildApresentacaoLideranca(
-  ativos: Array<{ nome: string; cargo: string | null }>,
+  ativos: Array<{ nome: string; cargo: string | null; admissao?: string | null }>,
   itens: TreinamentoItemRow[],
   mesFiltro: MesFiltroEficiencia,
   ano: number,
 ): ApresentacaoLiderancaData {
-  const { resumos, pessoas } = buildOpsTreinamentosCategorias(ativos, itens)
+  const { resumos, pessoas } = buildOpsTreinamentosCategorias(ativos, itens, ano)
   const resumo = resumos.find((r) => r.categoria === 'Liderança')
   const lideres = pessoas.filter((p) => p.categoria === 'Liderança')
   const qtdPessoas = resumo?.qtdPessoas ?? lideres.length
-  const metaMinutos = qtdPessoas * EFICIENCIA_META_TREINAMENTO_MINUTOS
+  const metaMinutos =
+    resumo?.metaMinutos ??
+    lideres.reduce((s, p) => s + metaTreinamentoMinutosProporcional(p.admissao, ano), 0)
 
   const minutos =
     mesFiltro == null

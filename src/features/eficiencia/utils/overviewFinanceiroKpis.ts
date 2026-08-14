@@ -138,9 +138,9 @@ export function aplicarCelulasFiltro(
   ano?: number,
 ): HeatCell[] {
   if (filtro == null) return cells
-  if (filtro === 'resultado') {
+  if (filtro === 'resultado' || filtro === 'resultado_ytd') {
     return cells.map((c, i) =>
-      mesNoFiltro(i + 1, 'resultado', ano) ? c : { value: null, label: '-' },
+      mesNoFiltro(i + 1, filtro, ano) ? c : { value: null, label: '-' },
     )
   }
   // Multi/mês único: mantém células; o destaque visual fica no heat row.

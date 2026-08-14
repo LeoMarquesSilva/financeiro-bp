@@ -1,14 +1,15 @@
 import {
-  EFICIENCIA_META_TREINAMENTO_MINUTOS,
   isTreinamentoLideranca,
   resolveOpsTreinamentoCategoria,
   type OpsTreinamentoCategoria,
 } from '../constants'
 import type { TreinamentoItemRow } from '../types/eficiencia.types'
+import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
 
 export type OpsTurnoverAtivo = {
   nome: string
   cargo: string | null
+  admissao?: string | null
 }
 
 export type OpsTreinamentoPessoaDetalhe = {
@@ -17,6 +18,7 @@ export type OpsTreinamentoPessoaDetalhe = {
   categoria: OpsTreinamentoCategoria
   minutos: number
   minutosLideranca: number
+  admissao?: string | null
 }
 
 export type OpsTreinamentoCategoriaResumo = {
@@ -47,6 +49,7 @@ function formatHorasMinutos(minutos: number): string {
 export function buildOpsTreinamentosCategorias(
   ativos: OpsTurnoverAtivo[],
   itens: TreinamentoItemRow[],
+  ano: number = new Date().getFullYear(),
 ): {
   resumos: OpsTreinamentoCategoriaResumo[]
   pessoas: OpsTreinamentoPessoaDetalhe[]
@@ -64,6 +67,7 @@ export function buildOpsTreinamentosCategorias(
       categoria,
       minutos: 0,
       minutosLideranca: 0,
+      admissao: a.admissao ?? null,
     })
   }
 
@@ -89,7 +93,12 @@ export function buildOpsTreinamentosCategorias(
     const qtdPessoas = grupo.length
     const minutos = grupo.reduce((s, p) => s + p.minutos, 0)
     const temMeta = categoria !== 'Gerente'
-    const metaMinutos = temMeta ? qtdPessoas * EFICIENCIA_META_TREINAMENTO_MINUTOS : null
+    const metaMinutos = temMeta
+      ? grupo.reduce(
+          (s, p) => s + metaTreinamentoMinutosProporcional(p.admissao, ano),
+          0,
+        )
+      : null
     const pctAtingimento =
       temMeta && metaMinutos && metaMinutos > 0
         ? Math.round((minutos / metaMinutos) * 10000) / 100

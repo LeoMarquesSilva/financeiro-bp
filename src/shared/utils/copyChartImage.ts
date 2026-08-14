@@ -974,6 +974,7 @@ async function renderPreparedElementToPngBlob(
   width: number,
   height: number,
   scale = DEFAULT_SCALE,
+  options?: { overflowVisible?: boolean },
 ): Promise<Blob> {
   // Clona para não mover o nó original (ex.: wrapper montado em document.body).
   const snapshot = prepared.cloneNode(true) as HTMLElement
@@ -983,7 +984,10 @@ async function renderPreparedElementToPngBlob(
   snapshot.style.visibility = 'visible'
   snapshot.style.width = `${width}px`
   snapshot.style.height = `${height}px`
-  snapshot.style.overflow = 'hidden'
+  snapshot.style.minHeight = `${height}px`
+  snapshot.style.maxHeight = 'none'
+  snapshot.style.overflow = options?.overflowVisible ? 'visible' : 'hidden'
+  snapshot.style.boxSizing = 'border-box'
 
   const xhtmlNs = 'http://www.w3.org/1999/xhtml'
   const wrapper = document.createElement('div')
@@ -1330,11 +1334,15 @@ function measurePreparedElement(
   document.body.appendChild(prepared)
   const width = options?.fixedWidth ?? Math.ceil(prepared.scrollWidth)
   const height = Math.ceil(
-    prepared.offsetHeight || prepared.getBoundingClientRect().height || prepared.scrollHeight,
+    Math.max(
+      prepared.scrollHeight,
+      prepared.offsetHeight,
+      prepared.getBoundingClientRect().height,
+    ),
   )
   document.body.removeChild(prepared)
 
-  return { width, height }
+  return { width: Math.max(1, width), height: Math.max(1, height) }
 }
 
 function prepareHtmlExportElement(source: HTMLElement, options?: HtmlExportOptions): HTMLElement {
@@ -2097,8 +2105,667 @@ function prepareApresentacaoExportElement(source: HTMLElement): HTMLElement {
 }
 
 /**
+ * Layout absoluto do Bloco 2 no tamanho do slide PPT — cada card com altura
+ * igual, tipografia ampliada e tabelas 100% largura (sem depender de flex no SVG).
+ */
+/**
+ * Aumenta tipografia inline do clone de export PPT (~factor).
+ * Só mexe em font-size já definido (px/rem), preservando hierarquia.
+ */
+function bumpApresentacaoExportFonts(root: HTMLElement, factor = 1.15): void {
+  root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+    const raw = el.style.fontSize
+    if (!raw) return
+    const m = raw.trim().match(/^([\d.]+)(px|rem)$/i)
+    if (!m) return
+    const n = Number(m[1])
+    if (!Number.isFinite(n) || n <= 0) return
+    const next = Math.round(n * factor * 10) / 10
+    el.style.setProperty('font-size', `${next}${m[2]}`, 'important')
+  })
+}
+
+function applyApresentacaoFillSlideLayout(
+  root: HTMLElement,
+  slideW: number,
+  slideH: number,
+): void {
+  /**
+   * Big Numbers / Programa de Bônus: preenche o slide mantendo o visual do preview
+   * (gaps, radius, padding) — sem colar tudo nas bordas.
+   */
+  if (root.hasAttribute('data-apresentacao-fill-preserve')) {
+    const pad = 14
+    const gap = 10
+    const gridGap = 8
+
+    const fullWidth = (el: HTMLElement | null) => {
+      if (!el) return
+      el.style.setProperty('width', '100%', 'important')
+      el.style.setProperty('max-width', 'none', 'important')
+      el.style.setProperty('min-width', '0', 'important')
+      el.style.setProperty('box-sizing', 'border-box', 'important')
+    }
+
+    root.style.setProperty('position', 'relative', 'important')
+    root.style.setProperty('width', `${slideW}px`, 'important')
+    root.style.setProperty('min-width', `${slideW}px`, 'important')
+    root.style.setProperty('max-width', `${slideW}px`, 'important')
+    root.style.setProperty('height', `${slideH}px`, 'important')
+    root.style.setProperty('min-height', `${slideH}px`, 'important')
+    root.style.setProperty('max-height', `${slideH}px`, 'important')
+    root.style.setProperty('padding', `${pad}px`, 'important')
+    root.style.setProperty('margin', '0', 'important')
+    root.style.setProperty('box-sizing', 'border-box', 'important')
+    root.style.setProperty('overflow', 'hidden', 'important')
+    root.style.setProperty('background', 'transparent', 'important')
+    root.style.setProperty('background-color', 'transparent', 'important')
+    root.style.setProperty('display', 'flex', 'important')
+    root.style.setProperty('flex-direction', 'column', 'important')
+    root.style.setProperty('gap', `${gap}px`, 'important')
+    root.style.setProperty('justify-content', 'stretch', 'important')
+    root.style.setProperty('align-items', 'stretch', 'important')
+
+    root.querySelectorAll<HTMLElement>('[data-bn-periodo]').forEach((el) => {
+      el.style.setProperty('display', 'none', 'important')
+    })
+
+    root.querySelectorAll<HTMLElement>('*').forEach((el) => {
+      for (const prop of ['width', 'min-width', 'max-width'] as const) {
+        const v = el.style.getPropertyValue(prop)
+        if (!v) continue
+        const px = v.endsWith('px') ? parseFloat(v) : NaN
+        if (Number.isFinite(px) && px >= 80) {
+          el.style.removeProperty(prop)
+        }
+      }
+    })
+    root.style.setProperty('width', `${slideW}px`, 'important')
+    root.style.setProperty('min-width', `${slideW}px`, 'important')
+    root.style.setProperty('max-width', `${slideW}px`, 'important')
+
+    Array.from(root.children).forEach((child) => {
+      fullWidth(child as HTMLElement)
+    })
+
+    const kpis = root.querySelector<HTMLElement>('[data-bn-kpis]')
+    if (kpis) {
+      fullWidth(kpis)
+      kpis.style.setProperty('display', 'grid', 'important')
+      kpis.style.setProperty(
+        'grid-template-columns',
+        'repeat(6, minmax(0, 1fr))',
+        'important',
+      )
+      kpis.style.setProperty('flex', '0 0 auto', 'important')
+      kpis.style.setProperty('gap', `${gridGap}px`, 'important')
+      kpis.style.setProperty('margin', '0', 'important')
+      kpis.querySelectorAll<HTMLElement>(':scope > *').forEach((card) => {
+        card.style.setProperty('width', '100%', 'important')
+        card.style.setProperty('max-width', 'none', 'important')
+        card.style.setProperty('min-width', '0', 'important')
+        card.style.setProperty('border-radius', '10px', 'important')
+        card.style.setProperty('padding', '10px 12px', 'important')
+        card.style.setProperty('box-sizing', 'border-box', 'important')
+        card.style.setProperty('border', '1px solid #E2E8F0', 'important')
+        card.style.setProperty('background', '#FFFFFF', 'important')
+        card.style.setProperty('background-color', '#FFFFFF', 'important')
+      })
+    }
+
+    const tops = root.querySelector<HTMLElement>('[data-bn-tops]')
+    if (tops) {
+      fullWidth(tops)
+      tops.style.setProperty('display', 'grid', 'important')
+      tops.style.setProperty('grid-template-columns', '1fr 1fr', 'important')
+      tops.style.setProperty('grid-template-rows', '1fr 1fr', 'important')
+      tops.style.setProperty('flex', '1 1 0', 'important')
+      tops.style.setProperty('min-height', '0', 'important')
+      tops.style.setProperty('max-height', '100%', 'important')
+      tops.style.setProperty('overflow', 'hidden', 'important')
+      tops.style.setProperty('gap', `${gridGap}px`, 'important')
+      tops.style.setProperty('margin', '0', 'important')
+      tops.style.setProperty('align-items', 'stretch', 'important')
+      tops.querySelectorAll<HTMLElement>(':scope > *').forEach((card) => {
+        card.style.setProperty('width', '100%', 'important')
+        card.style.setProperty('max-width', 'none', 'important')
+        card.style.setProperty('min-width', '0', 'important')
+        card.style.setProperty('height', '100%', 'important')
+        card.style.setProperty('min-height', '0', 'important')
+        card.style.setProperty('border-radius', '12px', 'important')
+        card.style.setProperty('padding', '12px', 'important')
+        card.style.setProperty('display', 'flex', 'important')
+        card.style.setProperty('flex-direction', 'column', 'important')
+        card.style.setProperty('box-sizing', 'border-box', 'important')
+        card.style.setProperty('border', '1px solid #E2E8F0', 'important')
+        card.style.setProperty('background', '#FFFFFF', 'important')
+        card.style.setProperty('background-color', '#FFFFFF', 'important')
+        const tablesWrap = card.querySelector<HTMLElement>(':scope > div:last-of-type')
+        if (tablesWrap) {
+          tablesWrap.style.setProperty('flex', '1 1 auto', 'important')
+          tablesWrap.style.setProperty('min-height', '0', 'important')
+          tablesWrap.style.setProperty('display', 'flex', 'important')
+          tablesWrap.style.setProperty('gap', '10px', 'important')
+          tablesWrap.style.setProperty('width', '100%', 'important')
+          tablesWrap.querySelectorAll<HTMLElement>(':scope > *').forEach((col) => {
+            col.style.setProperty('flex', '1 1 0', 'important')
+            col.style.setProperty('min-width', '0', 'important')
+            col.style.setProperty('width', 'auto', 'important')
+            col.style.setProperty('max-width', 'none', 'important')
+          })
+          tablesWrap.querySelectorAll<HTMLElement>('table').forEach((table) => {
+            table.style.setProperty('width', '100%', 'important')
+            table.style.setProperty('max-width', 'none', 'important')
+          })
+        }
+      })
+    }
+
+
+    // Programa de Bônus — mesmos ganchos do Big Numbers (kpis + body)
+    const bonusKpis = root.querySelector<HTMLElement>('[data-bonus-kpis]')
+    if (bonusKpis) {
+      fullWidth(bonusKpis)
+      bonusKpis.style.setProperty('display', 'grid', 'important')
+      bonusKpis.style.setProperty(
+        'grid-template-columns',
+        'repeat(4, minmax(0, 1fr))',
+        'important',
+      )
+      bonusKpis.style.setProperty('flex', '0 0 auto', 'important')
+      bonusKpis.style.setProperty('gap', `${gridGap}px`, 'important')
+      bonusKpis.style.setProperty('margin', '0', 'important')
+      bonusKpis.querySelectorAll<HTMLElement>(':scope > *').forEach((card) => {
+        card.style.setProperty('width', '100%', 'important')
+        card.style.setProperty('max-width', 'none', 'important')
+        card.style.setProperty('min-width', '0', 'important')
+        card.style.setProperty('box-sizing', 'border-box', 'important')
+        card.style.setProperty('border-radius', '12px', 'important')
+        card.style.setProperty('overflow', 'hidden', 'important')
+        card.style.setProperty('background', '#FFFFFF', 'important')
+        card.style.setProperty('background-color', '#FFFFFF', 'important')
+      })
+      bonusKpis
+        .querySelectorAll<HTMLElement>('[data-bonus-summary-header]')
+        .forEach((header) => {
+          header.style.setProperty('width', '100%', 'important')
+          header.style.setProperty('max-width', 'none', 'important')
+          header.style.setProperty('align-self', 'stretch', 'important')
+          header.style.setProperty('box-sizing', 'border-box', 'important')
+          header.style.setProperty('text-align', 'center', 'important')
+        })
+      bonusKpis
+        .querySelectorAll<HTMLElement>('[data-bonus-summary-body]')
+        .forEach((body) => {
+          body.style.setProperty('width', '100%', 'important')
+          body.style.setProperty('max-width', 'none', 'important')
+          body.style.setProperty('align-self', 'stretch', 'important')
+          body.style.setProperty('box-sizing', 'border-box', 'important')
+          body.style.setProperty('align-items', 'center', 'important')
+          body.style.setProperty('text-align', 'center', 'important')
+        })
+      bonusKpis
+        .querySelectorAll<HTMLElement>(
+          '[data-bonus-card-label], [data-bonus-card-value], [data-bonus-card-sub]',
+        )
+        .forEach((content) => {
+          content.style.setProperty('width', '100%', 'important')
+          content.style.setProperty('max-width', 'none', 'important')
+          content.style.setProperty('text-align', 'center', 'important')
+          content.style.setProperty('box-sizing', 'border-box', 'important')
+        })
+    }
+
+    const bonusBody = root.querySelector<HTMLElement>('[data-bonus-body]')
+    if (bonusBody) {
+      fullWidth(bonusBody)
+      bonusBody.style.setProperty('display', 'grid', 'important')
+      bonusBody.style.setProperty(
+        'grid-template-columns',
+        'minmax(0, 0.38fr) minmax(0, 0.62fr)',
+        'important',
+      )
+      bonusBody.style.setProperty('flex', '1 1 0', 'important')
+      bonusBody.style.setProperty('min-height', '0', 'important')
+      bonusBody.style.setProperty('max-height', '100%', 'important')
+      bonusBody.style.setProperty('overflow', 'hidden', 'important')
+      bonusBody.style.setProperty('gap', `${gridGap}px`, 'important')
+      bonusBody.style.setProperty('margin', '0', 'important')
+      bonusBody.style.setProperty('align-items', 'start', 'important')
+      bonusBody.querySelectorAll<HTMLElement>(':scope > *').forEach((card) => {
+        card.style.setProperty('width', '100%', 'important')
+        card.style.setProperty('max-width', 'none', 'important')
+        card.style.setProperty('min-width', '0', 'important')
+        card.style.setProperty('border-radius', '12px', 'important')
+        card.style.setProperty('overflow', 'hidden', 'important')
+        card.style.setProperty('display', 'flex', 'important')
+        card.style.setProperty('flex-direction', 'column', 'important')
+        card.style.setProperty('box-sizing', 'border-box', 'important')
+        card.style.setProperty('background', '#FFFFFF', 'important')
+        card.style.setProperty('background-color', '#FFFFFF', 'important')
+      })
+      const tabela = bonusBody.querySelector<HTMLElement>('[data-bonus-tabela]')
+      if (tabela) {
+        tabela.style.setProperty('height', '100%', 'important')
+        tabela.style.setProperty('min-height', '0', 'important')
+        tabela.style.setProperty('align-self', 'stretch', 'important')
+      }
+      const premissas = bonusBody.querySelector<HTMLElement>('[data-bonus-premissas]')
+      if (premissas) {
+        premissas.style.setProperty('height', 'fit-content', 'important')
+        premissas.style.setProperty('align-self', 'start', 'important')
+      }
+      bonusBody
+        .querySelectorAll<HTMLElement>('[data-bonus-section-header]')
+        .forEach((header) => {
+          header.style.setProperty('width', '100%', 'important')
+          header.style.setProperty('max-width', 'none', 'important')
+          header.style.setProperty('align-self', 'stretch', 'important')
+          header.style.setProperty('box-sizing', 'border-box', 'important')
+        })
+      bonusBody.querySelectorAll<HTMLElement>('table').forEach((table) => {
+        table.style.setProperty('width', '100%', 'important')
+        table.style.setProperty('max-width', 'none', 'important')
+      })
+    }
+
+    const footer = root.querySelector<HTMLElement>('[data-apresentacao-top-contratos]')
+    if (footer) {
+      fullWidth(footer)
+      footer.style.setProperty('flex', '0 0 auto', 'important')
+      footer.style.setProperty('margin', '0', 'important')
+      footer.style.setProperty('border-radius', '8px', 'important')
+      footer.style.setProperty('padding', '12px 14px 14px', 'important')
+      footer.style.setProperty('box-sizing', 'border-box', 'important')
+      footer.style.setProperty('border', '1px solid #E6E8EB', 'important')
+      footer.style.setProperty('background', '#FFFFFF', 'important')
+      footer.style.setProperty('background-color', '#FFFFFF', 'important')
+      footer.style.setProperty('overflow', 'visible', 'important')
+      footer.style.setProperty('min-height', '0', 'important')
+      footer.style.setProperty('height', 'auto', 'important')
+      footer.style.setProperty('max-height', 'none', 'important')
+      const row =
+        footer.querySelector<HTMLElement>('[data-top-contratos-row]') ??
+        footer.querySelector<HTMLElement>(':scope > div:last-of-type')
+      if (row) {
+        row.style.setProperty('display', 'flex', 'important')
+        row.style.setProperty('width', '100%', 'important')
+        row.style.setProperty('gap', `${gridGap}px`, 'important')
+        row.style.setProperty('align-items', 'stretch', 'important')
+        row.style.setProperty('overflow', 'visible', 'important')
+        row
+          .querySelectorAll<HTMLElement>('[data-top-contrato-cell]')
+          .forEach((cell) => {
+            cell.style.setProperty('flex', '1 1 0', 'important')
+            cell.style.setProperty('min-width', '0', 'important')
+            cell.style.setProperty('width', 'auto', 'important')
+            cell.style.setProperty('max-width', 'none', 'important')
+            cell.style.setProperty('min-height', '52px', 'important')
+            cell.style.setProperty('height', 'auto', 'important')
+            cell.style.setProperty('padding', '10px 12px', 'important')
+            cell.style.setProperty('border-radius', '8px', 'important')
+            cell.style.setProperty('box-sizing', 'border-box', 'important')
+            cell.style.setProperty('display', 'flex', 'important')
+            cell.style.setProperty('align-items', 'center', 'important')
+            cell.style.setProperty('justify-content', 'center', 'important')
+            cell.style.setProperty('overflow', 'visible', 'important')
+          })
+      }
+    }
+
+    root.querySelectorAll<HTMLElement>('[data-top-contrato-nome]').forEach((el) => {
+      el.style.setProperty('font-size', '13px', 'important')
+      el.style.setProperty('font-weight', '700', 'important')
+      el.style.setProperty('line-height', '1.3', 'important')
+      el.style.setProperty('white-space', 'normal', 'important')
+      el.style.setProperty('word-break', 'break-word', 'important')
+      el.style.setProperty('overflow-wrap', 'anywhere', 'important')
+      el.style.setProperty('width', '100%', 'important')
+      el.style.setProperty('overflow', 'visible', 'important')
+      el.style.setProperty('display', 'block', 'important')
+      el.style.removeProperty('-webkit-line-clamp')
+      el.style.removeProperty('-webkit-box-orient')
+    })
+    return
+  }
+
+  const padX = 18
+  const padY = 14
+  const gap = 7
+  const cards = Array.from(
+    root.querySelectorAll<HTMLElement>('[data-overview-copy-card]'),
+  )
+  const headerCards = cards.filter((c) =>
+    c.hasAttribute('data-apresentacao-area-header'),
+  )
+  const footerCards = cards.filter((c) =>
+    c.hasAttribute('data-apresentacao-top-contratos'),
+  )
+  const bodyCards = cards.filter(
+    (c) =>
+      !c.hasAttribute('data-apresentacao-area-header') &&
+      !c.hasAttribute('data-apresentacao-top-contratos'),
+  )
+
+  const headerH = headerCards.length > 0 ? 72 : 0
+  const footerH = footerCards.length > 0 ? 56 : 0
+  const headerBlock =
+    headerCards.length > 0
+      ? headerH * headerCards.length + gap * headerCards.length
+      : 0
+  const footerBlock =
+    footerCards.length > 0
+      ? footerH * footerCards.length + gap * footerCards.length
+      : 0
+  const bodyN = Math.max(1, bodyCards.length)
+  const bodyAvail = Math.max(
+    36 * bodyN,
+    slideH - padY * 2 - headerBlock - footerBlock - gap * Math.max(0, bodyN - 1),
+  )
+  const bodyCardH = Math.max(36, Math.floor(bodyAvail / bodyN))
+  const cardW = slideW - padX * 2
+
+  const titleFs = Math.max(13, Math.min(18, Math.round(bodyCardH * 0.22)))
+  const metaFs = Math.max(12, Math.min(15, Math.round(bodyCardH * 0.18)))
+  const headFs = Math.max(11, Math.min(14, Math.round(bodyCardH * 0.17)))
+  const cellFs = Math.max(12, Math.min(17, Math.round(bodyCardH * 0.2)))
+
+  root.style.setProperty('position', 'relative', 'important')
+  root.style.setProperty('width', `${slideW}px`, 'important')
+  root.style.setProperty('min-width', `${slideW}px`, 'important')
+  root.style.setProperty('max-width', `${slideW}px`, 'important')
+  root.style.setProperty('height', `${slideH}px`, 'important')
+  root.style.setProperty('min-height', `${slideH}px`, 'important')
+  root.style.setProperty('max-height', `${slideH}px`, 'important')
+  root.style.setProperty('padding', '0', 'important')
+  root.style.setProperty('margin', '0', 'important')
+  root.style.setProperty('box-sizing', 'border-box', 'important')
+  root.style.setProperty('overflow', 'hidden', 'important')
+  root.style.setProperty('background', 'transparent', 'important')
+  root.style.setProperty('background-color', 'transparent', 'important')
+  root.style.setProperty('display', 'block', 'important')
+
+  let cursorY = padY
+
+  const placeCard = (
+    card: HTMLElement,
+    height: number,
+    opts?: { overflowVisible?: boolean; transparentBg?: boolean },
+  ) => {
+    card.style.setProperty('position', 'absolute', 'important')
+    card.style.setProperty('left', `${padX}px`, 'important')
+    card.style.setProperty('top', `${cursorY}px`, 'important')
+    card.style.setProperty('width', `${cardW}px`, 'important')
+    card.style.setProperty('min-width', `${cardW}px`, 'important')
+    card.style.setProperty('max-width', `${cardW}px`, 'important')
+    card.style.setProperty('height', `${height}px`, 'important')
+    card.style.setProperty('min-height', `${height}px`, 'important')
+    card.style.setProperty('max-height', `${height}px`, 'important')
+    card.style.setProperty('box-sizing', 'border-box', 'important')
+    card.style.setProperty(
+      'overflow',
+      opts?.overflowVisible ? 'visible' : 'hidden',
+      'important',
+    )
+    card.style.setProperty('margin', '0', 'important')
+    card.style.setProperty('padding', '6px 10px', 'important')
+    card.style.setProperty('border-radius', '8px', 'important')
+    if (opts?.transparentBg) {
+      card.style.setProperty('background', 'transparent', 'important')
+      card.style.setProperty('background-color', 'transparent', 'important')
+      card.style.setProperty('border', 'none', 'important')
+      card.style.setProperty('box-shadow', 'none', 'important')
+    } else {
+      card.style.setProperty('background', '#FFFFFF', 'important')
+      card.style.setProperty('background-color', '#FFFFFF', 'important')
+      card.style.setProperty('border', '1px solid #E2E8F0', 'important')
+      card.style.setProperty('box-shadow', '0 1px 2px rgba(15,23,42,0.06)', 'important')
+    }
+    card.style.setProperty('display', 'block', 'important')
+    card.style.setProperty('flex', 'none', 'important')
+    cursorY += height + gap
+  }
+
+  headerCards.forEach((card) => {
+    placeCard(card, headerH, { overflowVisible: true, transparentBg: true })
+  })
+  bodyCards.forEach((card) => {
+    placeCard(card, bodyCardH)
+  })
+  footerCards.forEach((card) => {
+    placeCard(card, footerH)
+  })
+
+  cards.forEach((card) => {
+    const wrap = card.firstElementChild as HTMLElement | null
+    if (wrap) {
+      wrap.style.setProperty('width', '100%', 'important')
+      wrap.style.setProperty('height', '100%', 'important')
+      wrap.style.setProperty(
+        'overflow',
+        card.hasAttribute('data-apresentacao-area-header') ? 'visible' : 'hidden',
+        'important',
+      )
+      wrap.style.setProperty('display', 'block', 'important')
+    }
+
+    const isAreaMatrix =
+      card.querySelector('[data-apresentacao-area-label]') != null ||
+      card.querySelectorAll('colgroup col').length >= 8
+
+    card.querySelectorAll<HTMLTableElement>('table').forEach((table) => {
+      table.style.setProperty('width', '100%', 'important')
+      table.style.setProperty('min-width', '0', 'important')
+      table.style.setProperty('max-width', '100%', 'important')
+      table.style.setProperty('height', 'auto', 'important')
+      table.style.setProperty('table-layout', 'fixed', 'important')
+      table.style.setProperty('border-collapse', 'collapse', 'important')
+
+      const cols = Array.from(table.querySelectorAll('colgroup col'))
+      if (cols.length >= 2) {
+        if (isAreaMatrix && cols.length >= 8) {
+          const titleW = 190
+          const metaW = 72
+          const restN = cols.length - 2
+          const restW = Math.max(
+            70,
+            Math.floor((cardW - 28 - titleW - metaW) / restN),
+          )
+          cols.forEach((col, ci) => {
+            const el = col as HTMLElement
+            const w = ci === 0 ? titleW : ci === 1 ? metaW : restW
+            el.style.setProperty('width', `${w}px`, 'important')
+          })
+        } else {
+          const titleW = 168
+          const monthN = cols.length - 1
+          const monthW = Math.max(28, Math.floor((cardW - 28 - titleW) / monthN))
+          cols.forEach((col, ci) => {
+            const el = col as HTMLElement
+            el.style.setProperty(
+              'width',
+              `${ci === 0 ? titleW : monthW}px`,
+              'important',
+            )
+          })
+        }
+      }
+    })
+
+    card.querySelectorAll<HTMLTableCellElement>('th').forEach((th, idx) => {
+      th.style.setProperty(
+        'font-size',
+        `${idx === 0 ? titleFs : headFs}px`,
+        'important',
+      )
+      th.style.setProperty('font-weight', idx === 0 ? '700' : '600', 'important')
+      th.style.setProperty('padding', '2px 3px', 'important')
+      th.style.setProperty('line-height', '1.15', 'important')
+      th.style.setProperty('white-space', 'nowrap', 'important')
+    })
+
+    card.querySelectorAll<HTMLTableCellElement>('td').forEach((td, idx) => {
+      const fs =
+        idx === 0 ? titleFs : idx === 1 && isAreaMatrix ? metaFs : cellFs
+      td.style.setProperty('font-size', `${fs}px`, 'important')
+      td.style.setProperty(
+        'font-weight',
+        idx === 0 || (isAreaMatrix && idx === 1) ? '600' : '700',
+        'important',
+      )
+      td.style.setProperty(
+        'padding',
+        idx === 0 ? '2px 3px' : td.style.padding || '2px 3px',
+        'important',
+      )
+      td.style.setProperty('line-height', '1.15', 'important')
+      td.style.setProperty('white-space', 'nowrap', 'important')
+    })
+
+    card.querySelectorAll<HTMLElement>('[data-year-band-pill]').forEach((pill) => {
+      pill.style.setProperty('font-size', `${cellFs}px`, 'important')
+      pill.style.setProperty('font-weight', '700', 'important')
+      pill.style.setProperty('padding', '3px 2px', 'important')
+      pill.style.setProperty(
+        'min-height',
+        `${Math.max(16, Math.round(bodyCardH * 0.32))}px`,
+        'important',
+      )
+    })
+
+    card.querySelectorAll<HTMLElement>('[data-top-contrato-nome]').forEach((el) => {
+      el.style.setProperty(
+        'font-size',
+        `${Math.max(11, Math.min(14, cellFs))}px`,
+        'important',
+      )
+      el.style.setProperty('font-weight', '700', 'important')
+    })
+  })
+}
+
+/**
+ * html2canvas/foreignObject não funde border-radius parcial entre células.
+ * No clone, troca as pílulas mensais por uma faixa absoluta por ano (Ago–Dez, Jan–Jul…).
+ */
+function mergeYearBandPillsForExport(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>('[data-overview-copy-card]').forEach((card) => {
+    const pills = Array.from(
+      card.querySelectorAll<HTMLElement>('[data-year-band-pill]'),
+    )
+    if (pills.length === 0) return
+
+    // Card já é `position: absolute` no fill-slide — âncora ok para overlays.
+
+    // Zera padding horizontal das células para a faixa cobrir o quadrante do mês inteiro.
+    for (const pill of pills) {
+      const td = pill.parentElement
+      if (!(td instanceof HTMLElement)) continue
+      td.style.setProperty('padding-left', '0', 'important')
+      td.style.setProperty('padding-right', '0', 'important')
+      td.style.setProperty('padding-top', '2px', 'important')
+      td.style.setProperty('padding-bottom', '2px', 'important')
+      pill.style.setProperty('width', '100%', 'important')
+      pill.style.setProperty('border-radius', '0', 'important')
+    }
+    void card.offsetWidth
+
+    const groups = new Map<string, HTMLElement[]>()
+    for (const pill of pills) {
+      const key = pill.getAttribute('data-year-band-group') ?? '_'
+      const list = groups.get(key) ?? []
+      list.push(pill)
+      groups.set(key, list)
+    }
+
+    const cardRect = card.getBoundingClientRect()
+
+    for (const groupPills of groups.values()) {
+      if (groupPills.length === 0) continue
+
+      const tds = groupPills
+        .map((p) => p.parentElement)
+        .filter((el): el is HTMLElement => el instanceof HTMLElement)
+      if (tds.length === 0) continue
+
+      const firstTd = tds[0]!
+      const lastTd = tds[tds.length - 1]!
+      const firstRect = firstTd.getBoundingClientRect()
+      const lastRect = lastTd.getBoundingClientRect()
+      const samplePill = groupPills.find((p) => {
+        const t = (p.textContent ?? '').replace(/\u00A0/g, ' ').trim()
+        return t.length > 0 && t !== '-'
+      }) ?? groupPills[0]!
+
+      let label = ''
+      for (const pill of groupPills) {
+        const t = (pill.textContent ?? '').replace(/\u00A0/g, ' ').trim()
+        if (t && t !== '-') label = t
+      }
+
+      const bg =
+        samplePill.getAttribute('data-band-bg') ||
+        samplePill.style.backgroundColor ||
+        '#FEE2E2'
+      const color =
+        samplePill.getAttribute('data-band-fg') ||
+        samplePill.style.color ||
+        '#DC2626'
+      const fontSize = samplePill.style.fontSize || '11px'
+
+      const bl = parseFloat(window.getComputedStyle(firstTd).borderLeftWidth) || 0
+      const left = firstRect.left - cardRect.left + bl
+      const top = firstRect.top - cardRect.top + 2
+      const width = Math.max(8, lastRect.right - firstRect.left - bl)
+      const height = Math.max(16, firstRect.height - 4)
+
+      for (const pill of groupPills) {
+        pill.style.setProperty('visibility', 'hidden', 'important')
+        pill.style.setProperty('opacity', '0', 'important')
+      }
+
+      const overlay = document.createElement('div')
+      overlay.setAttribute('data-year-band-merged', '1')
+      const labelSpan = document.createElement('span')
+      labelSpan.textContent = label || '-'
+      labelSpan.style.setProperty('color', color, 'important')
+      labelSpan.style.setProperty('-webkit-text-fill-color', color, 'important')
+      labelSpan.style.setProperty('font-weight', '700', 'important')
+      labelSpan.style.setProperty('font-size', fontSize, 'important')
+      overlay.appendChild(labelSpan)
+      overlay.style.setProperty('position', 'absolute', 'important')
+      overlay.style.setProperty('left', `${left}px`, 'important')
+      overlay.style.setProperty('top', `${top}px`, 'important')
+      overlay.style.setProperty('width', `${width}px`, 'important')
+      overlay.style.setProperty('height', `${height}px`, 'important')
+      overlay.style.setProperty('box-sizing', 'border-box', 'important')
+      overlay.style.setProperty('border-radius', '6px', 'important')
+      overlay.style.setProperty('background', bg, 'important')
+      overlay.style.setProperty('background-color', bg, 'important')
+      overlay.style.setProperty('color', color, 'important')
+      overlay.style.setProperty('-webkit-text-fill-color', color, 'important')
+      overlay.style.setProperty('font-weight', '700', 'important')
+      overlay.style.setProperty('font-size', fontSize, 'important')
+      overlay.style.setProperty('line-height', '1', 'important')
+      overlay.style.setProperty('display', 'flex', 'important')
+      overlay.style.setProperty('align-items', 'center', 'important')
+      overlay.style.setProperty('justify-content', 'center', 'important')
+      overlay.style.setProperty('border', '1px solid rgba(15,23,42,0.08)', 'important')
+      overlay.style.setProperty('pointer-events', 'none', 'important')
+      overlay.style.setProperty('z-index', '2', 'important')
+      overlay.style.setProperty('print-color-adjust', 'exact', 'important')
+      overlay.style.setProperty('-webkit-print-color-adjust', 'exact', 'important')
+      card.appendChild(overlay)
+    }
+  })
+}
+
+/**
  * Slide Apresentação Jurídico → PNG no tamanho físico do PPT
- * (33,87 cm × 16,32 cm). Conteúdo esticado para ocupar 100% do canvas + DPI.
+ * (33,87 cm × 16,32 cm).
+ *
+ * Com `data-apresentacao-fill-slide` (Bloco 2): layout absoluto no tamanho do
+ * slide + tipografia ampliada — PNG preenche toda a área de colagem.
  */
 export async function copyApresentacaoSlideToClipboard(
   element: HTMLElement,
@@ -2113,41 +2780,86 @@ export async function copyApresentacaoSlideToClipboard(
   const SLIDE_IN_W = SLIDE_CM_W / 2.54
   const SLIDE_IN_H = SLIDE_CM_H / 2.54
 
+  const fillSlide = element.hasAttribute('data-apresentacao-fill-slide')
   const prepared = prepareApresentacaoExportElement(element)
-  const { width, height } = measurePreparedElement(prepared)
+
+  let width: number
+  let height: number
+
+  if (fillSlide) {
+    applyApresentacaoFillSlideLayout(prepared, SLIDE_W, SLIDE_H)
+    // Monta no DOM para o layout absoluto “assar” antes do foreignObject.
+    prepared.style.setProperty('position', 'fixed', 'important')
+    prepared.style.setProperty('left', '-10000px', 'important')
+    prepared.style.setProperty('top', '0', 'important')
+    prepared.style.setProperty('visibility', 'hidden', 'important')
+    document.body.appendChild(prepared)
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+    // Retenção: funde pílulas mensais em faixas por ano (html2canvas não une células).
+    prepared.style.setProperty('visibility', 'visible', 'important')
+    mergeYearBandPillsForExport(prepared)
+    prepared.style.setProperty('visibility', 'hidden', 'important')
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve())
+    })
+    const exportId = element.getAttribute('data-apresentacao-export')
+    bumpApresentacaoExportFonts(
+      prepared,
+      exportId === 'programa_bonus' ? 1 : 1.15,
+    )
+    width = SLIDE_W
+    height = SLIDE_H
+  } else {
+    bumpApresentacaoExportFonts(prepared, 1.15)
+    const measured = measurePreparedElement(prepared)
+    width = measured.width
+    height = measured.height
+  }
+
   if (width === 0 || height === 0) {
+    if (fillSlide && prepared.parentNode) prepared.parentNode.removeChild(prepared)
     throw new Error('Slide ainda não renderizado')
   }
 
-  const contentBlob = await renderPreparedElementToPngBlob(prepared, width, height, scale)
-  const part = await measureBlobPart(contentBlob)
-  const img = await blobToImage(part.blob)
+  try {
+    const contentBlob = await renderPreparedElementToPngBlob(prepared, width, height, scale)
+    const part = await measureBlobPart(contentBlob)
+    const img = await blobToImage(part.blob)
 
-  const canvas = document.createElement('canvas')
-  canvas.width = SLIDE_W * scale
-  canvas.height = SLIDE_H * scale
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas não suportado neste navegador')
+    const canvas = document.createElement('canvas')
+    canvas.width = SLIDE_W * scale
+    canvas.height = SLIDE_H * scale
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas não suportado neste navegador')
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  // Contain: mantém proporção (não estica/quebra o texto das áreas).
-  const fit = Math.min(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight)
-  const dw = img.naturalWidth * fit
-  const dh = img.naturalHeight * fit
-  const dx = (canvas.width - dw) / 2
-  const dy = (canvas.height - dh) / 2
-  ctx.drawImage(img, dx, dy, dw, dh)
+    if (fillSlide) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      const fit = Math.min(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight)
+      const dw = img.naturalWidth * fit
+      const dh = img.naturalHeight * fit
+      const dx = (canvas.width - dw) / 2
+      const dy = (canvas.height - dh) / 2
+      ctx.drawImage(img, dx, dy, dw, dh)
+    }
 
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (value) => (value ? resolve(value) : reject(new Error('Falha ao gerar imagem PNG'))),
-      'image/png',
-    )
-  })
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (value) => (value ? resolve(value) : reject(new Error('Falha ao gerar imagem PNG'))),
+        'image/png',
+      )
+    })
 
-  const dpi = Math.round((SLIDE_W * scale) / SLIDE_IN_W)
-  void SLIDE_IN_H
-  await copyPngBlobToClipboard(blob, dpi)
+    const dpi = Math.round((SLIDE_W * scale) / SLIDE_IN_W)
+    void SLIDE_IN_H
+    await copyPngBlobToClipboard(blob, dpi)
+  } finally {
+    if (fillSlide && prepared.parentNode) prepared.parentNode.removeChild(prepared)
+  }
 }
 
 /** Cards KPI do Overview — snapshot fiel (cores das células alinhadas ao card branco). */

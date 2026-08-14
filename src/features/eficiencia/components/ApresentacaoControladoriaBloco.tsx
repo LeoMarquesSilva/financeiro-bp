@@ -9,7 +9,6 @@ import {
 import type { ApresentacaoControladoriaData } from '../utils/apresentacaoControladoria'
 import { OpsLegaisResponsumPanel } from './OpsLegaisResponsumPanel'
 
-const GOLD = '#D5B170'
 const GOLD_DARK = '#C6A361'
 
 type Props = {
@@ -185,28 +184,6 @@ export function ApresentacaoControladoriaBloco({ data, loading, error }: Props) 
         gap: 10,
       }}
     >
-      <div
-        data-overview-copy-card
-        data-chart-export-preserve-bg
-        style={{
-          display: 'inline-block',
-          alignSelf: 'flex-start',
-          borderRadius: 5,
-          backgroundColor: GOLD,
-          color: '#fff',
-          padding: '3px 10px',
-          fontSize: 10,
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.03em',
-          whiteSpace: 'nowrap',
-          printColorAdjust: 'exact',
-          WebkitPrintColorAdjust: 'exact',
-        }}
-      >
-        7. Big Numbers Controladoria
-      </div>
-
       {error && !data ? (
         <div
           style={{

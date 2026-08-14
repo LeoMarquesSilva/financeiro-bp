@@ -15,8 +15,7 @@ import {
   EFICIENCIA_META_PDI,
   filtrarMensalPorMesFiltro,
   isMesesFiltro,
-  isPeriodoCurtoFiltro,
-  mesesEfetivosFiltro,
+  isResultadoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import {
@@ -130,15 +129,15 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
 
   const { data: marketingDash, isLoading: loadingMarketing } = useInstagramMarketing()
   const treinoResumos = useMemo(
-    () => buildOpsTreinamentosCategorias(ativos, itens).resumos,
-    [ativos, itens],
+    () => buildOpsTreinamentosCategorias(ativos, itens, ano).resumos,
+    [ativos, itens, ano],
   )
   const equipeResumo = treinoResumos.find((r) => r.categoria === 'Equipe')
   const metaTreinoLabel =
     treinoAnual && treinoAnual.pessoas_ativas > 0
-      ? `Meta: ${Math.floor(Number(treinoAnual.meta_minutos) / 60)}h (${treinoAnual.pessoas_ativas} × 14h)`
-      : equipeResumo && equipeResumo.qtdPessoas > 0
-        ? `Meta: ${equipeResumo.qtdPessoas * 14}h (${equipeResumo.qtdPessoas} × 14h)`
+      ? `Meta: ${Math.floor(Number(treinoAnual.meta_minutos) / 60)}h (${treinoAnual.pessoas_ativas} pessoas · proporcional)`
+      : equipeResumo && equipeResumo.qtdPessoas > 0 && equipeResumo.metaMinutos != null
+        ? `Meta: ${Math.round(equipeResumo.metaMinutos / 60)}h (${equipeResumo.qtdPessoas} pessoas · proporcional)`
         : 'Meta 100%'
 
   const cellsTreino: HeatCell[] = aplicarCelulasFiltro(
@@ -386,14 +385,10 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     }
   })()
 
-  /** Destaca/atenua meses no heat row (igual Overview jurídico — multi-mês incluso). */
-  const mesDestaque: number | number[] | null = (() => {
-    if (isMesesFiltro(mesFiltro)) return mesFiltro
-    if (mesFiltro === 'resultado' || isPeriodoCurtoFiltro(mesFiltro)) {
-      return mesesEfetivosFiltro(mesFiltro, ano)
-    }
-    return null
-  })()
+  /** Destaca só quando o usuário marca meses; Resultado/semana não pintam o heat. */
+  const mesDestaque: number | number[] | null = isMesesFiltro(mesFiltro)
+    ? mesFiltro
+    : null
 
   const busy =
     loading ||
@@ -410,7 +405,9 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
       toast.error('Conteúdo não disponível para cópia')
       return
     }
-    const cards = Array.from(container.querySelectorAll<HTMLElement>('[data-overview-copy-card]'))
+    const cards = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-overview-copy-card]'),
+    ).filter((el) => !el.closest('[data-overview-copy-group="mkt"]'))
     if (cards.length === 0) {
       toast.error('Conteúdo não disponível para cópia')
       return
@@ -460,6 +457,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
       </div>
 
       <div ref={copyRef} className="space-y-3">
+        <div data-overview-copy-group="ops" className="space-y-3">
         <OverviewKpiHeatRow
           title="SLA Protocolo"
           meta={EFICIENCIA_META_OPS_SLA_PROTOCOLO}
@@ -547,6 +545,8 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           acumulado={acumIniciativas}
           onRacionalClick={() => setRacionalAberto('ops_legais_iniciativas')}
         />
+        </div>
+        <div data-overview-copy-group="mkt" className="space-y-3">
         <OverviewKpiHeatRow
           title="MKT - Posts Anuais"
           meta={100}
@@ -599,6 +599,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           acumulado={acumMarketingAlcance}
           onRacionalClick={() => setRacionalAberto('ops_legais_marketing')}
         />
+        </div>
       </div>
 
       <p className="text-center text-[11px] text-slate-400">
@@ -635,7 +636,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
         ano={ano}
         mes={
           racionalAberto === 'desenvolvimento_equipe' || racionalAberto === 'retencao_talentos'
-            ? mesFiltro === 'resultado'
+            ? isResultadoFiltro(mesFiltro)
               ? null
               : mesFiltro
             : mesFiltro
@@ -685,7 +686,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           racionalAberto === 'desenvolvimento_equipe' &&
           equipeResumo &&
           equipeResumo.qtdPessoas > 0
-            ? `Meta: ${equipeResumo.qtdPessoas * 14}h (${equipeResumo.qtdPessoas} × 14h)`
+            ? `Meta: ${Math.round((equipeResumo.metaMinutos ?? 0) / 60)}h (${equipeResumo.qtdPessoas} pessoas · proporcional)`
             : racionalAberto === 'ops_legais_iniciativas'
               ? `Meta: ${EFICIENCIA_META_OPS_INICIATIVAS} projetos`
               : racionalAberto === 'ops_legais_marketing'

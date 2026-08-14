@@ -114,7 +114,7 @@ function formatMetaDesenvolvimentoEquipe(
   treinamentos: EficienciaOverview['treinamentos'],
 ): string {
   if (!treinamentos || treinamentos.pessoas_ativas <= 0) return 'Meta 100%'
-  return `Meta: ${formatMinutos(treinamentos.meta_minutos)}h (${treinamentos.pessoas_ativas} x 14h)`
+  return `Meta: ${formatMinutos(treinamentos.meta_minutos)}h (${treinamentos.pessoas_ativas} pessoas · proporcional)`
 }
 
 export function OverviewTab({

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { useQueries } from '@tanstack/react-query'
 import { Check, Copy, Loader2, Presentation } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,14 @@ import {
   type ApresentacaoBlocoId,
 } from '../utils/apresentacaoMatrix'
 import { mesesRangeBigNumber } from '../utils/apresentacaoBigNumber'
+import { fetchApresentacaoFinanceiroBundle } from '../utils/apresentacaoFinanceiro'
+import {
+  anosNoPeriodo,
+  type MesAno,
+} from '../utils/apresentacaoMesAno'
+import { eficienciaService } from '../services/eficienciaService'
+import type { EficienciaOverview } from '../types/eficiencia.types'
+import type { ApresentacaoFinanceiroBundle } from '../utils/apresentacaoFinanceiro'
 import type { MesFiltroEficiencia } from '../constants'
 
 type CopyStatus = 'idle' | 'loading' | 'done'
@@ -40,34 +49,92 @@ export function ApresentacaoJuridicoDialog({
   const [copyStatus, setCopyStatus] = useState<Partial<Record<ApresentacaoBlocoId, CopyStatus>>>(
     {},
   )
-  /** Período exclusivo do Bloco 4 (YoY). Default Jan–Jun. */
+  /** Período exclusivo do Bloco 2 — De Jan/25 · Até Jan/26 (ajustável). */
+  const [unificadoInicio, setUnificadoInicio] = useState<MesAno>({ ano: 2025, mes: 1 })
+  const [unificadoFim, setUnificadoFim] = useState<MesAno>({ ano: 2026, mes: 1 })
   const [bnMesInicio, setBnMesInicio] = useState(1)
   const [bnMesFim, setBnMesFim] = useState(6)
   const bigNumberMeses = useMemo(
     () => mesesRangeBigNumber(bnMesInicio, bnMesFim),
     [bnMesInicio, bnMesFim],
   )
-  /** Período exclusivo do Bloco 6 (Iniciativas) — alinhado à aba Ops Legais. */
+  /** Período exclusivo do Bloco 11 — Programa de Bônus (padrão Jun–Dez). */
+  const [bonusMesInicio, setBonusMesInicio] = useState(6)
+  const [bonusMesFim, setBonusMesFim] = useState(12)
   const [iniciativasMesFiltro, setIniciativasMesFiltro] =
     useState<MesFiltroEficiencia>(null)
-  /** Período exclusivo do Bloco 7 (Marketing). */
   const [marketingMesFiltro, setMarketingMesFiltro] =
     useState<MesFiltroEficiencia>(null)
-  /** Período exclusivo do Bloco 8 (Financeiro Ops). */
   const [financeiroOpsMesFiltro, setFinanceiroOpsMesFiltro] =
     useState<MesFiltroEficiencia>(null)
+
+  const anosUnificado = useMemo(
+    () => anosNoPeriodo(unificadoInicio, unificadoFim),
+    [unificadoInicio, unificadoFim],
+  )
+
+  const unificadoOverviewQueries = useQueries({
+    queries: anosUnificado.map((y) => ({
+      queryKey: ['eficiencia', 'overview', y, null] as const,
+      queryFn: (): Promise<EficienciaOverview> =>
+        eficienciaService.getOverview(y, null),
+      enabled: open,
+      staleTime: 60_000,
+    })),
+  })
+
+  const unificadoFinanceiroQueries = useQueries({
+    queries: anosUnificado.map((y) => ({
+      queryKey: ['eficiencia', 'apresentacao-financeiro', y] as const,
+      queryFn: () => fetchApresentacaoFinanceiroBundle(y),
+      enabled: open,
+      staleTime: 60_000,
+    })),
+  })
+
+  const overviewByAno = useMemo(() => {
+    const map = new Map<number, EficienciaOverview>()
+    anosUnificado.forEach((y, i) => {
+      const data = unificadoOverviewQueries[i]?.data
+      if (data) map.set(y, data)
+    })
+    return map
+  }, [anosUnificado, unificadoOverviewQueries])
+
+  const financeiroByAno = useMemo(() => {
+    const map = new Map<number, ApresentacaoFinanceiroBundle>()
+    anosUnificado.forEach((y, i) => {
+      const data = unificadoFinanceiroQueries[i]?.data
+      if (data) map.set(y, data)
+    })
+    return map
+  }, [anosUnificado, unificadoFinanceiroQueries])
+
+  const loadingUnificado =
+    open &&
+    (unificadoOverviewQueries.some(
+      (q: { isLoading: boolean; isPending: boolean }) =>
+        q.isLoading || q.isPending,
+    ) ||
+      unificadoFinanceiroQueries.some(
+        (q: { isLoading: boolean; isPending: boolean }) =>
+          q.isLoading || q.isPending,
+      ) ||
+      anosUnificado.some((y) => !overviewByAno.has(y)))
 
   const {
     rows,
     colunas,
     composicao,
     receitaRows,
+    topContratos,
     bigNumber,
     controladoria,
     lideranca,
     iniciativas,
     marketing,
     financeiroOps,
+    bonus,
     loading,
     loadingComposicao,
     loadingBigNumber,
@@ -90,12 +157,18 @@ export function ApresentacaoJuridicoDialog({
     iniciativasMesFiltro,
     marketingMesFiltro,
     financeiroOpsMesFiltro,
+    bonusMesInicio,
+    bonusMesFim,
   )
 
   const handleCopyBloco = async (blocoId: ApresentacaoBlocoId) => {
     const root = slideRef.current
     if (!root) {
       toast.error('Conteúdo não disponível para cópia')
+      return
+    }
+    if (blocoId === 'juridico_unificado' && loadingUnificado) {
+      toast.error('Jurídico Unificado ainda carregando')
       return
     }
     if (blocoId === 'bignumber' && (loadingBigNumber || !bigNumber)) {
@@ -124,6 +197,10 @@ export function ApresentacaoJuridicoDialog({
     }
     if (blocoId === 'composicao' && (loadingComposicao || !composicao)) {
       toast.error('Composição ainda carregando')
+      return
+    }
+    if (blocoId === 'programa_bonus' && (loading || !bonus)) {
+      toast.error('Programa de Bônus ainda carregando')
       return
     }
     if (
@@ -171,8 +248,8 @@ export function ApresentacaoJuridicoDialog({
                 Apresentação — Jurídico
               </DialogTitle>
               <p className="mt-1 text-xs text-slate-500">
-                Bloco 1–4: filtro abaixo · Bloco 5: YoY · Bloco 6: ano · Bloco
-                7–9: filtro próprio · cópia 33,87 × 16,32 cm
+                Bloco 2: De/Até mês·ano (a partir de Jan/25) · demais blocos com
+                filtro próprio · cópia 33,87 × 16,32 cm
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -181,31 +258,34 @@ export function ApresentacaoJuridicoDialog({
                 const CopyIcon =
                   status === 'loading' ? Loader2 : status === 'done' ? Check : Copy
                 const blocoBusy =
-                  bloco.id === 'lideranca'
-                    ? loadingLideranca || !lideranca
-                    : bloco.id === 'bignumber'
-                      ? loadingBigNumber || !bigNumber
-                      : bloco.id === 'controladoria'
-                        ? loadingControladoria || !controladoria
-                        : bloco.id === 'iniciativas'
-                          ? loadingIniciativas || !iniciativas
-                          : bloco.id === 'marketing'
-                            ? loadingMarketing || !marketing
-                            : bloco.id === 'financeiro_ops'
-                              ? loadingFinanceiroOps || !financeiroOps
-                              : bloco.id === 'composicao'
-                                ? loadingComposicao || !composicao
-                                : loading
+                  bloco.id === 'juridico_unificado'
+                    ? loadingUnificado
+                    : bloco.id === 'lideranca'
+                      ? loadingLideranca || !lideranca
+                      : bloco.id === 'bignumber'
+                        ? loadingBigNumber || !bigNumber
+                        : bloco.id === 'controladoria'
+                          ? loadingControladoria || !controladoria
+                          : bloco.id === 'iniciativas'
+                            ? loadingIniciativas || !iniciativas
+                            : bloco.id === 'marketing'
+                              ? loadingMarketing || !marketing
+                              : bloco.id === 'financeiro_ops'
+                                ? loadingFinanceiroOps || !financeiroOps
+                                : bloco.id === 'composicao'
+                                  ? loadingComposicao || !composicao
+                                  : bloco.id === 'programa_bonus'
+                                    ? loading || !bonus
+                                    : loading
                 return (
                   <Button
                     key={bloco.id}
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 shrink-0 gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-700"
-                    onClick={() => handleCopyBloco(bloco.id)}
+                    className="h-8 gap-1.5 text-xs"
                     disabled={status === 'loading' || blocoBusy}
-                    aria-label={`Copiar ${bloco.label} para PowerPoint`}
+                    onClick={() => void handleCopyBloco(bloco.id)}
                   >
                     <CopyIcon
                       className={
@@ -213,7 +293,7 @@ export function ApresentacaoJuridicoDialog({
                       }
                       aria-hidden
                     />
-                    Copiar bloco {index + 1}
+                    Copiar {index + 1}
                   </Button>
                 )
               })}
@@ -231,19 +311,28 @@ export function ApresentacaoJuridicoDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-4">
-          <div className="mx-auto max-w-[1200px]">
+          <div className="mx-auto w-full max-w-none">
             <ApresentacaoJuridicoSlide
               ref={slideRef}
               colunas={colunas}
               rows={rows}
+              overviewByAnoUnificado={overviewByAno}
+              financeiroByAnoUnificado={financeiroByAno}
+              loadingUnificado={loadingUnificado}
+              unificadoInicio={unificadoInicio}
+              unificadoFim={unificadoFim}
+              onUnificadoInicioChange={setUnificadoInicio}
+              onUnificadoFimChange={setUnificadoFim}
               composicao={composicao}
               receitaRows={receitaRows}
+              topContratos={topContratos}
               bigNumber={bigNumber}
               controladoria={controladoria}
               lideranca={lideranca}
               iniciativas={iniciativas}
               marketing={marketing}
               financeiroOps={financeiroOps}
+              bonus={bonus}
               ano={ano}
               loading={loading}
               loadingComposicao={loadingComposicao}
@@ -263,6 +352,10 @@ export function ApresentacaoJuridicoDialog({
               bigNumberMesFim={bnMesFim}
               onBigNumberMesInicioChange={setBnMesInicio}
               onBigNumberMesFimChange={setBnMesFim}
+              bonusMesInicio={bonusMesInicio}
+              bonusMesFim={bonusMesFim}
+              onBonusMesInicioChange={setBonusMesInicio}
+              onBonusMesFimChange={setBonusMesFim}
               iniciativasMesFiltro={iniciativasMesFiltro}
               onIniciativasMesFiltroChange={setIniciativasMesFiltro}
               marketingMesFiltro={marketingMesFiltro}

@@ -861,9 +861,8 @@ export const eficienciaService = {
   async fetchTurnoverAtivosArea(
     ano: number,
     area: string,
-  ): Promise<Array<{ nome: string; cargo: string | null }>> {
-    const rows = await this.fetchTurnoverAtivosAreaDetalhe(ano, area)
-    return rows.map(({ nome, cargo }) => ({ nome, cargo }))
+  ): Promise<Array<{ nome: string; cargo: string | null; admissao: string | null }>> {
+    return this.fetchTurnoverAtivosAreaDetalhe(ano, area)
   },
 
   async fetchTreinamentosAnual(

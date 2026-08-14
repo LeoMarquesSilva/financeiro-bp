@@ -4,8 +4,6 @@ import { ReceitaComparativoChart } from '@/features/receita/components/ReceitaCo
 import type { ReceitaMesRow } from '@/features/receita/types/receita.types'
 import type { ApresentacaoComposicaoData } from '../utils/apresentacaoComposicao'
 
-const GOLD = '#D5B170'
-
 type Props = {
   data: ApresentacaoComposicaoData | null
   receitaRows?: ReceitaMesRow[] | null
@@ -111,29 +109,6 @@ export function ApresentacaoComposicaoBloco({
         gap: 10,
       }}
     >
-      <div
-        data-overview-copy-card
-        data-chart-export-preserve-bg
-        style={{
-          display: 'inline-block',
-          alignSelf: 'flex-start',
-          borderRadius: 5,
-          backgroundColor: GOLD,
-          color: '#fff',
-          padding: '3px 10px',
-          fontSize: 10,
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.03em',
-          whiteSpace: 'nowrap',
-          printColorAdjust: 'exact',
-          WebkitPrintColorAdjust: 'exact',
-        }}
-      >
-        5. Composição da Receita
-        {data ? ` — ${data.mesLabel}/${data.ano}` : ''}
-      </div>
-
       {loading || !data ? (
         <div style={{ display: 'grid', gap: 6 }}>
           {Array.from({ length: 3 }, (_, i) => (

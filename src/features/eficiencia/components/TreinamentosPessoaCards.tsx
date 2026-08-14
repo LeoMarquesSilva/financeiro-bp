@@ -78,7 +78,6 @@ export function TreinamentosPessoaCards({
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const [abertos, setAbertos] = useState<Set<string>>(() => new Set())
   const accent = ACCENT[accentClass]
-  const semMeta = metaMinutos == null
 
   const itensPorPessoa = useMemo(() => {
     const map = new Map<string, TreinamentoItemRow[]>()
@@ -122,11 +121,16 @@ export function TreinamentosPessoaCards({
   return (
     <div className="space-y-3">
       {ordenados.map((p) => {
+        const metaPessoa =
+          p.meta_minutos != null && Number.isFinite(Number(p.meta_minutos))
+            ? Number(p.meta_minutos)
+            : metaMinutos
+        const semMetaPessoa = metaPessoa == null
         const minutos = Number(p.minutos_lancados ?? 0)
-        const atingiu = !semMeta && minutos >= (metaMinutos ?? 0)
-        const pct = semMeta
+        const atingiu = !semMetaPessoa && minutos >= (metaPessoa ?? 0)
+        const pct = semMetaPessoa
           ? 100
-          : Math.min(100, (minutos / (metaMinutos || 1)) * 100)
+          : Math.min(100, (minutos / (metaPessoa || 1)) * 100)
         const nomeExibicao = resolvePessoaDisplayNome(
           p.colaborador,
           teamMembers,
@@ -207,7 +211,7 @@ export function TreinamentosPessoaCards({
                   <div
                     className={cn(
                       'h-full rounded-full transition-all',
-                      atingiu || semMeta ? accent.barOk : accent.barNok,
+                      atingiu || semMetaPessoa ? accent.barOk : accent.barNok,
                     )}
                     style={{ width: `${pct}%` }}
                   />

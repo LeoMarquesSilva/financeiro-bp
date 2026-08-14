@@ -185,13 +185,14 @@ export function ApresentacaoLiderancaBloco({ data, loading, error }: Props) {
           >
             <BarChart3 size={14} aria-hidden />
           </span>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, overflow: 'visible' }}>
             <div
               style={{
                 fontSize: 10,
                 fontWeight: 700,
                 color: '#1F2937',
-                lineHeight: 1.2,
+                lineHeight: 1.25,
+                whiteSpace: 'normal',
               }}
             >
               {toPriMaiuscula('Desenvolvimento Contínuo de Lideranças')}
@@ -208,7 +209,7 @@ export function ApresentacaoLiderancaBloco({ data, loading, error }: Props) {
                 fontWeight: 700,
               }}
             >
-              Meta: 14h
+              Meta proporcional
             </div>
           </div>
         </div>
@@ -263,7 +264,7 @@ export function ApresentacaoLiderancaBloco({ data, loading, error }: Props) {
             {data.horasRealizadasLabel}
           </div>
           <div style={{ fontSize: 8, color: '#94A3B8' }}>
-            Meta {data.metaHorasLabel} ({data.qtdPessoas} × 14h)
+            Meta {data.metaHorasLabel} ({data.qtdPessoas} pessoas · proporcional)
           </div>
         </div>
       </div>
@@ -324,9 +325,10 @@ export function ApresentacaoLiderancaBloco({ data, loading, error }: Props) {
                     fontSize: 11,
                     fontWeight: 700,
                     color: '#1F2937',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    lineHeight: 1.25,
+                    whiteSpace: 'normal',
+                    overflow: 'visible',
+                    wordBreak: 'break-word',
                   }}
                 >
                   {nome || p.colaborador}
@@ -365,7 +367,7 @@ export function ApresentacaoLiderancaBloco({ data, loading, error }: Props) {
       {data.pctAtingimento != null ? (
         <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2 }}>
           {formatPercent(data.pctAtingimento)} · {data.horasRealizadasLabel} realizadas · Meta:{' '}
-          {Math.round(data.metaMinutos / 60)}h total ({data.qtdPessoas} × 14h)
+          {Math.round(data.metaMinutos / 60)}h total ({data.qtdPessoas} pessoas · proporcional)
         </div>
       ) : null}
     </div>

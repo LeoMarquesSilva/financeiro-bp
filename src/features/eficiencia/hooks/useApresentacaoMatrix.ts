@@ -24,12 +24,17 @@ import {
   fetchApresentacaoComposicao,
   mesReferenciaComposicao,
 } from '../utils/apresentacaoComposicao'
+import {
+  fetchApresentacaoTopContratos,
+  mesReferenciaTopContratos,
+} from '../utils/apresentacaoTopContratos'
 import { fetchApresentacaoBigNumber } from '../utils/apresentacaoBigNumber'
 import { fetchApresentacaoControladoria } from '../utils/apresentacaoControladoria'
 import { buildApresentacaoIniciativas } from '../utils/apresentacaoIniciativas'
 import { buildApresentacaoMarketing } from '../utils/apresentacaoMarketing'
 import { buildApresentacaoFinanceiroOps } from '../utils/apresentacaoFinanceiroOps'
 import { fetchApresentacaoLideranca } from '../utils/apresentacaoLideranca'
+import { buildApresentacaoBonus } from '../utils/apresentacaoBonus'
 import { instagramService } from '@/features/operacoes-legais/marketing/instagramService'
 import { cobrancaService } from '@/features/cobranca/services/cobrancaService'
 import type { MesFiltroEficiencia } from '../constants'
@@ -58,6 +63,8 @@ export function useApresentacaoMatrix(
   iniciativasMesFiltro: MesFiltroEficiencia = null,
   marketingMesFiltro: MesFiltroEficiencia = null,
   financeiroOpsMesFiltro: MesFiltroEficiencia = null,
+  bonusMesInicio = 6,
+  bonusMesFim = 12,
 ) {
   const queries = useQueries({
     queries: APRESENTACAO_COLUNAS.map((col) => {
@@ -88,6 +95,14 @@ export function useApresentacaoMatrix(
       return fetchApresentacaoComposicao(ano, mesComposicao, rows)
     },
     enabled: enabled && !!financeiroQuery.data?.rows,
+    staleTime: 60_000,
+  })
+
+  const mesTopContratos = mesReferenciaTopContratos(ano, mesFiltro)
+  const topContratosQuery = useQuery({
+    queryKey: ['eficiencia', 'apresentacao-top-contratos', ano, mesTopContratos] as const,
+    queryFn: () => fetchApresentacaoTopContratos(ano, mesTopContratos, 5),
+    enabled,
     staleTime: 60_000,
   })
 
@@ -278,6 +293,17 @@ export function useApresentacaoMatrix(
   const metaDev = metaDesenvolvimentoApresentacao(consolidado)
   const financeiro = financeiroQuery.data
 
+  const bonus =
+    consolidado != null || financeiro != null
+      ? buildApresentacaoBonus(
+          consolidado,
+          financeiro,
+          ano,
+          bonusMesInicio,
+          bonusMesFim,
+        )
+      : null
+
   const rows: ApresentacaoMatrixRow[] = APRESENTACAO_KPIS.map((kpi) => {
     const metaLabel =
       kpi.id === 'desenvolvimento' ? metaDev : kpi.metaLabel
@@ -310,12 +336,14 @@ export function useApresentacaoMatrix(
     colunas: APRESENTACAO_COLUNAS,
     composicao: composicaoQuery.data ?? null,
     receitaRows: financeiroQuery.data?.rows ?? null,
+    topContratos: topContratosQuery.data ?? [],
     bigNumber: bigNumberQuery.data ?? null,
     controladoria: controladoriaQuery.data ?? null,
     lideranca: liderancaQuery.data ?? null,
     iniciativas,
     marketing,
     financeiroOps,
+    bonus,
     loading,
     loadingMatrix,
     loadingComposicao,

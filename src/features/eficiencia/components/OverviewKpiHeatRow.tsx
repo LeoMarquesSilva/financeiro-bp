@@ -12,7 +12,6 @@ import { toPriMaiuscula } from '../utils/textFormat'
 const COL_TITLE_WIDTH = 150
 const COL_MES_WIDTH = 60
 const COL_ACUM_WIDTH = 64
-const TABLE_MIN_WIDTH = COL_TITLE_WIDTH + MESES_EFICIENCIA.length * COL_MES_WIDTH + COL_ACUM_WIDTH
 export const OVERVIEW_RACIONAL_SLOT_WIDTH = 100
 const RACIONAL_SLOT_CLASS = 'flex w-[100px] shrink-0 self-center'
 
@@ -54,12 +53,12 @@ export type HeatCell = {
 
 type Props = {
   title: string
-  /** 12 células, Janeiro a Dezembro (ignorado quando `modoAnual`). */
+  /** Células mensais (12 Jan–Dez, ou N colunas quando `monthLabels` é informado). */
   cells: HeatCell[]
   acumulado: HeatCell
   /** Meta fixa na mesma escala de HeatCell.value (fallback quando metasPorMes não informado). */
   meta: number
-  /** Meta por mês (Jan–Dez) para colorir células — ex.: SLA Protocolo com Meta D-1 vigente. */
+  /** Meta por mês (alinhada a `cells`) para colorir células — ex.: SLA Protocolo com Meta D-1 vigente. */
   metasPorMes?: (number | null)[]
   /** Meta usada na coluna Acum.; padrão = meta fixa ou mínima de metasPorMes. */
   metaAcumulado?: number
@@ -67,7 +66,7 @@ type Props = {
   metaLabel?: string
   /** `maximo` = menor valor atinge a meta (ex.: inadimplência). Default `minimo`. */
   metaComparacao?: MetaComparacaoKpi
-  /** Meses (1–12) em destaque no filtro; null/[] = nenhum. */
+  /** Meses (1–12) em destaque no filtro; null/[] = nenhum. Ignorado com `monthLabels`. */
   mesDestaque?: number | number[] | null
   /**
    * Indicador anual (ex.: Retenção): uma coluna do ano + Acum., sem Jan–Dez.
@@ -76,6 +75,25 @@ type Props = {
   modoAnual?: boolean
   /** Rótulo da coluna anual (ex.: "2026"). */
   anoLabel?: string
+  /**
+   * Cabeçalhos customizados (ex.: Jan/25, Fev/25). Quando informado, `cells` deve ter
+   * o mesmo length — usado no Jurídico Unificado multi-ano.
+   */
+  monthLabels?: readonly string[]
+  /**
+   * Quando informado, cada célula do body ocupa N colunas do cabeçalho (ex.: Retenção
+   * anual fundindo os meses de cada ano no intervalo). `cells.length` = grupos;
+   * soma dos spans = `monthLabels.length` (ou 12).
+   * Preferir `yearBands` no export PPT — `colspan` desalinha no html2canvas.
+   */
+  cellColSpans?: number[]
+  /**
+   * Faixa contínua por ano (1 `<td>` por mês, sem colspan). Visual de pílula alinhada
+   * ao cabeçalho — seguro no preview e na cola PPT.
+   */
+  yearBands?: boolean
+  /** Quando false, omite a coluna Acum. (ex.: Jurídico Unificado). Default true. */
+  showAcumulado?: boolean
   /** Quando informado, mostra o botão "Racional" que abre o detalhamento das linhas do indicador. */
   onRacionalClick?: () => void
 }
@@ -113,6 +131,48 @@ const thBase: CSSProperties = {
   width: COL_MES_WIDTH,
 }
 
+function yearSuffixFromLabel(label: string): string | null {
+  const m = label.match(/\/(\d{2})$/)
+  return m?.[1] ?? null
+}
+
+function isYearBreakAt(labels: readonly string[], index: number): boolean {
+  if (index <= 0 || !labels[index] || !labels[index - 1]) return false
+  const prev = yearSuffixFromLabel(labels[index - 1]!)
+  const cur = yearSuffixFromLabel(labels[index]!)
+  return prev != null && cur != null && prev !== cur
+}
+
+/** Separação suave entre anos (ex.: Dez/25 | Jan/26). */
+const YEAR_GAP: CSSProperties = {
+  borderLeft: '3px solid #FFFFFF',
+}
+
+type YearBandRole = 'alone' | 'start' | 'middle' | 'end'
+
+function yearBandRole(labels: readonly string[], index: number): YearBandRole {
+  const atStart = index === 0 || isYearBreakAt(labels, index)
+  const atEnd =
+    index === labels.length - 1 || isYearBreakAt(labels, index + 1)
+  if (atStart && atEnd) return 'alone'
+  if (atStart) return 'start'
+  if (atEnd) return 'end'
+  return 'middle'
+}
+
+function yearBandCellPad(role: YearBandRole, yearBreak: boolean): string {
+  const left = yearBreak ? 6 : role === 'start' || role === 'alone' ? 2 : 0
+  const right = role === 'end' || role === 'alone' ? 2 : 0
+  return `2px ${right}px 2px ${left}px`
+}
+
+function yearBandRadius(role: YearBandRole): string {
+  if (role === 'alone') return '6px'
+  if (role === 'start') return '6px 0 0 6px'
+  if (role === 'end') return '0 6px 6px 0'
+  return '0'
+}
+
 /** Réplica visual da tabela KPI_HTML_*_MENSAL do BI: título + 12 meses coloridos por meta + coluna Acum. */
 export function OverviewKpiHeatCard({
   title,
@@ -126,6 +186,10 @@ export function OverviewKpiHeatCard({
   mesDestaque = null,
   modoAnual = false,
   anoLabel,
+  monthLabels,
+  cellColSpans,
+  yearBands = false,
+  showAcumulado = true,
 }: OverviewKpiHeatCardProps) {
   const metasDefinidas = (metasPorMes ?? []).filter((m): m is number => m != null)
   const metaFallbackAcum =
@@ -134,9 +198,13 @@ export function OverviewKpiHeatCard({
   const metaTexto = resolveMetaTexto(meta, metaLabel, metasPorMes)
 
   const metaForCell = (index: number) => metasPorMes?.[index] ?? meta
-  const destaque = mesesDestaqueSet(mesDestaque)
-  /** Mesma largura total das linhas mensais: título | faixa dos 12 meses | Acum. */
-  const colAnoWidth = MESES_EFICIENCIA.length * COL_MES_WIDTH
+  const destaque = monthLabels ? null : mesesDestaqueSet(mesDestaque)
+  const labels = monthLabels ?? MESES_EFICIENCIA
+  const colAnoWidth = labels.length * COL_MES_WIDTH
+  const tableMinWidth =
+    COL_TITLE_WIDTH +
+    labels.length * COL_MES_WIDTH +
+    (showAcumulado ? COL_ACUM_WIDTH : 0)
 
   return (
     <div
@@ -153,15 +221,22 @@ export function OverviewKpiHeatCard({
       }}
     >
       <div className="overflow-x-auto">
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: TABLE_MIN_WIDTH }}>
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            tableLayout: 'fixed',
+            minWidth: tableMinWidth,
+          }}
+        >
           <colgroup>
             <col style={{ width: COL_TITLE_WIDTH }} />
             {modoAnual ? (
               <col style={{ width: colAnoWidth }} />
             ) : (
-              MESES_EFICIENCIA.map((m) => <col key={m} style={{ width: COL_MES_WIDTH }} />)
+              labels.map((m) => <col key={m} style={{ width: COL_MES_WIDTH }} />)
             )}
-            <col style={{ width: COL_ACUM_WIDTH }} />
+            {showAcumulado ? <col style={{ width: COL_ACUM_WIDTH }} /> : null}
           </colgroup>
           <thead>
             <tr>
@@ -191,14 +266,17 @@ export function OverviewKpiHeatCard({
                   {anoLabel ?? 'Ano'}
                 </th>
               ) : (
-                MESES_EFICIENCIA.map((m, i) => {
+                labels.map((m, i) => {
                   const destacado = destaque?.has(i + 1) ?? false
+                  const yearBreak = Boolean(monthLabels) && isYearBreakAt(labels, i)
                   return (
                     <th
-                      key={m}
+                      key={`${m}-${i}`}
                       style={{
                         ...thBase,
                         width: undefined,
+                        fontSize: monthLabels ? 10 : 12,
+                        ...(yearBreak ? YEAR_GAP : null),
                         ...(destacado
                           ? { color: '#0F172A', borderBottom: '2px solid #0F172A', fontWeight: 700 }
                           : destaque != null
@@ -211,18 +289,20 @@ export function OverviewKpiHeatCard({
                   )
                 })
               )}
-              <th
-                style={{
-                  padding: 4,
-                  textAlign: 'center',
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: '#1F2937',
-                  borderBottom: '2px solid #E5E7EB',
-                }}
-              >
-                Acum.
-              </th>
+              {showAcumulado ? (
+                <th
+                  style={{
+                    padding: 4,
+                    textAlign: 'center',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: '#1F2937',
+                    borderBottom: '2px solid #E5E7EB',
+                  }}
+                >
+                  Acum.
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -241,9 +321,101 @@ export function OverviewKpiHeatCard({
                 >
                   {acumulado.value == null ? '-' : acumulado.label}
                 </td>
+              ) : cellColSpans && cellColSpans.length > 0 ? (
+                cells.map((cell, i) => {
+                  const span = Math.max(1, cellColSpans[i] ?? 1)
+                  const st = cellStyle(cell, metaForCell(i), false, metaComparacao)
+                  /** Cartões por ano via colspan — evitar no export PPT (desalinha). */
+                  return (
+                    <td
+                      key={i}
+                      colSpan={span}
+                      style={{
+                        padding: i > 0 ? '2px 2px 2px 6px' : '2px 2px 2px 2px',
+                        textAlign: 'center',
+                        verticalAlign: 'middle',
+                        background: 'transparent',
+                      }}
+                    >
+                      <div
+                        style={{
+                          ...st,
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          borderRadius: 6,
+                          padding: '5px 8px',
+                          border: '1px solid rgba(15,23,42,0.08)',
+                          minHeight: 24,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 11,
+                        }}
+                      >
+                        {cell.value == null ? '-' : cell.label}
+                      </div>
+                    </td>
+                  )
+                })
+              ) : yearBands ? (
+                cells.map((cell, i) => {
+                  const yearBreak = Boolean(monthLabels) && isYearBreakAt(labels, i)
+                  const role = yearBandRole(labels, i)
+                  const st = cellStyle(cell, metaForCell(i), false, metaComparacao)
+                  const showText =
+                    cell.value == null
+                      ? '-'
+                      : cell.label.trim() === ''
+                        ? '\u00A0'
+                        : cell.label
+                  return (
+                    <td
+                      key={i}
+                      style={{
+                        padding: yearBandCellPad(role, yearBreak),
+                        textAlign: 'center',
+                        verticalAlign: 'middle',
+                        background: 'transparent',
+                        ...(yearBreak ? YEAR_GAP : null),
+                      }}
+                    >
+                      <div
+                        data-year-band-pill
+                        data-year-band-group={yearSuffixFromLabel(labels[i]!) ?? `i${i}`}
+                        data-band-bg={String(st.background ?? '#FEE2E2')}
+                        data-band-fg={String(st.color ?? '#DC2626')}
+                        style={{
+                          ...st,
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          borderRadius: yearBandRadius(role),
+                          padding: '5px 4px',
+                          borderTop: '1px solid rgba(15,23,42,0.08)',
+                          borderBottom: '1px solid rgba(15,23,42,0.08)',
+                          borderLeft:
+                            role === 'start' || role === 'alone'
+                              ? '1px solid rgba(15,23,42,0.08)'
+                              : 'none',
+                          borderRight:
+                            role === 'end' || role === 'alone'
+                              ? '1px solid rgba(15,23,42,0.08)'
+                              : 'none',
+                          minHeight: 24,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 11,
+                        }}
+                      >
+                        {showText}
+                      </div>
+                    </td>
+                  )
+                })
               ) : (
                 cells.map((cell, i) => {
                   const destacado = destaque?.has(i + 1) ?? false
+                  const yearBreak = Boolean(monthLabels) && isYearBreakAt(labels, i)
                   return (
                     <td
                       key={i}
@@ -252,6 +424,7 @@ export function OverviewKpiHeatCard({
                         textAlign: 'center',
                         fontSize: 11,
                         ...cellStyle(cell, metaForCell(i), destacado, metaComparacao),
+                        ...(yearBreak ? YEAR_GAP : null),
                         ...(destaque != null && !destacado ? { opacity: 0.4 } : null),
                         ...(destacado ? { outline: '2px solid #0F172A', outlineOffset: -2 } : null),
                       }}
@@ -261,17 +434,19 @@ export function OverviewKpiHeatCard({
                   )
                 })
               )}
-              <td
-                style={{
-                  padding: 4,
-                  textAlign: 'center',
-                  fontSize: 11,
-                  borderLeft: '2px solid #E5E7EB',
-                  ...cellStyle(acumulado, metaFallbackAcum, true, metaComparacao),
-                }}
-              >
-                {acumulado.value == null ? '-' : acumulado.label}
-              </td>
+              {showAcumulado ? (
+                <td
+                  style={{
+                    padding: 4,
+                    textAlign: 'center',
+                    fontSize: 11,
+                    borderLeft: '2px solid #E5E7EB',
+                    ...cellStyle(acumulado, metaFallbackAcum, true, metaComparacao),
+                  }}
+                >
+                  {acumulado.value == null ? '-' : acumulado.label}
+                </td>
+              ) : null}
             </tr>
           </tbody>
         </table>
