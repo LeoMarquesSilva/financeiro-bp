@@ -1,4 +1,4 @@
-import { AlertTriangle, Target } from 'lucide-react'
+import { AlertTriangle, Target, Wallet } from 'lucide-react'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { RECEITA_COLORS, RECEITA_META_INADIMPLENCIA_PCT } from '../constants'
@@ -34,6 +34,7 @@ type KPIProgressProps =
       mode: 'higher-is-better'
       pct: number
       barClassName?: string
+      label?: string
     }
   | {
       mode: 'lower-is-better'
@@ -61,7 +62,7 @@ function KPIProgressBar({ progress }: { progress: KPIProgressProps }) {
     return (
       <div className="mt-2.5">
         <div className="mb-1 flex items-center justify-between gap-2 text-[10px]">
-          <span className="text-slate-500">Atingimento</span>
+          <span className="text-slate-500">{progress.label ?? 'Atingimento'}</span>
           <span className="font-semibold tabular-nums text-slate-800">{formatPercent(pct)}</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -210,7 +211,7 @@ export function ReceitaGestaoAVistaKpis({
   if (loading || !resumo) {
     return (
       <div className={gridClassName}>
-        {[1, 2].map((i) => (
+        {[1, 2, 3].map((i) => (
           <KPISkeleton key={i} />
         ))}
       </div>
@@ -249,6 +250,24 @@ export function ReceitaGestaoAVistaKpis({
         ? 'text-amber-600'
         : RECEITA_COLORS.inadimplencia.textStrong
 
+  const pctPrevisto =
+    resumo.previstoAcumulado > 0
+      ? Math.round((resumo.recebidoAcumulado / resumo.previstoAcumulado) * 10000) / 100
+      : 0
+  const gapPrevisto = resumo.previstoAcumulado - resumo.recebidoAcumulado
+  const previstoSecondaryLine =
+    gapPrevisto > 0.01
+      ? `Previsto ${formatCurrency(resumo.previstoAcumulado)} · faltam ${formatCurrency(gapPrevisto)}`
+      : gapPrevisto < -0.01
+        ? `Previsto ${formatCurrency(resumo.previstoAcumulado)} · ${formatCurrency(-gapPrevisto)} acima`
+        : `Previsto ${formatCurrency(resumo.previstoAcumulado)} · batido`
+  const previstoProgressBarClassName =
+    pctPrevisto >= 100
+      ? 'bg-emerald-600'
+      : pctPrevisto >= 80
+        ? 'bg-sky-600'
+        : 'bg-violet-500'
+
   return (
     <div className={gridClassName}>
       <KPIItem
@@ -267,10 +286,26 @@ export function ReceitaGestaoAVistaKpis({
         compact
       />
       <KPIItem
+        icon={Wallet}
+        label={`Recebido · previsto · ${resumo.periodoMetaAnualLabel}${areaLabel ? ` (${areaLabel})` : ''}`}
+        value={formatCurrency(resumo.recebidoAcumulado)}
+        valueTitle={`${formatCurrency(resumo.recebidoAcumulado)} recebido · previsto ${formatCurrency(resumo.previstoAcumulado)} (${resumo.periodoMetaLabel})`}
+        secondaryLine={previstoSecondaryLine}
+        progress={{
+          mode: 'higher-is-better',
+          pct: pctPrevisto,
+          barClassName: previstoProgressBarClassName,
+          label: 'Batimento',
+        }}
+        iconColor="bg-violet-50 text-violet-700"
+        valueColor={RECEITA_COLORS.recebido.textStrong}
+        compact
+      />
+      <KPIItem
         icon={AlertTriangle}
-        label={`Inad. vencida · ${resumo.periodoAnualLabel}${areaLabel ? ` (${areaLabel})` : ''}`}
+        label={`Inad. vencida · ${resumo.periodoMetaAnualLabel}${areaLabel ? ` (${areaLabel})` : ''}`}
         value={formatCurrency(resumo.inadimplenciaVencidoAno)}
-        valueTitle={`${formatCurrency(resumo.inadimplenciaVencidoAno)} · ${formatPercent(pctInad)} do previsto (${resumo.periodoAnoLabel})`}
+        valueTitle={`${formatCurrency(resumo.inadimplenciaVencidoAno)} · ${formatPercent(pctInad)} do previsto (${resumo.periodoMetaLabel})`}
         secondaryLine={inadSecondaryLine}
         progress={{
           mode: 'lower-is-better',

@@ -614,6 +614,10 @@ function shouldFitContentExport(source: HTMLElement): boolean {
   return source.hasAttribute('data-chart-export-fit-content')
 }
 
+function shouldFullScrollExport(source: HTMLElement): boolean {
+  return source.hasAttribute('data-chart-export-full-scroll')
+}
+
 function shouldInlineRowCardExport(source: HTMLElement): boolean {
   return source.hasAttribute('data-chart-export-inline-row')
 }
@@ -622,6 +626,7 @@ function shouldPrintSnapshotExport(source: HTMLElement): boolean {
   if (!source.hasAttribute('data-chart-export-preserve-bg')) return false
   if (shouldExpandExportWidth(source)) return false
   if (shouldFitContentExport(source)) return false
+  if (shouldFullScrollExport(source)) return false
   return true
 }
 
@@ -676,8 +681,8 @@ function applyPrintFlexRowFix(root: HTMLElement, source: HTMLElement): void {
 function preparePrintSnapshotElement(source: HTMLElement, options?: HtmlExportOptions): HTMLElement {
   const { preserveBackground } = resolveHtmlExportOptions(source, options)
   const clone = source.cloneNode(true) as HTMLElement
-  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
   inlineNodeStyles(source, clone)
+  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
 
   const sourceStyle = window.getComputedStyle(source)
   const rect = source.getBoundingClientRect()
@@ -715,6 +720,240 @@ function preparePrintSnapshotElement(source: HTMLElement, options?: HtmlExportOp
   const display = sourceStyle.display
   if (display === 'flex' || display === 'inline-flex') {
     applyPrintFlexRowFix(clone, source)
+  }
+  applyNestedFlexExportFix(clone, source, {
+    skipRoot: display === 'flex' || display === 'inline-flex',
+  })
+
+  return clone
+}
+
+function exportChildElements(el: HTMLElement, skipIgnore: boolean): HTMLElement[] {
+  return Array.from(el.children).filter((child): child is HTMLElement => {
+    if (!(child instanceof HTMLElement)) return false
+    if (skipIgnore && child.hasAttribute('data-chart-export-ignore')) return false
+    return true
+  })
+}
+
+function isFlexRow(style: CSSStyleDeclaration): boolean {
+  if (style.display !== 'flex' && style.display !== 'inline-flex') return false
+  return style.flexDirection === 'row' || style.flexDirection === 'row-reverse'
+}
+
+function isFlexColumn(style: CSSStyleDeclaration): boolean {
+  if (style.display !== 'flex' && style.display !== 'inline-flex') return false
+  return style.flexDirection === 'column' || style.flexDirection === 'column-reverse'
+}
+
+function shouldSkipFlexExportFix(sourceEl: HTMLElement): boolean {
+  if (isFixedSizeIcon(sourceEl)) return true
+  const rect = sourceEl.getBoundingClientRect()
+  if (rect.width <= 48 && rect.height <= 48 && sourceEl.querySelector('svg') != null) {
+    return true
+  }
+  return false
+}
+
+/** Texto solto + badge no mesmo flex vira célula anônima no table — isola o texto. */
+function wrapLooseTextNodes(el: HTMLElement): void {
+  Array.from(el.childNodes).forEach((node) => {
+    if (node.nodeType !== Node.TEXT_NODE) return
+    const text = node.textContent ?? ''
+    if (!text.trim()) return
+    const span = document.createElement('span')
+    span.textContent = text
+    el.replaceChild(span, node)
+  })
+}
+
+function applyFlexColumnToBlock(cloneEl: HTMLElement): void {
+  cloneEl.style.setProperty('display', 'block', 'important')
+  cloneEl.style.setProperty('height', 'auto', 'important')
+  cloneEl.style.setProperty('min-height', '0', 'important')
+  cloneEl.style.setProperty('max-height', 'none', 'important')
+
+  exportChildElements(cloneEl, false).forEach((child) => {
+    child.style.setProperty('flex', 'none', 'important')
+    child.style.setProperty('height', 'auto', 'important')
+    child.style.setProperty('max-height', 'none', 'important')
+    child.style.setProperty('width', '100%', 'important')
+    child.style.setProperty('max-width', '100%', 'important')
+  })
+}
+
+function applyFlexRowToTable(cloneEl: HTMLElement, sourceStyle: CSSStyleDeclaration): void {
+  wrapLooseTextNodes(cloneEl)
+
+  const gap = parseFloat(sourceStyle.columnGap || sourceStyle.gap) || 0
+  const justify = sourceStyle.justifyContent
+  const align = sourceStyle.alignItems
+
+  cloneEl.style.setProperty('display', 'table', 'important')
+  cloneEl.style.setProperty('width', '100%', 'important')
+  cloneEl.style.setProperty('max-width', '100%', 'important')
+  cloneEl.style.setProperty('height', 'auto', 'important')
+  cloneEl.style.setProperty('table-layout', 'auto', 'important')
+  cloneEl.style.setProperty('border-collapse', 'separate', 'important')
+  cloneEl.style.setProperty('border-spacing', `${gap}px 0`, 'important')
+  cloneEl.style.setProperty('white-space', 'normal', 'important')
+
+  const verticalAlign =
+    align === 'flex-start' || align === 'start'
+      ? 'top'
+      : align === 'flex-end' || align === 'end'
+        ? 'bottom'
+        : 'middle'
+
+  const cloneChildren = exportChildElements(cloneEl, false)
+  cloneChildren.forEach((child, index) => {
+    const isLast = index === cloneChildren.length - 1
+    const isFirst = index === 0
+
+    child.style.setProperty('display', 'table-cell', 'important')
+    child.style.setProperty('vertical-align', verticalAlign, 'important')
+
+    if (justify === 'space-between' || justify === 'space-around' || justify === 'space-evenly') {
+      if (isLast && !isFirst) {
+        child.style.setProperty('text-align', 'right', 'important')
+        child.style.setProperty('width', '1%', 'important')
+        child.style.setProperty('white-space', 'nowrap', 'important')
+      } else {
+        child.style.setProperty('text-align', 'left', 'important')
+      }
+    } else if (justify === 'center') {
+      child.style.setProperty('text-align', 'center', 'important')
+    } else if (justify === 'flex-end' || justify === 'end') {
+      child.style.setProperty('text-align', 'right', 'important')
+    }
+
+    if (child.classList.contains('shrink-0') || child.classList.contains('tabular-nums')) {
+      child.style.setProperty('white-space', 'nowrap', 'important')
+    }
+  })
+}
+
+/**
+ * foreignObject/SVG não calcula flex — linhas (rótulo + valor, badge) se sobrepõem.
+ * Converte coluna → block e linha → table, medindo a árvore original.
+ */
+function applyNestedFlexExportFix(
+  clone: HTMLElement,
+  source: HTMLElement,
+  options?: { skipRoot?: boolean },
+): void {
+  const skipRoot = options?.skipRoot ?? false
+
+  const walk = (cloneEl: HTMLElement, sourceEl: HTMLElement, isRoot: boolean) => {
+    if (!(isRoot && skipRoot) && !shouldSkipFlexExportFix(sourceEl)) {
+      const style = window.getComputedStyle(sourceEl)
+      if (isFlexColumn(style)) {
+        applyFlexColumnToBlock(cloneEl)
+      } else if (isFlexRow(style)) {
+        applyFlexRowToTable(cloneEl, style)
+      }
+    }
+
+    const sourceChildren = exportChildElements(sourceEl, true)
+    const cloneChildren = exportChildElements(cloneEl, false)
+    const offset = Math.max(0, cloneChildren.length - sourceChildren.length)
+    const count = Math.min(sourceChildren.length, cloneChildren.length)
+    for (let i = 0; i < count; i++) {
+      walk(cloneChildren[i + offset], sourceChildren[i], false)
+    }
+  }
+
+  walk(clone, source, true)
+}
+
+/** Painéis com scroll interno — largura fixa da tela, altura = conteúdo completo (sem fit-content reset). */
+function applyFullScrollExportLayout(root: HTMLElement, fixedWidth: number): void {
+  root.style.setProperty('width', `${fixedWidth}px`, 'important')
+  root.style.setProperty('min-width', `${fixedWidth}px`, 'important')
+  root.style.setProperty('max-width', `${fixedWidth}px`, 'important')
+  root.style.setProperty('height', 'auto', 'important')
+  root.style.setProperty('min-height', '0', 'important')
+  root.style.setProperty('max-height', 'none', 'important')
+  root.style.setProperty('overflow', 'visible', 'important')
+  root.style.setProperty('flex', 'none', 'important')
+  root.style.setProperty('align-items', 'stretch', 'important')
+
+  root.querySelectorAll<HTMLElement>('.overflow-y-auto, .overflow-x-auto, .overflow-hidden').forEach(
+    (el) => {
+      el.style.setProperty('overflow', 'visible', 'important')
+      el.style.setProperty('max-height', 'none', 'important')
+      el.style.setProperty('min-height', '0', 'important')
+      el.style.setProperty('height', 'auto', 'important')
+      el.style.setProperty('flex', 'none', 'important')
+    },
+  )
+
+  root.querySelectorAll<HTMLElement>('[class*="grid"]').forEach((el) => {
+    const display = window.getComputedStyle(el).display
+    if (display === 'grid') {
+      el.style.setProperty('display', 'grid', 'important')
+    }
+  })
+}
+
+function measureFullScrollHeight(prepared: HTMLElement): number {
+  prepared.style.position = 'absolute'
+  prepared.style.left = '-9999px'
+  prepared.style.top = '0'
+  prepared.style.visibility = 'hidden'
+  prepared.style.height = 'auto'
+  prepared.style.maxHeight = 'none'
+  prepared.style.overflow = 'visible'
+
+  document.body.appendChild(prepared)
+  const height = Math.ceil(prepared.scrollHeight)
+  document.body.removeChild(prepared)
+
+  prepared.style.position = 'static'
+  prepared.style.left = 'auto'
+  prepared.style.visibility = 'visible'
+
+  return Math.max(1, height)
+}
+
+function prepareFullScrollExportElement(source: HTMLElement, options?: HtmlExportOptions): HTMLElement {
+  const { preserveBackground } = resolveHtmlExportOptions(source, options)
+  const clone = source.cloneNode(true) as HTMLElement
+  inlineNodeStyles(source, clone)
+  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
+
+  const sourceStyle = window.getComputedStyle(source)
+  const fixedWidth = Math.max(1, Math.ceil(source.getBoundingClientRect().width))
+
+  if (preserveBackground) {
+    const explicitBg = source.getAttribute('data-chart-export-bg')
+    const bg =
+      explicitBg ||
+      source.style.backgroundColor ||
+      sourceStyle.backgroundColor ||
+      sourceStyle.background
+    if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+      clone.style.setProperty('background', bg, 'important')
+    }
+    clone.style.setProperty('border', sourceStyle.border, 'important')
+    clone.style.setProperty('border-radius', sourceStyle.borderRadius, 'important')
+    clone.style.setProperty('box-shadow', sourceStyle.boxShadow, 'important')
+  }
+
+  clone.style.setProperty('margin', '0', 'important')
+  clone.style.setProperty('padding', sourceStyle.padding, 'important')
+  clone.style.setProperty('box-sizing', 'border-box', 'important')
+  clone.style.setProperty('position', 'static', 'important')
+  clone.style.setProperty('outline', 'none', 'important')
+
+  applyFullScrollExportLayout(clone, fixedWidth)
+  applyNestedFlexExportFix(clone, source)
+
+  clone.querySelectorAll<HTMLElement>('[data-chart-export-trim="copy-padding"]').forEach((el) => {
+    el.style.setProperty('padding-right', '1.25rem', 'important')
+  })
+  if (clone.hasAttribute('data-chart-export-trim')) {
+    clone.style.setProperty('padding-right', '1.25rem', 'important')
   }
 
   return clone
@@ -1101,8 +1340,8 @@ function measurePreparedElement(
 function prepareHtmlExportElement(source: HTMLElement, options?: HtmlExportOptions): HTMLElement {
   const { preserveBackground } = resolveHtmlExportOptions(source, options)
   const clone = source.cloneNode(true) as HTMLElement
-  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
   inlineNodeStyles(source, clone)
+  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
 
   if (preserveBackground) {
     const sourceStyle = window.getComputedStyle(source)
@@ -1132,6 +1371,9 @@ function prepareHtmlExportElement(source: HTMLElement, options?: HtmlExportOptio
       shouldExpandExportWidth(source),
       shouldFitContentExport(source),
     )
+    if (!shouldFitContentExport(source) && !shouldInlineRowCardExport(source)) {
+      applyNestedFlexExportFix(clone, source)
+    }
   } else {
     applyExportHtmlColors(clone, preserveBackground)
     applyExportLayoutFixes(clone)
@@ -1162,6 +1404,21 @@ async function htmlElementToPngBlob(
 ): Promise<Blob> {
   const { preserveBackground } = resolveHtmlExportOptions(element, options)
   const printSnapshot = shouldPrintSnapshotExport(element)
+  const fullScroll = shouldFullScrollExport(element)
+
+  if (fullScroll) {
+    const prepared = prepareFullScrollExportElement(element, options)
+    const width = Math.max(1, Math.ceil(element.getBoundingClientRect().width))
+    const height = measureFullScrollHeight(prepared.cloneNode(true) as HTMLElement)
+    if (width === 0 || height === 0) {
+      throw new Error('Conteúdo ainda não renderizado')
+    }
+    prepared.style.setProperty('height', `${height}px`, 'important')
+    prepared.style.setProperty('min-height', `${height}px`, 'important')
+    prepared.style.setProperty('max-height', `${height}px`, 'important')
+    prepared.style.setProperty('overflow', 'hidden', 'important')
+    return renderPreparedElementToPngBlob(prepared, width, height, scale)
+  }
 
   if (printSnapshot) {
     const prepared = preparePrintSnapshotElement(element, options)
@@ -1781,8 +2038,8 @@ export async function copyElementImageToClipboard(
  */
 function prepareApresentacaoExportElement(source: HTMLElement): HTMLElement {
   const clone = source.cloneNode(true) as HTMLElement
-  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
   inlineNodeStyles(source, clone)
+  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
 
   const sourceStyle = window.getComputedStyle(source)
   const sourceWidth = Math.max(1, Math.ceil(source.getBoundingClientRect().width))

@@ -6,6 +6,7 @@ import {
   MESES_EFICIENCIA_ARQUIVO,
 } from '../constants'
 import type { IndicadoresResultadoMes } from '../types/indicadoresResultado.types'
+import { buildIndicadoresOperacionaisRows } from './indicadoresOperacionaisHtml'
 import type {
   GestaoPdiDetalheRow,
   RacionalColuna,
@@ -539,97 +540,12 @@ function writeResultadoSheet(wb: ExcelJS.Workbook, data: IndicadoresResultadoMes
 
   styleHeaderRow(ws, 4, ['Indicador', 'Resultado', 'Detalhe'])
 
-  const r = data.slaProtocolo.resumo
-  const e = data.eficienciaProtocolo.resumo
-  const kpis: Array<[string, string, string, string?]> = []
-
-  if (r?.qtd_d1 != null && r.qtd_fatal != null) {
-    const den = r.qtd_d1 + r.qtd_fatal
-    const pctD1 = den > 0 ? `${((r.qtd_d1 / den) * 100).toFixed(2).replace('.', ',')}%` : '—'
-    kpis.push([
-      'SLA Protocolo (D-1)',
-      pctD1,
-      `${r.qtd_d1} D-1 · ${r.qtd_fatal} FATAL · ${r.qtd_excludente ?? 0} excludentes`,
-      den > 0 && r.qtd_d1 / den >= 0.9 ? GREEN_SOFT : RED_SOFT,
-    ])
-  }
-  if (e?.qtd_eficiencia != null && e.qtd_inconsistencia != null) {
-    const den = e.qtd_eficiencia + e.qtd_inconsistencia
-    const pctOk = den > 0 ? `${((e.qtd_eficiencia / den) * 100).toFixed(2).replace('.', ',')}%` : '—'
-    kpis.push([
-      'Eficiência Protocolo',
-      pctOk,
-      `${e.qtd_eficiencia} eficiência · ${e.qtd_inconsistencia} inconsistência`,
-      den > 0 && e.qtd_eficiencia / den >= 0.95 ? GREEN_SOFT : RED_SOFT,
-    ])
-  }
-
-  let dentro = 0
-  let fora = 0
-  for (const row of data.agendamento.linhas) {
-    if (String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')) fora += 1
-    else dentro += 1
-  }
-  const denAg = dentro + fora
-  kpis.push([
-    'SLA Ciência Agendamentos',
-    denAg ? `${((dentro / denAg) * 100).toFixed(2).replace('.', ',')}%` : '—',
-    `${dentro} dentro · ${fora} fora`,
-    denAg && dentro / denAg >= 0.95 ? GREEN_SOFT : RED_SOFT,
-  ])
-
-  const vr = vistagemCounts(data.vistagemRisco.resumo, data.vistagemRisco.linhas)
-  const vn = vistagemCounts(data.vistagemNormal.resumo, data.vistagemNormal.linhas)
-  const denVr = vr.sim + vr.nao
-  const denVn = vn.sim + vn.nao
-  kpis.push([
-    'SLA Vistagem Risco',
-    denVr ? `${((vr.sim / denVr) * 100).toFixed(2).replace('.', ',')}%` : '—',
-    `${vr.sim} Sim · ${vr.nao} Não`,
-    denVr && vr.sim / denVr >= 0.98 ? GREEN_SOFT : RED_SOFT,
-  ])
-  kpis.push([
-    'SLA Vistagem Normal',
-    denVn ? `${((vn.sim / denVn) * 100).toFixed(2).replace('.', ',')}%` : '—',
-    `${vn.sim} Sim · ${vn.nao} Não`,
-    denVn && vn.sim / denVn >= 0.98 ? GREEN_SOFT : RED_SOFT,
-  ])
-  kpis.push([
-    'Desenvolvimento Equipe',
-    `${data.desenvolvimento.linhas.length} lançamentos`,
-    'Ver aba DESENVOLVIMENTO DE EQUIPE',
-    BRAND_SOFT,
-  ])
-
-  const gp = data.gestaoPdiMensal
-  const gpPct =
-    gp?.pct_aptas != null
-      ? `${gp.pct_aptas.toFixed(2).replace('.', ',')}%`
-      : gp && gp.elegiveis > 0
-        ? formatPercent(Math.round((gp.aptas / gp.elegiveis) * 10000) / 100)
-        : '—'
-  kpis.push([
-    'Gestão de PDI',
-    gpPct,
-    gp
-      ? `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`
-      : 'Ver aba GESTÃO DE PDI',
-    gp && gp.pct_aptas != null && gp.pct_aptas >= 100 ? GREEN_SOFT : gp ? RED_SOFT : BRAND_SOFT,
-  ])
-
-  const rt = data.retencaoAnual
-  const rtPct =
-    rt != null
-      ? `${rt.pct_retencao.toFixed(2).replace('.', ',')}%`
-      : '—'
-  kpis.push([
-    'Retenção de Talentos',
-    rtPct,
-    rt
-      ? `${rt.funcionarios_ativos} ativos · ${rt.saidas_voluntarias} saídas voluntárias`
-      : 'Ver aba RETENÇÃO DE TALENTOS',
-    rt && rt.pct_retencao >= rt.meta_pct_retencao_minima ? GREEN_SOFT : rt ? RED_SOFT : BRAND_SOFT,
-  ])
+  const kpis = buildIndicadoresOperacionaisRows(data).map((r) => [
+    r.indicador,
+    r.resultado,
+    r.detalhe,
+    r.bgColor.replace('#', ''),
+  ] as [string, string, string, string])
 
   kpis.forEach((kpi, i) => {
     const row = 5 + i

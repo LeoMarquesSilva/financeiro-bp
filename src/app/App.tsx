@@ -20,6 +20,26 @@ import { OpexPage } from '@/features/opex/pages/OpexPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
 import { OperacoesLegaisPage } from '@/features/operacoes-legais/pages/OperacoesLegaisPage'
+import {
+  useCaptureRacionalExportFromUrl,
+  useRacionalExportFromUrl,
+} from '@/features/eficiencia/hooks/useRacionalExportFromUrl'
+
+function RacionalExportFromUrlEffect() {
+  const { loading, user } = useAuth()
+  useRacionalExportFromUrl(!loading && Boolean(user))
+  return null
+}
+
+function UnauthenticatedRoutes() {
+  useCaptureRacionalExportFromUrl()
+  return (
+    <Routes>
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="*" element={<Login />} />
+    </Routes>
+  )
+}
 
 function ProtectedRoute({
   routePath,
@@ -62,16 +82,14 @@ function AppRoutes() {
   if (!user || (!role && moduleAccess.length === 0)) {
     return (
       <BrowserRouter>
-        <Routes>
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="*" element={<Login />} />
-        </Routes>
+        <UnauthenticatedRoutes />
       </BrowserRouter>
     )
   }
 
   return (
     <BrowserRouter>
+      <RacionalExportFromUrlEffect />
       <Routes>
         <Route path="/" element={<Navigate to={homePath} replace />} />
         <Route path="/financeiro" element={<FinanceiroLayout />}>

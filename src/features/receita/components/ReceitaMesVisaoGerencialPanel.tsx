@@ -109,7 +109,7 @@ export function ReceitaMesVisaoGerencialPanel({
 
   const inadHeaderConteudo = (options: { interactive?: boolean } = {}) => (
     <>
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         {options.interactive ? (
           <button
             type="button"
@@ -149,7 +149,7 @@ export function ReceitaMesVisaoGerencialPanel({
       <div className="mt-1 flex items-center justify-between gap-2">
         <p className="min-w-0 text-xs font-medium text-red-800">{contextoMesAreas}</p>
         {pctInadPrevisto != null ? (
-          <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-medium tabular-nums text-red-900">
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-medium tabular-nums text-red-900">
             {formatPercent(pctInadPrevisto)} do previsto
           </span>
         ) : null}
@@ -158,9 +158,9 @@ export function ReceitaMesVisaoGerencialPanel({
   )
 
   const inadTotalRodape = (
-    <div className="mt-2 flex items-center justify-between border-t border-red-200/60 pt-2 text-xs font-semibold text-red-900">
-      <span>= Total inad. mês</span>
-      <span className="tabular-nums">{formatCurrency(inadMes)}</span>
+    <div className="mt-2 flex items-center justify-between gap-2 border-t border-red-200/60 pt-2 text-xs font-semibold text-red-900">
+      <span className="whitespace-nowrap">= Total inad. mês</span>
+      <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCurrency(inadMes)}</span>
     </div>
   )
 
@@ -170,9 +170,9 @@ export function ReceitaMesVisaoGerencialPanel({
         ref={composicaoRecebidoRef}
         data-chart-export-preserve-bg
         data-chart-export-bg="#eff6ff"
-        className="rounded-xl border border-sky-200/70 bg-sky-50/40 p-3"
+        className="overflow-hidden rounded-xl border border-sky-200/70 bg-sky-50/40 p-3"
       >
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center justify-between gap-2">
           <h3 className="min-w-0 text-sm font-semibold uppercase tracking-wide text-sky-900">
             Composição do recebido
           </h3>
@@ -187,7 +187,7 @@ export function ReceitaMesVisaoGerencialPanel({
         <div className="mt-1 flex items-center justify-between gap-2">
           <p className="min-w-0 text-xs font-medium text-sky-800">{contextoMesAreas}</p>
           {pctPrevistoCaixa != null ? (
-            <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-medium tabular-nums text-sky-900">
+            <span className="shrink-0 whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-medium tabular-nums text-sky-900">
               {formatPercent(pctPrevistoCaixa)} do previsto (venc. mês)
             </span>
           ) : null}
@@ -261,20 +261,20 @@ export function ReceitaMesVisaoGerencialPanel({
           })}
         </ul>
 
-        <div className="mt-2 flex items-center justify-between border-t border-sky-200/60 pt-2 text-xs font-semibold text-sky-900">
-          <span className="flex items-center gap-1.5">
-            = Total recebido
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-sky-200/60 pt-2 text-xs font-semibold text-sky-900">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="whitespace-nowrap">= Total recebido</span>
             {recebidoFecha ? (
-              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
+              <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
                 fecha
               </span>
             ) : null}
           </span>
-          <span className="tabular-nums">{formatCurrency(totalRecebido)}</span>
+          <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCurrency(totalRecebido)}</span>
         </div>
       </section>
 
-      <section className="rounded-xl border border-red-200/80 bg-red-50/60 p-3">
+      <section className="overflow-hidden rounded-xl border border-red-200/80 bg-red-50/60 p-3">
         {inadHeaderConteudo({ interactive: true })}
         {inadGrupoExpandido ? (
           <div className="mt-3">
@@ -294,6 +294,7 @@ export function ReceitaMesVisaoGerencialPanel({
       <div
         ref={inadExportRef}
         aria-hidden
+        data-chart-export-ignore
         data-chart-export-preserve-bg
         data-chart-export-bg="#fef2f2"
         data-chart-export-fit-content
@@ -313,14 +314,14 @@ export function ReceitaMesVisaoGerencialPanel({
         {inadTotalRodape}
       </div>
 
-      <section className="rounded-xl border border-slate-200/80 bg-slate-50/40">
+      <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50/40">
         <button
           type="button"
           onClick={() => setContabilAberto((v) => !v)}
           className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
           aria-expanded={contabilAberto}
         >
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+          <span className="min-w-0 text-xs font-semibold uppercase leading-normal tracking-wide text-slate-600">
             Validação contábil do previsto
           </span>
           <ChevronDown

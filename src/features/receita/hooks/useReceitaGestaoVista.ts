@@ -20,6 +20,7 @@ import {
   buildGestaoVistaTotalYtd,
   enrichGestaoVistaResumoInadVencidoAno,
   mesInicioMetaGestao,
+  mesesMetaNoPeriodoGestao,
 } from '../utils/receitaGestaoVista'
 
 export type UseReceitaGestaoVistaResult = {
@@ -40,6 +41,10 @@ export function useReceitaGestaoVista(
   const meses = useMemo(() => rows.map((r) => r.mes), [rows])
   const mesMax = mesMaxDisponivelInadimplencia(ano)
   const mesInicioMeta = mesInicioMetaGestao(rows)
+  const mesesInadVencido = useMemo(
+    () => mesesMetaNoPeriodoGestao(rows, ano),
+    [rows, ano],
+  )
   const areaSelecionada = areaKey ? findMetaAreaSlice(metaAreaSlices, areaKey) : null
 
   const {
@@ -111,12 +116,12 @@ export function useReceitaGestaoVista(
     isLoading: inadVencidoLoading,
     error: inadVencidoError,
   } = useQuery({
-    queryKey: ['receita', 'gestao-vista', 'inad-vencido-ano', ano, mesMax, areaKey],
+    queryKey: ['receita', 'gestao-vista', 'inad-vencido-meta', ano, mesesInadVencido, areaKey],
     queryFn: async () => {
-      const mesesAno = Array.from({ length: mesMax }, (_, i) => i + 1)
+      if (mesesInadVencido.length === 0) return { valor: 0, previsto: 0 }
       if (!areaKey) {
         const fechamentos = await Promise.all(
-          mesesAno.map((m) => receitaService.fetchPrevistoFechamentoMes(ano, m)),
+          mesesInadVencido.map((m) => receitaService.fetchPrevistoFechamentoMes(ano, m)),
         )
         return {
           valor: fechamentos.reduce((s, f) => s + f.inadimplencia_kpi, 0),
@@ -124,7 +129,7 @@ export function useReceitaGestaoVista(
         }
       }
       const porMes = await Promise.all(
-        mesesAno.map(async (m) => {
+        mesesInadVencido.map(async (m) => {
           const [prevAll, prevArea] = await Promise.all([
             receitaService.fetchPrevistoMesItens(ano, m),
             receitaService.fetchPrevistoItensPorArea(ano, m, areaKey),
@@ -141,7 +146,7 @@ export function useReceitaGestaoVista(
         previsto: porMes.reduce((s, r) => s + r.previsto, 0),
       }
     },
-    enabled: mesMax > 0,
+    enabled: mesesInadVencido.length > 0,
   })
 
   const mesesCongelados = useMemo(() => {

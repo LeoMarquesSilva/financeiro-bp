@@ -657,11 +657,11 @@ export function ReceitaRecebidoClassificacaoSheet({
       <SheetContent side="right" className="flex w-full max-w-2xl flex-col p-0 sm:max-w-2xl">
         <div
           ref={sheetExportRef}
-          data-chart-export-fit-content
+          data-chart-export-full-scroll
           data-chart-export-preserve-bg
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-        <SheetHeader className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-sky-600 to-sky-700 px-6 py-4 pr-14 text-left">
+        <SheetHeader className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-sky-600 to-sky-700 px-6 pb-4 pt-3 pr-14 text-left">
           {view === 'fechamento' && fechamentoDrill ? (
             <>
               <Button
@@ -773,21 +773,21 @@ export function ReceitaRecebidoClassificacaoSheet({
             <>
               <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 flex-1 items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white">
-                    <Banknote className="h-5 w-5" aria-hidden />
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white">
+                    <Banknote className="h-4 w-4" aria-hidden />
                   </span>
                   <div className="min-w-0">
-                    <SheetTitle className="text-base font-semibold text-white">
+                    <SheetTitle className="text-base font-semibold leading-8 text-white">
                       Visão do mês
                       {areaLabel ? ` — ${areaLabel}` : ''} · {mesLabel} / {ano}
                     </SheetTitle>
-                    <SheetDescription className="mt-1 text-xs text-sky-100">
+                    <SheetDescription className="text-xs text-sky-100">
                       Previsto · Recebido · Inadimplência
                       {areaLabel ? ` · filtro ${areaLabel}` : ''}
                     </SheetDescription>
                   </div>
                 </div>
-                <div className="shrink-0 pt-1" data-chart-export-ignore>
+                <div className="shrink-0" data-chart-export-ignore>
                   <ElementCopyButton
                     containerRef={sheetExportRef}
                     preserveBackground
@@ -795,11 +795,11 @@ export function ReceitaRecebidoClassificacaoSheet({
                   />
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-3">
+              <div className="mt-3 grid grid-cols-3 items-stretch gap-3">
                 <button
                   type="button"
                   onClick={() => abrirFechamentoDrill('previsto_grupo')}
-                  className="rounded-lg bg-white/10 px-2 py-2 text-left transition-colors hover:bg-white/20"
+                  className="flex min-h-[76px] min-w-0 flex-col justify-between rounded-lg bg-white/10 px-2.5 py-2 text-left transition-colors hover:bg-white/20"
                 >
                   <p className="text-[10px] font-medium uppercase tracking-wide text-sky-100/90">
                     Previsto
@@ -807,32 +807,32 @@ export function ReceitaRecebidoClassificacaoSheet({
                   <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight text-white/95">
                     {formatCurrency(totalPrevisto)}
                   </p>
-                  <p className="mt-0.5 flex items-center gap-0.5 text-[10px] leading-snug text-sky-100/80">
+                  <p className="mt-0.5 flex items-center gap-0.5 text-[10px] font-medium leading-snug text-sky-100/80">
                     Venc. do mês
                     <ChevronRight className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                   </p>
                 </button>
-                <div className="rounded-lg bg-white/15 px-2 py-2 ring-1 ring-white/20">
+                <div className="flex min-h-[76px] min-w-0 flex-col justify-between rounded-lg bg-white/15 px-2.5 py-2 ring-1 ring-white/20">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-sky-100">
                     Recebido
                   </p>
                   <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight text-white">
                     {formatCurrency(recebidoHeader)}
                   </p>
-                  <p className="mt-0.5 text-[10px] font-medium tabular-nums text-sky-100">
+                  <p className="mt-0.5 text-[10px] font-medium leading-snug tabular-nums text-sky-100">
                     {pctMetaMesHeader != null
                       ? `${formatPercent(pctMetaMesHeader)} da meta${areaLabel ? ` (${areaLabel})` : ''}`
                       : '—'}
                   </p>
                 </div>
-                <div className="flex min-h-[72px] flex-col justify-between rounded-lg bg-red-950/25 px-3 py-2.5 ring-1 ring-red-300/20">
+                <div className="flex min-h-[76px] min-w-0 flex-col justify-between rounded-lg bg-red-950/25 px-2.5 py-2 ring-1 ring-red-300/20">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-red-100/90">
                     Inad. mês
                   </p>
-                  <p className="mt-1 text-xl font-bold tabular-nums leading-none tracking-tight text-red-400">
+                  <p className="mt-0.5 text-lg font-bold tabular-nums leading-tight text-red-400">
                     {inadHeader != null ? formatCurrency(inadHeader) : '—'}
                   </p>
-                  <p className="mt-1.5 text-[10px] font-medium tabular-nums text-red-100/90">
+                  <p className="mt-0.5 text-[10px] font-medium leading-snug tabular-nums text-red-100/90">
                     {pctInadPrevistoHeader != null
                       ? `${formatPercent(pctInadPrevistoHeader)} do previsto`
                       : '—'}

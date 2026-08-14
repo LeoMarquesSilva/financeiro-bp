@@ -95,8 +95,8 @@ export function enrichGestaoVistaResumoInadVencidoAno(
   }
 }
 
-/** Meses com meta definida já decorridos (ex.: meta só a partir de jul → [7] em jul/26). */
-function mesesMetaNoPeriodoGestao(rows: ReceitaMesRow[], ano: number, ref = new Date()): number[] {
+/** Meses com meta definida já decorridos (ex.: meta só a partir de jun → [6,7,8] em ago/26). */
+export function mesesMetaNoPeriodoGestao(rows: ReceitaMesRow[], ano: number, ref = new Date()): number[] {
   const mesMax = mesMaxDisponivelInadimplencia(ano, ref)
   return rows
     .filter(
@@ -204,11 +204,8 @@ function buildResumoFromMeses(
     inadimplenciaPctPeriodo: calcularPctInadimplencia(inadPeriodo, previstoPeriodoInad),
     inadimplenciaVencidoAno: 0,
     inadimplenciaVencidoPctAno: null,
-    periodoAnoLabel: periodoGestaoLabel(mesesPeriodo, ano),
-    periodoAnualLabel: periodoGestaoLabel(
-      Array.from({ length: 12 }, (_, i) => i + 1),
-      ano,
-    ),
+    periodoAnoLabel: periodoGestaoLabel(mesesMetaPeriodo, ano),
+    periodoAnualLabel: periodoGestaoLabel(mesesMetaAno, ano),
     periodoLabel: periodoGestaoLabel(mesesMetaPeriodo, ano),
     periodoMetaLabel: periodoGestaoLabel(mesesMetaPeriodo, ano),
     periodoMetaAnualLabel: periodoGestaoLabel(mesesMetaAno, ano),

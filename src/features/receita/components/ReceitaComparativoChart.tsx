@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ReactElement } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Building2,
@@ -733,6 +733,19 @@ function ComparativoDotLabel({
   }
 }
 
+/** Ponto customizado: o `dot` objeto do Recharts some no último valor antes de `null`. */
+function lineSeriesDot(
+  color: string,
+  r = 3,
+): (props: { cx?: number; cy?: number; value?: number | string | null }) => ReactElement | null {
+  return ({ cx, cy, value }) => {
+    if (value == null || cx == null || cy == null) return null
+    const num = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(num)) return null
+    return <circle cx={cx} cy={cy} r={r} fill={color} stroke="#fff" strokeWidth={1.5} />
+  }
+}
+
 function AreaGapNaCell() {
   return <span className="text-slate-400">N/A</span>
 }
@@ -1276,7 +1289,7 @@ export function ReceitaComparativoChart({
   const abrirRecebidoDetalhe = (mes: number) => {
     if (isMesFuturo(ano, mes)) return
     const row = rows.find((r) => r.mes === mes)
-    if (row && row.recebido > 0) setDetalheMes(row)
+    if (row && (row.recebido > 0 || row.previsto > 0)) setDetalheMes(row)
   }
 
   const areaGapMetaTotal = useMemo(
@@ -1672,8 +1685,8 @@ export function ReceitaComparativoChart({
                   stroke={s.color}
                   strokeWidth={2}
                   strokeDasharray={s.strokeDasharray}
-                  dot={{ r: 3, fill: s.color, stroke: '#fff', strokeWidth: 1.5 }}
-                  activeDot={{ r: 4, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                  dot={lineSeriesDot(s.color, 3)}
+                  activeDot={lineSeriesDot(s.color, 4)}
                   connectNulls={false}
                 >
                   {(s.key === 'meta' || s.key === 'inadimplencia') && (
@@ -1962,94 +1975,98 @@ export function ReceitaComparativoChart({
                   stroke={s.color}
                   strokeWidth={2.5}
                   fill={`url(#${'gradientId' in s ? s.gradientId : ''})`}
-                  dot={
-                    s.key === 'recebido'
-                      ? ({ cx, cy, value, payload }) => {
-                          if (value == null || cx == null || cy == null) return null
-                          const point = payload as ChartPoint
-                          const clicavel =
-                            point.mes != null &&
-                            !isMesFuturo(ano, point.mes) &&
-                            (rows.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
-                          if (!clicavel) {
-                            return <circle cx={cx} cy={cy} r={3} fill={s.color} />
-                          }
-                          return (
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={5}
-                              fill={s.color}
-                              stroke="#fff"
-                              strokeWidth={2}
-                              className="cursor-pointer"
-                              role="button"
-                              tabIndex={0}
-                              aria-label={`Ver detalhe recebido — ${point.mesLabel}`}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                abrirRecebidoDetalhe(point.mes)
-                              }}
-                            />
-                          )
-                        }
-                      : ({ cx, cy, value }) => {
-                          if (value == null || cx == null || cy == null) return null
-                          return <circle cx={cx} cy={cy} r={3} fill={s.color} />
-                        }
-                  }
-                  activeDot={
-                    s.key === 'recebido'
-                      ? ({ cx, cy, value, payload }) => {
-                          if (value == null || cx == null || cy == null) return null
-                          const point = payload as ChartPoint
-                          const clicavel =
-                            point.mes != null &&
-                            !isMesFuturo(ano, point.mes) &&
-                            (rows.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
-                          if (!clicavel) {
-                            return (
-                              <circle
-                                cx={cx}
-                                cy={cy}
-                                r={5}
-                                fill={s.color}
-                                stroke="#fff"
-                                strokeWidth={2}
-                              />
-                            )
-                          }
-                          return (
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={6}
-                              fill={s.color}
-                              stroke="#fff"
-                              strokeWidth={2}
-                              className="cursor-pointer"
-                              role="button"
-                              tabIndex={0}
-                              aria-label={`Ver detalhe recebido — ${point.mesLabel}`}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                abrirRecebidoDetalhe(point.mes)
-                              }}
-                            />
-                          )
-                        }
-                      : { r: 5, fill: s.color, stroke: '#fff', strokeWidth: 2 }
-                  }
+                  dot={({ cx, cy, value, payload }) => {
+                    if (value == null || cx == null || cy == null) return null
+                    const point = payload as ChartPoint
+                    const serie = s.key === 'recebido' || s.key === 'previsto' ? s.key : null
+                    const clicavel =
+                      serie != null &&
+                      point.mes != null &&
+                      !isMesFuturo(ano, point.mes) &&
+                      (rows.find((r) => r.mes === point.mes)?.[serie] ?? 0) > 0
+                    if (!clicavel) {
+                      return (
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={3}
+                          fill={s.color}
+                          stroke="#fff"
+                          strokeWidth={1.5}
+                        />
+                      )
+                    }
+                    return (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={5}
+                        fill={s.color}
+                        stroke="#fff"
+                        strokeWidth={2}
+                        className="cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Ver detalhe ${serie} — ${point.mesLabel}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          abrirRecebidoDetalhe(point.mes)
+                        }}
+                      />
+                    )
+                  }}
+                  activeDot={({ cx, cy, value, payload }) => {
+                    if (value == null || cx == null || cy == null) return null
+                    const point = payload as ChartPoint
+                    const serie = s.key === 'recebido' || s.key === 'previsto' ? s.key : null
+                    const clicavel =
+                      serie != null &&
+                      point.mes != null &&
+                      !isMesFuturo(ano, point.mes) &&
+                      (rows.find((r) => r.mes === point.mes)?.[serie] ?? 0) > 0
+                    if (!clicavel) {
+                      return (
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={5}
+                          fill={s.color}
+                          stroke="#fff"
+                          strokeWidth={2}
+                        />
+                      )
+                    }
+                    return (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={6}
+                        fill={s.color}
+                        stroke="#fff"
+                        strokeWidth={2}
+                        className="cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Ver detalhe ${serie} — ${point.mesLabel}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          abrirRecebidoDetalhe(point.mes)
+                        }}
+                      />
+                    )
+                  }}
                   connectNulls={false}
                 >
-                  {s.key === 'recebido' && (
+                  {(s.key === 'recebido' || (!percentMode && s.key === 'previsto')) && (
                     <LabelList
-                      dataKey="recebido"
+                      dataKey={s.key}
                       content={ComparativoDotLabel({
                         color: s.color,
                         percentMode,
                         position: percentMode ? 'right' : 'above',
                         total: chartData.length,
+                        offset: s.key === 'previsto' ? 16 : 10,
+                        stagger: s.key === 'previsto' ? 14 : 0,
                       })}
                     />
                   )}
@@ -2065,11 +2082,91 @@ export function ReceitaComparativoChart({
                   strokeWidth={2}
                   strokeDasharray={'strokeDasharray' in s ? s.strokeDasharray : undefined}
                   dot={
-                    s.key === 'meta' || s.key === 'inadimplencia'
-                      ? { r: 3, fill: s.color, stroke: '#fff', strokeWidth: 1.5 }
-                      : false
+                    s.key === 'inadimplencia'
+                      ? ({ cx, cy, value, payload }) => {
+                          if (value == null || cx == null || cy == null) return null
+                          const point = payload as ChartPoint
+                          const clicavel =
+                            point.mes != null &&
+                            !isMesFuturo(ano, point.mes) &&
+                            (rows.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
+                          if (!clicavel) {
+                            return (
+                              <circle
+                                cx={cx}
+                                cy={cy}
+                                r={3}
+                                fill={s.color}
+                                stroke="#fff"
+                                strokeWidth={1.5}
+                              />
+                            )
+                          }
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={4}
+                              fill={s.color}
+                              stroke="#fff"
+                              strokeWidth={2}
+                              className="cursor-pointer"
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Ver detalhe inadimplência — ${point.mesLabel}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                abrirRecebidoDetalhe(point.mes)
+                              }}
+                            />
+                          )
+                        }
+                      : s.key === 'meta'
+                        ? lineSeriesDot(s.color, 3)
+                        : false
                   }
-                  activeDot={{ r: 4, fill: s.color, stroke: '#fff', strokeWidth: 2 }}
+                  activeDot={
+                    s.key === 'inadimplencia'
+                      ? ({ cx, cy, value, payload }) => {
+                          if (value == null || cx == null || cy == null) return null
+                          const point = payload as ChartPoint
+                          const clicavel =
+                            point.mes != null &&
+                            !isMesFuturo(ano, point.mes) &&
+                            (rows.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
+                          if (!clicavel) {
+                            return (
+                              <circle
+                                cx={cx}
+                                cy={cy}
+                                r={4}
+                                fill={s.color}
+                                stroke="#fff"
+                                strokeWidth={2}
+                              />
+                            )
+                          }
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={5}
+                              fill={s.color}
+                              stroke="#fff"
+                              strokeWidth={2}
+                              className="cursor-pointer"
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Ver detalhe inadimplência — ${point.mesLabel}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                abrirRecebidoDetalhe(point.mes)
+                              }}
+                            />
+                          )
+                        }
+                      : lineSeriesDot(s.color, 4)
+                  }
                   connectNulls={s.key !== 'inadimplencia'}
                 >
                   {!percentMode && s.key === 'meta' && (
@@ -2098,7 +2195,7 @@ export function ReceitaComparativoChart({
                         offset: 22,
                         stagger: 18,
                         getSecondaryAt: (i) => {
-                          const mes = rows[i]?.mes
+                          const mes = chartData[i]?.mes
                           if (mes == null) return undefined
                           const pct = inadimplenciaCongeladaPorMes.get(mes)?.pct
                           return pct != null ? formatPercent(pct) : undefined

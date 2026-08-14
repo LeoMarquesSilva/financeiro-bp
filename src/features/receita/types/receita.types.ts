@@ -61,12 +61,12 @@ export type GestaoVistaResumo = {
   pctMeta: number | null
   inadimplenciaPeriodo: number
   inadimplenciaPctPeriodo: number | null
-  /** Inad. vencida e não paga — Jan–Dez, item a item (mesma regra da visão do mês). */
+  /** Inad. vencida e não paga — Jun–Dez (meses com meta), item a item. */
   inadimplenciaVencidoAno: number
   inadimplenciaVencidoPctAno: number | null
-  /** Período acumulado Jan–mês atual (ex.: Jan–Ago/2026). */
+  /** Período acumulado dos meses com meta já decorridos (ex.: Jun–Ago/2026). */
   periodoAnoLabel: string
-  /** Referência anual Jan–Dez. */
+  /** Referência anual da meta (ex.: Jun–Dez/2026). */
   periodoAnualLabel: string
   /** Meses com meta já decorridos (ex.: Jun–Ago/2026). */
   periodoLabel: string

@@ -17,7 +17,6 @@ import {
   RECEITA_COLORS,
   RECEITA_DEPARTAMENTO_CORES,
 } from '../constants'
-
 export function ReceitaPage() {
   const [configOpen, setConfigOpen] = useState(false)
   const { metas, isLoading: metasLoading, error: metasError, refetch: refetchMetas, updateMetas, isUpdating } =
