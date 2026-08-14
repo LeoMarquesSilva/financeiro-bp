@@ -9,6 +9,10 @@ import {
 } from '../_shared/relatorioMensal/fetchData.ts'
 import { resolverPeriodoGestaoVista } from '../_shared/relatorioMensal/periodoGestaoVista.ts'
 import { getGraphToken, sendGraphMail } from '../_shared/relatorioMensal/graphMail.ts'
+import {
+  groupDestinatariosForEnvio,
+  uniqueEmailsFromGrupo,
+} from '../_shared/relatorioMensal/groupDestinatariosEnvio.ts'
 import { areaLabel, parseSecoesConfig } from '../_shared/relatorioMensal/constants.ts'
 
 const corsHeaders = {
@@ -199,11 +203,14 @@ Deno.serve(async (req: Request) => {
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  const results: Array<{ email: string; ok: boolean; erro?: string }> = []
+  const results: Array<{ email: string; ok: boolean; erro?: string; area_key?: string | null }> = []
+  const grupos = groupDestinatariosForEnvio(destinatarios)
 
-  for (const dest of destinatarios) {
-    const email = dest.email.trim()
-    if (!emailRegex.test(email)) {
+  for (const grupo of grupos) {
+    const { validos, invalidos } = uniqueEmailsFromGrupo(grupo.destinatarios, emailRegex)
+
+    for (const dest of invalidos) {
+      const email = dest.email.trim()
       await admin.from('relatorio_mensal_log').insert({
         ano,
         mes,
@@ -213,37 +220,39 @@ Deno.serve(async (req: Request) => {
         trigger: modo,
         destinatario_id: dest.id === 'teste' ? null : dest.id,
       })
-      results.push({ email, ok: false, erro: 'E-mail inválido' })
-      continue
+      results.push({ email, ok: false, erro: 'E-mail inválido', area_key: grupo.area_key })
     }
 
-    const variantKeys = variantesParaDestinatario(dest.area_key)
-    const assunto = `SIOE — Gestão à vista · ${String(mes).padStart(2, '0')}/${ano} (${periodo.periodoCurto})${dest.area_key ? ` · ${areaLabel(dest.area_key)}` : ''}`
-    const corpo = buildDigestEmail(dadosMap, periodo, variantKeys, secoesConfig, dest.area_key)
+    if (validos.length === 0) continue
+
+    const variantKeys = variantesParaDestinatario(grupo.area_key)
+    const assunto = `SIOE — Gestão à vista · ${String(mes).padStart(2, '0')}/${ano} (${periodo.periodoCurto})${grupo.area_key ? ` · ${areaLabel(grupo.area_key)}` : ''}`
+    const corpo = buildDigestEmail(dadosMap, periodo, variantKeys, secoesConfig, grupo.area_key)
+    const emailLogLabel = validos.join(', ')
 
     try {
-      await sendGraphMail(token, MS_SENDER, email, assunto, corpo)
+      await sendGraphMail(token, MS_SENDER, validos, assunto, corpo)
       await admin.from('relatorio_mensal_log').insert({
         ano,
         mes,
-        email,
+        email: emailLogLabel,
         status: 'sucesso',
         trigger: modo,
-        destinatario_id: dest.id === 'teste' ? null : dest.id,
+        destinatario_id: null,
       })
-      results.push({ email, ok: true })
+      results.push({ email: emailLogLabel, ok: true, area_key: grupo.area_key })
     } catch (e) {
       const erro = (e instanceof Error ? e.message : String(e)).slice(0, 1000)
       await admin.from('relatorio_mensal_log').insert({
         ano,
         mes,
-        email,
+        email: emailLogLabel,
         status: 'erro',
         erro,
         trigger: modo,
-        destinatario_id: dest.id === 'teste' ? null : dest.id,
+        destinatario_id: null,
       })
-      results.push({ email, ok: false, erro })
+      results.push({ email: emailLogLabel, ok: false, erro, area_key: grupo.area_key })
     }
   }
 

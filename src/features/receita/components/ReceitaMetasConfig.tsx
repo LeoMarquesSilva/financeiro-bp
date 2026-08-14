@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { MESES_ABREV, RECEITA_COLORS } from '../constants'
 import { cn } from '@/lib/utils'
 import type { ReceitaMetasConfig } from '../types/receita.types'
-import { parseCurrencyBr, formatCurrencyInput } from '@/shared/utils/format'
+import { parseCurrencyBr, formatCurrencyInput, formatCurrency } from '@/shared/utils/format'
 import { toast } from 'sonner'
+import { ReceitaConfigCollapsibleSection } from './ReceitaConfigCollapsibleSection'
 
 type Props = {
   metas: ReceitaMetasConfig
@@ -47,17 +48,13 @@ export function ReceitaMetasConfig({ metas, onSave, isSaving, onSaved }: Props) 
   }
 
   return (
-    <section className="space-y-4">
-      <div>
-        <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-          <Target className="h-4 w-4 text-slate-500" aria-hidden />
-          Metas e projeções
-        </h3>
-        <p className="mt-1 text-xs text-slate-500">
-          Ano de referência, meta mensal, projeções e meses exibidos nos gráficos.
-        </p>
-      </div>
-      <div className="space-y-4">
+    <ReceitaConfigCollapsibleSection
+      bordered={false}
+      icon={<Target className="h-4 w-4 text-slate-500" aria-hidden />}
+      title="Metas e projeções"
+      description="Ano de referência, meta mensal, projeções e meses exibidos nos gráficos."
+      summary={`${form.ano} · meta ${formatCurrency(form.meta)}/mês · ${form.meses.length} meses no gráfico`}
+    >
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor="receita-ano">Ano de referência</Label>
@@ -198,7 +195,6 @@ export function ReceitaMetasConfig({ metas, onSave, isSaving, onSaved }: Props) 
       <Button type="button" onClick={handleSave} disabled={isSaving}>
         {isSaving ? 'Salvando…' : 'Salvar metas'}
       </Button>
-      </div>
-    </section>
+    </ReceitaConfigCollapsibleSection>
   )
 }

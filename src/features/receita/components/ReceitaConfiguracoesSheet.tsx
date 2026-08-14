@@ -46,7 +46,7 @@ export function ReceitaConfiguracoesSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 space-y-10 overflow-y-auto px-6 pb-8">
+        <div className="flex-1 space-y-2 overflow-y-auto px-6 pb-8 pt-2">
           <ReceitaMetasConfig metas={metas} onSave={onSaveMetas} isSaving={isSavingMetas} />
           <ReceitaDepartamentoCoresConfig
             cores={cores}

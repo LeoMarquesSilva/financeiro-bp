@@ -48,6 +48,15 @@ export function useRelatorioMensalConfig(enabled = true) {
     },
   })
 
+  const replaceDestinatarios = useMutation({
+    mutationFn: (
+      dests: Array<Omit<RelatorioMensalDestinatario, 'created_at' | 'updated_at'>>,
+    ) => relatorioMensalService.replaceDestinatarios(dests),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['receita', 'relatorio-mensal', 'destinatarios'] })
+    },
+  })
+
   const enviar = useMutation({
     mutationFn: relatorioMensalService.invokeEnviar,
     onSuccess: () => {
@@ -67,6 +76,7 @@ export function useRelatorioMensalConfig(enabled = true) {
     saveConfig,
     saveDestinatario,
     deleteDestinatario,
+    replaceDestinatarios,
     enviar,
     refetchLog: logQuery.refetch,
   }

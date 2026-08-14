@@ -9,6 +9,7 @@ import {
 } from '../constants'
 import type { ReceitaDepartamentoCoresConfig } from '../types/receita.types'
 import { toast } from 'sonner'
+import { ReceitaConfigCollapsibleSection } from './ReceitaConfigCollapsibleSection'
 
 type Props = {
   cores: ReceitaDepartamentoCoresConfig
@@ -75,17 +76,12 @@ export function ReceitaDepartamentoCoresConfig({ cores, onSave, isSaving, onSave
   }
 
   return (
-    <section className="space-y-4 border-t border-slate-200 pt-8">
-      <div>
-        <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-          <Palette className="h-4 w-4 text-slate-500" aria-hidden />
-          Cores por área (departamento)
-        </h3>
-        <p className="mt-1 text-xs text-slate-500">
-          Cor de cada departamento no gráfico &quot;Recebido por área&quot;.
-        </p>
-      </div>
-      <div className="space-y-4">
+    <ReceitaConfigCollapsibleSection
+      icon={<Palette className="h-4 w-4 text-slate-500" aria-hidden />}
+      title="Cores por área (departamento)"
+      description='Cor de cada departamento no gráfico "Recebido por área".'
+      summary={`${sortedKeys.length} áreas configuradas`}
+    >
         <p className="text-xs text-slate-500">
           Salvo em{' '}
           <code className="rounded bg-slate-100 px-1">app_settings.receita_departamento_cores</code>.
@@ -148,7 +144,6 @@ export function ReceitaDepartamentoCoresConfig({ cores, onSave, isSaving, onSave
             Restaurar todos os padrões
           </Button>
         </div>
-      </div>
-    </section>
+    </ReceitaConfigCollapsibleSection>
   )
 }

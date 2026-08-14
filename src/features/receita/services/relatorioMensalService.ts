@@ -165,6 +165,29 @@ export const relatorioMensalService = {
     if (error) throw error
   },
 
+  async replaceDestinatarios(
+    dests: Array<Omit<RelatorioMensalDestinatario, 'created_at' | 'updated_at'>>,
+  ): Promise<void> {
+    const { error: delErr } = await supabase
+      .from('relatorio_mensal_destinatarios')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+    if (delErr) throw delErr
+
+    if (dests.length === 0) return
+
+    const rows = dests.map((d) => ({
+      id: d.id,
+      nome: d.nome.trim(),
+      email: d.email.trim().toLowerCase(),
+      area_key: d.area_key?.trim() || null,
+      ativo: d.ativo,
+      updated_at: new Date().toISOString(),
+    }))
+    const { error } = await supabase.from('relatorio_mensal_destinatarios').insert(rows as never)
+    if (error) throw error
+  },
+
   async fetchLog(limit = 30): Promise<RelatorioMensalLogEntry[]> {
     const { data, error } = await supabase
       .from('relatorio_mensal_log')

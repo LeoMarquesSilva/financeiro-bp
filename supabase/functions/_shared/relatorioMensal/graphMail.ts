@@ -24,10 +24,17 @@ export async function getGraphToken(
 export async function sendGraphMail(
   token: string,
   sender: string,
-  destino: string,
+  destinos: string | string[],
   assunto: string,
   corpoHtml: string,
 ): Promise<void> {
+  const toList = (Array.isArray(destinos) ? destinos : [destinos])
+    .map((d) => d.trim())
+    .filter(Boolean)
+  if (toList.length === 0) {
+    throw new Error('Nenhum destinatário informado.')
+  }
+
   const resp = await fetch(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`,
     {
@@ -37,7 +44,7 @@ export async function sendGraphMail(
         message: {
           subject: assunto,
           body: { contentType: 'HTML', content: corpoHtml },
-          toRecipients: [{ emailAddress: { address: destino } }],
+          toRecipients: toList.map((address) => ({ emailAddress: { address } })),
         },
         saveToSentItems: true,
       }),

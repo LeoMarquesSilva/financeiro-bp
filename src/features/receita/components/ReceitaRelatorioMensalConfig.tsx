@@ -1,12 +1,18 @@
-import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, GripVertical, Mail, Plus, Send, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { ChevronDown, ChevronUp, GripVertical, Mail, Plus, Send, Trash2, Users } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAuth } from '@/lib/AuthContext'
+import { teamMembersService } from '@/lib/teamMembersService'
 import { RECEITA_META_CONTRIBUICAO_AREA, RECEITA_DEPARTAMENTO_LABELS } from '../constants'
 import { useRelatorioMensalConfig } from '../hooks/useRelatorioMensalConfig'
+import {
+  buildDestinatariosPadrao,
+  groupDestinatariosPorArea,
+} from '../utils/relatorioMensalDestinatarios'
 import {
   SECOES_ORDEM_DEFAULT,
   type RelatorioMensalConfig,
@@ -17,6 +23,7 @@ import {
 } from '../services/relatorioMensalService'
 import { toast } from 'sonner'
 import { formatDate } from '@/shared/utils/format'
+import { ReceitaConfigCollapsibleSection } from './ReceitaConfigCollapsibleSection'
 
 const SECAO_LABELS: Record<keyof RelatorioMensalSecoes, string> = {
   indicadores_operacionais: 'Indicadores operacionais (tabela)',
@@ -41,26 +48,11 @@ type DestForm = {
   ativo: boolean
 }
 
-const emptyDest = (): DestForm => ({ nome: '', email: '', area_key: '', ativo: true })
+const emptyDest = (): DestForm => ({ nome: '', email: '', area_key: 'insolvencia', ativo: true })
 
 type Props = {
   /** Só consulta Supabase quando o sheet de configurações está aberto. */
   enabled?: boolean
-}
-
-function SectionHeader() {
-  return (
-    <div>
-      <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-        <Mail className="h-4 w-4 text-slate-500" aria-hidden />
-        Envio automático de e-mail
-      </h3>
-      <p className="mt-1 text-xs text-slate-500">
-        Gestão à vista diária: recorte do mês corrente (dia 1 até ontem) — receita e eficiência —
-        via Microsoft Graph. Somente administradores.
-      </p>
-    </div>
-  )
 }
 
 export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
@@ -77,8 +69,25 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
     saveConfig,
     saveDestinatario,
     deleteDestinatario,
+    replaceDestinatarios,
     enviar,
   } = useRelatorioMensalConfig(enabled && isAdmin)
+
+  const usuariosQuery = useQuery({
+    queryKey: ['team_members', 'relatorio-mensal'],
+    queryFn: () => teamMembersService.list(),
+    enabled: enabled && isAdmin,
+  })
+
+  const usuariosAtivos = useMemo(
+    () => (usuariosQuery.data ?? []).filter((u) => u.is_active !== false),
+    [usuariosQuery.data],
+  )
+
+  const destinatariosPorArea = useMemo(
+    () => groupDestinatariosPorArea(destinatarios),
+    [destinatarios],
+  )
 
   const [form, setForm] = useState<RelatorioMensalConfig | null>(null)
   const [destForm, setDestForm] = useState<DestForm>(emptyDest())
@@ -99,8 +108,12 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
   if (isError) {
     const msg = error instanceof Error ? error.message : 'Erro ao carregar configuração'
     return (
-      <section className="space-y-3 border-t border-slate-200 pt-8">
-        <SectionHeader />
+      <ReceitaConfigCollapsibleSection
+        icon={<Mail className="h-4 w-4 text-slate-500" aria-hidden />}
+        title="Envio automático de e-mail"
+        description="Gestão à vista diária via Microsoft Graph. Somente administradores."
+        summary="Erro ao carregar"
+      >
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <p className="font-medium">Configuração indisponível</p>
           <p className="mt-1 text-xs">{msg}</p>
@@ -110,16 +123,20 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
             foi aplicada no Supabase e se seu usuário é admin ativo.
           </p>
         </div>
-      </section>
+      </ReceitaConfigCollapsibleSection>
     )
   }
 
   if (isLoading || !form) {
     return (
-      <section className="space-y-4 border-t border-slate-200 pt-8">
-        <SectionHeader />
+      <ReceitaConfigCollapsibleSection
+        icon={<Mail className="h-4 w-4 text-slate-500" aria-hidden />}
+        title="Envio automático de e-mail"
+        description="Gestão à vista diária via Microsoft Graph. Somente administradores."
+        summary="Carregando…"
+      >
         <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
-      </section>
+      </ReceitaConfigCollapsibleSection>
     )
   }
 
@@ -173,6 +190,24 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
     }
   }
 
+  const handleAplicarPadrao = async () => {
+    if (
+      !window.confirm(
+        'Substituir todos os destinatários pela lista padrão?\n\n' +
+          '• Liderança (Samuel, Gustavo, Ricardo, Felipe) em cada área meta\n' +
+          '• Gerente de cada área (RH)',
+      )
+    ) {
+      return
+    }
+    try {
+      await replaceDestinatarios.mutateAsync(buildDestinatariosPadrao())
+      toast.success('Destinatários padrão aplicados')
+    } catch {
+      toast.error('Erro ao aplicar destinatários padrão')
+    }
+  }
+
   const handleEditDest = (d: RelatorioMensalDestinatario) => {
     setDestForm({
       id: d.id,
@@ -205,9 +240,12 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
   const ultimoLog = log[0]
 
   return (
-    <section className="space-y-6 border-t border-slate-200 pt-8">
-      <SectionHeader />
-
+    <ReceitaConfigCollapsibleSection
+      icon={<Mail className="h-4 w-4 text-slate-500" aria-hidden />}
+      title="Envio automático de e-mail"
+      description="Gestão à vista diária: recorte do mês corrente (dia 1 até ontem) — receita e eficiência — via Microsoft Graph. Somente administradores."
+      summary={`${form.enabled ? 'Ativo' : 'Inativo'} · ${form.hora_local} · ${destinatarios.length} destinatário(s)`}
+    >
       <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3">
         <div>
           <Label htmlFor="relatorio-enabled" className="font-medium">
@@ -323,8 +361,93 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
         </p>
       )}
 
-      <div className="space-y-3 border-t border-slate-200 pt-6">
-        <Label>Destinatários</Label>
+      <div className="space-y-4 border-t border-slate-200 pt-6">
+        <div>
+          <Label>Destinatários por área meta</Label>
+          <p className="mt-1 text-xs text-slate-500">
+            Cada área gera <strong>1 e-mail por dia</strong> com todos os destinatários cadastrados
+            nela no campo Para (visão do escritório + aquela área). Cadastre liderança e gerente na
+            mesma área — não são envios separados por pessoa.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-3 text-xs text-sky-950">
+          <p className="font-medium">Como funciona o campo “Área”</p>
+          <ul className="mt-2 list-disc space-y-1 pl-4 text-sky-900/90">
+            <li>
+              <strong>Insolvência, Trabalhista…</strong> — e-mail focado na área (indicadores +
+              receita + eficiência da área).
+            </li>
+            <li>
+              <strong>Escritório completo</strong> — um único e-mail com as 5 áreas (use só se não
+              quiser cadastrar área a área).
+            </li>
+          </ul>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={replaceDestinatarios.isPending}
+            onClick={() => void handleAplicarPadrao()}
+          >
+            <Users className="h-4 w-4" />
+            Aplicar lista padrão (liderança + gerentes)
+          </Button>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <Label className="text-xs text-slate-500">Usuário SIOE (opcional)</Label>
+            <select
+              className="mt-1 flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value=""
+              onChange={(e) => {
+                const id = e.target.value
+                if (!id) return
+                const u = usuariosAtivos.find((m) => m.id === id)
+                if (u) {
+                  setDestForm((d) => ({
+                    ...d,
+                    nome: u.full_name ?? d.nome,
+                    email: u.email ?? d.email,
+                  }))
+                }
+              }}
+            >
+              <option value="">Selecionar de Usuários…</option>
+              {usuariosAtivos.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.full_name} ({u.email})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="text-xs text-slate-500">Área meta do e-mail</Label>
+            <select
+              className="mt-1 flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={destForm.area_key || '__all__'}
+              onChange={(e) =>
+                setDestForm((d) => ({
+                  ...d,
+                  area_key: e.target.value === '__all__' ? '' : e.target.value,
+                }))
+              }
+            >
+              <option value="__all__">Escritório completo (todas as áreas em 1 e-mail)</option>
+              {RECEITA_META_CONTRIBUICAO_AREA.map((a) => (
+                <option key={a.key} value={a.key}>
+                  {RECEITA_DEPARTAMENTO_LABELS[a.key] ?? a.key}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="grid gap-2 sm:grid-cols-2">
           <Input
             placeholder="Nome"
@@ -338,27 +461,8 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
             onChange={(e) => setDestForm((d) => ({ ...d, email: e.target.value }))}
           />
         </div>
+
         <div className="flex flex-wrap items-end gap-2">
-          <div className="min-w-[200px] flex-1">
-            <Label className="text-xs text-slate-500">Área (opcional — digest focado)</Label>
-            <select
-              className="mt-1 flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={destForm.area_key || '__all__'}
-              onChange={(e) =>
-                setDestForm((d) => ({
-                  ...d,
-                  area_key: e.target.value === '__all__' ? '' : e.target.value,
-                }))
-              }
-            >
-              <option value="__all__">Digest completo (6 variantes)</option>
-              {RECEITA_META_CONTRIBUICAO_AREA.map((a) => (
-                <option key={a.key} value={a.key}>
-                  {RECEITA_DEPARTAMENTO_LABELS[a.key] ?? a.key}
-                </option>
-              ))}
-            </select>
-          </div>
           <Button type="button" variant="secondary" className="gap-1" onClick={() => void handleAddDest()}>
             <Plus className="h-4 w-4" />
             {destForm.id ? 'Atualizar' : 'Adicionar'}
@@ -370,38 +474,53 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
           )}
         </div>
 
-        <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
-          {destinatarios.length === 0 && (
-            <li className="px-3 py-4 text-sm text-slate-500">Nenhum destinatário cadastrado.</li>
-          )}
-          {destinatarios.map((d: RelatorioMensalDestinatario) => (
-            <li key={d.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-              <button
-                type="button"
-                className="min-w-0 flex-1 text-left hover:text-slate-900"
-                onClick={() => handleEditDest(d)}
-              >
-                <span className="font-medium">{d.nome || d.email}</span>
-                <span className="block truncate text-xs text-slate-500">
-                  {d.email}
-                  {d.area_key
-                    ? ` · ${RECEITA_DEPARTAMENTO_LABELS[d.area_key] ?? d.area_key}`
-                    : ' · digest completo'}
-                  {!d.ativo ? ' · inativo' : ''}
-                </span>
-              </button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="shrink-0 text-red-600 hover:text-red-700"
-                onClick={() => void deleteDestinatario.mutateAsync(d.id)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </li>
+        <div className="space-y-4">
+          {destinatariosPorArea.map((grupo) => (
+            <div key={grupo.area_key ?? 'digest'} className="rounded-lg border border-slate-200">
+              <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
+                <p className="text-sm font-semibold text-slate-800">{grupo.label}</p>
+                <p className="text-xs text-slate-500">
+                  {grupo.items.length === 0
+                    ? 'Nenhum destinatário'
+                    : `1 e-mail/dia · ${grupo.items.length} destinatário(s) no Para`}
+                </p>
+              </div>
+              {grupo.items.length === 0 ? (
+                <p className="px-3 py-3 text-sm text-slate-400">—</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {grupo.items.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left hover:text-slate-900"
+                        onClick={() => handleEditDest(d)}
+                      >
+                        <span className="font-medium">{d.nome || d.email}</span>
+                        <span className="block truncate text-xs text-slate-500">{d.email}</span>
+                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 text-red-600 hover:text-red-700"
+                        onClick={() => void deleteDestinatario.mutateAsync(d.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           ))}
-        </ul>
+        </div>
+
+        {destinatarios.length === 0 && (
+          <p className="text-sm text-slate-500">
+            Nenhum destinatário cadastrado. Use &quot;Aplicar lista padrão&quot; ou adicione manualmente.
+          </p>
+        )}
       </div>
 
       {log.length > 0 && (
@@ -437,6 +556,6 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
           </div>
         </div>
       )}
-    </section>
+    </ReceitaConfigCollapsibleSection>
   )
 }
