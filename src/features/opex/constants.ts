@@ -15,3 +15,6 @@ export const MESES_LONGOS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ] as const
+
+/** Placeholder quando o fornecedor ainda não foi definido no orçamento. */
+export const OPEX_FORNECEDOR_NAO_CADASTRADO = 'FORNECEDOR NÃO CADASTRADO'

@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyInput, formatDate, formatNumberToCurrencyInput, parseCurrencyBr } from '@/shared/utils/format'
-import { MESES_CURTOS, MESES_LONGOS } from '../constants'
+import { MESES_CURTOS, MESES_LONGOS, OPEX_FORNECEDOR_NAO_CADASTRADO } from '../constants'
 import { toggleMesFiltro } from '../utils/opexPeriodo'
 import { useOpexOrcamento } from '../hooks/useOpexOrcamento'
 import { opexOrcamentoService } from '../services/opexOrcamentoService'
@@ -42,6 +42,7 @@ import {
   countPlanosContasUnicos,
   countPlanosMicroUnicos,
   departamentoOrcamentoLabel,
+  montarDescricaoOrcamento,
   parseFornecedorDescricao,
   planosContasDasLinhas,
 } from '../utils/opexOrcamentoGrouping'
@@ -89,6 +90,7 @@ type LinhaForm = {
   meses: number[]
   grupo_conta: string
   plano_contas: string
+  fornecedor: string
   descricao: string
   departamento: string
   valor: string
@@ -115,6 +117,7 @@ const emptyForm = (): LinhaForm => ({
   meses: [],
   grupo_conta: '',
   plano_contas: '',
+  fornecedor: '',
   descricao: '',
   departamento: '',
   valor: '',
@@ -255,6 +258,39 @@ export function OpexOrcamentoSection({ ano }: Props) {
     if (form.plano_contas.trim()) set.add(form.plano_contas.trim())
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
   }, [grupoContaSelecionado, planosDoGrupo, linhas, form.plano_contas])
+
+  const planoMicroSelecionado = form.plano_contas.trim()
+
+  const { data: titulosPlanoOrcamento } = useQuery({
+    queryKey: ['opex', 'fornecedores-opcoes', ano, grupoContaSelecionado, planoMicroSelecionado],
+    queryFn: () => opexService.fetchPlanoTitulos(ano, grupoContaSelecionado, planoMicroSelecionado),
+    enabled: dialogOpen && grupoContaSelecionado.length > 0 && planoMicroSelecionado.length > 0,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const fornecedorOpcoes = useMemo(() => {
+    const set = new Set<string>()
+    for (const t of titulosPlanoOrcamento ?? []) {
+      const fornecedor = t.fornecedor.trim()
+      if (fornecedor && fornecedor !== '—') set.add(fornecedor)
+    }
+    for (const l of linhas) {
+      if (grupoContaSelecionado && l.grupo_conta.trim() !== grupoContaSelecionado) continue
+      if (planoMicroSelecionado && l.plano_contas.trim() !== planoMicroSelecionado) continue
+      const { fornecedor } = parseFornecedorDescricao(l)
+      if (fornecedor && fornecedor !== 'Sem fornecedor') set.add(fornecedor)
+    }
+    if (form.fornecedor.trim()) set.add(form.fornecedor.trim())
+    set.delete(OPEX_FORNECEDOR_NAO_CADASTRADO)
+    const cadastrados = Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    return [OPEX_FORNECEDOR_NAO_CADASTRADO, ...cadastrados]
+  }, [
+    titulosPlanoOrcamento,
+    linhas,
+    grupoContaSelecionado,
+    planoMicroSelecionado,
+    form.fornecedor,
+  ])
 
   const { data: departamentosVios } = useQuery({
     queryKey: ['opex', 'departamentos-opcoes', ano],
@@ -467,22 +503,25 @@ export function OpexOrcamentoSection({ ano }: Props) {
       meses.some((m) => m < 1 || m > 12) ||
       !form.grupo_conta.trim() ||
       !form.plano_contas.trim() ||
+      !form.fornecedor.trim() ||
       !form.departamento.trim() ||
       valor <= 0
     ) {
-      setErro('Selecione ao menos um mês e preencha plano contas, plano micro, departamento e valor.')
+      setErro('Selecione ao menos um mês e preencha plano contas, plano micro, fornecedor, departamento e valor.')
       return
     }
     setSalvando(true)
     setErro(null)
     try {
-      const titulo_ref = form.descricao.trim() || form.departamento.trim() || '—'
+      const descricaoDetalhe = form.descricao.trim()
+      const descricao = montarDescricaoOrcamento(descricaoDetalhe, form.fornecedor.trim())
+      const titulo_ref = descricaoDetalhe || form.departamento.trim() || '—'
       const payload = {
         grupo_conta: form.grupo_conta.trim(),
         plano_contas: form.plano_contas.trim(),
         conta_numero: '',
         titulo_ref,
-        descricao: form.descricao.trim(),
+        descricao,
         departamento: form.departamento.trim(),
         valor,
       }
@@ -893,7 +932,7 @@ export function OpexOrcamentoSection({ ano }: Props) {
           <DialogHeader>
             <DialogTitle>{editId ? 'Editar linha' : 'Nova linha de orçamento'}</DialogTitle>
             <DialogDescription>
-              Informe plano, departamento e valor. O lançamento é replicado em cada mês selecionado.
+              Informe plano, fornecedor, departamento e valor. O lançamento é replicado em cada mês selecionado.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-5 px-6 py-5">
@@ -978,6 +1017,7 @@ export function OpexOrcamentoSection({ ano }: Props) {
                       ...f,
                       grupo_conta,
                       plano_contas: f.grupo_conta === grupo_conta ? f.plano_contas : '',
+                      fornecedor: f.grupo_conta === grupo_conta ? f.fornecedor : '',
                     }))
                   }}
                   className={ORCAMENTO_FIELD_SELECT}
@@ -996,7 +1036,14 @@ export function OpexOrcamentoSection({ ano }: Props) {
                 <select
                   id="orcamento-plano"
                   value={form.plano_contas}
-                  onChange={(e) => setForm((f) => ({ ...f, plano_contas: e.target.value }))}
+                  onChange={(e) => {
+                    const plano_contas = e.target.value
+                    setForm((f) => ({
+                      ...f,
+                      plano_contas,
+                      fornecedor: f.plano_contas === plano_contas ? f.fornecedor : '',
+                    }))
+                  }}
                   className={ORCAMENTO_FIELD_SELECT}
                   required
                   disabled={!grupoContaSelecionado}
@@ -1007,6 +1054,26 @@ export function OpexOrcamentoSection({ ano }: Props) {
                   {planoMicroOpcoes.map((plano) => (
                     <option key={plano} value={plano}>
                       {plano}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="orcamento-fornecedor">Fornecedor</Label>
+                <select
+                  id="orcamento-fornecedor"
+                  value={form.fornecedor}
+                  onChange={(e) => setForm((f) => ({ ...f, fornecedor: e.target.value }))}
+                  className={ORCAMENTO_FIELD_SELECT}
+                  required
+                  disabled={!planoMicroSelecionado}
+                >
+                  <option value="">
+                    {planoMicroSelecionado ? 'Selecione o fornecedor…' : 'Selecione o plano micro primeiro'}
+                  </option>
+                  {fornecedorOpcoes.map((fornecedor) => (
+                    <option key={fornecedor} value={fornecedor}>
+                      {fornecedor}
                     </option>
                   ))}
                 </select>

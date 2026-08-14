@@ -26,18 +26,24 @@ export function parseFornecedorDescricao(l: OpexOrcamentoLinha): FornecedorDescr
   }
 }
 
+/** Monta descricao no formato hierárquico (detalhe · fornecedor). */
+export function montarDescricaoOrcamento(descricaoDetalhe: string, fornecedor: string): string {
+  const desc = descricaoDetalhe.trim()
+  const forn = fornecedor.trim()
+  if (desc && forn && forn !== 'Sem fornecedor') {
+    return `${desc}${DESC_FORN_SEP}${forn}`
+  }
+  if (forn && forn !== 'Sem fornecedor') return forn
+  return desc
+}
+
 /** Atualiza o texto exibido na hierarquia, preservando fornecedor no campo descricao. */
 export function reconstruirDescricaoOrcamento(
   linha: OpexOrcamentoLinha,
   novaDescricaoDetalhe: string,
 ): string {
-  const desc = novaDescricaoDetalhe.trim()
   const { fornecedor } = parseFornecedorDescricao(linha)
-  const forn = fornecedor.trim()
-  if (desc && forn && forn !== 'Sem fornecedor') {
-    return `${desc}${DESC_FORN_SEP}${forn}`
-  }
-  return desc || linha.descricao.trim()
+  return montarDescricaoOrcamento(novaDescricaoDetalhe, fornecedor) || linha.descricao.trim()
 }
 
 export function departamentoOrcamentoLabel(l: OpexOrcamentoLinha): string {
