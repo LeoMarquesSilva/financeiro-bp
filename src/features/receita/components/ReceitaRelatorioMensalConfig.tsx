@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useAuth } from '@/lib/AuthContext'
 import { teamMembersService } from '@/lib/teamMembersService'
+import type { TeamMember } from '@/lib/database.types'
 import { RECEITA_META_CONTRIBUICAO_AREA, RECEITA_DEPARTAMENTO_LABELS } from '../constants'
 import { useRelatorioMensalConfig } from '../hooks/useRelatorioMensalConfig'
 import {
@@ -80,7 +81,7 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
   })
 
   const usuariosAtivos = useMemo(
-    () => (usuariosQuery.data ?? []).filter((u) => u.is_active !== false),
+    () => (usuariosQuery.data ?? []).filter((u: TeamMember) => u.is_active !== false),
     [usuariosQuery.data],
   )
 
@@ -408,7 +409,7 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
               onChange={(e) => {
                 const id = e.target.value
                 if (!id) return
-                const u = usuariosAtivos.find((m) => m.id === id)
+                const u = usuariosAtivos.find((m: TeamMember) => m.id === id)
                 if (u) {
                   setDestForm((d) => ({
                     ...d,
@@ -419,7 +420,7 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
               }}
             >
               <option value="">Selecionar de Usuários…</option>
-              {usuariosAtivos.map((u) => (
+              {usuariosAtivos.map((u: TeamMember) => (
                 <option key={u.id} value={u.id}>
                   {u.full_name} ({u.email})
                 </option>

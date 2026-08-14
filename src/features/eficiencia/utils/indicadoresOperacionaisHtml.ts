@@ -1,8 +1,5 @@
 import { MESES_EFICIENCIA } from '../constants'
-import {
-  buildIndicadoresOperacionaisRows,
-  type IndicadorOperacionalRow,
-} from './indicadoresOperacionaisBuild'
+import { type IndicadorOperacionalRow } from './indicadoresOperacionaisBuild'
 import {
   buildRacionalExportUrl,
   INDICADOR_OPERACIONAL_RACIONAL,
