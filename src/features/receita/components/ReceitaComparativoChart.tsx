@@ -977,7 +977,7 @@ export function ReceitaComparativoChart({
   } = useQuery({
     queryKey: ['receita', 'recebido-departamento', ano, meses],
     queryFn: () => receitaService.fetchRecebidoPorDepartamento(ano),
-    enabled: porAreaMode && meses.length > 0,
+    enabled: (porAreaMode || areaLinhaSelecionada != null) && meses.length > 0,
   })
 
   const {
@@ -987,7 +987,7 @@ export function ReceitaComparativoChart({
   } = useQuery({
     queryKey: ['receita', 'previsto-departamento', ano],
     queryFn: () => receitaService.fetchPrevistoPorDepartamento(ano),
-    enabled: porAreaMode && areaLinhaSelecionada != null,
+    enabled: areaLinhaSelecionada != null,
   })
 
   const {
@@ -1005,7 +1005,7 @@ export function ReceitaComparativoChart({
       )
       return Object.fromEntries(entries) as Record<number, ReceitaInadimplenciaDepartamentoMes[]>
     },
-    enabled: porAreaMode && areaLinhaSelecionada != null && meses.length > 0,
+    enabled: areaLinhaSelecionada != null && meses.length > 0,
   })
 
   const inadEvolucaoEnabled = !porAreaMode || areaLinhaSelecionada != null
@@ -1085,7 +1085,8 @@ export function ReceitaComparativoChart({
       const next = !v
       if (next) {
         setPorAreaMode(false)
-        setAreaLinhaSelecionada(null)
+      } else if (areaLinhaSelecionada) {
+        setPorAreaMode(true)
       }
       return next
     })
@@ -1114,9 +1115,10 @@ export function ReceitaComparativoChart({
   }
 
   const selectAreaLinha = (key: string) => {
-    setPercentMode(false)
-    setPorAreaMode(true)
     setAreaLinhaSelecionada((prev) => (prev === key ? null : key))
+    if (!percentMode) {
+      setPorAreaMode(true)
+    }
   }
 
   const toggleSeries = (key: SeriesKey) => {
@@ -1155,12 +1157,6 @@ export function ReceitaComparativoChart({
       }),
     [rows, ano, inadimplenciaCongeladaPorMes, graficoOpts],
   )
-
-  const chartData = useMemo(() => {
-    const base = percentMode ? toComparativoPercentData(rawChartData) : rawChartData
-    if (graficoOpts.mesInicioExibicao == null) return base
-    return base.filter((d) => mesExibicaoGraficoComparativo(d.mes, graficoOpts))
-  }, [percentMode, rawChartData, graficoOpts])
 
   const visibleSeries = visible
 
@@ -1275,6 +1271,31 @@ export function ReceitaComparativoChart({
     graficoOpts,
   ])
 
+  const chartData = useMemo(() => {
+    const areaSource: ChartPoint[] | null =
+      percentMode && areaLinhaSelecionada
+        ? areaLinhaData.map((p) => ({
+            mes: p.mes,
+            mesLabel: p.mesLabel,
+            meta: p.meta,
+            projetadoBaseAbril: null,
+            projetadoReal: null,
+            previsto: p.previsto,
+            recebido: p.recebido,
+            inadimplencia: p.inadimplencia,
+          }))
+        : null
+    const source = areaSource ?? rawChartData
+    const base = percentMode ? toComparativoPercentData(source) : rawChartData
+    if (graficoOpts.mesInicioExibicao == null) return base
+    return base.filter((d) => mesExibicaoGraficoComparativo(d.mes, graficoOpts))
+  }, [percentMode, rawChartData, graficoOpts, areaLinhaSelecionada, areaLinhaData])
+
+  const areaPercentLoading =
+    percentMode &&
+    areaLinhaSelecionada != null &&
+    (deptLoading || previstoDeptLoading || inadDeptLoading || (inadEvolucaoEnabled && !inadEvolucao))
+
   const abrirAreaMesDetalhe = (point: AreaLinhaPoint, serie: 'recebido' | 'previsto') => {
     const total = serie === 'recebido' ? point.recebido : point.previsto
     if (total == null || total <= 0) return
@@ -1377,7 +1398,9 @@ export function ReceitaComparativoChart({
                     ? `Meta · Previsto · Recebido · Inadimplência — ${areaLinhaAtual.label}`
                     : 'Meta vs. recebido por área'
                   : percentMode
-                    ? 'Comparativo mensal (% da meta)'
+                    ? areaLinhaAtual
+                      ? `Comparativo mensal (% da meta) — ${areaLinhaAtual.label}`
+                      : 'Comparativo mensal (% da meta)'
                     : resultadoAtivo
                       ? 'Comparativo mensal — resultado'
                       : 'Comparativo mensal'}
@@ -1917,6 +1940,11 @@ export function ReceitaComparativoChart({
           </>
           )
           )
+          ) : areaPercentLoading ? (
+            <div className="flex h-[300px] items-center justify-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Carregando dados da área…
+            </div>
           ) : (
           <div data-chart-plot className="h-[300px] min-h-[300px] w-full min-w-0">
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
