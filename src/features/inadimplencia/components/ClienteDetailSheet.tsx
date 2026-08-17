@@ -600,7 +600,7 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
           className="flex w-full max-w-2xl flex-col overflow-hidden p-0 sm:max-w-2xl rounded-l-2xl border-l border-slate-200/60 bg-slate-50 shadow-2xl"
         >
           {/* ── Header ── */}
-          <header className="shrink-0 bg-gradient-to-br from-primary-dark to-[#0a1420] px-6 pt-6 pb-5 pr-12">
+          <header className="shrink-0 bg-gradient-to-br from-primary-dark to-[#0a1420] px-6 pt-6 pb-5 pr-16">
             <SheetTitle className="text-lg font-bold text-white leading-tight">
               {grupoCliente || client.razao_social}
             </SheetTitle>

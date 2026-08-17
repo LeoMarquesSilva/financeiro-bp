@@ -500,7 +500,7 @@ export function AmostraChamadosDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] w-[min(1120px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="shrink-0 border-b border-slate-200 px-6 pr-12 py-4 text-left">
+        <DialogHeader className="shrink-0 border-b border-slate-200 px-6 pr-16 py-4 text-left">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 space-y-1.5">
               <DialogTitle className="flex items-center gap-2">

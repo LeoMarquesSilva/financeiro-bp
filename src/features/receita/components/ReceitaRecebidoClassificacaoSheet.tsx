@@ -661,7 +661,7 @@ export function ReceitaRecebidoClassificacaoSheet({
           data-chart-export-preserve-bg
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-        <SheetHeader className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-sky-600 to-sky-700 px-6 pb-4 pt-3 pr-14 text-left">
+        <SheetHeader className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-sky-600 to-sky-700 px-6 py-4 pr-16 text-left">
           {view === 'fechamento' && fechamentoDrill ? (
             <>
               <Button

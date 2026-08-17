@@ -275,7 +275,7 @@ export function ReceitaEncargosKpiDetalheSheet({
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="flex w-full max-w-2xl flex-col p-0 sm:max-w-2xl">
-        <SheetHeader className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-orange-600 to-orange-700 px-6 py-4 pr-14 text-left">
+        <SheetHeader className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-orange-600 to-orange-700 px-6 py-4 pr-16 text-left">
           {view === 'titulos' && grupoSelecionado && planoSelecionado && mesSelecionado ? (
             <>
               <Button
