@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ClipboardCheck } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import {
@@ -9,7 +9,9 @@ import {
 } from '../constants'
 import { useEficienciaProtocolo, useEficienciaProtocoloRanking } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
+import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
+import { totaisEficienciaProtocoloFromResumo } from '../utils/periodoCurtoIndicadorTotais'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
@@ -56,11 +58,38 @@ export function EficienciaProtocoloTab({
     loading: loadingEvol,
   } = useEvolucaoPorResponsavel('eficiencia_protocolo', ano, area, responsavel, mesFiltro)
 
-  const semInconsistenciaArea = mensalFiltrado.reduce((s, m) => s + m.sem_inconsistencia, 0)
-  const totalArea = mensalFiltrado.reduce((s, m) => s + m.total, 0)
-  const semInconsistencia = responsavel ? acumResp.ok : semInconsistenciaArea
-  const total = responsavel ? acumResp.total : totalArea
-  const inconsistentes = Math.max(0, total - semInconsistencia)
+  const periodoCurto = usePeriodoCurtoResumo(
+    'eficiencia_protocolo',
+    ano,
+    mesFiltro,
+    area,
+    responsavel,
+  )
+
+  const periodoTotais = useMemo(() => {
+    if (periodoCurto.periodoCurtoAtivo && periodoCurto.resumo) {
+      return totaisEficienciaProtocoloFromResumo(periodoCurto.resumo)
+    }
+    const semInconsistencia = mensalFiltrado.reduce((s, m) => s + m.sem_inconsistencia, 0)
+    const total = mensalFiltrado.reduce((s, m) => s + m.total, 0)
+    return {
+      semInconsistencia,
+      total,
+      inconsistentes: Math.max(0, total - semInconsistencia),
+      pctGeral: total > 0 ? (semInconsistencia / total) * 100 : 0,
+    }
+  }, [periodoCurto.periodoCurtoAtivo, periodoCurto.resumo, mensalFiltrado])
+
+  const semInconsistenciaArea = periodoTotais.semInconsistencia
+  const totalArea = periodoTotais.total
+  const semInconsistencia =
+    responsavel && !periodoCurto.periodoCurtoAtivo ? acumResp.ok : semInconsistenciaArea
+  const total =
+    responsavel && !periodoCurto.periodoCurtoAtivo ? acumResp.total : totalArea
+  const inconsistentes =
+    responsavel && !periodoCurto.periodoCurtoAtivo
+      ? Math.max(0, acumResp.total - acumResp.ok)
+      : periodoTotais.inconsistentes
   const rankingFiltrado = rankingDesvioFiltrado(
     ranking,
     (r) => r.usuario,
@@ -73,13 +102,21 @@ export function EficienciaProtocoloTab({
         }
       : null,
   )
-  const pctGeral = total > 0 ? (semInconsistencia / total) * 100 : 0
+  const pctGeral =
+    responsavel && !periodoCurto.periodoCurtoAtivo
+      ? total > 0
+        ? (semInconsistencia / total) * 100
+        : 0
+      : periodoTotais.pctGeral
 
   const semInconsistenciaGav = mensalGestaoVista.reduce((s, m) => s + m.sem_inconsistencia, 0)
   const totalGav = mensalGestaoVista.reduce((s, m) => s + m.total, 0)
   const pctGestaoVista = totalGav > 0 ? (semInconsistenciaGav / totalGav) * 100 : null
   const areaHint = area ? `Área ${area}` : undefined
-  const loadingPeriodo = loading || Boolean(responsavel && loadingEvol)
+  const loadingPeriodo =
+    loading ||
+    periodoCurto.loading ||
+    Boolean(responsavel && !periodoCurto.periodoCurtoAtivo && loadingEvol)
 
   const chartData = responsavel
     ? evolucaoResp

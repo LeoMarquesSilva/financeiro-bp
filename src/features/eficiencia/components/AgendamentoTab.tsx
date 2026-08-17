@@ -10,7 +10,9 @@ import {
 } from '../constants'
 import { useAgendamento, useAgendamentoRanking } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
+import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
+import { totaisAgendamentoFromResumo } from '../utils/periodoCurtoIndicadorTotais'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
@@ -61,18 +63,48 @@ export function AgendamentoTab({
   const indisponivel = isAgendamentoVistagemIndisponivelPorArea(area)
   const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
 
+  const periodoCurto = usePeriodoCurtoResumo(
+    'sla_ciencia_agendamentos',
+    ano,
+    mesFiltro,
+    area,
+    responsavel,
+  )
+
+  const periodoTotais = useMemo(() => {
+    if (periodoCurto.periodoCurtoAtivo && periodoCurto.resumo) {
+      return totaisAgendamentoFromResumo(periodoCurto.resumo)
+    }
+    const dentroPrazo = mensalFiltrado.reduce((s, m) => s + m.dentro_prazo, 0)
+    const foraPrazo = mensalFiltrado.reduce((s, m) => s + m.fora_prazo, 0)
+    const total = dentroPrazo + foraPrazo
+    return {
+      dentroPrazo,
+      foraPrazo,
+      total,
+      pctGeral: total > 0 ? (dentroPrazo / total) * 100 : null,
+    }
+  }, [periodoCurto.periodoCurtoAtivo, periodoCurto.resumo, mensalFiltrado])
+
   const dentroPrazo = indisponivel
     ? 0
-    : responsavel
+    : responsavel && !periodoCurto.periodoCurtoAtivo
       ? acumResp.ok
-      : mensalFiltrado.reduce((s, m) => s + m.dentro_prazo, 0)
+      : periodoTotais.dentroPrazo
   const foraPrazo = indisponivel
     ? 0
-    : responsavel
+    : responsavel && !periodoCurto.periodoCurtoAtivo
       ? Math.max(0, acumResp.total - acumResp.ok)
-      : mensalFiltrado.reduce((s, m) => s + m.fora_prazo, 0)
+      : periodoTotais.foraPrazo
   const total = dentroPrazo + foraPrazo
-  const pctGeral = !indisponivel && total > 0 ? (dentroPrazo / total) * 100 : null
+  const pctGeral =
+    !indisponivel && responsavel && !periodoCurto.periodoCurtoAtivo
+      ? total > 0
+        ? (dentroPrazo / total) * 100
+        : null
+      : indisponivel
+        ? null
+        : periodoTotais.pctGeral
 
   const dentroPrazoGav = indisponivel
     ? 0
@@ -84,7 +116,10 @@ export function AgendamentoTab({
   const pctGestaoVista =
     !indisponivel && totalGav > 0 ? (dentroPrazoGav / totalGav) * 100 : null
   const areaHint = area ? `Área ${area}` : undefined
-  const loadingPeriodo = loading || Boolean(responsavel && loadingEvol)
+  const loadingPeriodo =
+    loading ||
+    periodoCurto.loading ||
+    Boolean(responsavel && !periodoCurto.periodoCurtoAtivo && loadingEvol)
 
   const chartData = responsavel
     ? evolucaoResp

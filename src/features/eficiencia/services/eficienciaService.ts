@@ -87,6 +87,7 @@ import {
   fetchOpsLegaisPublicacoesRacionalResumo,
   fetchOpsLegaisSlaProtocoloRacionalResumo,
   fetchRacionalLinhasCompletas,
+  fetchSlaCienciaAgendamentosRacionalResumo,
   fetchSlaProtocoloRacionalResumo,
   fetchSlaVistagemRacionalResumo,
   RACIONAL_LIMITE,
@@ -113,6 +114,9 @@ async function fetchRacionalResumo(
   }
   if (indicador === 'eficiencia_protocolo') {
     return fetchEficienciaProtocoloRacionalResumo(cfg, ano, area, mes, responsavel)
+  }
+  if (indicador === 'sla_ciencia_agendamentos') {
+    return fetchSlaCienciaAgendamentosRacionalResumo(cfg, ano, area, mes, responsavel)
   }
   if (indicador === 'ops_legais_sla_protocolo') {
     return fetchOpsLegaisSlaProtocoloRacionalResumo(cfg, ano, area, mes)

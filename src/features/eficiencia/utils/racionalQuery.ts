@@ -840,6 +840,53 @@ export async function fetchOpsLegaisPublicacoesRacionalResumo(
   }
 }
 
+/** SLA Ciência Agendamentos — dentro vs fora do prazo (mesma base do KPI). */
+export async function fetchSlaCienciaAgendamentosRacionalResumo(
+  cfg: RacionalConfig,
+  ano: number,
+  area: string | null,
+  mes: MesFiltroEficiencia,
+  responsavel: string | null = null,
+): Promise<RacionalResultado['resumo']> {
+  let qtd_eficiencia = 0
+  let qtd_inconsistencia = 0
+  let offset = 0
+
+  while (true) {
+    const query = buildRacionalBaseQuery(
+      cfg,
+      'sla_ciencia_agendamentos',
+      ano,
+      area,
+      mes,
+      'fatal_sem18_d1',
+      'default',
+      responsavel,
+    ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const rows = (data ?? []) as Array<{ fatal_sem18_d1: string | null }>
+    for (const row of rows) {
+      if (String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')) {
+        qtd_inconsistencia += 1
+      } else {
+        qtd_eficiencia += 1
+      }
+    }
+
+    if (rows.length < RACIONAL_FETCH_PAGE) break
+    offset += RACIONAL_FETCH_PAGE
+  }
+
+  return {
+    qtd_eficiencia,
+    qtd_inconsistencia,
+    qtd_total: qtd_eficiencia + qtd_inconsistencia,
+  }
+}
+
 /** COUNT(*) por vistado_d1 — mesmos filtros do KPI. */
 export async function fetchSlaVistagemRacionalResumo(
   cfg: RacionalConfig,

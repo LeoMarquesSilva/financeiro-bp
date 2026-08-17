@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import {
@@ -16,6 +16,8 @@ import {
   useSlaVistagemDesvioRankings,
 } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
+import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
+import { totaisVistagemFromResumo } from '../utils/periodoCurtoIndicadorTotais'
 import {
   emptyLabelDesvioResponsavel,
   rankingDesvioFiltrado,
@@ -71,19 +73,40 @@ export function SlaVistagemTab({
     !risco && area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
   const indisponivel = indisponivelOps || indisponivelNormal
 
+  const periodoCurto = usePeriodoCurtoResumo(indicador, ano, mesFiltro, area, responsavel)
+
   const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
+
+  const periodoTotais = useMemo(() => {
+    if (periodoCurto.periodoCurtoAtivo && periodoCurto.resumo) {
+      return totaisVistagemFromResumo(periodoCurto.resumo)
+    }
+    const total = mensalFiltrado.reduce((s, m) => s + m.total, 0)
+    const vistadoD1 = mensalFiltrado.reduce((s, m) => s + m.vistado_d1, 0)
+    return {
+      total,
+      vistadoD1,
+      pctGeral: total > 0 ? (vistadoD1 / total) * 100 : null,
+    }
+  }, [periodoCurto.periodoCurtoAtivo, periodoCurto.resumo, mensalFiltrado])
+
   const totalPublicacoes = indisponivel
     ? 0
-    : responsavel
+    : responsavel && !periodoCurto.periodoCurtoAtivo
       ? acumResp.total
-      : mensalFiltrado.reduce((s, m) => s + m.total, 0)
+      : periodoTotais.total
   const totalVistadoD1 = indisponivel
     ? 0
-    : responsavel
+    : responsavel && !periodoCurto.periodoCurtoAtivo
       ? acumResp.ok
-      : mensalFiltrado.reduce((s, m) => s + m.vistado_d1, 0)
-  const pctGeral =
-    !indisponivel && totalPublicacoes > 0 ? (totalVistadoD1 / totalPublicacoes) * 100 : null
+      : periodoTotais.vistadoD1
+  const pctGeral = indisponivel
+    ? null
+    : responsavel && !periodoCurto.periodoCurtoAtivo
+      ? totalPublicacoes > 0
+        ? (totalVistadoD1 / totalPublicacoes) * 100
+        : null
+      : periodoTotais.pctGeral
 
   const totalPublicacoesGav = indisponivel
     ? 0
@@ -123,7 +146,10 @@ export function SlaVistagemTab({
           'Sem desvios no período.',
         )
 
-  const loadingKpi = loading || Boolean(responsavel && loadingEvol)
+  const loadingKpi =
+    loading ||
+    periodoCurto.loading ||
+    Boolean(responsavel && !periodoCurto.periodoCurtoAtivo && loadingEvol)
   const chartData = responsavel
     ? evolucaoResp
     : mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_d1 }))

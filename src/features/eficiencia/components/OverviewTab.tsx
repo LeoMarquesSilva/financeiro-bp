@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Check, Copy, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatPercent } from '@/shared/utils/format'
@@ -30,6 +31,13 @@ import {
 } from '../utils/overviewFinanceiroKpis'
 import { acumuladoGestaoPdi, buildGestaoPdiCells } from '../utils/gestaoPdiCalc'
 import { resolveMetaTexto } from '../utils/overviewKpiMeta'
+import { eficienciaService } from '../services/eficienciaService'
+import {
+  totaisAgendamentoFromResumo,
+  totaisEficienciaProtocoloFromResumo,
+  totaisSlaProtocoloFromResumo,
+  totaisVistagemFromResumo,
+} from '../utils/periodoCurtoIndicadorTotais'
 
 type Props = {
   ano: number
@@ -132,7 +140,35 @@ export function OverviewTab({
   const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const copyRef = useRef<HTMLDivElement>(null)
   const mesDestaque = isMesesFiltro(mesFiltro) ? mesFiltro : null
+  const periodoCurtoAtivo = isPeriodoCurtoFiltro(mesFiltro)
   const { data: financeiroKpis, isLoading: loadingFinanceiroKpis } = useOverviewFinanceiroKpis(ano)
+
+  const { data: resumosPeriodo } = useQuery({
+    queryKey: ['eficiencia', 'overview-periodo-resumos', ano, mesFiltro, area],
+    enabled: periodoCurtoAtivo && !loading && data != null,
+    queryFn: async () => {
+      const agendaVistagemOpsLegais = isAgendamentoVistagemIndisponivelPorArea(area)
+      const [sla, efi, agend, vistRisco, vistNormal] = await Promise.all([
+        eficienciaService.fetchRacionalResumoOnly('sla_protocolo', ano, area, mesFiltro),
+        eficienciaService.fetchRacionalResumoOnly('eficiencia_protocolo', ano, area, mesFiltro),
+        agendaVistagemOpsLegais
+          ? Promise.resolve(undefined)
+          : eficienciaService.fetchRacionalResumoOnly(
+              'sla_ciencia_agendamentos',
+              ano,
+              area,
+              mesFiltro,
+            ),
+        agendaVistagemOpsLegais
+          ? Promise.resolve(undefined)
+          : eficienciaService.fetchRacionalResumoOnly('sla_vistagem_risco', ano, area, mesFiltro),
+        agendaVistagemOpsLegais || area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
+          ? Promise.resolve(undefined)
+          : eficienciaService.fetchRacionalResumoOnly('sla_vistagem_normal', ano, area, mesFiltro),
+      ])
+      return { sla, efi, agend, vistRisco, vistNormal }
+    },
+  })
 
   if (loading || !data) {
     return (
@@ -178,6 +214,11 @@ export function OverviewTab({
     rows.filter((r) => mesNoFiltro(r.mes, mesFiltro, ano))
 
   const acumuladoSlaProtocolo = (() => {
+    if (periodoCurtoAtivo && resumosPeriodo?.sla) {
+      const t = totaisSlaProtocoloFromResumo(resumosPeriodo.sla)
+      if (t.qtdTotal === 0) return ACUMULADO_VAZIO
+      return { value: t.pctGeral, label: PCT0(t.pctGeral) }
+    }
     const rows = filterMensal(data.slaProtocolo)
     return somaRazaoPct(
       rows.map((r) => r.qtd_d1),
@@ -185,6 +226,11 @@ export function OverviewTab({
     )
   })()
   const acumuladoEficienciaProtocolo = (() => {
+    if (periodoCurtoAtivo && resumosPeriodo?.efi) {
+      const t = totaisEficienciaProtocoloFromResumo(resumosPeriodo.efi)
+      if (t.total === 0) return ACUMULADO_VAZIO
+      return { value: t.pctGeral, label: PCT0(t.pctGeral) }
+    }
     const rows = filterMensal(data.eficienciaProtocolo)
     return somaRazaoPct(
       rows.map((r) => r.sem_inconsistencia),
@@ -192,6 +238,12 @@ export function OverviewTab({
     )
   })()
   const acumuladoAgendamento = (() => {
+    if (periodoCurtoAtivo && resumosPeriodo?.agend) {
+      const t = totaisAgendamentoFromResumo(resumosPeriodo.agend)
+      if (t.total === 0) return ACUMULADO_VAZIO
+      const pct = t.pctGeral ?? 0
+      return { value: pct, label: PCT0(pct) }
+    }
     const rows = filterMensal(data.agendamento)
     return somaRazaoPct(
       rows.map((r) => r.dentro_prazo),
@@ -199,6 +251,12 @@ export function OverviewTab({
     )
   })()
   const acumuladoVistagemRisco = (() => {
+    if (periodoCurtoAtivo && resumosPeriodo?.vistRisco) {
+      const t = totaisVistagemFromResumo(resumosPeriodo.vistRisco)
+      if (t.total === 0) return ACUMULADO_VAZIO
+      const pct = t.pctGeral ?? 0
+      return { value: pct, label: PCT0(pct) }
+    }
     const rows = filterMensal(data.slaVistagemRisco)
     return somaRazaoPct(
       rows.map((r) => r.vistado_d1),
@@ -206,6 +264,12 @@ export function OverviewTab({
     )
   })()
   const acumuladoVistagemComum = (() => {
+    if (periodoCurtoAtivo && resumosPeriodo?.vistNormal) {
+      const t = totaisVistagemFromResumo(resumosPeriodo.vistNormal)
+      if (t.total === 0) return ACUMULADO_VAZIO
+      const pct = t.pctGeral ?? 0
+      return { value: pct, label: PCT0(pct) }
+    }
     const rows = filterMensal(data.slaVistagemComum)
     return somaRazaoPct(
       rows.map((r) => r.vistado_d1),

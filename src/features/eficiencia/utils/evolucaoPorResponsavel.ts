@@ -1,4 +1,11 @@
-import { EFICIENCIA_TZ } from '../constants'
+import {
+  EFICIENCIA_TZ,
+  isPeriodoCurtoFiltro,
+  linhaNoPeriodoCurtoFiltro,
+  mesNoFiltro,
+  mesesEfetivosFiltro,
+  type MesFiltroEficiencia,
+} from '../constants'
 import type { RacionalIndicador } from '../types/eficiencia.types'
 import type { EvolucaoPoint } from '../components/EficienciaEvolucaoChart'
 import { isVistadoD1Sim } from './racionalFormat'
@@ -61,6 +68,30 @@ function dataColunaIndicador(indicador: RacionalIndicador): string | null {
   }
 }
 
+function linhaEntraNoMesFiltro(
+  row: Record<string, unknown>,
+  indicador: RacionalIndicador,
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+): boolean {
+  const dataCol = dataColunaIndicador(indicador)
+  if (!dataCol) return false
+
+  if (isPeriodoCurtoFiltro(mesFiltro)) {
+    if (indicador === 'gestao_pdi') {
+      const mes = Number(row.mes)
+      return Number.isFinite(mes) && mesNoFiltro(mes, mesFiltro, ano)
+    }
+    return linhaNoPeriodoCurtoFiltro(row[dataCol], ano, mesFiltro)
+  }
+
+  const mes = mesDaLinhaRacional(row[dataCol], ano)
+  if (mes == null) return false
+  const meses = mesesEfetivosFiltro(mesFiltro, ano)
+  if (meses && !meses.includes(mes)) return false
+  return true
+}
+
 function toPoints(buckets: Map<number, Bucket>, useCi: boolean): EvolucaoPoint[] {
   return [...buckets.entries()]
     .sort(([a], [b]) => a - b)
@@ -87,6 +118,7 @@ export function agregarEvolucaoPorResponsavel(
   indicador: RacionalIndicador,
   linhas: Array<Record<string, unknown>>,
   ano: number,
+  mesFiltro: MesFiltroEficiencia = null,
 ): EvolucaoPoint[] {
   if (!RACIONAL_COLUNA_RESPONSAVEL[indicador] && indicador !== 'gestao_pdi') {
     return []
@@ -106,8 +138,8 @@ export function agregarEvolucaoPorResponsavel(
   }
 
   for (const row of linhas) {
-    const mes = mesDaLinhaRacional(row[dataCol], ano)
-    if (mes == null) continue
+    if (!linhaEntraNoMesFiltro(row, indicador, ano, mesFiltro)) continue
+    const mes = mesDaLinhaRacional(row[dataCol], ano) ?? 1
     const b = ensure(mes)
 
     switch (indicador) {
@@ -166,7 +198,7 @@ export function acumularEvolucaoPorResponsavel(
   linhas: Array<Record<string, unknown>>,
   indicador: RacionalIndicador,
   ano: number,
-  meses: number[] | null,
+  mesFiltro: MesFiltroEficiencia = null,
 ): { pct: number | null; ok: number; total: number } {
   const dataCol = dataColunaIndicador(indicador)
   if (!dataCol) return { pct: null, ok: 0, total: 0 }
@@ -177,9 +209,7 @@ export function acumularEvolucaoPorResponsavel(
   const cisTotal = new Set<string>()
 
   for (const row of linhas) {
-    const mes = mesDaLinhaRacional(row[dataCol], ano)
-    if (mes == null) continue
-    if (meses && !meses.includes(mes)) continue
+    if (!linhaEntraNoMesFiltro(row, indicador, ano, mesFiltro)) continue
 
     switch (indicador) {
       case 'sla_protocolo': {

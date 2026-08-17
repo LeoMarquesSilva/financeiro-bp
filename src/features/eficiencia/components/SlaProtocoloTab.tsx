@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { FileCheck2 } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import {
@@ -7,14 +7,16 @@ import {
   filtrarMensalPorMesFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
-import { toPriMaiuscula } from '../utils/textFormat'
 import {
   useSlaProtocolo,
   useSlaProtocoloJustificativaFatal,
   useSlaProtocoloRankingFatal,
 } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
+import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
+import { totaisSlaProtocoloFromResumo } from '../utils/periodoCurtoIndicadorTotais'
+import { toPriMaiuscula } from '../utils/textFormat'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
@@ -68,15 +70,46 @@ export function SlaProtocoloTab({
     loading: loadingEvol,
   } = useEvolucaoPorResponsavel('sla_protocolo', ano, area, responsavel, mesFiltro)
 
-  const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
-  const qtdD1Area = mensalFiltrado.reduce((s, m) => s + m.qtd_d1, 0)
-  const qtdTotalArea = mensalFiltrado.reduce((s, m) => s + m.qtd_total, 0)
-  const qtdFatalArea = mensalFiltrado.reduce((s, m) => s + m.qtd_fatal, 0)
-  const qtdExcludente = mensalFiltrado.reduce((s, m) => s + (m.qtd_excludente ?? 0), 0)
+  const periodoCurto = usePeriodoCurtoResumo(
+    'sla_protocolo',
+    ano,
+    mesFiltro,
+    area,
+    responsavel,
+  )
 
-  const qtdD1 = responsavel ? acumResp.ok : qtdD1Area
-  const qtdTotal = responsavel ? acumResp.total : qtdTotalArea
-  const qtdFatal = responsavel ? Math.max(0, acumResp.total - acumResp.ok) : qtdFatalArea
+  const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
+
+  const periodoTotais = useMemo(() => {
+    if (periodoCurto.periodoCurtoAtivo && periodoCurto.resumo) {
+      return totaisSlaProtocoloFromResumo(periodoCurto.resumo)
+    }
+
+    const qtdD1 = mensalFiltrado.reduce((s, m) => s + m.qtd_d1, 0)
+    const qtdTotal = mensalFiltrado.reduce((s, m) => s + m.qtd_total, 0)
+    const qtdFatal = mensalFiltrado.reduce((s, m) => s + m.qtd_fatal, 0)
+    return {
+      qtdD1,
+      qtdFatal,
+      qtdTotal,
+      qtdExcludente: mensalFiltrado.reduce((s, m) => s + (m.qtd_excludente ?? 0), 0),
+      pctGeral: qtdTotal > 0 ? (qtdD1 / qtdTotal) * 100 : 0,
+    }
+  }, [periodoCurto.periodoCurtoAtivo, periodoCurto.resumo, mensalFiltrado])
+
+  const qtdD1Area = periodoTotais.qtdD1
+  const qtdTotalArea = periodoTotais.qtdTotal
+  const qtdFatalArea = periodoTotais.qtdFatal
+  const qtdExcludente = periodoTotais.qtdExcludente
+
+  const qtdD1 =
+    responsavel && !periodoCurto.periodoCurtoAtivo ? acumResp.ok : qtdD1Area
+  const qtdTotal =
+    responsavel && !periodoCurto.periodoCurtoAtivo ? acumResp.total : qtdTotalArea
+  const qtdFatal =
+    responsavel && !periodoCurto.periodoCurtoAtivo
+      ? Math.max(0, acumResp.total - acumResp.ok)
+      : qtdFatalArea
   const rankingFiltrado = rankingDesvioFiltrado(
     ranking,
     (r) => r.usuario,
@@ -85,7 +118,12 @@ export function SlaProtocoloTab({
       ? { usuario: responsavel, qtd_fatal: qtdFatal, pct_do_total: 100 }
       : null,
   )
-  const pctGeral = qtdTotal > 0 ? (qtdD1 / qtdTotal) * 100 : 0
+  const pctGeral =
+    responsavel && !periodoCurto.periodoCurtoAtivo
+      ? qtdTotal > 0
+        ? (qtdD1 / qtdTotal) * 100
+        : 0
+      : periodoTotais.pctGeral
   const metaAtual = mensalFiltrado.length
     ? mensalFiltrado[mensalFiltrado.length - 1]!.meta
     : null
@@ -98,7 +136,10 @@ export function SlaProtocoloTab({
     : null
 
   const areaHint = area ? `Área ${area}` : undefined
-  const loadingPeriodo = loading || Boolean(responsavel && loadingEvol)
+  const loadingPeriodo =
+    loading ||
+    periodoCurto.loading ||
+    Boolean(responsavel && !periodoCurto.periodoCurtoAtivo && loadingEvol)
 
   function openRacional(escopo: RacionalEscopo = 'default') {
     setRacionalEscopo(escopo)

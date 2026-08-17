@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   filtrarMensalPorMesFiltro,
-  mesesEfetivosFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
@@ -38,7 +37,7 @@ export function useEvolucaoPorResponsavel(
         'default',
         responsavel,
       )
-      const pontos = agregarEvolucaoPorResponsavel(indicador, result.linhas, ano)
+      const pontos = agregarEvolucaoPorResponsavel(indicador, result.linhas, ano, null)
       return { pontos, linhas: result.linhas }
     },
     staleTime: 1000 * 60,
@@ -52,8 +51,7 @@ export function useEvolucaoPorResponsavel(
 
   const acumulado = useMemo(() => {
     if (!enabled || !data?.linhas) return { pct: null as number | null, ok: 0, total: 0 }
-    const meses = mesesEfetivosFiltro(mesFiltro, ano)
-    return acumularEvolucaoPorResponsavel(data.linhas, indicador, ano, meses)
+    return acumularEvolucaoPorResponsavel(data.linhas, indicador, ano, mesFiltro)
   }, [enabled, data?.linhas, indicador, ano, mesFiltro])
 
   return {

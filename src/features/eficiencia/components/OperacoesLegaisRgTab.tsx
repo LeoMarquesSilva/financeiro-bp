@@ -48,6 +48,7 @@ import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
+import { totaisOpsCadastroFromResumo } from '../utils/periodoCurtoIndicadorTotais'
 
 type SecaoId =
   | 'protocolos'
@@ -190,7 +191,7 @@ export function OperacoesLegaisRgTab({
     queryKey: ['eficiencia', 'ops-legais-rg-semana', ano, mesFiltro],
     enabled: periodoCurtoAtivo,
     queryFn: async () => {
-      const [sla, efi, analise, agenda] = await Promise.all([
+      const [sla, efi, analise, agenda, cad] = await Promise.all([
         eficienciaService.fetchRacionalResumoOnly('ops_legais_sla_protocolo', ano, null, mesFiltro),
         eficienciaService.fetchRacionalResumoOnly(
           'ops_legais_eficiencia_protocolo',
@@ -205,8 +206,9 @@ export function OperacoesLegaisRgTab({
           null,
           mesFiltro,
         ),
+        eficienciaService.fetchRacionalResumoOnly('ops_legais_cadastro', ano, null, mesFiltro),
       ])
-      return { sla, efi, analise, agenda }
+      return { sla, efi, analise, agenda, cad }
     },
   })
 
@@ -278,11 +280,15 @@ export function OperacoesLegaisRgTab({
   }, [pubAgendaFiltrado, periodoCurtoAtivo, resumosSemana])
 
   const cadTotais = useMemo(() => {
+    if (periodoCurtoAtivo && resumosSemana?.cad) {
+      const t = totaisOpsCadastroFromResumo(resumosSemana.cad)
+      return { dentro: t.dentro, fora: t.fora, tot: t.total, pct: t.pct }
+    }
     const dentro = cadFiltrado.reduce((s, m) => s + m.dentro_prazo, 0)
     const fora = cadFiltrado.reduce((s, m) => s + m.fora_prazo, 0)
     const tot = dentro + fora
     return { dentro, fora, tot, pct: tot > 0 ? (dentro / tot) * 100 : null }
-  }, [cadFiltrado])
+  }, [cadFiltrado, periodoCurtoAtivo, resumosSemana])
 
   return (
     <div className="space-y-5">

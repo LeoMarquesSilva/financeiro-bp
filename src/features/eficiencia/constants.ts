@@ -575,6 +575,22 @@ export function filtrarMensalGestaoAVista<T extends { mes: number }>(
   return filtrarMensalPorMesFiltro(rows, filtroEfetivoGestaoAVista(ano, ref), ano)
 }
 
+/** true se a data ISO (YYYY-MM-DD…) cai no intervalo curto (semana ou De–Até). */
+export function linhaNoPeriodoCurtoFiltro(
+  dataValue: unknown,
+  ano: number,
+  filtro: MesFiltroEficiencia,
+  ref = new Date(),
+): boolean {
+  if (!isPeriodoCurtoFiltro(filtro)) return true
+  const raw = String(dataValue ?? '').trim()
+  if (!raw) return false
+  const iso = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : null
+  if (!iso) return false
+  const { inicio, fimExclusivo } = rangePeriodoFiltro(ano, filtro, ref)
+  return iso >= inicio && iso < fimExclusivo
+}
+
 /**
  * Intervalo [inicio, fimExclusivo) YYYY-MM-DD para RPCs/edge (mês, resultado, semana ou ano).
  */
