@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { FileSearch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MESES_EFICIENCIA } from '../constants'
@@ -47,8 +47,10 @@ export function OverviewRacionalSpacer() {
 export type HeatCell = {
   /** Valor numérico usado para comparar com a meta (mesma escala da meta). null = sem dados no mês. */
   value: number | null
-  /** Texto exibido na célula (já formatado). */
+  /** Texto principal exibido na célula (linha de cima quando há subLabel). */
   label: string
+  /** Segunda linha (ex.: % abaixo das horas em Desenvolvimento Equipe). */
+  subLabel?: string
 }
 
 type Props = {
@@ -104,20 +106,23 @@ function mesesDestaqueSet(mesDestaque: number | number[] | null): Set<number> | 
   return list.length > 0 ? new Set(list) : null
 }
 
+const CELL_FONT_MONTH = 600
+const CELL_FONT_ACUM = 700
+
 function cellStyle(
   cell: HeatCell,
   meta: number,
-  bold: boolean,
   comparacao: MetaComparacaoKpi = 'minimo',
+  fontWeight: number = CELL_FONT_MONTH,
 ): CSSProperties {
   if (cell.value == null) {
-    return { background: '#FFFFFF', color: '#6B7280', fontWeight: bold ? 700 : 600 }
+    return { background: '#FFFFFF', color: '#6B7280', fontWeight }
   }
   const atingiu = atingiuMetaKpi(cell.value, meta, comparacao) === true
   return {
     background: atingiu ? '#ECFDF3' : '#FEE2E2',
     color: atingiu ? '#059669' : '#DC2626',
-    fontWeight: bold ? 700 : 600,
+    fontWeight,
   }
 }
 
@@ -173,6 +178,31 @@ function yearBandRadius(role: YearBandRole): string {
   return '0'
 }
 
+function renderHeatCellContent(cell: HeatCell): ReactNode {
+  if (cell.value == null) return '-'
+  if (!cell.subLabel) return cell.label
+  return (
+    <span
+      data-heat-cell-stacked="1"
+      style={{ display: 'block', lineHeight: 1.15, textAlign: 'center' }}
+    >
+      <span data-heat-cell-stacked-primary="1" style={{ display: 'block' }}>
+        {cell.label}
+      </span>
+      <span
+        data-heat-cell-stacked-secondary="1"
+        style={{ display: 'block', fontSize: '0.88em' }}
+      >
+        {cell.subLabel}
+      </span>
+    </span>
+  )
+}
+
+function heatCellStackedAttr(cell: HeatCell): { 'data-heat-cell-stacked'?: '1' } {
+  return cell.subLabel ? { 'data-heat-cell-stacked': '1' } : {}
+}
+
 /** Réplica visual da tabela KPI_HTML_*_MENSAL do BI: título + 12 meses coloridos por meta + coluna Acum. */
 export function OverviewKpiHeatCard({
   title,
@@ -209,6 +239,7 @@ export function OverviewKpiHeatCard({
   return (
     <div
       data-overview-copy-card
+      data-overview-kpi-title={title}
       data-chart-export-preserve-bg
       style={{
         flex: 1,
@@ -307,29 +338,45 @@ export function OverviewKpiHeatCard({
           </thead>
           <tbody>
             <tr>
-              <td style={{ padding: '4px 6px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: '#059669' }}>
+              <td
+                style={{
+                  padding: '4px 6px',
+                  textAlign: 'left',
+                  fontSize: 10,
+                  fontWeight: 500,
+                  color: '#059669',
+                  lineHeight: 1.35,
+                }}
+              >
                 {metaTexto}
               </td>
               {modoAnual ? (
                 <td
+                  {...heatCellStackedAttr(acumulado)}
                   style={{
                     padding: 4,
                     textAlign: 'center',
                     fontSize: 11,
-                    ...cellStyle(acumulado, metaFallbackAcum, true, metaComparacao),
+                    ...cellStyle(
+                      acumulado,
+                      metaFallbackAcum,
+                      metaComparacao,
+                      CELL_FONT_ACUM,
+                    ),
                   }}
                 >
-                  {acumulado.value == null ? '-' : acumulado.label}
+                  {renderHeatCellContent(acumulado)}
                 </td>
               ) : cellColSpans && cellColSpans.length > 0 ? (
                 cells.map((cell, i) => {
                   const span = Math.max(1, cellColSpans[i] ?? 1)
-                  const st = cellStyle(cell, metaForCell(i), false, metaComparacao)
+                  const st = cellStyle(cell, metaForCell(i), metaComparacao)
                   /** Cartões por ano via colspan — evitar no export PPT (desalinha). */
                   return (
                     <td
                       key={i}
                       colSpan={span}
+                      {...heatCellStackedAttr(cell)}
                       style={{
                         padding: i > 0 ? '2px 2px 2px 6px' : '2px 2px 2px 2px',
                         textAlign: 'center',
@@ -352,7 +399,7 @@ export function OverviewKpiHeatCard({
                           fontSize: 11,
                         }}
                       >
-                        {cell.value == null ? '-' : cell.label}
+                        {renderHeatCellContent(cell)}
                       </div>
                     </td>
                   )
@@ -361,16 +408,12 @@ export function OverviewKpiHeatCard({
                 cells.map((cell, i) => {
                   const yearBreak = Boolean(monthLabels) && isYearBreakAt(labels, i)
                   const role = yearBandRole(labels, i)
-                  const st = cellStyle(cell, metaForCell(i), false, metaComparacao)
-                  const showText =
-                    cell.value == null
-                      ? '-'
-                      : cell.label.trim() === ''
-                        ? '\u00A0'
-                        : cell.label
+                  const st = cellStyle(cell, metaForCell(i), metaComparacao)
+                  const showText = renderHeatCellContent(cell)
                   return (
                     <td
                       key={i}
+                      {...heatCellStackedAttr(cell)}
                       style={{
                         padding: yearBandCellPad(role, yearBreak),
                         textAlign: 'center',
@@ -419,32 +462,39 @@ export function OverviewKpiHeatCard({
                   return (
                     <td
                       key={i}
+                      {...heatCellStackedAttr(cell)}
                       style={{
                         padding: 4,
                         textAlign: 'center',
                         fontSize: 11,
-                        ...cellStyle(cell, metaForCell(i), destacado, metaComparacao),
+                        ...cellStyle(cell, metaForCell(i), metaComparacao),
                         ...(yearBreak ? YEAR_GAP : null),
                         ...(destaque != null && !destacado ? { opacity: 0.4 } : null),
                         ...(destacado ? { outline: '2px solid #0F172A', outlineOffset: -2 } : null),
                       }}
                     >
-                      {cell.value == null ? '-' : cell.label}
+                      {renderHeatCellContent(cell)}
                     </td>
                   )
                 })
               )}
               {showAcumulado ? (
                 <td
+                  {...heatCellStackedAttr(acumulado)}
                   style={{
                     padding: 4,
                     textAlign: 'center',
                     fontSize: 11,
                     borderLeft: '2px solid #E5E7EB',
-                    ...cellStyle(acumulado, metaFallbackAcum, true, metaComparacao),
+                    ...cellStyle(
+                      acumulado,
+                      metaFallbackAcum,
+                      metaComparacao,
+                      CELL_FONT_ACUM,
+                    ),
                   }}
                 >
-                  {acumulado.value == null ? '-' : acumulado.label}
+                  {renderHeatCellContent(acumulado)}
                 </td>
               ) : null}
             </tr>

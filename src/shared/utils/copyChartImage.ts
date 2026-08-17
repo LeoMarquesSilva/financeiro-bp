@@ -2117,6 +2117,27 @@ function prepareApresentacaoExportElement(source: HTMLElement): HTMLElement {
     el.style.setProperty('overflow', 'visible', 'important')
   })
 
+  // Liderança: mantém avatar em coluna fixa e centraliza o nome no espaço
+  // restante. O PowerPoint recalcula flex rows e deixava nomes quebrados tortos.
+  clone
+    .querySelectorAll<HTMLElement>('[data-lideranca-pessoa-identidade]')
+    .forEach((el) => {
+      el.style.setProperty('display', 'grid', 'important')
+      el.style.setProperty(
+        'grid-template-columns',
+        '32px minmax(0, 1fr)',
+        'important',
+      )
+      el.style.setProperty('align-items', 'center', 'important')
+      el.style.setProperty('width', '100%', 'important')
+    })
+  clone.querySelectorAll<HTMLElement>('[data-lideranca-pessoa-nome]').forEach((el) => {
+    el.style.setProperty('display', 'block', 'important')
+    el.style.setProperty('width', '100%', 'important')
+    el.style.setProperty('text-align', 'center', 'important')
+    el.style.setProperty('line-height', '1.25', 'important')
+  })
+
   return clone
 }
 
@@ -2155,9 +2176,78 @@ function bumpApresentacaoExportFonts(
   })
 }
 
+/** Células Desenvolvimento Equipe (horas + %): export PPT precisa de quebra de linha explícita. */
+function isStackedHeatCell(el: HTMLElement): boolean {
+  return (
+    el.hasAttribute('data-heat-cell-stacked') ||
+    el.querySelector('[data-heat-cell-stacked]') != null
+  )
+}
+
+function applyStackedHeatCellExportStyles(cell: HTMLElement, cellFs: number): void {
+  // Usa a mesma tipografia das demais células do Jurídico. As alturas
+  // explícitas mantêm as duas linhas dentro do card no SVG do clipboard.
+  const primaryFs = cellFs
+  const secondaryFs = cellFs
+  const primaryLineH = Math.ceil(primaryFs * 1.05)
+  const secondaryLineH = Math.ceil(secondaryFs * 1.05)
+  const contentHeight = primaryLineH + secondaryLineH
+
+  cell.style.setProperty('white-space', 'normal', 'important')
+  cell.style.setProperty('line-height', '1', 'important')
+  cell.style.setProperty('vertical-align', 'middle', 'important')
+  cell.style.setProperty('padding', '2px', 'important')
+  cell.style.setProperty('height', `${contentHeight + 4}px`, 'important')
+
+  // O <td> também recebe o atributo apenas para seleção. O conteúdo empilhado
+  // é o <span> interno; nunca transforme o próprio <td> em display:block,
+  // pois isso remove a célula do layout da tabela e desloca os meses.
+  const stacked =
+    cell.querySelector<HTMLElement>('[data-heat-cell-stacked]') ??
+    (cell.tagName !== 'TD' && cell.matches('[data-heat-cell-stacked]') ? cell : null)
+  if (!stacked) return
+
+  const primaryElement = stacked.querySelector<HTMLElement>(
+    '[data-heat-cell-stacked-primary]',
+  )
+  const secondaryElement = stacked.querySelector<HTMLElement>(
+    '[data-heat-cell-stacked-secondary]',
+  )
+  const primaryText =
+    stacked.getAttribute('data-stacked-primary-text') ??
+    primaryElement?.textContent?.trim() ??
+    ''
+  const secondaryText =
+    stacked.getAttribute('data-stacked-secondary-text') ??
+    secondaryElement?.textContent?.trim() ??
+    ''
+
+  // O SVG/foreignObject do clipboard desloca blocos aninhados dentro de <td>.
+  // No clone de export, reduz a célula a um único nó com quebra explícita.
+  // Isso preserva exatamente uma célula por mês e impede deslocamento de colunas.
+  if (!stacked.hasAttribute('data-stacked-export-flat')) {
+    stacked.setAttribute('data-stacked-export-flat', '1')
+    stacked.setAttribute('data-stacked-primary-text', primaryText)
+    stacked.setAttribute('data-stacked-secondary-text', secondaryText)
+    stacked.textContent = `${primaryText}\n${secondaryText}`
+  }
+
+  stacked.style.setProperty('display', 'block', 'important')
+  stacked.style.setProperty('white-space', 'pre-line', 'important')
+  stacked.style.setProperty('font-size', `${primaryFs}px`, 'important')
+  stacked.style.setProperty('font-weight', '600', 'important')
+  stacked.style.setProperty('line-height', `${primaryLineH}px`, 'important')
+  stacked.style.setProperty('text-align', 'center', 'important')
+  stacked.style.setProperty('width', '100%', 'important')
+  stacked.style.setProperty('margin', '0 auto', 'important')
+  stacked.style.setProperty('height', `${contentHeight}px`, 'important')
+  stacked.style.setProperty('overflow', 'visible', 'important')
+}
+
 /** Reduz textos de tabela somente quando ultrapassam a largura real da célula. */
 function fitApresentacaoTableText(root: HTMLElement): void {
   const fit = (el: HTMLElement, minFontSize: number) => {
+    if (isStackedHeatCell(el)) return
     const available = el.clientWidth
     const required = el.scrollWidth
     if (available <= 0 || required <= available) return
@@ -2179,12 +2269,27 @@ function fitApresentacaoTableText(root: HTMLElement): void {
 
   root.querySelectorAll<HTMLTableRowElement>('tr').forEach((row) => {
     const firstCell = row.querySelector<HTMLElement>(':scope > th:first-child, :scope > td:first-child')
-    if (firstCell) fit(firstCell, 9)
+    if (!firstCell) return
+    if (firstCell.tagName === 'TH') {
+      fit(firstCell, 9)
+      return
+    }
+    // Metas usam a mesma fonte em todos os cards; textos longos quebram em
+    // até duas linhas em vez de serem reduzidos a tamanhos diferentes.
+    firstCell.style.setProperty('white-space', 'normal', 'important')
+    firstCell.style.setProperty('line-height', '1.05', 'important')
+    firstCell.style.setProperty('overflow', 'visible', 'important')
   })
 
   root.querySelectorAll<HTMLElement>('tbody td > div').forEach((content) => {
     if (content.hasAttribute('data-year-band-pill')) return
+    if (isStackedHeatCell(content)) return
     fit(content, 9)
+  })
+
+  root.querySelectorAll<HTMLElement>('tbody td[data-heat-cell-stacked]').forEach((cell) => {
+    const fs = Number.parseFloat(window.getComputedStyle(cell).fontSize) || 11
+    applyStackedHeatCellExportStyles(cell, fs)
   })
 }
 
@@ -2580,13 +2685,26 @@ function applyApresentacaoFillSlideLayout(
     36 * bodyN,
     slideH - padY * 2 - headerBlock - footerBlock - gap * Math.max(0, bodyN - 1),
   )
-  const bodyCardH = Math.max(36, Math.floor(bodyAvail / bodyN))
+  const desenvolvimentoCard = bodyCards.find(
+    (card) =>
+      card.getAttribute('data-overview-kpi-title') === 'Desenvolvimento Equipe',
+  )
+  // Desenvolvimento possui meta longa e valores em duas linhas. Reserva uma
+  // linha mais alta no PPT; o espaço é descontado igualmente dos demais cards.
+  const desenvolvimentoExtraH = desenvolvimentoCard ? 28 : 0
+  const bodyCardH = Math.max(
+    36,
+    Math.floor((bodyAvail - desenvolvimentoExtraH) / bodyN),
+  )
+  const desenvolvimentoCardH = bodyCardH + desenvolvimentoExtraH
   const cardW = slideW - padX * 2
 
-  const titleFs = scalePx(Math.max(13, Math.min(18, Math.round(bodyCardH * 0.22))))
-  const metaFs = scalePx(Math.max(12, Math.min(15, Math.round(bodyCardH * 0.18))))
-  const headFs = scalePx(Math.max(11, Math.min(14, Math.round(bodyCardH * 0.17))))
-  const cellFs = scalePx(Math.max(12, Math.min(17, Math.round(bodyCardH * 0.2))))
+  // Tipografia única em todos os cards do Jurídico Unificado. Evita que textos
+  // semelhantes mudem de tamanho conforme o comprimento ou tipo do indicador.
+  const titleFs = scalePx(15)
+  const metaFs = scalePx(11)
+  const headFs = scalePx(12)
+  const cellFs = scalePx(14)
   const titleColW = Math.round(240 * fontScale)
   const metaColW = Math.round(72 * fontScale)
   const areaTitleColW = Math.round(210 * fontScale)
@@ -2651,7 +2769,10 @@ function applyApresentacaoFillSlideLayout(
     placeCard(card, headerH, { overflowVisible: true, transparentBg: true })
   })
   bodyCards.forEach((card) => {
-    placeCard(card, bodyCardH)
+    placeCard(
+      card,
+      card === desenvolvimentoCard ? desenvolvimentoCardH : bodyCardH,
+    )
   })
   footerCards.forEach((card) => {
     placeCard(card, footerH)
@@ -2724,36 +2845,36 @@ function applyApresentacaoFillSlideLayout(
               : isHeader
                 ? headFs
                 : cellFs
-        const textLength = (cell.textContent ?? '').trim().length
-        const fs =
-          colIdx !== 0
-            ? baseFs
-            : textLength > 38
-              ? Math.max(10, baseFs * 0.62)
-              : textLength > 20
-                ? Math.max(12, baseFs * 0.82)
-                : baseFs
+        const fs = baseFs
         const fontWeight = isHeader
           ? colIdx === 0
             ? '700'
             : '600'
           : colIdx === 0 || (isAreaMatrix && colIdx === 1)
             ? '600'
-            : '700'
+            : cell.style.fontWeight || '600'
         cell.style.setProperty('font-size', `${fs}px`, 'important')
         cell.style.setProperty('font-weight', fontWeight, 'important')
+        cell.style.setProperty(
+          'text-align',
+          colIdx === 0 ? 'left' : 'center',
+          'important',
+        )
+        cell.style.setProperty('vertical-align', 'middle', 'important')
         cell.style.setProperty(
           'padding',
           colIdx === 0 ? '2px 6px 2px 3px' : cell.style.padding || '2px 3px',
           'important',
         )
         if (colIdx === 0) {
-          cell.style.setProperty('line-height', '1.15', 'important')
-          cell.style.setProperty('white-space', 'nowrap', 'important')
+          cell.style.setProperty('line-height', isHeader ? '1.15' : '1.05', 'important')
+          cell.style.setProperty('white-space', isHeader ? 'nowrap' : 'normal', 'important')
           cell.style.setProperty('overflow', 'visible', 'important')
           cell.style.setProperty('word-break', 'normal', 'important')
           cell.style.setProperty('overflow-wrap', 'normal', 'important')
           cell.style.setProperty('vertical-align', 'middle', 'important')
+        } else if (isStackedHeatCell(cell)) {
+          applyStackedHeatCellExportStyles(cell, cellFs)
         } else {
           cell.style.setProperty('line-height', '1.15', 'important')
           cell.style.setProperty('white-space', 'nowrap', 'important')
@@ -2763,6 +2884,7 @@ function applyApresentacaoFillSlideLayout(
 
     card.querySelectorAll<HTMLElement>('tbody td div').forEach((div) => {
       if (div.hasAttribute('data-year-band-pill')) return
+      if (isStackedHeatCell(div)) return
       const textLength = (div.textContent ?? '').trim().length
       const fittedFs =
         textLength > 14

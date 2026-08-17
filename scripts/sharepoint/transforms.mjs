@@ -394,6 +394,16 @@ export function resolveNomeCanonico(nome) {
 }
 
 /**
+ * Chave de dedupe/sync de linhas do Turnover BP.
+ * Mesma admissão pode ter transferência + desligamento final (ex.: Mariana Boscatto).
+ */
+export function turnoverRowDedupeKey(row) {
+  const area = row.area ?? ''
+  const desligamento = row.desligamento ?? ''
+  return `${row.nome}|${row.admissao ?? ''}|${area}|${desligamento}`
+}
+
+/**
  * Área do usuário na data de conclusão (colunas "Área (na conclusão)"): busca em sp_turnover
  * o registro do usuário vigente na data (admissão <= data <= desligamento, ou sem desligamento);
  * fallback: registro ativo sem desligamento. Regra fixa do BI: "CAROLINE ABDALLA" -> Trabalhista.

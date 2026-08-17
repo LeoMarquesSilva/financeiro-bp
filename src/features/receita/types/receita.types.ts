@@ -226,4 +226,6 @@ export type ReceitaPrevistoItemRow = {
   valor_item: number
   plano_contas: string
   situacao_titulo: string | null
+  /** Área VIOS do item (quando a RPC expõe departamento). */
+  departamento?: string | null
 }

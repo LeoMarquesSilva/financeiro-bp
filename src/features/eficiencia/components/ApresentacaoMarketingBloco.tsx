@@ -249,10 +249,6 @@ export function ApresentacaoMarketingBloco({
             {data.rows.map((row) => (
               <MarketingHeatCard key={row.id} row={row} />
             ))}
-            <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2, paddingLeft: 4 }}>
-              * Engajamento e alcance: média dos meses com post no período · Pautas =
-              volume de posts (proxy SIOE)
-            </div>
           </div>
         )}
       </div>

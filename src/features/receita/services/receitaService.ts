@@ -320,6 +320,7 @@ export const receitaService = {
       valor_item: Number(row.valor_item) || 0,
       plano_contas: row.plano_contas != null ? String(row.plano_contas) : '',
       situacao_titulo: row.situacao_titulo != null ? String(row.situacao_titulo) : null,
+      departamento: row.departamento != null ? String(row.departamento) : null,
     }))
   },
 

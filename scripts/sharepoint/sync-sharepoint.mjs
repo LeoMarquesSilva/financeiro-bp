@@ -44,6 +44,7 @@ import {
   computeConclusaoCompleta,
   computeAdesaoApos18,
   areaNaConclusao,
+  turnoverRowDedupeKey,
   resolveNomeCanonico,
   parseNumeroProcessoLista,
   toIsoDate,
@@ -669,7 +670,7 @@ const FONTES = {
         .filter((r) => r.nome)
       return await replaceAll(
         'sp_turnover',
-        dedupeBy(rows, (r) => `${r.nome}|${r.admissao}`),
+        dedupeBy(rows, turnoverRowDedupeKey),
         'id',
       )
     },

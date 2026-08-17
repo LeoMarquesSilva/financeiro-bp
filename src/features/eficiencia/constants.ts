@@ -186,9 +186,6 @@ export function isCargoExcluidoDesenvolvimento(cargo: string | null | undefined)
   )
 }
 
-/** Áreas excluídas da população base de Retenção no Overview (slicer BI). */
-export const EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO = ['Distressd Deals', 'Tributário'] as const
-
 /** Rótulos curtos dos meses (1 = Jan … 12 = Dez). */
 export const MESES_EFICIENCIA = [
   'Jan',

@@ -142,6 +142,8 @@ type ChartPoint = {
   recebido: number | null
   previsto: number | null
   inadimplencia: number | null
+  /** % congelada (vs previsto) — mesma base da tabela de evolução. */
+  inadimplenciaPct?: number | null
 }
 
 function formatYAxis(value: number): string {
@@ -180,7 +182,12 @@ function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
       projetadoReal: ((p.projetadoReal ?? 0) / meta) * 100,
       previsto: ((p.previsto ?? 0) / meta) * 100,
       recebido: p.recebido != null ? (p.recebido / meta) * 100 : null,
-      inadimplencia: p.inadimplencia != null ? (p.inadimplencia / meta) * 100 : null,
+      inadimplencia:
+        p.inadimplenciaPct != null
+          ? p.inadimplenciaPct
+          : p.inadimplencia != null
+            ? (p.inadimplencia / meta) * 100
+            : null,
     }
   })
 }
@@ -191,7 +198,7 @@ const SERIES_PERCENT_LEGEND: Partial<Record<SeriesKey, string>> = {
   previsto: 'Previsto (% meta)',
   projetadoBaseAbril: 'Proj. base abril (% meta)',
   projetadoReal: 'Proj. real (% meta)',
-  inadimplencia: 'Inadimplência (% meta)',
+  inadimplencia: 'Inadimplência (% previsto)',
 }
 
 function pctMeta(recebido: number, meta: number): number | null {
@@ -943,8 +950,8 @@ type Props = {
   ano: number
   departamentoCores?: ReceitaDepartamentoCoresConfig
   /**
-   * Modo Apresentação: só o gráfico consolidado (sem toggles, tabela ou drill).
-   * Usado no Bloco 3 da Apresentação Jurídico.
+   * Modo Apresentação (Bloco Composição): gráfico com filtros interativos;
+   * controles ficam fora da cópia para slide (`data-chart-export-ignore`).
    */
   apresentacaoMode?: boolean
 }
@@ -964,7 +971,8 @@ export function ReceitaComparativoChart({
   } | null>(null)
   const [semAreaAberto, setSemAreaAberto] = useState(false)
   const [tabelaAberta, setTabelaAberta] = useState(false)
-  const [percentMode, setPercentMode] = useState(false)
+  // Na Apresentação, o comparativo é exclusivamente percentual — sem valores em R$.
+  const [percentMode, setPercentMode] = useState(apresentacaoMode)
   const [porAreaMode, setPorAreaMode] = useState(false)
   const [resultadoMode, setResultadoMode] = useState(false)
   const anoCorrente = new Date().getFullYear()
@@ -1163,6 +1171,7 @@ export function ReceitaComparativoChart({
             undefined,
             graficoOpts,
           ),
+          inadimplenciaPct: inadCongelada?.pct ?? null,
         }
       }),
     [rows, ano, inadimplenciaCongeladaPorMes, graficoOpts],
@@ -1293,6 +1302,7 @@ export function ReceitaComparativoChart({
             previsto: p.previsto,
             recebido: p.recebido,
             inadimplencia: p.inadimplencia,
+            inadimplenciaPct: p.inadimplenciaPct,
           }))
         : null
     const source = areaSource ?? rawChartData
@@ -1377,7 +1387,7 @@ export function ReceitaComparativoChart({
     return `${labels[0]}–${labels[labels.length - 1]} / ${ano}`
   }, [areaMesesSelecionados, rows, ano])
 
-  const porAreaAtivo = !apresentacaoMode && porAreaMode
+  const porAreaAtivo = porAreaMode
 
   return (
     <div className={apresentacaoMode ? undefined : 'space-y-6'}>
@@ -1451,12 +1461,44 @@ export function ReceitaComparativoChart({
         </div>
         ) : (
           <div className="mb-2 text-xs font-semibold text-slate-800">
-            Comparativo mensal — Meta · Previsto · Recebido · Inadimplência
+            {percentMode
+              ? areaLinhaAtual
+                ? `Comparativo mensal (% da meta) — ${areaLinhaAtual.label}`
+                : 'Comparativo mensal (%) — Meta · Previsto · Recebido · Inadimplência'
+              : resultadoAtivo
+                ? 'Comparativo mensal — resultado'
+                : 'Comparativo mensal — Meta · Previsto · Recebido · Inadimplência'}
           </div>
         )}
 
-        {!apresentacaoMode ? (
-        <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+        <div
+          className="mb-3 flex flex-wrap items-center justify-center gap-2"
+          data-chart-export-ignore={apresentacaoMode || undefined}
+        >
+          {apresentacaoMode ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn(
+                'h-7 shrink-0 gap-1.5 text-[11px]',
+                resultadoAtivo
+                  ? 'border-amber-300 bg-amber-50 text-amber-900 shadow-sm'
+                  : 'text-slate-600',
+              )}
+              onClick={() => setResultadoMode((v) => !v)}
+              disabled={!resultadoDisponivel}
+              aria-pressed={resultadoAtivo}
+              title={
+                resultadoDisponivel
+                  ? 'Exibe só meses com meta (jun+); oculta recebido e inadimplência do mês corrente'
+                  : 'Disponível apenas no ano corrente'
+              }
+            >
+              Resultado
+            </Button>
+          ) : null}
+
           <button
             type="button"
             onClick={togglePercentMode}
@@ -1487,10 +1529,11 @@ export function ReceitaComparativoChart({
             {porAreaMode ? 'Ver consolidado' : 'Ver por área'}
           </button>
         </div>
-        ) : null}
 
-        {!apresentacaoMode ? (
-        <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+        <div
+          className="mb-3 flex flex-wrap items-center justify-center gap-2"
+          data-chart-export-ignore={apresentacaoMode || undefined}
+        >
           {metaAreaSlices.map((area) => {
             const ativo = areaLinhaSelecionada === area.key
             return (
@@ -1516,10 +1559,12 @@ export function ReceitaComparativoChart({
             )
           })}
         </div>
-        ) : null}
 
         {porAreaAtivo && areaLinhaSelecionada == null && (
-          <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+          <div
+            className="mb-3 flex flex-wrap items-center justify-center gap-2"
+            data-chart-export-ignore={apresentacaoMode || undefined}
+          >
             <span className="text-[11px] font-medium text-slate-500">
               Período <span className="font-normal text-slate-400">(multi-seleção)</span>:
             </span>
@@ -1567,7 +1612,10 @@ export function ReceitaComparativoChart({
             </p>
           ) : (
           <>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div
+            className="mb-3 flex flex-wrap items-center justify-between gap-2"
+            data-chart-export-ignore={apresentacaoMode || undefined}
+          >
             <button
               type="button"
               onClick={() => setAreaLinhaSelecionada(null)}

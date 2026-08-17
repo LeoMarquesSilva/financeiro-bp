@@ -93,9 +93,8 @@ const BONUS_FIXOS: BonusIndicadorRow[] = [
     meta: 85,
     resultado: 100,
     direcao: 'maior',
-    /** Peso do programa = 10%; contribuição fixa pedida = 5%. */
     peso: BONUS_PESOS.nps,
-    contribuicao: 5,
+    contribuicao: BONUS_PESOS.nps,
     bateu: true,
     fixo: true,
   },

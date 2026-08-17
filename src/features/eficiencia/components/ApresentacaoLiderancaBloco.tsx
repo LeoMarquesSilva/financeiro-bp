@@ -361,18 +361,32 @@ export function ApresentacaoLiderancaBloco({ data, loading, error }: Props) {
                 alignItems: 'center',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <div
+                data-lideranca-pessoa-identidade
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '32px minmax(0, 1fr)',
+                  alignItems: 'center',
+                  gap: 8,
+                  minWidth: 0,
+                  width: '100%',
+                }}
+              >
                 <Avatar
                   fullName={nome || p.colaborador || '?'}
                   src={avatarUrl}
                   className="h-8 w-8 shrink-0"
                 />
                 <span
+                  data-lideranca-pessoa-nome
                   style={{
+                    display: 'block',
+                    width: '100%',
                     fontSize: 11,
                     fontWeight: 700,
                     color: '#1F2937',
                     lineHeight: 1.25,
+                    textAlign: 'center',
                     whiteSpace: 'normal',
                     overflow: 'visible',
                     wordBreak: 'break-word',

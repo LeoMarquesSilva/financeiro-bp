@@ -17,6 +17,10 @@ import {
   opcoesMesAnoAteHoje,
   type MesAno,
 } from '../utils/apresentacaoMesAno'
+import {
+  buildDesenvolvimentoEquipeHeatCell,
+  formatMinutosHeatLabel,
+} from '../utils/desenvolvimentoEquipeHeatCell'
 import { OverviewKpiHeatCard, type HeatCell } from './OverviewKpiHeatRow'
 
 type Props = {
@@ -31,21 +35,18 @@ type Props = {
   onFimChange: (v: MesAno) => void
 }
 
-const PCT0 = (v: number) => `${v.toFixed(2)}%`
 const VAZIA: HeatCell = { value: null, label: '-' }
+
+function pctCell(value: number): HeatCell {
+  return { value, label: formatPercent(value) }
+}
 
 function somaRazaoPct(numeros: number[], denominadores: number[]): HeatCell {
   const num = numeros.reduce((a, b) => a + b, 0)
   const den = denominadores.reduce((a, b) => a + b, 0)
   if (den === 0) return VAZIA
   const v = (num / den) * 100
-  return { value: v, label: PCT0(v) }
-}
-
-function formatMinutos(min: number): string {
-  const h = Math.floor(min / 60)
-  const m = Math.round(min % 60)
-  return `${h}:${String(m).padStart(2, '0')}`
+  return pctCell(v)
 }
 
 function formatMetaDesenvolvimentoEquipe(
@@ -53,16 +54,12 @@ function formatMetaDesenvolvimentoEquipe(
   slots: MesAno[],
 ): string {
   const anos = [...new Set(slots.map((s) => s.ano))]
-  const pessoas = Math.max(
-    0,
-    ...anos.map((a) => overviewByAno.get(a)?.treinamentos?.pessoas_ativas ?? 0),
-  )
   const metaMin = anos.reduce(
     (s, a) => s + (overviewByAno.get(a)?.treinamentos?.meta_minutos ?? 0),
     0,
   )
-  if (pessoas <= 0 || metaMin <= 0) return 'Meta 100%'
-  return `Meta: ${formatMinutos(metaMin)}h (${pessoas} pessoas · proporcional × ${anos.length}a)`
+  if (metaMin <= 0) return 'Meta 100%'
+  return `Meta ${formatMinutosHeatLabel(metaMin)}h`
 }
 
 function MesAnoSelect({
@@ -148,36 +145,33 @@ export function ApresentacaoJuridicoUnificadoBloco({
     const slaCells = slots.map((slot) => {
       const row = pick((o) => o.slaProtocolo, slot, (r, m) => r.mes === m)
       if (!row) return VAZIA
-      return { value: row.pct_eficiencia, label: PCT0(row.pct_eficiencia) }
+      return pctCell(row.pct_eficiencia)
     })
     const efiCells = slots.map((slot) => {
       const row = pick((o) => o.eficienciaProtocolo, slot, (r, m) => r.mes === m)
       if (!row) return VAZIA
-      return { value: row.pct_eficiencia, label: PCT0(row.pct_eficiencia) }
+      return pctCell(row.pct_eficiencia)
     })
     const agendaCells = slots.map((slot) => {
       const row = pick((o) => o.agendamento, slot, (r, m) => r.mes === m)
       if (!row) return VAZIA
-      return { value: row.pct_dentro_prazo, label: PCT0(row.pct_dentro_prazo) }
+      return pctCell(row.pct_dentro_prazo)
     })
     const vistRiscoCells = slots.map((slot) => {
       const row = pick((o) => o.slaVistagemRisco, slot, (r, m) => r.mes === m)
       if (!row) return VAZIA
-      return { value: row.pct_d1, label: PCT0(row.pct_d1) }
+      return pctCell(row.pct_d1)
     })
     const vistNormalCells = slots.map((slot) => {
       const row = pick((o) => o.slaVistagemComum, slot, (r, m) => r.mes === m)
       if (!row) return VAZIA
-      return { value: row.pct_d1, label: PCT0(row.pct_d1) }
+      return pctCell(row.pct_d1)
     })
 
     const treinoCells = slots.map((slot) => {
       const row = pick((o) => o.treinamentosMensal, slot, (r, m) => r.mes === m)
       if (!row) return VAZIA
-      return {
-        value: row.pct_atingimento,
-        label: `${formatMinutos(row.minutos_lancados)} (${formatPercent(row.pct_atingimento)})`,
-      }
+      return buildDesenvolvimentoEquipeHeatCell(row.minutos_lancados, row.pct_atingimento)
     })
 
     const pdiCells = slots.map((slot) => {
@@ -192,7 +186,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
       const gestao = fin?.mesesPorArea.get(null) ?? []
       const row = gestao.find((m) => m.mes === slot.mes)
       if (!row || row.pctMeta == null) return VAZIA
-      return { value: row.pctMeta, label: PCT0(row.pctMeta) }
+      return pctCell(row.pctMeta)
     })
 
     const inadCells = slots.map((slot) => {
@@ -201,7 +195,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
       const gestao = fin?.mesesPorArea.get(null) ?? []
       const row = gestao.find((m) => m.mes === slot.mes)
       if (!row || row.inadimplenciaPct == null) return VAZIA
-      return { value: row.inadimplenciaPct, label: PCT0(row.inadimplenciaPct) }
+      return pctCell(row.inadimplenciaPct)
     })
 
     const npsCells = slots.map(() => VAZIA)
@@ -264,10 +258,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
         0,
       )
       const pct = metaMin > 0 ? (minutos / metaMin) * 100 : treinoRows[0]!.pct_atingimento
-      return {
-        value: pct,
-        label: `${formatMinutos(minutos)} (${formatPercent(pct)})`,
-      }
+      return buildDesenvolvimentoEquipeHeatCell(minutos, pct)
     })()
 
     const pdiRows = slots
@@ -294,8 +285,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
         meta += row.meta ?? 0
       }
       if (meta <= 0) return VAZIA
-      const pct = (recebido / meta) * 100
-      return { value: pct, label: PCT0(pct) }
+      return pctCell((recebido / meta) * 100)
     })()
 
     const acumuladoInad: HeatCell = (() => {
@@ -310,14 +300,12 @@ export function ApresentacaoJuridicoUnificadoBloco({
         previsto += row.previsto
       }
       if (previsto <= 0) return VAZIA
-      const pct = (inad / previsto) * 100
-      return { value: pct, label: PCT0(pct) }
+      return pctCell((inad / previsto) * 100)
     })()
 
     const fimNorm = compareMesAno(inicio, fim) <= 0 ? fim : inicio
 
-    /** Retenção: 1 célula por mês (valor do ano), sem colspan — alinha no PPT.
-     * Texto no mês do meio de cada ano; `yearBands` funde o visual em pílula. */
+    /** Retenção: indicador anual — valor único por ano, rótulo no 1º mês da faixa. */
     const retencaoCells: HeatCell[] = (() => {
       const out: HeatCell[] = slots.map(() => VAZIA)
       let i = 0
@@ -326,7 +314,8 @@ export function ApresentacaoJuridicoUnificadoBloco({
         let j = i + 1
         while (j < slots.length && slots[j]!.ano === ano) j += 1
         const ov = overviewByAno.get(ano)
-        const mid = Math.floor((i + j - 1) / 2)
+        const label =
+          ov?.turnover != null ? formatPercent(ov.turnover.pct_retencao) : '-'
         for (let k = i; k < j; k++) {
           if (!ov?.turnover) {
             out[k] = VAZIA
@@ -334,7 +323,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
           }
           out[k] = {
             value: ov.turnover.pct_retencao,
-            label: k === mid ? formatPercent(ov.turnover.pct_retencao) : '\u00A0',
+            label: k === i ? label : '\u00A0',
           }
         }
         i = j
@@ -403,7 +392,6 @@ export function ApresentacaoJuridicoUnificadoBloco({
           showAcumulado={false}
           title="Retenção de Talentos"
           meta={metaRetencao}
-          metaLabel={`Meta ${metaRetencao}%`}
           monthLabels={monthLabels}
           yearBands
           cells={retencaoCells}
@@ -429,7 +417,6 @@ export function ApresentacaoJuridicoUnificadoBloco({
           showAcumulado={false}
           title="Índice de Inadimplência"
           meta={EFICIENCIA_META_INDICE_INADIMPLENCIA}
-          metaLabel={`Meta ${EFICIENCIA_META_INDICE_INADIMPLENCIA}%`}
           metaComparacao="maximo"
           monthLabels={monthLabels}
           cells={inadCells}

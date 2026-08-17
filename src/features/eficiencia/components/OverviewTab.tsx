@@ -31,6 +31,10 @@ import {
 } from '../utils/overviewFinanceiroKpis'
 import { acumuladoGestaoPdi, buildGestaoPdiCells } from '../utils/gestaoPdiCalc'
 import { resolveMetaTexto } from '../utils/overviewKpiMeta'
+import {
+  buildDesenvolvimentoEquipeHeatCell,
+  formatMinutosHeatLabel,
+} from '../utils/desenvolvimentoEquipeHeatCell'
 import { eficienciaService } from '../services/eficienciaService'
 import {
   totaisAgendamentoFromResumo,
@@ -112,9 +116,7 @@ function somaRazaoPct(numeros: number[], denominadores: number[]): HeatCell {
 }
 
 function formatMinutos(min: number): string {
-  const h = Math.floor(min / 60)
-  const m = Math.round(min % 60)
-  return `${h}:${String(m).padStart(2, '0')}`
+  return formatMinutosHeatLabel(min)
 }
 
 /** Meta anual de treinamentos — ex.: `Meta: 588:00h (42 x 14h)`. */
@@ -194,16 +196,13 @@ export function OverviewTab({
   const treinamentosCells: HeatCell[] = Array.from({ length: 12 }, (_, i) => {
     const row = data.treinamentosMensal.find((r) => r.mes === i + 1)
     if (!row) return { value: null, label: '-' }
-    return {
-      value: row.pct_atingimento,
-      label: `${formatMinutos(row.minutos_lancados)} (${formatPercent(row.pct_atingimento)})`,
-    }
+    return buildDesenvolvimentoEquipeHeatCell(row.minutos_lancados, row.pct_atingimento)
   })
   const treinamentosAcumulado: HeatCell = data.treinamentos
-    ? {
-        value: data.treinamentos.pct_atingimento,
-        label: `${formatMinutos(data.treinamentos.minutos_lancados)} (${formatPercent(data.treinamentos.pct_atingimento)})`,
-      }
+    ? buildDesenvolvimentoEquipeHeatCell(
+        data.treinamentos.minutos_lancados,
+        data.treinamentos.pct_atingimento,
+      )
     : { value: null, label: '-' }
 
   const retencaoCell: HeatCell = data.turnover
@@ -287,10 +286,7 @@ export function OverviewTab({
           const metaAno =
             data.treinamentos?.meta_minutos ?? rows[0]?.meta_minutos ?? 0
           const pct = metaAno > 0 ? (minutos / metaAno) * 100 : rows[0]!.pct_atingimento
-          return {
-            value: pct,
-            label: `${formatMinutos(minutos)} (${formatPercent(pct)})`,
-          }
+          return buildDesenvolvimentoEquipeHeatCell(minutos, pct)
         })()
 
   const slaProtocoloMetasPorMes = Array.from({ length: 12 }, (_, i) => {

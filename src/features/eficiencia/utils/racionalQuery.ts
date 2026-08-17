@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
 import {
-  EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO,
   EFICIENCIA_NOME_ALIASES_CHAVE,
   areaFiltroParaIndicador,
   MESES_EFICIENCIA,
@@ -299,11 +298,15 @@ export function applyRetencaoRacionalPeriodo(
   ano: number,
   mes: MesFiltroEficiencia,
 ): AnyQuery {
-  // Base do ano: admitidos até 31/12 e (ativos ou desligados no ano).
-  // Resultado = ano todo (indicador anual — não recorta jun–dez).
+  // Racional anual: admitidos até 31/12 + (sem desligamento OU desligamento no ano).
+  // Não inclui quem só saiu em anos posteriores (ex.: filtro 2025 ≠ deslig. 2026).
+  const inicioAno = `${ano}-01-01`
+  const inicioAnoSeguinte = `${ano + 1}-01-01`
   query = query
     .lte('admissao', `${ano}-12-31`)
-    .or(`desligamento.is.null,desligamento.gte.${ano}-01-01`)
+    .or(
+      `desligamento.is.null,and(desligamento.gte.${inicioAno},desligamento.lt.${inicioAnoSeguinte})`,
+    )
 
   if (
     mes === 'resultado' ||
@@ -482,6 +485,13 @@ export function buildRacionalBaseQuery(
         .order('vistado_d1', { ascending: true })
         .order(cfg.dataColuna, { ascending: false })
       break
+    case 'retencao_talentos':
+      // Voluntário antes de Involuntário; ativos (tipo nulo) por último.
+      query = query
+        .order('tipo_desligamento', { ascending: false, nullsFirst: false })
+        .order('desligamento', { ascending: false, nullsFirst: true })
+        .order('admissao', { ascending: false })
+      break
     default:
       query = query.order(cfg.dataColuna, { ascending: false })
   }
@@ -516,6 +526,54 @@ export function buildRacionalBaseQuery(
 }
 
 const RACIONAL_FETCH_PAGE = 1000
+
+function anoDeDataIso(value: unknown): number | null {
+  const iso = String(value ?? '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null
+  return Number(iso.slice(0, 4))
+}
+
+/** Garante população do racional = ativos (sem deslig.) + desligados no ano filtrado. */
+export function filterRetencaoRacionalLinhasPorAno(
+  linhas: Array<Record<string, unknown>>,
+  ano: number,
+): Array<Record<string, unknown>> {
+  return linhas.filter((row) => {
+    const admAno = anoDeDataIso(row.admissao)
+    if (admAno != null && admAno > ano) return false
+    const desAno = anoDeDataIso(row.desligamento)
+    if (desAno != null && desAno !== ano) return false
+    return true
+  })
+}
+
+const RETENCAO_TIPO_DESLIGAMENTO_RANK: Record<string, number> = {
+  Voluntário: 0,
+  Involuntário: 1,
+}
+
+function rankRetencaoTipoDesligamento(tipo: unknown): number {
+  const key = String(tipo ?? '').trim()
+  if (!key) return 2
+  return RETENCAO_TIPO_DESLIGAMENTO_RANK[key] ?? 2
+}
+
+/** Racional Retenção: Voluntário primeiro, depois desligamento mais recente. */
+export function sortRetencaoRacionalLinhas(
+  linhas: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return [...linhas].sort((a, b) => {
+    const rankDiff =
+      rankRetencaoTipoDesligamento(a.tipo_desligamento) -
+      rankRetencaoTipoDesligamento(b.tipo_desligamento)
+    if (rankDiff !== 0) return rankDiff
+
+    const desDiff = String(b.desligamento ?? '').localeCompare(String(a.desligamento ?? ''))
+    if (desDiff !== 0) return desDiff
+
+    return String(b.admissao ?? '').localeCompare(String(a.admissao ?? ''))
+  })
+}
 
 export async function fetchRacionalLinhasCompletas(
   cfg: RacionalConfig,
@@ -552,7 +610,8 @@ export async function fetchRacionalLinhasCompletas(
     offset += RACIONAL_FETCH_PAGE
   }
 
-  return linhas
+  if (indicador !== 'retencao_talentos') return linhas
+  return sortRetencaoRacionalLinhas(filterRetencaoRacionalLinhasPorAno(linhas, ano))
 }
 
 /**
@@ -932,4 +991,4 @@ export async function fetchSlaVistagemRacionalResumo(
   }
 }
 
-export { RACIONAL_LIMITE, EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO }
+export { RACIONAL_LIMITE }

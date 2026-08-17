@@ -248,9 +248,6 @@ export function ApresentacaoFinanceiroOpsBloco({
             {data.rows.map((row) => (
               <FinanceiroOpsHeatCard key={row.id} row={row} />
             ))}
-            <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2, paddingLeft: 4 }}>
-              Fechamento: indicador do BI ainda sem fonte no SIOE (exibe &quot;-&quot;).
-            </div>
           </div>
         )}
       </div>

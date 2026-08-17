@@ -12,8 +12,18 @@ import { eficienciaService } from '../services/eficienciaService'
 import type { OpsLegaisAntecipacaoMesRow } from '../types/eficiencia.types'
 import { serieMensalEfetividade } from './opsEfetividadeCobranca'
 
-/** Meta Fechamento (BI slide) — fonte ainda não mapeada no SIOE. */
+/** Meta Fechamento (BI slide). */
 export const EFICIENCIA_META_OPS_FECHAMENTO = 100
+
+/** Valores validados manualmente enquanto o indicador não possui fonte integrada. */
+const OPS_FECHAMENTO_MANUAL: Readonly<
+  Record<number, Readonly<Partial<Record<number, number>>>>
+> = {
+  2026: {
+    6: 0,
+    7: 100,
+  },
+}
 
 export type FinanceiroOpsMesCell = {
   mes: number
@@ -108,8 +118,21 @@ export function buildApresentacaoFinanceiroOps(
   })
   const efetAcum = efetTotal > 0 ? (efetOk / efetTotal) * 100 : null
 
-  /** Fechamento: sem fonte no SIOE — traço em todos os meses. */
-  const fechCells = meses.map((mes) => cellPct(mes, null, EFICIENCIA_META_OPS_FECHAMENTO))
+  const fechamentoAno = OPS_FECHAMENTO_MANUAL[ano] ?? {}
+  const fechCells = meses.map((mes) =>
+    cellPct(
+      mes,
+      fechamentoAno[mes] ?? null,
+      EFICIENCIA_META_OPS_FECHAMENTO,
+    ),
+  )
+  const fechValores = fechCells
+    .map((cell) => cell.valor)
+    .filter((valor): valor is number => valor != null)
+  const fechAcum =
+    fechValores.length > 0
+      ? fechValores.reduce((total, valor) => total + valor, 0) / fechValores.length
+      : null
 
   const rows: FinanceiroOpsIndicadorRow[] = [
     {
@@ -142,9 +165,10 @@ export function buildApresentacaoFinanceiroOps(
       metaLabel: `Meta: ${formatPercent(EFICIENCIA_META_OPS_FECHAMENTO)}`,
       meta: EFICIENCIA_META_OPS_FECHAMENTO,
       cells: fechCells,
-      acumValor: null,
-      acumLabel: '-',
-      acumAtingiu: null,
+      acumValor: fechAcum,
+      acumLabel: fechAcum == null ? '-' : formatPercent(fechAcum),
+      acumAtingiu:
+        fechAcum == null ? null : fechAcum >= EFICIENCIA_META_OPS_FECHAMENTO,
     },
   ]
 

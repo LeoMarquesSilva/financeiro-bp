@@ -277,8 +277,16 @@ function IndicadoresTable({
             <path d="M9 12h6M9 16h4" stroke="#D5B170" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </span>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.04em' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+              lineHeight: 1.25,
+              overflowWrap: 'break-word',
+            }}
+          >
             INDICADORES — PESOS, RESULTADOS E CONTRIBUIÇÃO
           </div>
           <div style={{ marginTop: 3, fontSize: 10, color: '#CBD5E1', lineHeight: 1.35 }}>

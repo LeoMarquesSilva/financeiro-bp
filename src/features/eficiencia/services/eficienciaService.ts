@@ -6,7 +6,6 @@ import { receitaService } from '@/features/receita/services/receitaService'
 import { computePostEngagementRate } from '@/features/operacoes-legais/marketing/instagramAnalytics'
 import { instagramService } from '@/features/operacoes-legais/marketing/instagramService'
 import {
-  EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO,
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
   MES_INICIO_RESULTADO,
   OPS_LEGAIS_CADASTRO_CONTROLADORIA,
@@ -87,6 +86,8 @@ import {
   fetchOpsLegaisPublicacoesRacionalResumo,
   fetchOpsLegaisSlaProtocoloRacionalResumo,
   fetchRacionalLinhasCompletas,
+  filterRetencaoRacionalLinhasPorAno,
+  sortRetencaoRacionalLinhas,
   fetchSlaCienciaAgendamentosRacionalResumo,
   fetchSlaProtocoloRacionalResumo,
   fetchSlaVistagemRacionalResumo,
@@ -417,13 +418,6 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
     tabela: 'sp_turnover',
     dataColuna: 'admissao',
     areaColuna: 'area',
-    filtros: [
-      {
-        tipo: 'excludeInAllowNull',
-        coluna: 'area',
-        valores: [...EFICIENCIA_AREAS_EXCLUIDAS_RETENCAO],
-      },
-    ],
     colunas: [
       { key: 'nome', label: 'Nome' },
       { key: 'area', label: 'Área' },
@@ -1313,6 +1307,10 @@ export const eficienciaService = {
 
     if (indicador === 'retencao_talentos' && responsavel?.trim()) {
       linhas = linhas.filter((row) => nomesResponsavelMatch(String(row.nome ?? ''), responsavel))
+    }
+
+    if (indicador === 'retencao_talentos') {
+      linhas = sortRetencaoRacionalLinhas(filterRetencaoRacionalLinhasPorAno(linhas, ano))
     }
 
     const resumo = opts?.somenteDesvios
