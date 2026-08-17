@@ -62,6 +62,7 @@ export function OfficialPhotosProvider({ children }: { children: ReactNode }) {
     queryKey: ['official-photos', 'catalog'],
     enabled: !!user && !authLoading,
     staleTime: 1000 * 60 * 10,
+    retry: false,
     queryFn: loadOfficialPhotoCatalog,
   })
 
