@@ -1,0 +1,32 @@
+---
+description: Match de nome na Eficiência — acento, Ex Func e ILIKE
+globs: src/features/eficiencia/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Match de nome (Eficiência)
+
+Comparar pessoa **sempre** pela chave sem acento — nunca `===` nem ILIKE só com token unaccented.
+
+O Postgres `ILIKE '%LETICIA%'` **não** casa `Letícia`. PostgREST `.or()` usa `*` no lugar de `%`.
+
+## Canônico
+
+| Camada | API |
+|---|---|
+| Frontend | `normalizeResponsavelChave` / `nomesResponsavelMatch` / `filtrarPorResponsavel` |
+| SQL / join | `eficiencia_nome_chave` (`unaccent` + strip `Ex Func` + aliases) |
+| Filtro PostgREST | `applyRacionalResponsavel` — ILIKE na **âncora** (token mais longo), com e sem acento; recorte fino no client |
+
+```typescript
+// ❌ BAD
+row.usuario === responsavel
+query.ilike('criado_por', '%LETICIA%')
+query.or('and(col.ilike.%Fernanda%,col.ilike.%Arnoni%)')
+
+// ✅ GOOD
+nomesResponsavelMatch(row.usuario, responsavel)
+applyRacionalResponsavel(query, indicador, responsavel)
+```
+
+Ranking de **desvio** só lista quem desviou. Com filtro de pessoa, usar `rankingDesvioFiltrado` + `emptyLabelDesvioResponsavel` — 0 desvio ≠ “sem dado”.

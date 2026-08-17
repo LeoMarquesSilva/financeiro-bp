@@ -225,7 +225,12 @@ export function EficienciaEvolucaoChart({
           </div>
         )}
         <div data-chart-plot className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+          {chartData.length === 0 ? (
+            <div className="flex h-full min-h-[300px] items-center justify-center px-6 text-center text-sm text-slate-400">
+              Sem dados no período.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%" minHeight={300}>
             <LineChart
               key={chartData.map((d) => `${d.mesLabel}:${d.valor}`).join('|')}
               data={chartData}
@@ -284,7 +289,8 @@ export function EficienciaEvolucaoChart({
                 />
               </Line>
             </LineChart>
-          </ResponsiveContainer>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
     </section>

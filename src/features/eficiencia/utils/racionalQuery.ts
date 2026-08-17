@@ -24,8 +24,9 @@ import type {
 import { isVistadoD1Sim, isOpsLegaisCadastroDeParaOk } from './racionalFormat'
 import {
   RACIONAL_COLUNA_RESPONSAVEL,
-  significantResponsavelTokens,
+  ancoraNomeResponsavel,
   nomesResponsavelMatch,
+  stripAcentoNome,
 } from './responsavelMatch'
 
 const RACIONAL_LIMITE = 500
@@ -389,7 +390,11 @@ export function applyRacionalEscopo(
   return query
 }
 
-/** Recorte por responsável (gestão individual) — ILIKE por tokens significativos. */
+/**
+ * Recorte SQL por responsável: ILIKE só na âncora (token mais longo),
+ * com e sem acento. O recorte fino é `nomesResponsavelMatch` no client.
+ * Não usar AND de tokens sem acento — `LETICIA` não casa `Letícia` no Postgres.
+ */
 export function applyRacionalResponsavel(
   query: AnyQuery,
   indicador: RacionalIndicador,
@@ -398,15 +403,18 @@ export function applyRacionalResponsavel(
   const coluna = RACIONAL_COLUNA_RESPONSAVEL[indicador]
   const nome = responsavel?.trim()
   if (!coluna || !nome) return query
-  const tokens = significantResponsavelTokens(nome)
-  if (tokens.length === 0) {
+
+  const ancora = ancoraNomeResponsavel(nome)
+  if (!ancora) {
     return query.ilike(coluna, `%${nome}%`)
   }
-  let next = query
-  for (const token of tokens) {
-    next = next.ilike(coluna, `%${token}%`)
+
+  const plain = stripAcentoNome(ancora)
+  if (plain.toLocaleLowerCase('pt-BR') === ancora.toLocaleLowerCase('pt-BR')) {
+    return query.ilike(coluna, `%${ancora}%`)
   }
-  return next
+  // Em `.or()`, o PostgREST usa `*` no lugar de `%`.
+  return query.or(`${coluna}.ilike.*${ancora}*,${coluna}.ilike.*${plain}*`)
 }
 
 export function buildRacionalBaseQuery(

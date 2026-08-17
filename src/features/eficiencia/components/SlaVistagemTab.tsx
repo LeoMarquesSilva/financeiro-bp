@@ -16,7 +16,10 @@ import {
   useSlaVistagemDesvioRankings,
 } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
-import { filtrarPorResponsavel } from '../utils/responsavelMatch'
+import {
+  emptyLabelDesvioResponsavel,
+  rankingDesvioFiltrado,
+} from '../utils/responsavelMatch'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
@@ -56,8 +59,6 @@ export function SlaVistagemTab({
     risco,
     area,
   )
-  const porUsuarioFiltrado = filtrarPorResponsavel(porUsuario, (r) => r.usuario, responsavel)
-
   const indicador: RacionalIndicador = risco ? 'sla_vistagem_risco' : 'sla_vistagem_normal'
   const {
     chartData: evolucaoResp,
@@ -99,11 +100,28 @@ export function SlaVistagemTab({
   const resultadoRacional: HeatCell | null =
     pctGeral != null ? { value: pctGeral, label: formatPercent(pctGeral) } : null
 
+  const porUsuarioFiltrado = rankingDesvioFiltrado(
+    porUsuario,
+    (r) => r.usuario,
+    responsavel,
+    responsavel && acumResp.total > 0
+      ? {
+          usuario: responsavel,
+          qtd_desvio: Math.max(0, acumResp.total - acumResp.ok),
+          pct_do_total: 100,
+        }
+      : null,
+  )
+
   const emptyDesvio = indisponivelOps
     ? 'Indicador não se aplica a Operações Legais'
     : indisponivelNormal
       ? 'Trabalhista não possui SLA Vistagem Normal'
-      : 'Sem desvios no período.'
+      : emptyLabelDesvioResponsavel(
+          responsavel,
+          Boolean(responsavel && acumResp.total > 0),
+          'Sem desvios no período.',
+        )
 
   const loadingKpi = loading || Boolean(responsavel && loadingEvol)
   const chartData = responsavel
@@ -137,6 +155,8 @@ export function SlaVistagemTab({
           icon={ShieldCheck}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
+          scopeEquipe
+          pessoaNome={responsavel}
         />
         <EficienciaKpiCard
           title={`SLA D+1 no período selecionado (${risco ? 'demanda de risco' : 'demanda comum'})`}
@@ -151,6 +171,9 @@ export function SlaVistagemTab({
           icon={ShieldCheck}
           accentClass="bg-sky-100 text-sky-700"
           loading={loadingKpi}
+          pessoaNome={responsavel}
+          currentPct={pctGeral}
+          vsEquipePct={pctGestaoVista}
         />
         <EficienciaKpiCard
           title="Publicações no período selecionado"

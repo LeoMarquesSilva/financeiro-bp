@@ -4,11 +4,18 @@ import { EFICIENCIA_NOME_ALIASES_CHAVE } from '../constants'
 
 const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'di', 'du', 'del', 'van', 'von'])
 
-/** Chave estável (sem acento, maiúscula) + aliases AD. */
+/** Espelha `eficiencia_nome_chave` no SQL (Ex Func + unaccent). */
+export function stripExFuncPrefix(nome: string): string {
+  return nome.replace(/^ex\s+func\.?\s+/i, '').trim()
+}
+
+export function stripAcentoNome(nome: string): string {
+  return nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
+/** Chave estável (sem acento, maiúscula) + aliases AD. Igual ao SQL. */
 export function normalizeResponsavelChave(nome: string): string {
-  const key = nome
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+  const key = stripAcentoNome(stripExFuncPrefix(nome))
     .trim()
     .toUpperCase()
     .replace(/\s+/g, ' ')
@@ -21,6 +28,60 @@ export function significantResponsavelTokens(nome: string): string[] {
     .split(' ')
     .map((t) => t.trim())
     .filter((t) => t.length > 2 && !PARTICULAS.has(t.toLowerCase()))
+}
+
+/** Palavras do nome original (com acento), sem partículas. */
+export function responsavelTokensOriginais(nome: string): string[] {
+  return stripExFuncPrefix(nome)
+    .trim()
+    .split(/\s+/)
+    .map((t) => t.replace(/[%*,()]/g, '').trim())
+    .filter((t) => t.length > 2 && !PARTICULAS.has(t.toLowerCase()))
+}
+
+/** Token mais longo — âncora de ILIKE (evita AND de tokens sem acento). */
+export function ancoraNomeResponsavel(nome: string): string | null {
+  const tokens = responsavelTokensOriginais(nome)
+  if (tokens.length === 0) return null
+  return tokens.reduce((a, b) => (b.length >= a.length ? b : a))
+}
+
+/**
+ * Ranking de desvio com recorte de pessoa.
+ * Se o ranking só traz quem desviou e o match falhar por grafia, usa `fallback`.
+ * Qtd 0 → lista vazia (mensagem “nenhum desvio”, não barra invisível).
+ */
+export function rankingDesvioFiltrado<T extends Record<string, unknown>>(
+  rows: T[],
+  getNome: (row: T) => string | null | undefined,
+  responsavel: string | null | undefined,
+  fallback: T | null = null,
+): T[] {
+  if (!responsavel?.trim()) return rows
+  const hit = filtrarPorResponsavel(rows, getNome, responsavel)
+  if (hit.length > 0) {
+    return hit.map((r) => ({ ...r, pct_do_total: 100 }))
+  }
+  if (!fallback) return []
+  const qtd = Number(
+    fallback.qtd_inconsistencia ??
+      fallback.qtd_fatal ??
+      fallback.qtd_desvio ??
+      fallback.fora_prazo ??
+      fallback.qtd ??
+      0,
+  )
+  if (!Number.isFinite(qtd) || qtd <= 0) return []
+  return [{ ...fallback, pct_do_total: 100 }]
+}
+
+export function emptyLabelDesvioResponsavel(
+  responsavel: string | null | undefined,
+  temAtividade: boolean,
+  semDados = 'Sem dados no período.',
+): string {
+  if (responsavel?.trim() && temAtividade) return 'Nenhum desvio no período.'
+  return semDados
 }
 
 /**

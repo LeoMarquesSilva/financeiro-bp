@@ -17,7 +17,10 @@ import { EficienciaRankingChart } from './EficienciaRankingChart'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 import type { HeatCell } from './OverviewKpiHeatRow'
-import { filtrarPorResponsavel } from '../utils/responsavelMatch'
+import {
+  emptyLabelDesvioResponsavel,
+  rankingDesvioFiltrado,
+} from '../utils/responsavelMatch'
 
 const BI_BAR = '#94a3b8'
 
@@ -43,7 +46,6 @@ export function AgendamentoTab({
   const { data: mensal, loading } = useAgendamento(ano, area)
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
   const { data: ranking, loading: loadingRanking } = useAgendamentoRanking(ano, mesFiltro, area)
-  const rankingFiltrado = filtrarPorResponsavel(ranking, (r) => r.usuario, responsavel)
   const {
     chartData: evolucaoResp,
     acumulado: acumResp,
@@ -89,6 +91,19 @@ export function AgendamentoTab({
     : mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_dentro_prazo }))
 
   const rankingFatal = useMemo(() => {
+    const rankingFiltrado = rankingDesvioFiltrado(
+      ranking,
+      (r) => r.usuario,
+      responsavel,
+      responsavel && acumResp.total > 0
+        ? {
+            usuario: responsavel,
+            dentro_prazo: dentroPrazo,
+            fora_prazo: foraPrazo,
+            pct_do_total: 100,
+          }
+        : null,
+    )
     const totalFora = rankingFiltrado.reduce((s, r) => s + (r.fora_prazo ?? 0), 0)
     return rankingFiltrado
       .filter((r) => (r.fora_prazo ?? 0) > 0)
@@ -101,7 +116,7 @@ export function AgendamentoTab({
             : 0,
       }))
       .sort((a, b) => b.qtd_fatal - a.qtd_fatal)
-  }, [rankingFiltrado])
+  }, [ranking, responsavel, acumResp.total, dentroPrazo, foraPrazo])
 
   const resultadoRacional: HeatCell | null =
     pctGeral != null ? { value: pctGeral, label: formatPercent(pctGeral) } : null
@@ -133,6 +148,8 @@ export function AgendamentoTab({
           icon={CalendarCheck2}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
+          scopeEquipe
+          pessoaNome={responsavel}
         />
         <EficienciaKpiCard
           title="Agendamento/Ciência D+1 no período selecionado"
@@ -145,6 +162,9 @@ export function AgendamentoTab({
           icon={CalendarCheck2}
           accentClass="bg-amber-100 text-amber-700"
           loading={loadingPeriodo}
+          pessoaNome={responsavel}
+          currentPct={pctGeral}
+          vsEquipePct={pctGestaoVista}
         />
         <EficienciaKpiCard
           title="Fora do prazo no período selecionado"
@@ -188,7 +208,11 @@ export function AgendamentoTab({
           emptyLabel={
             indisponivel
               ? 'Indicador não se aplica a Operações Legais'
-              : 'Sem fatals no período.'
+              : emptyLabelDesvioResponsavel(
+                  responsavel,
+                  Boolean(responsavel && acumResp.total > 0),
+                  'Sem fatals no período.',
+                )
           }
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
         />
@@ -210,7 +234,11 @@ export function AgendamentoTab({
           emptyLabel={
             indisponivel
               ? 'Indicador não se aplica a Operações Legais'
-              : 'Sem fatals no período.'
+              : emptyLabelDesvioResponsavel(
+                  responsavel,
+                  Boolean(responsavel && acumResp.total > 0),
+                  'Sem fatals no período.',
+                )
           }
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
         />

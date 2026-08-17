@@ -22,7 +22,10 @@ import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 import type { HeatCell } from './OverviewKpiHeatRow'
 import type { RacionalEscopo } from '../types/eficiencia.types'
-import { filtrarPorResponsavel } from '../utils/responsavelMatch'
+import {
+  emptyLabelDesvioResponsavel,
+  rankingDesvioFiltrado,
+} from '../utils/responsavelMatch'
 
 /** Cor das barras no visual BI (cinza). */
 const BI_BAR = '#94a3b8'
@@ -59,8 +62,6 @@ export function SlaProtocoloTab({
   const { data: justificativas, loading: loadingJustificativas } =
     useSlaProtocoloJustificativaFatal(ano, mesFiltro, area)
 
-  const rankingFiltrado = filtrarPorResponsavel(ranking, (r) => r.usuario, responsavel)
-
   const {
     chartData: evolucaoResp,
     acumulado: acumResp,
@@ -76,6 +77,14 @@ export function SlaProtocoloTab({
   const qtdD1 = responsavel ? acumResp.ok : qtdD1Area
   const qtdTotal = responsavel ? acumResp.total : qtdTotalArea
   const qtdFatal = responsavel ? Math.max(0, acumResp.total - acumResp.ok) : qtdFatalArea
+  const rankingFiltrado = rankingDesvioFiltrado(
+    ranking,
+    (r) => r.usuario,
+    responsavel,
+    responsavel && acumResp.total > 0
+      ? { usuario: responsavel, qtd_fatal: qtdFatal, pct_do_total: 100 }
+      : null,
+  )
   const pctGeral = qtdTotal > 0 ? (qtdD1 / qtdTotal) * 100 : 0
   const metaAtual = mensalFiltrado.length
     ? mensalFiltrado[mensalFiltrado.length - 1]!.meta
@@ -140,6 +149,8 @@ export function SlaProtocoloTab({
           icon={FileCheck2}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
+          scopeEquipe
+          pessoaNome={responsavel}
         />
         <EficienciaKpiCard
           title="SLA de Protocolo no período selecionado"
@@ -150,6 +161,9 @@ export function SlaProtocoloTab({
           icon={FileCheck2}
           accentClass="bg-violet-100 text-violet-700"
           loading={loadingPeriodo}
+          pessoaNome={responsavel}
+          currentPct={pctGeral}
+          vsEquipePct={pctGestaoVista}
         />
         <EficienciaKpiCard
           title="FATAL no período selecionado"
@@ -215,6 +229,10 @@ export function SlaProtocoloTab({
           loading={loadingRanking}
           maxItems={9}
           scrollAll
+          emptyLabel={emptyLabelDesvioResponsavel(
+            responsavel,
+            Boolean(responsavel && acumResp.total > 0),
+          )}
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
         />
         <EficienciaRankingChart
@@ -232,6 +250,10 @@ export function SlaProtocoloTab({
           loading={loadingRanking}
           maxItems={9}
           scrollAll
+          emptyLabel={emptyLabelDesvioResponsavel(
+            responsavel,
+            Boolean(responsavel && acumResp.total > 0),
+          )}
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
         />
       </div>

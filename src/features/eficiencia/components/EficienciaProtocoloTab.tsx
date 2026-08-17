@@ -16,7 +16,10 @@ import { EficienciaRankingChart } from './EficienciaRankingChart'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 import type { HeatCell } from './OverviewKpiHeatRow'
-import { filtrarPorResponsavel } from '../utils/responsavelMatch'
+import {
+  emptyLabelDesvioResponsavel,
+  rankingDesvioFiltrado,
+} from '../utils/responsavelMatch'
 
 const BI_BAR = '#94a3b8'
 
@@ -47,7 +50,6 @@ export function EficienciaProtocoloTab({
     mesFiltro,
     area,
   )
-  const rankingFiltrado = filtrarPorResponsavel(ranking, (r) => r.usuario, responsavel)
   const {
     chartData: evolucaoResp,
     acumulado: acumResp,
@@ -59,6 +61,18 @@ export function EficienciaProtocoloTab({
   const semInconsistencia = responsavel ? acumResp.ok : semInconsistenciaArea
   const total = responsavel ? acumResp.total : totalArea
   const inconsistentes = Math.max(0, total - semInconsistencia)
+  const rankingFiltrado = rankingDesvioFiltrado(
+    ranking,
+    (r) => r.usuario,
+    responsavel,
+    responsavel && acumResp.total > 0
+      ? {
+          usuario: responsavel,
+          qtd_inconsistencia: inconsistentes,
+          pct_do_total: 100,
+        }
+      : null,
+  )
   const pctGeral = total > 0 ? (semInconsistencia / total) * 100 : 0
 
   const semInconsistenciaGav = mensalGestaoVista.reduce((s, m) => s + m.sem_inconsistencia, 0)
@@ -99,6 +113,8 @@ export function EficienciaProtocoloTab({
           icon={ClipboardCheck}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
+          scopeEquipe
+          pessoaNome={responsavel}
         />
         <EficienciaKpiCard
           title="Eficiência de Protocolo no período selecionado"
@@ -107,6 +123,9 @@ export function EficienciaProtocoloTab({
           icon={ClipboardCheck}
           accentClass="bg-emerald-100 text-emerald-700"
           loading={loadingPeriodo}
+          pessoaNome={responsavel}
+          currentPct={pctGeral}
+          vsEquipePct={pctGestaoVista}
         />
         <EficienciaKpiCard
           title="Protocolos no período selecionado"
@@ -152,6 +171,10 @@ export function EficienciaProtocoloTab({
           loading={loadingRanking}
           maxItems={9}
           scrollAll
+          emptyLabel={emptyLabelDesvioResponsavel(
+            responsavel,
+            Boolean(responsavel && acumResp.total > 0),
+          )}
           onRacionalClick={() => setRacionalAberto(true)}
         />
         <EficienciaRankingChart
@@ -169,6 +192,10 @@ export function EficienciaProtocoloTab({
           loading={loadingRanking}
           maxItems={9}
           scrollAll
+          emptyLabel={emptyLabelDesvioResponsavel(
+            responsavel,
+            Boolean(responsavel && acumResp.total > 0),
+          )}
           onRacionalClick={() => setRacionalAberto(true)}
         />
       </div>
