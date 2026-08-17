@@ -28,6 +28,7 @@ import {
   nomesResponsavelMatch,
   stripAcentoNome,
 } from './responsavelMatch'
+import { marcarTreinamentoLinhasRacional } from './treinamentosDedupe'
 
 const RACIONAL_LIMITE = 500
 
@@ -281,13 +282,15 @@ export async function fetchDesenvolvimentoRacional(
       return { ...row, area: tv?.area ?? null }
     })
 
+  const linhasMarcadas = marcarTreinamentoLinhasRacional(linhas)
+
   return {
     colunas: [
       { key: 'area', label: 'Área' },
       ...cfg.colunas,
     ],
-    linhas: linhas.slice(0, RACIONAL_LIMITE),
-    truncado: linhas.length > RACIONAL_LIMITE,
+    linhas: linhasMarcadas.slice(0, RACIONAL_LIMITE),
+    truncado: linhasMarcadas.length > RACIONAL_LIMITE,
   }
 }
 

@@ -13,6 +13,7 @@ import {
   type OpsTreinamentoPessoaDetalhe,
 } from './opsTreinamentosCategorias'
 import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
+import { dedupeTreinamentoItens } from './treinamentosDedupe'
 
 export type ApresentacaoLiderancaMesCell = {
   mes: number
@@ -106,7 +107,7 @@ function agregarTreinamentos(
   itens: TreinamentoItemRow[],
 ): ApresentacaoLiderancaTreinamento[] {
   const map = new Map<string, number>()
-  for (const i of itens) {
+  for (const i of dedupeTreinamentoItens(itens)) {
     const nome = String(i.treinamento ?? '').trim() || 'Treinamento'
     const min = Number(i.duracao_minutos ?? 0)
     if (!Number.isFinite(min) || min <= 0) continue
@@ -128,7 +129,7 @@ function minutosYtdAte(
 ): number {
   const keys = new Set(lideres.map((p) => normalizeNome(p.colaborador)))
   let total = 0
-  for (const i of itens) {
+  for (const i of dedupeTreinamentoItens(itens)) {
     const key = normalizeNome(i.colaborador)
     if (!keys.has(key)) continue
     const mes = mesFromIso(i.data)
@@ -148,7 +149,7 @@ function minutosNoFiltro(
 ): number {
   const keys = new Set(lideres.map((p) => normalizeNome(p.colaborador)))
   let total = 0
-  for (const i of itens) {
+  for (const i of dedupeTreinamentoItens(itens)) {
     const key = normalizeNome(i.colaborador)
     if (!keys.has(key)) continue
     const mes = mesFromIso(i.data)

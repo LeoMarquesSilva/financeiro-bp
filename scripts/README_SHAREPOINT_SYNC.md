@@ -13,15 +13,16 @@ npm run sync:sharepoint -- --dump-fields publicacoes   # inspecionar nomes inter
 
 | Fonte | Origem | Tabela | Estratégia |
 |---|---|---|---|
-| `feriados` | `Feriados.xlsx` (site Controladoria) | `sp_feriados` | replace |
-| `turnover` | `Gestão/Indicadores Juridico/2025/Turnover BP (1).xlsx` (workbook **date1904**; sync corrige +1462 dias) | `sp_turnover` | replace |
-| `gestao_pdi` | `…/Base de Gestão de PDI.xlsx` — abas **Elegíveis** + **Desvio…** / Análise Desvios | `sp_gestao_pdi_elegiveis`, `sp_gestao_pdi_desvios` | replace |
-| `publicacoes` | Lista SharePoint `91e8ba11…` (CONTROLADORIAJURDICA) | `sp_publicacoes` | **acumulativo** (lista rotativa ~7 dias na origem; o histórico vive aqui) |
-| `protocolos` | Lista "CONTROLE DE PROTOCOLOS" `4e115aab…` | `sp_protocolos` | acumulativo |
-| `treinamentos` | Lista `30ea2880…` | `sp_treinamentos_presenca` | acumulativo |
-| `processos_numero` | `Processos Lista.csv` (coluna Número) | `sp_processos_numero` | replace via upsert; backfill `nro_cnj` vazio nas tarefas |
-| `tarefas` | `Tarefas.csv` (Bases Atualizacoes) | `sp_tarefas` | acumulativo (só Status=Concluída); `nro_cnj` coalesce com Número do processo |
-| `tarefas_historico` | `Historico/*.csv` combinados | `sp_tarefas_historico` | acumulativo; mesmo coalesce de `nro_cnj` |
+| `feriados` | `Feriados.xlsx` (site Controladoria) | `sp_feriados` | replace (apaga o que saiu da planilha) |
+| `turnover` | `Gestão/Indicadores Juridico/2025/Turnover BP (1).xlsx` (workbook **date1904**; sync corrige +1462 dias) | `sp_turnover` | replace (apaga o que saiu da planilha) |
+| `gestao_pdi` | `…/Base de Gestão de PDI.xlsx` — abas **Elegíveis** + **Desvio…** / Análise Desvios | `sp_gestao_pdi_elegiveis`, `sp_gestao_pdi_desvios` | replace (apaga o que saiu da planilha) |
+| `publicacoes` | Lista SharePoint `91e8ba11…` (CONTROLADORIAJURDICA) | `sp_publicacoes` | upsert + apaga órfão **só na janela** ainda na lista (rotativa ~7 dias; histórico antigo fica) |
+| `agendamento` | Lista SharePoint de solicitações | `sp_agendamento` | upsert + apaga IDs que sumiram da lista |
+| `protocolos` | Lista "CONTROLE DE PROTOCOLOS" `4e115aab…` | `sp_protocolos` | upsert + apaga IDs que sumiram da lista |
+| `treinamentos` | Lista `30ea2880…` | `sp_treinamentos_presenca` | upsert + apaga IDs que sumiram da lista |
+| `processos_numero` | `Processos Lista.csv` (coluna Número) | `sp_processos_numero` | upsert + apaga CIs que saíram do CSV; backfill `nro_cnj` vazio nas tarefas |
+| `tarefas` | `Tarefas.csv` (Bases Atualizacoes) | `sp_tarefas` | **acumulativo** (CSV é recorte; só Status=Concluída); `nro_cnj` coalesce com Número do processo |
+| `tarefas_historico` | `Historico/*.csv` combinados | `sp_tarefas_historico` | **acumulativo** (arquivos de arquivo; não apaga histórico); mesmo coalesce de `nro_cnj` |
 | `decisoes` | `Decisoes Processuais.csv` | `sp_decisoes_processuais` | replace (dedupe por processo, decisão mais recente) |
 
 A **ordem importa**: `feriados` e `turnover` rodam primeiro porque são insumo das

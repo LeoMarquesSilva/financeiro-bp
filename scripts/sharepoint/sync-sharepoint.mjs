@@ -217,7 +217,48 @@ async function upsertChunks(table, rows, onConflict) {
   return upserted
 }
 
+/**
+ * Apaga no espelho chaves que sumiram da origem (upsert sozinho deixa órfão).
+ * Se keepIds vier vazio, não apaga nada (proteção contra fetch falho).
+ * `scope` limita a varredura (ex.: publicações — só a janela ainda presente na lista rotativa).
+ */
+async function deleteMissingIds(table, pkColumn, keepIds, scope = null) {
+  const keep = new Set(
+    keepIds.filter((id) => id != null && id !== '').map((id) => String(id)),
+  )
+  if (keep.size === 0) return 0
+
+  const existing = []
+  const pageSize = 1000
+  for (let from = 0; ; from += pageSize) {
+    let q = supabase.from(table).select(pkColumn).range(from, from + pageSize - 1)
+    if (scope?.column && scope.gte) q = q.gte(scope.column, scope.gte)
+    const { data, error } = await q
+    if (error) throw new Error(`ler ${table} para limpar órfãos: ${error.message}`)
+    if (!data?.length) break
+    for (const r of data) existing.push(r[pkColumn])
+    if (data.length < pageSize) break
+  }
+
+  const orphans = existing.filter((id) => id != null && id !== '' && !keep.has(String(id)))
+  let deleted = 0
+  for (let i = 0; i < orphans.length; i += BATCH) {
+    const chunk = orphans.slice(i, i + BATCH)
+    const { error: delError, count } = await supabase
+      .from(table)
+      .delete({ count: 'exact' })
+      .in(pkColumn, chunk)
+    if (delError) throw new Error(`delete órfãos ${table}: ${delError.message}`)
+    deleted += count ?? chunk.length
+  }
+  return deleted
+}
+
 async function replaceAll(table, rows, pkColumn) {
+  const { count, error: countError } = await supabase
+    .from(table)
+    .select(pkColumn, { count: 'exact', head: true })
+  if (countError) throw new Error(`contar ${table}: ${countError.message}`)
   const { error: delError } = await supabase.from(table).delete().not(pkColumn, 'is', null)
   if (delError) throw new Error(`delete ${table}: ${delError.message}`)
   let inserted = 0
@@ -227,7 +268,7 @@ async function replaceAll(table, rows, pkColumn) {
     if (error) throw new Error(`insert ${table} (lote ${i / BATCH + 1}): ${error.message}`)
     inserted += chunk.length
   }
-  return inserted
+  return { upserted: inserted, deleted: count ?? 0 }
 }
 
 async function loadFeriadosSet() {
@@ -542,8 +583,7 @@ const FONTES = {
           posterga_prazos: r['Posterga prazos?'] != null ? String(r['Posterga prazos?']) : null,
         }))
         .filter((r) => r.data)
-      const upserted = await replaceAll('sp_feriados', dedupeBy(rows, (r) => r.data), 'data')
-      return { upserted, deleted: 0 }
+      return await replaceAll('sp_feriados', dedupeBy(rows, (r) => r.data), 'data')
     },
   },
 
@@ -555,14 +595,14 @@ const FONTES = {
       console.log(`[gestao_pdi] lendo ${PDI_XLSX_PATH} (ano=${anoRef})`)
       const elegiveis = parsePdiElegiveisBuffer(buffer, anoRef)
       const desvios = parsePdiDesviosBuffer(buffer, anoRef)
-      const upsertedElegiveis = await replaceAll(
+      const elegiveisSync = await replaceAll(
         'sp_gestao_pdi_elegiveis',
         dedupeBy(elegiveis, (r) => `${r.ano}|${r.mes}|${r.colaborador}`),
         'id',
       )
-      let upsertedDesvios = 0
+      let desviosSync = { upserted: 0, deleted: 0 }
       try {
-        upsertedDesvios = await replaceAll(
+        desviosSync = await replaceAll(
           'sp_gestao_pdi_desvios',
           dedupeBy(desvios, (r) => `${r.ano}|${r.mes}|${r.colaborador}`),
           'id',
@@ -574,9 +614,12 @@ const FONTES = {
         throw e
       }
       console.log(
-        `[gestao_pdi] elegíveis=${upsertedElegiveis} desvios=${upsertedDesvios}`,
+        `[gestao_pdi] elegíveis=${elegiveisSync.upserted} desvios=${desviosSync.upserted}`,
       )
-      return { upserted: upsertedElegiveis + upsertedDesvios, deleted: 0 }
+      return {
+        upserted: elegiveisSync.upserted + desviosSync.upserted,
+        deleted: elegiveisSync.deleted + desviosSync.deleted,
+      }
     },
   },
 
@@ -624,12 +667,11 @@ const FONTES = {
           obs: strOrNull(r['OBS']),
         }))
         .filter((r) => r.nome)
-      const upserted = await replaceAll(
+      return await replaceAll(
         'sp_turnover',
         dedupeBy(rows, (r) => `${r.nome}|${r.admissao}`),
-        'id'
+        'id',
       )
-      return { upserted, deleted: 0 }
     },
   },
 
@@ -702,8 +744,13 @@ const FONTES = {
           })(),
         }))
         .filter((r) => Number.isFinite(r.sp_id))
-      const upserted = await upsertChunks('sp_agendamento', dedupeBy(rows, (r) => r.sp_id), 'sp_id')
-      return { upserted, deleted: 0 }
+      const unique = dedupeBy(rows, (r) => r.sp_id)
+      const upserted = await upsertChunks('sp_agendamento', unique, 'sp_id')
+      const keepIds = items
+        .map((f) => Number(pick(f, ['ID', 'id'])))
+        .filter((id) => Number.isFinite(id))
+      const deleted = await deleteMissingIds('sp_agendamento', 'sp_id', keepIds)
+      return { upserted, deleted }
     },
   },
 
@@ -794,9 +841,26 @@ const FONTES = {
           }
         })
         .filter((r) => Number.isFinite(r.sp_id))
-      // Acumulativo: a lista na origem é rotativa (~7 dias); nunca deletar histórico.
-      const upserted = await upsertChunks('sp_publicacoes', dedupeBy(rows, (r) => r.sp_id), 'sp_id')
-      return { upserted, deleted: 0 }
+      const unique = dedupeBy(rows, (r) => r.sp_id)
+      const upserted = await upsertChunks('sp_publicacoes', unique, 'sp_id')
+      // Lista rotativa (~7 dias): o histórico mora no SIOE. Só apaga órfão na janela
+      // ainda presente na origem — item excluído no SharePoint some daqui; o resto fica.
+      const keepIds = items
+        .map((f) => Number(pick(f, ['ID', 'id'])))
+        .filter((id) => Number.isFinite(id))
+      const criados = items
+        .map((f) => parseDate(pick(f, ['Criado', 'Created'])))
+        .filter((d) => d instanceof Date && !Number.isNaN(d.getTime()))
+      const since = criados.length
+        ? new Date(Math.min(...criados.map((d) => d.getTime()))).toISOString()
+        : null
+      const deleted = since
+        ? await deleteMissingIds('sp_publicacoes', 'sp_id', keepIds, {
+            column: 'criado',
+            gte: since,
+          })
+        : 0
+      return { upserted, deleted }
     },
   },
 
@@ -896,8 +960,13 @@ const FONTES = {
           }
         })
         .filter((r) => Number.isFinite(r.sp_id))
-      const upserted = await upsertChunks('sp_protocolos', dedupeBy(rows, (r) => r.sp_id), 'sp_id')
-      return { upserted, deleted: 0 }
+      const unique = dedupeBy(rows, (r) => r.sp_id)
+      const upserted = await upsertChunks('sp_protocolos', unique, 'sp_id')
+      const keepIds = items
+        .map((f) => Number(pick(f, ['ID', 'id'])))
+        .filter((id) => Number.isFinite(id))
+      const deleted = await deleteMissingIds('sp_protocolos', 'sp_id', keepIds)
+      return { upserted, deleted }
     },
   },
 
@@ -940,8 +1009,14 @@ const FONTES = {
           }
         })
         .filter((r) => Number.isFinite(r.sp_id))
-      const upserted = await upsertChunks('sp_treinamentos_presenca', dedupeBy(rows, (r) => r.sp_id), 'sp_id')
-      return { upserted, deleted: 0 }
+      const unique = dedupeBy(rows, (r) => r.sp_id)
+      const upserted = await upsertChunks('sp_treinamentos_presenca', unique, 'sp_id')
+      const deleted = await deleteMissingIds(
+        'sp_treinamentos_presenca',
+        'sp_id',
+        unique.map((r) => r.sp_id),
+      )
+      return { upserted, deleted }
     },
   },
 
@@ -968,17 +1043,19 @@ const FONTES = {
           }
         })
         .filter(Boolean)
-      const upserted = await upsertChunks(
+      const unique = dedupeBy(rows, (r) => r.ci)
+      const upserted = await upsertChunks('sp_processos_numero', unique, 'ci')
+      const deleted = await deleteMissingIds(
         'sp_processos_numero',
-        dedupeBy(rows, (r) => r.ci),
         'ci',
+        unique.map((r) => r.ci),
       )
       const { data: backfill, error } = await supabase.rpc('eficiencia_backfill_nro_cnj_de_processo')
       if (error) throw new Error(`backfill nro_cnj: ${error.message}`)
       console.log(
         `[Sync SharePoint] processos_numero backfill nro_cnj: ${JSON.stringify(backfill)}`,
       )
-      return { upserted, deleted: 0 }
+      return { upserted, deleted }
     },
   },
 
@@ -1023,6 +1100,8 @@ const FONTES = {
           }
         })
         .filter((r) => r.ci != null)
+      // Acumulativo: o CSV é recorte do VIOS, não o universo. Exclusão na origem
+      // não se propaga — apagar órfão aqui apagaria o histórico do painel.
       const upserted = await upsertChunks('sp_tarefas', dedupeBy(rows, (r) => r.ci), 'ci')
       return { upserted, deleted: 0 }
     },
@@ -1117,12 +1196,11 @@ const FONTES = {
         }))
       // Dedupe por processo mantendo a decisão mais recente (mesma regra do Power Query)
       rows.sort((a, b) => (a.data_decisao ?? '').localeCompare(b.data_decisao ?? ''))
-      const upserted = await replaceAll(
+      return await replaceAll(
         'sp_decisoes_processuais',
         dedupeBy(rows, (r) => r.processo),
-        'processo'
+        'processo',
       )
-      return { upserted, deleted: 0 }
     },
   },
 }

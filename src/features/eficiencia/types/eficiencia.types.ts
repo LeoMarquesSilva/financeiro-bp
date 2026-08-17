@@ -344,6 +344,8 @@ export interface TreinamentoItemRow {
   treinamento: string | null
   data: string | null
   duracao_minutos: number
+  /** Mesma pessoa + treinamento + data em mais de um ID (espelho/SharePoint). */
+  duplicado?: boolean
 }
 
 export interface VistagemDesvioRankingRow {

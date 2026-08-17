@@ -5,6 +5,7 @@ import {
 } from '../constants'
 import type { TreinamentoItemRow } from '../types/eficiencia.types'
 import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
+import { dedupeTreinamentoItens } from './treinamentosDedupe'
 
 export type OpsTurnoverAtivo = {
   nome: string
@@ -71,7 +72,7 @@ export function buildOpsTreinamentosCategorias(
     })
   }
 
-  for (const item of itens) {
+  for (const item of dedupeTreinamentoItens(itens)) {
     const key = normalizeNome(item.colaborador)
     if (!key) continue
     const pessoa = pessoasMap.get(key)

@@ -60,6 +60,10 @@ export function countVistagemD1(linhas: Array<Record<string, unknown>>): {
   return { sim, nao }
 }
 
+export function isRacionalLinhaTreinamentoDuplicado(row: Record<string, unknown>): boolean {
+  return row._duplicado === true
+}
+
 export function isRacionalLinhaForaMeta(
   indicador: string,
   row: Record<string, unknown>,

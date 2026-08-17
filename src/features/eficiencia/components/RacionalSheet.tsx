@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils'
 import { eficienciaService } from '../services/eficienciaService'
 import { exportRacionalExcel } from '../utils/racionalExport'
-import { formatRacionalCell, formatRacionalResumoLabel, isRacionalLinhaForaMeta, racionalLinhaForaMetaTitle } from '../utils/racionalFormat'
+import { formatRacionalCell, formatRacionalResumoLabel, isRacionalLinhaForaMeta, isRacionalLinhaTreinamentoDuplicado, racionalLinhaForaMetaTitle } from '../utils/racionalFormat'
 import { formatRacionalPeriodoLabel } from '../utils/racionalQuery'
 import {
   atingiuMetaKpi,
@@ -214,8 +214,11 @@ export function RacionalSheet({
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {linhas.map((row, i) => {
+                    const duplicado = isRacionalLinhaTreinamentoDuplicado(row)
                     const foraMeta =
-                      indicador != null && isRacionalLinhaForaMeta(indicador, row)
+                      !duplicado &&
+                      indicador != null &&
+                      isRacionalLinhaForaMeta(indicador, row)
                     const foraMetaTitle =
                       indicador != null ? racionalLinhaForaMetaTitle(indicador) : undefined
                     return (
@@ -224,8 +227,15 @@ export function RacionalSheet({
                         className={cn(
                           'text-slate-700',
                           foraMeta && 'bg-amber-50/80 text-slate-500',
+                          duplicado && 'bg-red-50 font-medium text-red-700',
                         )}
-                        title={foraMeta ? foraMetaTitle : undefined}
+                        title={
+                          duplicado
+                            ? 'Lançamento duplicado — mesma pessoa, treinamento e data. Conferir na origem.'
+                            : foraMeta
+                              ? foraMetaTitle
+                              : undefined
+                        }
                       >
                         {colunas.map((c) => (
                           <td key={c.key} className="whitespace-nowrap py-1.5 pr-4">

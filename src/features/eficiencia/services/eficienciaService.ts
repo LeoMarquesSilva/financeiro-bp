@@ -69,6 +69,7 @@ import {
 import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
 import { agregarGestaoPdiMensal, avaliarGestaoPdi } from '../utils/gestaoPdiCalc'
 import { nomesResponsavelMatch, RACIONAL_COLUNA_RESPONSAVEL } from '../utils/responsavelMatch'
+import { marcarTreinamentosDuplicados } from '../utils/treinamentosDedupe'
 
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.rpc(name as never, args as never)
@@ -189,6 +190,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'data_criada', label: 'Data criada' },
       { key: 'protocolado_em', label: 'Protocolado em' },
       { key: 'status_inconsistencia', label: 'Status' },
+      { key: 'inconsistencia_juridico', label: 'Inconsistência - Jurídico' },
       { key: 'inconsistencia_juridico_motivo', label: 'Motivo Inconsistência' },
     ],
   },
@@ -919,12 +921,14 @@ export const eficienciaService = {
       .order('data', { ascending: false })
       .limit(5000)
     if (error) throw error
-    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
-      colaborador: String(r.colaborador ?? ''),
-      treinamento: r.treinamento == null ? null : String(r.treinamento),
-      data: r.data == null ? null : String(r.data),
-      duracao_minutos: Number(r.duracao_minutos ?? 0),
-    }))
+    return marcarTreinamentosDuplicados(
+      ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+        colaborador: String(r.colaborador ?? ''),
+        treinamento: r.treinamento == null ? null : String(r.treinamento),
+        data: r.data == null ? null : String(r.data),
+        duracao_minutos: Number(r.duracao_minutos ?? 0),
+      })),
+    )
   },
 
   async fetchGestaoPdiElegiveis(ano: number): Promise<GestaoPdiElegivelRow[]> {

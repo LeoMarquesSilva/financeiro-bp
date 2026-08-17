@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Check, ChevronDown, GraduationCap, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/shared/components/Avatar'
 import { formatDate } from '@/shared/utils/format'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
@@ -117,9 +118,17 @@ export function TreinamentosPessoaCards({
   }
 
   const ordenados = [...porPessoa].sort((a, b) => b.minutos_lancados - a.minutos_lancados)
+  const qtdDuplicados = itens.filter((item) => item.duplicado).length
 
   return (
     <div className="space-y-3">
+      {qtdDuplicados > 0 ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {qtdDuplicados} {qtdDuplicados === 1 ? 'lançamento duplicado' : 'lançamentos duplicados'}{' '}
+          (mesma pessoa, treinamento e data). Destacados em vermelho para o gestor conferir na
+          origem.
+        </p>
+      ) : null}
       {ordenados.map((p) => {
         const metaPessoa =
           p.meta_minutos != null && Number.isFinite(Number(p.meta_minutos))
@@ -128,6 +137,9 @@ export function TreinamentosPessoaCards({
         const semMetaPessoa = metaPessoa == null
         const minutos = Number(p.minutos_lancados ?? 0)
         const atingiu = !semMetaPessoa && minutos >= (metaPessoa ?? 0)
+        const faltamMinutos = semMetaPessoa
+          ? 0
+          : Math.max(0, (metaPessoa ?? 0) - minutos)
         const pct = semMetaPessoa
           ? 100
           : Math.min(100, (minutos / (metaPessoa || 1)) * 100)
@@ -138,6 +150,7 @@ export function TreinamentosPessoaCards({
         )
         const avatarUrl = resolvePessoaAvatarUrl(p.colaborador, teamMembers, avatarCatalog)
         const lista = itensPorPessoa.get(normalizeNome(p.colaborador)) ?? []
+        const temDuplicado = lista.some((item) => item.duplicado)
         const aberto = abertos.has(p.colaborador)
 
         return (
@@ -165,14 +178,24 @@ export function TreinamentosPessoaCards({
                       {nomeExibicao}
                     </h3>
                     <p className="mt-0.5 text-xs text-slate-500">
-                      {formatHorasMinutos(minutos)}
-                      <span className="text-slate-300"> · </span>
-                      {Math.round(minutos)} min
+                      {semMetaPessoa ? (
+                        formatHorasMinutos(minutos)
+                      ) : atingiu ? (
+                        'Meta atingida'
+                      ) : (
+                        <>Faltam {formatHorasMinutos(faltamMinutos)} para a meta</>
+                      )}
                       {lista.length > 0 ? (
                         <>
                           <span className="text-slate-300"> · </span>
                           {lista.length} {lista.length === 1 ? 'lançamento' : 'lançamentos'}
                         </>
+                      ) : null}
+                      {temDuplicado ? (
+                        <span className="font-medium text-red-600">
+                          {' '}
+                          · conferir duplicado
+                        </span>
                       ) : null}
                     </p>
                   </div>
@@ -227,21 +250,66 @@ export function TreinamentosPessoaCards({
                       key={`${item.treinamento}-${item.data}-${idx}`}
                       className={cn(
                         'flex items-center justify-between gap-3 px-4 py-2 text-xs',
-                        idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/80',
+                        item.duplicado
+                          ? 'bg-red-50'
+                          : idx % 2 === 0
+                            ? 'bg-white'
+                            : 'bg-slate-50/80',
                       )}
+                      title={
+                        item.duplicado
+                          ? 'Lançamento duplicado — mesma pessoa, treinamento e data. Conferir na origem.'
+                          : undefined
+                      }
                     >
-                      <span className="flex min-w-0 items-start gap-2 text-slate-700">
-                        <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-rose-500" aria-hidden />
+                      <span
+                        className={cn(
+                          'flex min-w-0 items-start gap-2',
+                          item.duplicado ? 'text-red-700' : 'text-slate-700',
+                        )}
+                      >
+                        <MapPin
+                          className={cn(
+                            'mt-0.5 h-3 w-3 shrink-0',
+                            item.duplicado ? 'text-red-600' : 'text-rose-500',
+                          )}
+                          aria-hidden
+                        />
                         <span className="min-w-0">
-                          <span className="block truncate">
-                            {item.treinamento || 'Treinamento'}
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span
+                              className={cn(
+                                'block truncate',
+                                item.duplicado && 'font-semibold text-red-700',
+                              )}
+                            >
+                              {item.treinamento || 'Treinamento'}
+                            </span>
+                            {item.duplicado ? (
+                              <Badge
+                                variant="destructive"
+                                className="shrink-0 px-1.5 py-0 text-[10px]"
+                              >
+                                Duplicado
+                              </Badge>
+                            ) : null}
                           </span>
-                          <span className="mt-0.5 block tabular-nums text-[11px] text-slate-400">
+                          <span
+                            className={cn(
+                              'mt-0.5 block tabular-nums text-[11px]',
+                              item.duplicado ? 'text-red-500' : 'text-slate-400',
+                            )}
+                          >
                             {item.data ? formatDate(item.data) : '—'}
                           </span>
                         </span>
                       </span>
-                      <span className="shrink-0 tabular-nums text-slate-500">
+                      <span
+                        className={cn(
+                          'shrink-0 tabular-nums',
+                          item.duplicado ? 'font-medium text-red-700' : 'text-slate-500',
+                        )}
+                      >
                         {formatHorasMinutos(item.duracao_minutos)}
                       </span>
                     </li>
