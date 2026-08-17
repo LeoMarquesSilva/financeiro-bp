@@ -43,10 +43,11 @@ async function loadOfficialPhotoCatalog() {
     ...colaboradores.map((row) => row.id),
     ...teamMembers.map((row) => row.colaborador_id).filter((id): id is string => !!id),
   ]
-  const emails = [
-    ...colaboradores.map((row) => row.email),
-    ...teamMembers.map((row) => row.email),
-  ].filter((email): email is string => !!email)
+  const linkedIds = new Set(ids.filter(Boolean))
+  const emails = teamMembers
+    .filter((row) => !row.colaborador_id || !linkedIds.has(row.colaborador_id))
+    .map((row) => row.email)
+    .filter((email): email is string => !!email)
 
   const result = await officialPhotosService.lookup({
     externalUserIds: [...new Set(ids)],

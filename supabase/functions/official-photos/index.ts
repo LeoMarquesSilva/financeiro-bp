@@ -53,18 +53,11 @@ function uniqueTrimmed(values: unknown, limit: number): string[] {
   return out
 }
 
-async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = []
-  let index = 0
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (index < items.length) {
-      const current = index
-      index += 1
-      results[current] = await fn(items[current])
-    }
-  })
-  await Promise.all(workers)
-  return results
+function apiHeaders(apiKey: string, json = false): HeadersInit {
+  return {
+    'x-api-key': apiKey,
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -115,7 +108,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const externalUserIds = uniqueTrimmed(payload.externalUserIds, 100)
-  const emails = uniqueTrimmed(payload.emails, 100)
+  const emails = uniqueTrimmed(payload.emails, 20)
   if (externalUserIds.length === 0 && emails.length === 0) {
     return jsonResponse({ data: [], notFound: [] })
   }
@@ -123,58 +116,57 @@ Deno.serve(async (req: Request) => {
   const photos: OfficialPhoto[] = []
   const notFound: string[] = []
 
-  try {
-    if (externalUserIds.length > 0) {
+  if (externalUserIds.length > 0) {
+    try {
       const response = await fetch(`${base}/v1/photos/batch`, {
         method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'Content-Type': 'application/json',
-        },
+        headers: apiHeaders(apiKey, true),
         body: JSON.stringify({ externalUserIds }),
       })
       if (response.status === 429) {
         return jsonResponse({ error: 'Rate limit da API de fotos.' }, 429)
       }
-      if (!response.ok) {
-        return jsonResponse({ error: `Fotos oficiais batch: HTTP ${response.status}` }, 502)
+      if (response.ok) {
+        const batch = (await response.json()) as { data?: OfficialPhoto[]; notFound?: string[] }
+        photos.push(...(batch.data ?? []))
+        notFound.push(...(batch.notFound ?? []))
+      } else {
+        console.error('[official-photos] batch HTTP', response.status)
+        notFound.push(...externalUserIds)
       }
-      const batch = (await response.json()) as { data?: OfficialPhoto[]; notFound?: string[] }
-      photos.push(...(batch.data ?? []))
-      notFound.push(...(batch.notFound ?? []))
+    } catch (error) {
+      console.error('[official-photos] batch', error instanceof Error ? error.message : error)
+      notFound.push(...externalUserIds)
     }
-
-    if (emails.length > 0) {
-      const emailResults = await mapPool(emails, 8, async (email) => {
-        const response = await fetch(`${base}/v1/photos?email=${encodeURIComponent(email)}`, {
-          headers: { 'x-api-key': apiKey },
-        })
-        if (response.status === 404 || response.status === 409) {
-          return { email, photo: null as OfficialPhoto | null }
-        }
-        if (response.status === 429) {
-          throw new Error('RATE_LIMIT')
-        }
-        if (!response.ok) {
-          throw new Error(`HTTP_${response.status}`)
-        }
-        const payloadJson = (await response.json()) as { data?: OfficialPhoto }
-        return { email, photo: payloadJson.data ?? null }
-      })
-
-      for (const row of emailResults) {
-        if (row.photo) photos.push(row.photo)
-        else notFound.push(row.email)
-      }
-    }
-
-    return jsonResponse({ data: photos, notFound })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro ao consultar fotos oficiais.'
-    if (message === 'RATE_LIMIT') {
-      return jsonResponse({ error: 'Rate limit da API de fotos.' }, 429)
-    }
-    console.error('[official-photos]', message)
-    return jsonResponse({ error: 'Falha ao consultar fotos oficiais.' }, 502)
   }
+
+  const emailsToLookup = emails.filter((email) => {
+    const normalized = email.trim().toLowerCase()
+    return !photos.some((photo) => (photo.email ?? '').trim().toLowerCase() === normalized)
+  })
+
+  for (const email of emailsToLookup) {
+    try {
+      const response = await fetch(`${base}/v1/photos?email=${encodeURIComponent(email)}`, {
+        headers: apiHeaders(apiKey),
+      })
+      if (response.status === 404 || response.status === 409) {
+        notFound.push(email)
+        continue
+      }
+      if (!response.ok) {
+        console.error('[official-photos] email HTTP', response.status)
+        notFound.push(email)
+        continue
+      }
+      const payloadJson = (await response.json()) as { data?: OfficialPhoto }
+      if (payloadJson.data) photos.push(payloadJson.data)
+      else notFound.push(email)
+    } catch (error) {
+      console.error('[official-photos] email', error instanceof Error ? error.message : error)
+      notFound.push(email)
+    }
+  }
+
+  return jsonResponse({ data: photos, notFound })
 })
