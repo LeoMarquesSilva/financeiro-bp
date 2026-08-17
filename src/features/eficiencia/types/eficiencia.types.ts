@@ -295,6 +295,13 @@ export interface TurnoverTopTempoCasaRow {
   meses_casa: number
 }
 
+export interface TurnoverAtivoAreaRow {
+  nome: string
+  cargo: string | null
+  admissao: string | null
+  area: string | null
+}
+
 export interface ColaboradorFeriasRow {
   orqestrai_employee_id: string
   full_name: string

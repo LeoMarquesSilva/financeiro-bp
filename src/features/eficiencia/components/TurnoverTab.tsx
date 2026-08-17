@@ -10,7 +10,7 @@ import { useTurnover } from '../hooks/useEficiencia'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { eficienciaService } from '../services/eficienciaService'
-import type { ColaboradorFeriasRow } from '../types/eficiencia.types'
+import type { ColaboradorFeriasRow, TurnoverAtivoAreaRow } from '../types/eficiencia.types'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { normalizeNomeChave } from '../utils/racionalQuery'
@@ -106,7 +106,7 @@ export function TurnoverTab({
   )
   const ativosComTempo = useMemo(() => {
     const ref = dataRefTempoCasa(ano)
-    return (ativosData ?? []).map((p) => {
+    return (ativosData ?? []).map((p: TurnoverAtivoAreaRow) => {
       const adm = p.admissao ? new Date(`${String(p.admissao).slice(0, 10)}T12:00:00`) : null
       const valido = adm && !Number.isNaN(adm.getTime()) ? adm : null
       return {

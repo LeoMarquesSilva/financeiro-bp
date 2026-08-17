@@ -53,6 +53,7 @@ import type {
   TurnoverAnualRow,
   TurnoverDesligamentoRow,
   TurnoverTopTempoCasaRow,
+  TurnoverAtivoAreaRow,
   ColaboradorFeriasRow,
   UltimaAtualizacaoRow,
 } from '../types/eficiencia.types'
@@ -827,7 +828,7 @@ export const eficienciaService = {
   async fetchTurnoverAtivosAreaDetalhe(
     ano: number,
     area: string | null = null,
-  ): Promise<Array<{ nome: string; cargo: string | null; admissao: string | null; area: string | null }>> {
+  ): Promise<TurnoverAtivoAreaRow[]> {
     let query = supabase
       .from('sp_turnover')
       .select('nome, cargo, admissao, desligamento, area')
