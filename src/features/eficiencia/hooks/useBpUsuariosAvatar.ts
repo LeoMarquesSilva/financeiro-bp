@@ -115,14 +115,13 @@ export function useBpUsuariosAvatar() {
     staleTime: 1000 * 60 * 30,
   })
 
-  const usuarios = useMemo(
-    () =>
-      (data ?? []).map((u) => ({
-        ...u,
-        avatar_url: getOfficialPhotoUrlByEmail(u.email) ?? u.avatar_url,
-      })),
-    [data, officialVersion],
-  )
+  const usuarios = useMemo(() => {
+    const catalog = (data ?? []) as BpUsuarioAvatar[]
+    return catalog.map((u: BpUsuarioAvatar) => ({
+      ...u,
+      avatar_url: getOfficialPhotoUrlByEmail(u.email) ?? u.avatar_url,
+    }))
+  }, [data, officialVersion])
 
   const byNomeChave = useMemo(() => {
     const map = new Map<string, BpUsuarioAvatar>()
