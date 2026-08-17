@@ -224,19 +224,41 @@ export function ApresentacaoLiderancaBloco({ data, loading, error }: Props) {
                 border: '1px solid #E2E8F0',
                 borderRadius: 8,
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 11,
-                fontWeight: 700,
+                gap: 2,
+                padding: '4px 2px',
                 fontVariantNumeric: 'tabular-nums',
               }}
             >
-              {m.label}
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  lineHeight: 1.05,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {m.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 7,
+                  fontWeight: 600,
+                  lineHeight: 1.05,
+                  color: m.value == null ? '#94A3B8' : st.color,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {m.horasMesLabel}
+              </div>
             </div>
           )
         })}
 
         <div
+          data-lideranca-acumulado
           style={{
             background: '#F8F1E3',
             border: `2px solid ${acumStyle.color}`,
@@ -251,20 +273,45 @@ export function ApresentacaoLiderancaBloco({ data, loading, error }: Props) {
         >
           <div
             style={{
+              width: '100%',
               fontSize: 16,
               fontWeight: 800,
               color: acumStyle.color,
               fontVariantNumeric: 'tabular-nums',
               lineHeight: 1.1,
+              textAlign: 'center',
             }}
           >
             {data.acumuladoLabel}
           </div>
-          <div style={{ fontSize: 8, color: '#64748B', fontWeight: 600 }}>
+          <div
+            data-lideranca-acumulado-horas
+            style={{
+              width: '100%',
+              fontSize: 8,
+              color: '#64748B',
+              fontWeight: 600,
+              lineHeight: 1.05,
+              whiteSpace: 'nowrap',
+              textAlign: 'center',
+            }}
+          >
             {data.horasRealizadasLabel}
           </div>
-          <div style={{ fontSize: 8, color: '#94A3B8' }}>
-            Meta {data.metaHorasLabel} ({data.qtdPessoas} pessoas · proporcional)
+          <div
+            data-lideranca-acumulado-meta
+            style={{
+              width: '100%',
+              color: '#94A3B8',
+              fontSize: 7,
+              lineHeight: 1.05,
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ display: 'block', whiteSpace: 'nowrap' }}>
+              Meta {data.metaHorasLabel} · {data.qtdPessoas} pessoas
+            </span>
           </div>
         </div>
       </div>

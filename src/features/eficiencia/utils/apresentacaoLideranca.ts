@@ -20,6 +20,7 @@ export type ApresentacaoLiderancaMesCell = {
   mesLabel: string
   value: number | null
   label: string
+  horasMesLabel: string
   atingiu: boolean | null
 }
 
@@ -141,6 +142,23 @@ function minutosYtdAte(
   return total
 }
 
+function minutosNoMes(
+  lideres: OpsTreinamentoPessoaDetalhe[],
+  itens: TreinamentoItemRow[],
+  mesAlvo: number,
+): number {
+  const keys = new Set(lideres.map((p) => normalizeNome(p.colaborador)))
+  let total = 0
+  for (const i of itens) {
+    if (!keys.has(normalizeNome(i.colaborador))) continue
+    if (mesFromIso(i.data) !== mesAlvo) continue
+    const min = Number(i.duracao_minutos ?? 0)
+    if (!Number.isFinite(min) || min <= 0) continue
+    total += min
+  }
+  return total
+}
+
 function minutosNoFiltro(
   lideres: OpsTreinamentoPessoaDetalhe[],
   itens: TreinamentoItemRow[],
@@ -193,12 +211,15 @@ export function buildApresentacaoLideranca(
 
   const meses: ApresentacaoLiderancaMesCell[] = mesesBase.map((mes) => {
     const ytd = minutosYtdAte(lideres, itens, mes)
+    const minutosMes = minutosNoMes(lideres, itens, mes)
+    const horasMesLabel = formatHorasRealizadas(minutosMes)
     if (ytd <= 0 && metaMinutos <= 0) {
       return {
         mes,
         mesLabel: MESES_EFICIENCIA[mes - 1] ?? String(mes),
         value: null,
         label: '-',
+        horasMesLabel,
         atingiu: null,
       }
     }
@@ -208,6 +229,7 @@ export function buildApresentacaoLideranca(
         mesLabel: MESES_EFICIENCIA[mes - 1] ?? String(mes),
         value: null,
         label: '-',
+        horasMesLabel,
         atingiu: null,
       }
     }
@@ -218,6 +240,7 @@ export function buildApresentacaoLideranca(
       mesLabel: MESES_EFICIENCIA[mes - 1] ?? String(mes),
       value: pct,
       label: pct == null ? '-' : formatPercent(pct),
+      horasMesLabel,
       atingiu: pct == null ? null : pct >= 100,
     }
   })

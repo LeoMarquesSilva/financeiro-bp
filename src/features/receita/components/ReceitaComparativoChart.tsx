@@ -599,6 +599,7 @@ function ChartLabelWithBackdrop({
   color,
   textAnchor,
   dominantBaseline,
+  fontSize = RECEITA_CHART_LABEL.linePoint,
 }: {
   text: string
   secondaryText?: string
@@ -607,10 +608,11 @@ function ChartLabelWithBackdrop({
   color: string
   textAnchor: 'start' | 'middle' | 'end'
   dominantBaseline: 'auto' | 'hanging' | 'middle'
+  fontSize?: number
 }) {
-  const charWidth = 6.4
+  const charWidth = fontSize * 0.54
   const boxWidth = Math.max(text.length, secondaryText?.length ?? 0) * charWidth + 8
-  const boxHeight = secondaryText ? 29 : 15
+  const boxHeight = secondaryText ? fontSize * 2 + 5 : fontSize + 3
   const boxX =
     textAnchor === 'start' ? x - 3 : textAnchor === 'end' ? x - boxWidth + 3 : x - boxWidth / 2
   let boxY =
@@ -623,18 +625,31 @@ function ChartLabelWithBackdrop({
 
   return (
     <g pointerEvents="none">
-      <rect x={boxX} y={boxY} width={boxWidth} height={boxHeight} rx={3} fill="#fff" fillOpacity={0.88} />
+      <rect
+        x={boxX}
+        y={boxY}
+        width={boxWidth}
+        height={boxHeight}
+        rx={3}
+        fill={color}
+        fillOpacity={0.12}
+        stroke={color}
+        strokeOpacity={0.32}
+        strokeWidth={0.75}
+        style={{ fill: color, stroke: color }}
+      />
       <text
         x={x}
         y={y}
         fill={color}
+        style={{ fill: color }}
         textAnchor={textAnchor}
         dominantBaseline={dominantBaseline}
-        fontSize={RECEITA_CHART_LABEL.linePoint}
+        fontSize={fontSize}
         fontWeight={600}
       >
         <tspan x={x}>{text}</tspan>
-        {secondaryText && <tspan x={x} dy={12}>{secondaryText}</tspan>}
+        {secondaryText && <tspan x={x} dy={fontSize}>{secondaryText}</tspan>}
       </text>
     </g>
   )
@@ -650,6 +665,7 @@ function ComparativoDotLabel({
   dedupeFlat = false,
   getValueAt,
   getSecondaryAt,
+  fontSize,
 }: {
   color: string
   percentMode: boolean
@@ -662,6 +678,7 @@ function ComparativoDotLabel({
   getValueAt?: (index: number) => number | null | undefined
   /** Segunda linha do rótulo (ex.: % inadimplência congelada). */
   getSecondaryAt?: (index: number) => string | undefined
+  fontSize?: number
 }) {
   return function Label(props: LabelProps & { index?: number }) {
     const { x, y, value, index } = props
@@ -678,7 +695,7 @@ function ComparativoDotLabel({
       }
     }
 
-    const text = percentMode ? formatPercentLabel(num) : formatCurrency(num)
+    const text = percentMode ? formatPercent(num) : formatCurrency(num)
     if (!text) return null
     const secondaryText = index != null ? getSecondaryAt?.(index) : undefined
 
@@ -688,8 +705,13 @@ function ComparativoDotLabel({
     const adjustedOffset = offset + (index != null && index % 2 === 1 ? stagger : 0)
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
-    if (position === 'above') {
-      const vertical = resolveLabelVerticalPosition(cy, adjustedOffset, secondaryText, 'above')
+    if (position === 'above' || position === 'below') {
+      const vertical = resolveLabelVerticalPosition(
+        cy,
+        adjustedOffset,
+        secondaryText,
+        position,
+      )
       const labelY = labelYForPosition(cy, adjustedOffset, vertical)
       return (
         <ChartLabelWithBackdrop
@@ -700,20 +722,7 @@ function ComparativoDotLabel({
           color={color}
           textAnchor={anchor}
           dominantBaseline={vertical === 'above' ? 'auto' : 'hanging'}
-        />
-      )
-    }
-
-    if (position === 'below') {
-      return (
-        <ChartLabelWithBackdrop
-          text={text}
-          secondaryText={secondaryText}
-          x={labelX}
-          y={cy + adjustedOffset}
-          color={color}
-          textAnchor={anchor}
-          dominantBaseline="hanging"
+          fontSize={fontSize}
         />
       )
     }
@@ -728,6 +737,7 @@ function ComparativoDotLabel({
         color={color}
         textAnchor={rightAnchor}
         dominantBaseline="middle"
+      fontSize={fontSize}
       />
     )
   }
@@ -1950,11 +1960,7 @@ export function ReceitaComparativoChart({
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
             <ComposedChart
               data={chartData}
-              margin={
-                percentMode
-                  ? RECEITA_CHART_LAYOUT.marginDefault
-                  : { ...RECEITA_CHART_LAYOUT.marginWithPointLabels, right: 28 }
-              }
+              margin={{ ...RECEITA_CHART_LAYOUT.marginWithPointLabels, right: 28 }}
             >
               <defs>
                 <linearGradient id="receitaRecebidoGradient" x1="0" y1="0" x2="0" y2="1">
@@ -1983,9 +1989,7 @@ export function ReceitaComparativoChart({
                 tickLine={false}
                 width={percentMode ? 48 : 60}
                 domain={[0, 'auto']}
-                padding={
-                  percentMode ? undefined : { top: RECEITA_CHART_LAYOUT.yAxisPaddingTopWithLabels }
-                }
+                padding={{ top: RECEITA_CHART_LAYOUT.yAxisPaddingTopWithLabels }}
               />
 
               <Tooltip
@@ -2085,19 +2089,18 @@ export function ReceitaComparativoChart({
                   }}
                   connectNulls={false}
                 >
-                  {(s.key === 'recebido' || (!percentMode && s.key === 'previsto')) && (
-                    <LabelList
-                      dataKey={s.key}
-                      content={ComparativoDotLabel({
-                        color: s.color,
-                        percentMode,
-                        position: percentMode ? 'right' : 'above',
-                        total: chartData.length,
-                        offset: s.key === 'previsto' ? 16 : 10,
-                        stagger: s.key === 'previsto' ? 14 : 0,
-                      })}
-                    />
-                  )}
+                  <LabelList
+                    dataKey={s.key}
+                    content={ComparativoDotLabel({
+                      color: s.color,
+                      percentMode,
+                      position: s.key === 'recebido' ? 'below' : 'above',
+                      total: chartData.length,
+                      offset: s.key === 'previsto' ? 18 : 12,
+                      stagger: s.key === 'previsto' ? 12 : 8,
+                      fontSize: apresentacaoMode ? 9 : RECEITA_CHART_LABEL.linePoint,
+                    })}
+                  />
                 </Area>
               ))}
 
@@ -2149,9 +2152,7 @@ export function ReceitaComparativoChart({
                             />
                           )
                         }
-                      : s.key === 'meta'
-                        ? lineSeriesDot(s.color, 3)
-                        : false
+                      : lineSeriesDot(s.color, 3)
                   }
                   activeDot={
                     s.key === 'inadimplencia'
@@ -2197,40 +2198,35 @@ export function ReceitaComparativoChart({
                   }
                   connectNulls={s.key !== 'inadimplencia'}
                 >
-                  {!percentMode && s.key === 'meta' && (
-                    <LabelList
-                      dataKey={s.key}
-                      content={ComparativoDotLabel({
-                        color: s.color,
-                        percentMode: false,
-                        position: 'above',
-                        total: chartData.length,
-                        offset: 22,
-                        stagger: 14,
-                        dedupeFlat: true,
-                        getValueAt: (i) => chartData[i]?.meta ?? null,
-                      })}
-                    />
-                  )}
-                  {!percentMode && s.key === 'inadimplencia' && (
-                    <LabelList
-                      dataKey={s.key}
-                      content={ComparativoDotLabel({
-                        color: s.color,
-                        percentMode: false,
-                        position: 'above',
-                        total: chartData.length,
-                        offset: 22,
-                        stagger: 18,
-                        getSecondaryAt: (i) => {
-                          const mes = chartData[i]?.mes
-                          if (mes == null) return undefined
-                          const pct = inadimplenciaCongeladaPorMes.get(mes)?.pct
-                          return pct != null ? formatPercent(pct) : undefined
-                        },
-                      })}
-                    />
-                  )}
+                  <LabelList
+                    dataKey={s.key}
+                    content={ComparativoDotLabel({
+                      color: s.color,
+                      percentMode,
+                      position:
+                        s.key === 'inadimplencia' || s.key === 'projetadoReal'
+                          ? 'below'
+                          : 'above',
+                      total: chartData.length,
+                      offset:
+                        s.key === 'meta'
+                          ? 28
+                          : s.key === 'inadimplencia'
+                            ? 26
+                            : 18,
+                      stagger: s.key === 'inadimplencia' ? 12 : 8,
+                      fontSize: apresentacaoMode ? 9 : RECEITA_CHART_LABEL.linePoint,
+                      getSecondaryAt:
+                        !percentMode && s.key === 'inadimplencia'
+                          ? (i) => {
+                              const mes = chartData[i]?.mes
+                              if (mes == null) return undefined
+                              const pct = inadimplenciaCongeladaPorMes.get(mes)?.pct
+                              return pct != null ? formatPercent(pct) : undefined
+                            }
+                          : undefined,
+                    })}
+                  />
                 </Line>
               ))}
             </ComposedChart>

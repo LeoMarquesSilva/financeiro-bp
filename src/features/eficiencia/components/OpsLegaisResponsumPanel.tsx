@@ -124,9 +124,27 @@ export function OpsLegaisResponsumPanel({
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-start gap-2">
             <Star className="mt-0.5 h-4 w-4 text-amber-500" aria-hidden />
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Net Promoter Score (NPS)</h3>
-              <p className="text-[11px] text-slate-400">Avaliação do atendimento (1–10)</p>
+            <div style={{ minWidth: 0 }}>
+              <h3
+                className="text-sm font-semibold text-slate-900"
+                style={
+                  showListas
+                    ? undefined
+                    : { fontSize: 11, lineHeight: 1.1, whiteSpace: 'nowrap' }
+                }
+              >
+                Net Promoter Score (NPS)
+              </h3>
+              <p
+                className="text-[11px] text-slate-400"
+                style={
+                  showListas
+                    ? undefined
+                    : { fontSize: 9, lineHeight: 1.1, whiteSpace: 'nowrap' }
+                }
+              >
+                Avaliação do atendimento (1–10)
+              </p>
             </div>
           </div>
           <div className="mb-4 text-center">
@@ -150,7 +168,16 @@ export function OpsLegaisResponsumPanel({
           ).map(([label, qtd, bar, text]) => (
             <div key={label} className="mb-2">
               <div className="mb-1 flex justify-between text-[11px]">
-                <span className={cn('font-semibold', text)}>{label}</span>
+                <span
+                  className={cn('font-semibold', text)}
+                  style={
+                    showListas
+                      ? undefined
+                      : { fontSize: 9, lineHeight: 1.1, whiteSpace: 'nowrap' }
+                  }
+                >
+                  {label}
+                </span>
                 <span className="font-bold tabular-nums text-slate-600">
                   {qtd > 0 ? formatInt(qtd) : ''}
                 </span>

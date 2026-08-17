@@ -127,7 +127,17 @@ function KpiCard({
   const kind = def.kind
 
   const header = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+    <div
+      data-bn-title-row
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 6,
+        width: '100%',
+        minWidth: 0,
+      }}
+    >
       <span
         style={{
           width: 28,
@@ -144,12 +154,17 @@ function KpiCard({
         <Icon size={14} aria-hidden />
       </span>
       <span
+        data-bn-title
         style={{
           fontSize: 9,
           fontWeight: 700,
           letterSpacing: '0.04em',
           textTransform: 'uppercase',
           color: '#64748B',
+          whiteSpace: 'nowrap',
+          width: 'auto',
+          maxWidth: 'none',
+          flexShrink: 0,
         }}
       >
         {def.label}
@@ -370,11 +385,14 @@ function TopBlock({
       }}
     >
       <div
+        data-bn-title-row
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 8,
           marginBottom: 10,
+          width: '100%',
+          minWidth: 0,
         }}
       >
         <span
@@ -393,12 +411,17 @@ function TopBlock({
           <Icon size={14} aria-hidden />
         </span>
         <span
+          data-bn-title
           style={{
             fontSize: 11,
             fontWeight: 800,
             textTransform: 'uppercase',
             letterSpacing: '0.02em',
             color: '#0F172A',
+            whiteSpace: 'nowrap',
+            width: 'auto',
+            maxWidth: 'none',
+            flexShrink: 0,
           }}
         >
           {def.title}

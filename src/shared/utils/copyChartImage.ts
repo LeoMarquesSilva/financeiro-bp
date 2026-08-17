@@ -851,6 +851,18 @@ function applyNestedFlexExportFix(
         applyFlexColumnToBlock(cloneEl)
       } else if (isFlexRow(style)) {
         applyFlexRowToTable(cloneEl, style)
+        const sourceRowChildren = exportChildElements(sourceEl, true)
+        const cloneRowChildren = exportChildElements(cloneEl, false)
+        const rowOffset = Math.max(
+          0,
+          cloneRowChildren.length - sourceRowChildren.length,
+        )
+        sourceRowChildren.forEach((sourceChild, index) => {
+          const cloneChild = cloneRowChildren[index + rowOffset]
+          if (cloneChild && isFixedSizeIcon(sourceChild)) {
+            lockIconDimensions(cloneChild, sourceChild)
+          }
+        })
       }
     }
 
@@ -1042,6 +1054,10 @@ function lockIconDimensions(cell: HTMLElement, sourceCell: HTMLElement): void {
   cell.style.setProperty('border-radius', '9999px', 'important')
   cell.style.setProperty('overflow', 'hidden', 'important')
   cell.style.setProperty('box-sizing', 'border-box', 'important')
+  cell.style.setProperty('display', 'inline-flex', 'important')
+  cell.style.setProperty('vertical-align', 'middle', 'important')
+  cell.style.setProperty('align-items', 'center', 'important')
+  cell.style.setProperty('justify-content', 'center', 'important')
   cell.style.setProperty('flex-shrink', '0', 'important')
   cell.style.setProperty('text-align', 'center', 'important')
   cell.style.setProperty('line-height', `${size}px`, 'important')
@@ -2108,11 +2124,25 @@ function prepareApresentacaoExportElement(source: HTMLElement): HTMLElement {
  * Layout absoluto do Bloco 2 no tamanho do slide PPT — cada card com altura
  * igual, tipografia ampliada e tabelas 100% largura (sem depender de flex no SVG).
  */
+/** +10% tipográfico no export PPT (sobre o tuning anterior de cada bloco). */
+const APRESENTACAO_EXPORT_FONT_BONUS_SCALE = 1.1
+const APRESENTACAO_EXPORT_FONT_DEFAULT_SCALE = 1.15 * 1.1
+const APRESENTACAO_EXPORT_FONT_BIG_NUMBER_SCALE = 1.55
+
+function resolveApresentacaoExportFontScale(exportId: string | null): number {
+  if (exportId === 'programa_bonus') return APRESENTACAO_EXPORT_FONT_BONUS_SCALE
+  if (exportId === 'bignumber') return APRESENTACAO_EXPORT_FONT_BIG_NUMBER_SCALE
+  return APRESENTACAO_EXPORT_FONT_DEFAULT_SCALE
+}
+
 /**
  * Aumenta tipografia inline do clone de export PPT (~factor).
  * Só mexe em font-size já definido (px/rem), preservando hierarquia.
  */
-function bumpApresentacaoExportFonts(root: HTMLElement, factor = 1.15): void {
+function bumpApresentacaoExportFonts(
+  root: HTMLElement,
+  factor = APRESENTACAO_EXPORT_FONT_DEFAULT_SCALE,
+): void {
   root.querySelectorAll<HTMLElement>('*').forEach((el) => {
     const raw = el.style.fontSize
     if (!raw) return
@@ -2125,19 +2155,56 @@ function bumpApresentacaoExportFonts(root: HTMLElement, factor = 1.15): void {
   })
 }
 
+/** Reduz textos de tabela somente quando ultrapassam a largura real da célula. */
+function fitApresentacaoTableText(root: HTMLElement): void {
+  const fit = (el: HTMLElement, minFontSize: number) => {
+    const available = el.clientWidth
+    const required = el.scrollWidth
+    if (available <= 0 || required <= available) return
+
+    const computed = window.getComputedStyle(el)
+    const current = Number.parseFloat(computed.fontSize)
+    if (!Number.isFinite(current) || current <= 0) return
+
+    const next = Math.max(
+      minFontSize,
+      Math.floor(current * (available / required) * 0.96 * 10) / 10,
+    )
+    el.style.setProperty('font-size', `${next}px`, 'important')
+    el.style.setProperty('max-width', '100%', 'important')
+    el.style.setProperty('overflow', 'hidden', 'important')
+    el.style.setProperty('text-overflow', 'clip', 'important')
+    el.style.setProperty('white-space', 'nowrap', 'important')
+  }
+
+  root.querySelectorAll<HTMLTableRowElement>('tr').forEach((row) => {
+    const firstCell = row.querySelector<HTMLElement>(':scope > th:first-child, :scope > td:first-child')
+    if (firstCell) fit(firstCell, 9)
+  })
+
+  root.querySelectorAll<HTMLElement>('tbody td > div').forEach((content) => {
+    if (content.hasAttribute('data-year-band-pill')) return
+    fit(content, 9)
+  })
+}
+
 function applyApresentacaoFillSlideLayout(
   root: HTMLElement,
   slideW: number,
   slideH: number,
+  fontScale = 1,
 ): void {
+  const scalePx = (value: number) => Math.round(value * fontScale * 10) / 10
   /**
    * Big Numbers / Programa de Bônus: preenche o slide mantendo o visual do preview
    * (gaps, radius, padding) — sem colar tudo nas bordas.
    */
   if (root.hasAttribute('data-apresentacao-fill-preserve')) {
-    const pad = 14
-    const gap = 10
-    const gridGap = 8
+    const isBigNumber =
+      root.getAttribute('data-apresentacao-export') === 'bignumber'
+    const pad = isBigNumber ? 10 : 14
+    const gap = isBigNumber ? 6 : 10
+    const gridGap = isBigNumber ? 6 : 8
 
     const fullWidth = (el: HTMLElement | null) => {
       if (!el) return
@@ -2205,7 +2272,11 @@ function applyApresentacaoFillSlideLayout(
         card.style.setProperty('max-width', 'none', 'important')
         card.style.setProperty('min-width', '0', 'important')
         card.style.setProperty('border-radius', '10px', 'important')
-        card.style.setProperty('padding', '10px 12px', 'important')
+        card.style.setProperty(
+          'padding',
+          isBigNumber ? '8px 10px' : '10px 12px',
+          'important',
+        )
         card.style.setProperty('box-sizing', 'border-box', 'important')
         card.style.setProperty('border', '1px solid #E2E8F0', 'important')
         card.style.setProperty('background', '#FFFFFF', 'important')
@@ -2233,19 +2304,31 @@ function applyApresentacaoFillSlideLayout(
         card.style.setProperty('height', '100%', 'important')
         card.style.setProperty('min-height', '0', 'important')
         card.style.setProperty('border-radius', '12px', 'important')
-        card.style.setProperty('padding', '12px', 'important')
+        card.style.setProperty(
+          'padding',
+          isBigNumber ? '8px 10px' : '12px',
+          'important',
+        )
         card.style.setProperty('display', 'flex', 'important')
         card.style.setProperty('flex-direction', 'column', 'important')
         card.style.setProperty('box-sizing', 'border-box', 'important')
         card.style.setProperty('border', '1px solid #E2E8F0', 'important')
         card.style.setProperty('background', '#FFFFFF', 'important')
         card.style.setProperty('background-color', '#FFFFFF', 'important')
+        if (isBigNumber) {
+          const title = card.querySelector<HTMLElement>('[data-bn-title]')
+          title?.style.setProperty('font-size', '14px', 'important')
+        }
         const tablesWrap = card.querySelector<HTMLElement>(':scope > div:last-of-type')
         if (tablesWrap) {
           tablesWrap.style.setProperty('flex', '1 1 auto', 'important')
           tablesWrap.style.setProperty('min-height', '0', 'important')
           tablesWrap.style.setProperty('display', 'flex', 'important')
-          tablesWrap.style.setProperty('gap', '10px', 'important')
+          tablesWrap.style.setProperty(
+            'gap',
+            isBigNumber ? '6px' : '10px',
+            'important',
+          )
           tablesWrap.style.setProperty('width', '100%', 'important')
           tablesWrap.querySelectorAll<HTMLElement>(':scope > *').forEach((col) => {
             col.style.setProperty('flex', '1 1 0', 'important')
@@ -2256,10 +2339,45 @@ function applyApresentacaoFillSlideLayout(
           tablesWrap.querySelectorAll<HTMLElement>('table').forEach((table) => {
             table.style.setProperty('width', '100%', 'important')
             table.style.setProperty('max-width', 'none', 'important')
+            if (isBigNumber) {
+              table.style.setProperty('font-size', '12.5px', 'important')
+            }
           })
+          if (isBigNumber) {
+            tablesWrap
+              .querySelectorAll<HTMLElement>(':scope > * > div:first-child')
+              .forEach((year) => {
+                year.style.setProperty('font-size', '13px', 'important')
+                year.style.setProperty('margin-bottom', '3px', 'important')
+              })
+            tablesWrap
+              .querySelectorAll<HTMLElement>('th, td')
+              .forEach((cell) => {
+                cell.style.setProperty('padding', '3px 5px', 'important')
+                cell.style.setProperty('line-height', '1.15', 'important')
+              })
+          }
         }
       })
     }
+
+    root.querySelectorAll<HTMLElement>('[data-bn-title-row]').forEach((row) => {
+      row.style.setProperty('width', '100%', 'important')
+      row.style.setProperty('max-width', 'none', 'important')
+      row.style.setProperty('min-width', '0', 'important')
+      row.style.setProperty('box-sizing', 'border-box', 'important')
+      row.style.setProperty('flex-wrap', 'nowrap', 'important')
+      row.style.setProperty('overflow', 'visible', 'important')
+    })
+    root.querySelectorAll<HTMLElement>('[data-bn-title]').forEach((title) => {
+      title.style.setProperty('width', 'auto', 'important')
+      title.style.setProperty('max-width', 'none', 'important')
+      title.style.setProperty('min-width', 'max-content', 'important')
+      title.style.setProperty('white-space', 'nowrap', 'important')
+      title.style.setProperty('overflow', 'visible', 'important')
+      title.style.setProperty('word-break', 'keep-all', 'important')
+      title.style.setProperty('overflow-wrap', 'normal', 'important')
+    })
 
 
     // Programa de Bônus — mesmos ganchos do Big Numbers (kpis + body)
@@ -2465,10 +2583,13 @@ function applyApresentacaoFillSlideLayout(
   const bodyCardH = Math.max(36, Math.floor(bodyAvail / bodyN))
   const cardW = slideW - padX * 2
 
-  const titleFs = Math.max(13, Math.min(18, Math.round(bodyCardH * 0.22)))
-  const metaFs = Math.max(12, Math.min(15, Math.round(bodyCardH * 0.18)))
-  const headFs = Math.max(11, Math.min(14, Math.round(bodyCardH * 0.17)))
-  const cellFs = Math.max(12, Math.min(17, Math.round(bodyCardH * 0.2)))
+  const titleFs = scalePx(Math.max(13, Math.min(18, Math.round(bodyCardH * 0.22))))
+  const metaFs = scalePx(Math.max(12, Math.min(15, Math.round(bodyCardH * 0.18))))
+  const headFs = scalePx(Math.max(11, Math.min(14, Math.round(bodyCardH * 0.17))))
+  const cellFs = scalePx(Math.max(12, Math.min(17, Math.round(bodyCardH * 0.2))))
+  const titleColW = Math.round(240 * fontScale)
+  const metaColW = Math.round(72 * fontScale)
+  const areaTitleColW = Math.round(210 * fontScale)
 
   root.style.setProperty('position', 'relative', 'important')
   root.style.setProperty('width', `${slideW}px`, 'important')
@@ -2564,8 +2685,8 @@ function applyApresentacaoFillSlideLayout(
       const cols = Array.from(table.querySelectorAll('colgroup col'))
       if (cols.length >= 2) {
         if (isAreaMatrix && cols.length >= 8) {
-          const titleW = 190
-          const metaW = 72
+          const titleW = areaTitleColW
+          const metaW = metaColW
           const restN = cols.length - 2
           const restW = Math.max(
             70,
@@ -2577,7 +2698,7 @@ function applyApresentacaoFillSlideLayout(
             el.style.setProperty('width', `${w}px`, 'important')
           })
         } else {
-          const titleW = 168
+          const titleW = titleColW
           const monthN = cols.length - 1
           const monthW = Math.max(28, Math.floor((cardW - 28 - titleW) / monthN))
           cols.forEach((col, ci) => {
@@ -2592,34 +2713,66 @@ function applyApresentacaoFillSlideLayout(
       }
     })
 
-    card.querySelectorAll<HTMLTableCellElement>('th').forEach((th, idx) => {
-      th.style.setProperty(
-        'font-size',
-        `${idx === 0 ? titleFs : headFs}px`,
-        'important',
-      )
-      th.style.setProperty('font-weight', idx === 0 ? '700' : '600', 'important')
-      th.style.setProperty('padding', '2px 3px', 'important')
-      th.style.setProperty('line-height', '1.15', 'important')
-      th.style.setProperty('white-space', 'nowrap', 'important')
+    card.querySelectorAll<HTMLTableRowElement>('tr').forEach((tr) => {
+      tr.querySelectorAll<HTMLTableCellElement>('th, td').forEach((cell, colIdx) => {
+        const isHeader = cell.tagName === 'TH'
+        const baseFs =
+          colIdx === 0
+            ? titleFs
+            : colIdx === 1 && isAreaMatrix && !isHeader
+              ? metaFs
+              : isHeader
+                ? headFs
+                : cellFs
+        const textLength = (cell.textContent ?? '').trim().length
+        const fs =
+          colIdx !== 0
+            ? baseFs
+            : textLength > 38
+              ? Math.max(10, baseFs * 0.62)
+              : textLength > 20
+                ? Math.max(12, baseFs * 0.82)
+                : baseFs
+        const fontWeight = isHeader
+          ? colIdx === 0
+            ? '700'
+            : '600'
+          : colIdx === 0 || (isAreaMatrix && colIdx === 1)
+            ? '600'
+            : '700'
+        cell.style.setProperty('font-size', `${fs}px`, 'important')
+        cell.style.setProperty('font-weight', fontWeight, 'important')
+        cell.style.setProperty(
+          'padding',
+          colIdx === 0 ? '2px 6px 2px 3px' : cell.style.padding || '2px 3px',
+          'important',
+        )
+        if (colIdx === 0) {
+          cell.style.setProperty('line-height', '1.15', 'important')
+          cell.style.setProperty('white-space', 'nowrap', 'important')
+          cell.style.setProperty('overflow', 'visible', 'important')
+          cell.style.setProperty('word-break', 'normal', 'important')
+          cell.style.setProperty('overflow-wrap', 'normal', 'important')
+          cell.style.setProperty('vertical-align', 'middle', 'important')
+        } else {
+          cell.style.setProperty('line-height', '1.15', 'important')
+          cell.style.setProperty('white-space', 'nowrap', 'important')
+        }
+      })
     })
 
-    card.querySelectorAll<HTMLTableCellElement>('td').forEach((td, idx) => {
-      const fs =
-        idx === 0 ? titleFs : idx === 1 && isAreaMatrix ? metaFs : cellFs
-      td.style.setProperty('font-size', `${fs}px`, 'important')
-      td.style.setProperty(
-        'font-weight',
-        idx === 0 || (isAreaMatrix && idx === 1) ? '600' : '700',
-        'important',
-      )
-      td.style.setProperty(
-        'padding',
-        idx === 0 ? '2px 3px' : td.style.padding || '2px 3px',
-        'important',
-      )
-      td.style.setProperty('line-height', '1.15', 'important')
-      td.style.setProperty('white-space', 'nowrap', 'important')
+    card.querySelectorAll<HTMLElement>('tbody td div').forEach((div) => {
+      if (div.hasAttribute('data-year-band-pill')) return
+      const textLength = (div.textContent ?? '').trim().length
+      const fittedFs =
+        textLength > 14
+          ? Math.max(10, cellFs * 0.7)
+          : textLength > 10
+            ? Math.max(11, cellFs * 0.82)
+            : cellFs
+      div.style.setProperty('font-size', `${fittedFs}px`, 'important')
+      div.style.setProperty('line-height', '1.1', 'important')
+      div.style.setProperty('white-space', 'nowrap', 'important')
     })
 
     card.querySelectorAll<HTMLElement>('[data-year-band-pill]').forEach((pill) => {
@@ -2786,8 +2939,12 @@ export async function copyApresentacaoSlideToClipboard(
   let width: number
   let height: number
 
+  const exportId = element.getAttribute('data-apresentacao-export')
+  const fontScale = resolveApresentacaoExportFontScale(exportId)
+  const layoutFontScale = exportId === 'juridico_unificado' ? fontScale : 1
+
   if (fillSlide) {
-    applyApresentacaoFillSlideLayout(prepared, SLIDE_W, SLIDE_H)
+    applyApresentacaoFillSlideLayout(prepared, SLIDE_W, SLIDE_H, layoutFontScale)
     // Monta no DOM para o layout absoluto “assar” antes do foreignObject.
     prepared.style.setProperty('position', 'fixed', 'important')
     prepared.style.setProperty('left', '-10000px', 'important')
@@ -2797,6 +2954,12 @@ export async function copyApresentacaoSlideToClipboard(
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
     })
+    if (exportId === 'juridico_unificado') {
+      fitApresentacaoTableText(prepared)
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve())
+      })
+    }
     // Retenção: funde pílulas mensais em faixas por ano (html2canvas não une células).
     prepared.style.setProperty('visibility', 'visible', 'important')
     mergeYearBandPillsForExport(prepared)
@@ -2804,15 +2967,13 @@ export async function copyApresentacaoSlideToClipboard(
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => resolve())
     })
-    const exportId = element.getAttribute('data-apresentacao-export')
-    bumpApresentacaoExportFonts(
-      prepared,
-      exportId === 'programa_bonus' ? 1 : 1.15,
-    )
+    if (exportId !== 'juridico_unificado') {
+      bumpApresentacaoExportFonts(prepared, fontScale)
+    }
     width = SLIDE_W
     height = SLIDE_H
   } else {
-    bumpApresentacaoExportFonts(prepared, 1.15)
+    bumpApresentacaoExportFonts(prepared, fontScale)
     const measured = measurePreparedElement(prepared)
     width = measured.width
     height = measured.height

@@ -55,10 +55,13 @@ function CompLinha({
   return (
     <div
       style={{
-        display: 'flex',
-        justifyContent: 'space-between',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) max-content',
         alignItems: 'baseline',
-        gap: 12,
+        gap: 8,
+        width: '100%',
+        minWidth: 0,
+        boxSizing: 'border-box',
         padding: strong ? '8px 0 0' : '4px 0',
         borderTop: borderTop ? '1px solid #E2E8F0' : undefined,
         marginTop: borderTop ? 4 : 0,
@@ -66,20 +69,26 @@ function CompLinha({
     >
       <span
         style={{
-          fontSize: strong ? 12 : 11,
+          fontSize: strong ? 11 : 10,
           fontWeight: strong ? 700 : 500,
           color: strong ? color : '#334155',
+          flex: '1 1 auto',
+          minWidth: 0,
+          lineHeight: 1.2,
         }}
       >
         {label}
       </span>
       <span
         style={{
-          fontSize: strong ? 13 : 12,
+          fontSize: strong ? 11 : 10,
           fontWeight: 700,
           color,
           fontVariantNumeric: 'tabular-nums',
           whiteSpace: 'nowrap',
+          flexShrink: 0,
+          textAlign: 'right',
+          marginRight: 12,
         }}
       >
         {value}
@@ -131,7 +140,7 @@ export function ApresentacaoComposicaoBloco({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '1.15fr 0.85fr',
+            gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
             gap: 12,
             alignItems: 'start',
           }}
@@ -145,6 +154,9 @@ export function ApresentacaoComposicaoBloco({
               border: '1px solid #E2E8F0',
               background: '#FFFFFF',
               padding: '12px 14px',
+              minWidth: 0,
+              overflow: 'visible',
+              boxSizing: 'border-box',
               printColorAdjust: 'exact',
               WebkitPrintColorAdjust: 'exact',
             }}
@@ -183,7 +195,15 @@ export function ApresentacaoComposicaoBloco({
                 marginBottom: 8,
               }}
             >
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#334155',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
                 Clientes novos
               </span>
               <span
@@ -192,6 +212,8 @@ export function ApresentacaoComposicaoBloco({
                   fontWeight: 700,
                   color: '#0F172A',
                   fontVariantNumeric: 'tabular-nums',
+                  whiteSpace: 'nowrap',
+                  marginRight: 12,
                 }}
               >
                 {formatCurrency(data.novosContratos)}
@@ -206,8 +228,8 @@ export function ApresentacaoComposicaoBloco({
                   <div
                     key={g.grupo}
                     style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr) max-content',
                       gap: 10,
                       fontSize: 11,
                       lineHeight: 1.35,
@@ -216,9 +238,10 @@ export function ApresentacaoComposicaoBloco({
                     <span
                       style={{
                         color: '#475569',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        overflow: 'visible',
+                        textOverflow: 'clip',
+                        whiteSpace: 'normal',
+                        overflowWrap: 'anywhere',
                         minWidth: 0,
                       }}
                     >
@@ -230,6 +253,10 @@ export function ApresentacaoComposicaoBloco({
                         fontWeight: 600,
                         fontVariantNumeric: 'tabular-nums',
                         whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      textAlign: 'right',
+                        fontSize: 10,
+                        marginRight: 12,
                       }}
                     >
                       {formatCurrency(g.total)}{' '}
@@ -252,6 +279,9 @@ export function ApresentacaoComposicaoBloco({
               border: '1px solid #E2E8F0',
               background: '#FFFFFF',
               padding: '12px 14px',
+              minWidth: 0,
+              overflow: 'visible',
+              boxSizing: 'border-box',
               printColorAdjust: 'exact',
               WebkitPrintColorAdjust: 'exact',
             }}

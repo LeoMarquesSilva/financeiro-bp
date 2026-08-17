@@ -166,7 +166,7 @@ export function ApresentacaoIniciativasBloco({
               display: 'grid',
               gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.35fr)',
               gap: 10,
-              alignItems: 'start',
+              alignItems: 'center',
             }}
           >
             {/* Evolução mensal */}

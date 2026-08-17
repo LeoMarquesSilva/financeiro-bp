@@ -74,11 +74,13 @@ function BigCard({
       </div>
       <div
         style={{
+          width: '100%',
           fontSize: 22,
           fontWeight: 800,
           color: '#0F172A',
           fontVariantNumeric: 'tabular-nums',
           lineHeight: 1.1,
+          textAlign: 'center',
         }}
       >
         {value}
@@ -243,7 +245,7 @@ export function ApresentacaoControladoriaBloco({ data, loading, error }: Props) 
               icon={UserMinus}
             />
             <BigCard
-              label="Chamados Atendidos (Responsum)"
+              label="Chamados Atendidos"
               value={fmt(data.totais.chamados_responsum)}
               icon={Headphones}
             />
