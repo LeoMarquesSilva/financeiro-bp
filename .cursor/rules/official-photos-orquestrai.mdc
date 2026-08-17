@@ -14,8 +14,8 @@ A fonte canônica é a API `official-photos-api` do ORQESTRAI. O SIOE **só cons
 - Preferir `photoUrl` da API. Se `source === "none"` ou URL vazia, usar fallback local (`teamAvatars`, `avatar_url`, iniciais).
 - Identidade: `colaboradores.id` como `externalUserId`. E-mail é fallback temporário (domínio pode ser `@bpplaw` ou `@bismarchipires` — match também pelo local-part).
 - Cache: metadados (URL, `version`, `updatedAt`) no `localStorage` para 1ª pintura.
-  Recarregar a página ou focar a aba **sempre** consulta a API em background.
-  Só troca a UI quando `version` / `updatedAt` / URL mudarem.
+  Recarregar a página consulta a API. Foco na aba só refetch se o catálogo tiver
+  mais de 5 min. Só troca a UI quando `version` / `updatedAt` / URL mudarem.
   A URL de exibição leva `?v=version` para o browser não servir a imagem antiga.
   Prefetch das imagens no browser. **Não** gravar blob no Storage do SIOE.
 

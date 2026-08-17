@@ -94,10 +94,10 @@ export function OfficialPhotosProvider({ children }: { children: ReactNode }) {
   const query = useQuery({
     queryKey: ['official-photos', 'catalog'],
     enabled: !!user && !authLoading,
-    staleTime: 1000 * 60 * 2,
+    staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60 * 24,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: 'always',
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
     retry: false,
     placeholderData: persistedCatalog?.photos.length
       ? { data: persistedCatalog.photos, notFound: [] as string[] }
