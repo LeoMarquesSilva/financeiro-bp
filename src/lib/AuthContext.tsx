@@ -19,6 +19,7 @@ interface AuthState {
   fullName: string | null
   area: string | null
   avatarUrl: string | null
+  colaboradorId: string | null
   passwordChanged: boolean
   moduleAccess: ModuleKey[]
   /** Nível RH (`colaboradores`), quando vinculado ao team_member / e-mail. */
@@ -105,6 +106,7 @@ function emptyAuthState(): AuthState {
     fullName: null,
     area: null,
     avatarUrl: null,
+    colaboradorId: null,
     passwordChanged: true,
     moduleAccess: [],
     nivelHierarquico: null,
@@ -145,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fullName: member?.full_name ?? user.user_metadata?.full_name ?? null,
       area: member?.area ?? null,
       avatarUrl: member?.avatar_url ?? user.user_metadata?.avatar_url ?? null,
+      colaboradorId: member?.colaborador_id ?? null,
       passwordChanged: member?.password_changed ?? false,
       moduleAccess,
       nivelHierarquico: colaborador?.nivel_hierarquico ?? null,

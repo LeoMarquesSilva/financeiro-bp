@@ -5,6 +5,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/AuthContext'
+import { resolveOfficialAvatarForIdentity } from '@/lib/officialPhotos'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { useWhatsappNotifications } from '@/features/cobranca/notifications/WhatsappNotificationsProvider'
 import type { AppRole } from '@/lib/database.types'
 import type { ModuleKey } from '@/lib/moduleAccess'
@@ -49,7 +51,17 @@ function getInitials(name: string | null): string {
 }
 
 export function AppSidebar() {
-  const { role, moduleAccess, fullName, avatarUrl, signOut } = useAuth()
+  const { user, role, moduleAccess, fullName, avatarUrl, colaboradorId, signOut } = useAuth()
+  const { version: officialPhotosVersion } = useOfficialPhotos()
+  const displayAvatar = useMemo(
+    () =>
+      resolveOfficialAvatarForIdentity({
+        email: user?.email,
+        colaboradorId,
+        fallback: avatarUrl,
+      }),
+    [user?.email, colaboradorId, avatarUrl, officialPhotosVersion],
+  )
   const { config: roleRouteAccess } = useRoleAccessDefaults()
   const { unreadChats } = useWhatsappNotifications()
   const location = useLocation()
@@ -137,7 +149,9 @@ export function AppSidebar() {
                 aria-label="Meu perfil"
               >
                 <Avatar className="h-7 w-7 ring-2 ring-white/10">
-                  {avatarUrl && <AvatarImage src={avatarUrl} alt="" referrerPolicy="no-referrer" />}
+                  {displayAvatar && (
+                    <AvatarImage src={displayAvatar} alt="" referrerPolicy="no-referrer" />
+                  )}
                   <AvatarFallback className="bg-sidebar-accent text-[10px] text-white">
                     {getInitials(fullName)}
                   </AvatarFallback>

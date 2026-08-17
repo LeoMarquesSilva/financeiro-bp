@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/AuthContext'
 import { getTeamMember } from '@/lib/teamAvatars'
-import { getOfficialPhotoUrlByEmail } from '@/lib/officialPhotos'
+import { resolveOfficialAvatarForIdentity } from '@/lib/officialPhotos'
 import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,11 +21,16 @@ function getInitials(name: string | null): string {
 }
 
 export function PerfilPage() {
-  const { user, fullName, avatarUrl, role, markPasswordChanged } = useAuth()
-  useOfficialPhotos()
-  const officialAvatar = getOfficialPhotoUrlByEmail(user?.email)
-  const localAvatar = user?.email ? getTeamMember(user.email)?.avatar : null
-  const displayAvatar = officialAvatar ?? localAvatar ?? avatarUrl
+  const { user, fullName, avatarUrl, colaboradorId, role, markPasswordChanged } = useAuth()
+  const { version: officialPhotosVersion } = useOfficialPhotos()
+  const displayAvatar = useMemo(() => {
+    const localAvatar = user?.email ? getTeamMember(user.email)?.avatar : null
+    return resolveOfficialAvatarForIdentity({
+      email: user?.email,
+      colaboradorId,
+      fallback: localAvatar ?? avatarUrl,
+    })
+  }, [user?.email, colaboradorId, avatarUrl, officialPhotosVersion])
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')

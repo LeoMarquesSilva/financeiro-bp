@@ -7,11 +7,16 @@ export {
   officialEmailLocalPart,
   officialPhotoDisplayUrl,
   replaceOfficialPhotoCache,
+  applyOfficialPhotoCatalog,
+  hydrateOfficialPhotoCacheFromStorage,
+  peekPersistedOfficialPhotoCatalog,
+  prefetchOfficialPhotoImages,
   getOfficialPhotoCacheVersion,
   getOfficialPhotoByEmail,
   getOfficialPhotoUrlByEmail,
   getOfficialPhotoById,
   resolveOfficialAvatarUrl,
+  resolveOfficialAvatarForIdentity,
 } from '@/lib/officialPhotosCore'
 
 export type OfficialPhotosLookup = {

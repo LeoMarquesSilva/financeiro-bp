@@ -13,7 +13,9 @@ A fonte canônica é a API `official-photos-api` do ORQESTRAI. O SIOE **só cons
 - No front: `officialPhotosService` + `useOfficialPhotos` / `getOfficialPhotoUrlByEmail`.
 - Preferir `photoUrl` da API. Se `source === "none"` ou URL vazia, usar fallback local (`teamAvatars`, `avatar_url`, iniciais).
 - Identidade: `colaboradores.id` como `externalUserId`. E-mail é fallback temporário (domínio pode ser `@bpplaw` ou `@bismarchipires` — match também pelo local-part).
-- Cache curto (10 min) via React Query. Invalidar por `version` / `updatedAt`.
+- Cache: metadados (URL, `version`, `updatedAt`) no `localStorage` + React Query (10 min).
+  Hidratar na abertura e só trocar a UI quando `version` / `updatedAt` / URL mudarem.
+  Prefetch das imagens no browser. **Não** gravar blob no Storage do SIOE.
 
 ## Proibido
 

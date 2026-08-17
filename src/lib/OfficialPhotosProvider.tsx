@@ -4,9 +4,12 @@ import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/AuthContext'
 import {
   officialPhotosService,
-  replaceOfficialPhotoCache,
+  applyOfficialPhotoCatalog,
+  peekPersistedOfficialPhotoCatalog,
+  prefetchOfficialPhotoImages,
   getOfficialPhotoCacheVersion,
 } from '@/lib/officialPhotos'
+import type { OfficialPhotoEmailAlias } from '@/lib/officialPhotosCore'
 
 type OfficialPhotosContextValue = {
   version: number
@@ -22,6 +25,24 @@ export const OfficialPhotosContext = createContext<OfficialPhotosContextValue>({
 
 export function useOfficialPhotos() {
   return useContext(OfficialPhotosContext)
+}
+
+const persistedCatalog = peekPersistedOfficialPhotoCatalog()
+
+function buildSioeEmailAliases(
+  colaboradores: Array<{ id: string; email: string | null }>,
+  teamMembers: Array<{ email: string | null; colaborador_id: string | null }>,
+): OfficialPhotoEmailAlias[] {
+  const aliases: OfficialPhotoEmailAlias[] = []
+  for (const row of colaboradores) {
+    if (row.email) aliases.push({ externalUserId: row.id, email: row.email })
+  }
+  for (const row of teamMembers) {
+    if (row.colaborador_id && row.email) {
+      aliases.push({ externalUserId: row.colaborador_id, email: row.email })
+    }
+  }
+  return aliases
 }
 
 async function loadOfficialPhotoCatalog() {
@@ -53,7 +74,18 @@ async function loadOfficialPhotoCatalog() {
     externalUserIds: [...new Set(ids)],
     emails: [...new Set(emails)],
   })
-  replaceOfficialPhotoCache(result.data)
+
+  if (result.unavailable) {
+    const cached = peekPersistedOfficialPhotoCatalog()
+    if (cached?.photos.length) {
+      return { data: cached.photos, notFound: result.notFound, unavailable: true }
+    }
+    return result
+  }
+
+  const aliases = buildSioeEmailAliases(colaboradores, teamMembers)
+  applyOfficialPhotoCatalog(result.data, aliases)
+  prefetchOfficialPhotoImages(result.data)
   return result
 }
 
@@ -63,17 +95,23 @@ export function OfficialPhotosProvider({ children }: { children: ReactNode }) {
     queryKey: ['official-photos', 'catalog'],
     enabled: !!user && !authLoading,
     staleTime: 1000 * 60 * 10,
+    gcTime: 1000 * 60 * 60 * 24,
+    refetchOnWindowFocus: true,
     retry: false,
+    initialData: persistedCatalog?.photos.length
+      ? { data: persistedCatalog.photos, notFound: [] as string[] }
+      : undefined,
+    initialDataUpdatedAt: persistedCatalog?.savedAt,
     queryFn: loadOfficialPhotoCatalog,
   })
 
   const value = useMemo<OfficialPhotosContextValue>(
     () => ({
-      version: query.data ? getOfficialPhotoCacheVersion() : 0,
-      loading: query.isLoading,
-      unavailable: query.data?.unavailable === true,
+      version: getOfficialPhotoCacheVersion(),
+      loading: query.isLoading && getOfficialPhotoCacheVersion() === 0,
+      unavailable: query.data?.unavailable === true && getOfficialPhotoCacheVersion() === 0,
     }),
-    [query.data, query.isLoading],
+    [query.data, query.dataUpdatedAt, query.isLoading],
   )
 
   return <OfficialPhotosContext.Provider value={value}>{children}</OfficialPhotosContext.Provider>
