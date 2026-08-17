@@ -185,10 +185,10 @@ export function TreinamentosPessoaCards({
                       ) : (
                         <>Faltam {formatHorasMinutos(faltamMinutos)} para a meta</>
                       )}
-                      {lista.length > 0 ? (
+                      {!semMetaPessoa ? (
                         <>
                           <span className="text-slate-300"> · </span>
-                          {lista.length} {lista.length === 1 ? 'lançamento' : 'lançamentos'}
+                          Meta {formatHorasMinutos(metaPessoa ?? 0)}
                         </>
                       ) : null}
                       {temDuplicado ? (
