@@ -295,6 +295,20 @@ export interface TurnoverTopTempoCasaRow {
   meses_casa: number
 }
 
+export interface ColaboradorFeriasRow {
+  orqestrai_employee_id: string
+  full_name: string
+  nome_chave: string
+  vacation_exempt: boolean
+  saldo_dias: number
+  gozados_ano: number
+  em_ferias: boolean
+  ferias_inicio: string | null
+  ferias_fim: string | null
+  proximo_inicio: string | null
+  proximo_fim: string | null
+}
+
 export interface TreinamentosAnualRow {
   minutos_lancados: number
   pessoas_ativas: number

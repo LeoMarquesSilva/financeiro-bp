@@ -20,7 +20,6 @@ import type {
   TreinamentosPorPessoaRow,
   TurnoverAnualRow,
   TurnoverDesligamentoRow,
-  TurnoverTopTempoCasaRow,
   VistagemDesvioRankingRow,
 } from '../types/eficiencia.types'
 
@@ -161,18 +160,16 @@ export function useTurnover(ano: number, area: string | null = null) {
   const { data, error, isLoading } = useQuery({
     queryKey: ['eficiencia', 'turnover', ano, area],
     queryFn: async () => {
-      const [anual, desligamentos, top5] = await Promise.all([
+      const [anual, desligamentos] = await Promise.all([
         eficienciaService.fetchTurnoverAnual(ano, area),
         eficienciaService.fetchTurnoverDesligamentos(ano),
-        eficienciaService.fetchTurnoverTop5TempoCasa(ano),
       ])
-      return { anual, desligamentos, top5 }
+      return { anual, desligamentos }
     },
   })
   const anual: TurnoverAnualRow | null = data?.anual ?? null
   const desligamentos: TurnoverDesligamentoRow[] = data?.desligamentos ?? []
-  const top5: TurnoverTopTempoCasaRow[] = data?.top5 ?? []
-  return { anual, desligamentos, top5, loading: isLoading, error }
+  return { anual, desligamentos, loading: isLoading, error }
 }
 
 export function useTreinamentos(ano: number, area: string | null = null) {

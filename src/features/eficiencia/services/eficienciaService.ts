@@ -53,6 +53,7 @@ import type {
   TurnoverAnualRow,
   TurnoverDesligamentoRow,
   TurnoverTopTempoCasaRow,
+  ColaboradorFeriasRow,
   UltimaAtualizacaoRow,
 } from '../types/eficiencia.types'
 import type { IndicadoresResultadoMes } from '../types/indicadoresResultado.types'
@@ -811,16 +812,28 @@ export const eficienciaService = {
     return rpc('eficiencia_turnover_top5_tempo_casa', { p_ano: ano })
   },
 
-  /** Headcount ativo no ano por área (com admissão — top tempo de casa / categorias). */
+  async fetchColaboradoresFerias(): Promise<ColaboradorFeriasRow[]> {
+    const { data, error } = await supabase
+      .from('colaboradores_ferias')
+      .select(
+        'orqestrai_employee_id, full_name, nome_chave, vacation_exempt, saldo_dias, gozados_ano, em_ferias, ferias_inicio, ferias_fim, proximo_inicio, proximo_fim',
+      )
+      .limit(2000)
+    if (error) throw error
+    return (data ?? []) as ColaboradorFeriasRow[]
+  },
+
+  /** Headcount ativo no ano (com admissão). Sem `area` = todas as áreas. */
   async fetchTurnoverAtivosAreaDetalhe(
     ano: number,
-    area: string,
-  ): Promise<Array<{ nome: string; cargo: string | null; admissao: string | null }>> {
-    const { data, error } = await supabase
+    area: string | null = null,
+  ): Promise<Array<{ nome: string; cargo: string | null; admissao: string | null; area: string | null }>> {
+    let query = supabase
       .from('sp_turnover')
-      .select('nome, cargo, admissao, desligamento')
-      .eq('area', area)
+      .select('nome, cargo, admissao, desligamento, area')
       .limit(5000)
+    if (area) query = query.eq('area', area)
+    const { data, error } = await query
     if (error) throw error
 
     type Row = {
@@ -828,10 +841,14 @@ export const eficienciaService = {
       cargo: string | null
       admissao: string | null
       desligamento: string | null
+      area: string | null
     }
     const rows = (data ?? []) as Row[]
 
-    const byKey = new Map<string, { nome: string; cargo: string | null; admissao: string | null }>()
+    const byKey = new Map<
+      string,
+      { nome: string; cargo: string | null; admissao: string | null; area: string | null }
+    >()
     for (const row of rows) {
       const nome = String(row.nome ?? '').trim()
       if (!nome) continue
@@ -851,6 +868,7 @@ export const eficienciaService = {
           nome,
           cargo: row.cargo == null ? null : String(row.cargo),
           admissao: adm,
+          area: row.area == null ? null : String(row.area),
         })
       }
     }

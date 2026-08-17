@@ -22,6 +22,7 @@
     "import:orcamento": "node scripts/import-orcamento-xlsx.cjs",
     "verify:orcamento": "node scripts/verify-orcamento-xlsx.cjs",
     "sync:colaboradores": "node scripts/sync-colaboradores.mjs",
+    "sync:ferias": "node scripts/sync-orqestrai-ferias.mjs",
     "migrate:instagram": "node scripts/migrate-orqestrai-instagram.mjs"
   },
   "dependencies": {
