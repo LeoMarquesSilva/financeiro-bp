@@ -31,6 +31,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/lib/AuthContext'
 import { cn } from '@/lib/utils'
 import { getTeamMember, TEAM_BY_EMAIL } from '@/lib/teamAvatars'
+import { getOfficialPhotoUrlByEmail } from '@/lib/officialPhotos'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { colaboradoresService } from '@/features/colaboradores/services/colaboradoresService'
 import type { Colaborador } from '@/features/colaboradores/types'
 import { MESES_EFICIENCIA } from '../constants'
@@ -103,6 +105,9 @@ function resolveAvatar(
   email: string | null,
   name: string,
 ): string | null {
+  const official = getOfficialPhotoUrlByEmail(email)
+  if (official) return official
+
   const fromResponsum = preferredUrl?.trim()
   if (fromResponsum) return fromResponsum
 
@@ -273,6 +278,7 @@ export function AmostraChamadosDialog({
   mes,
   onMesChange,
 }: Props) {
+  useOfficialPhotos()
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [itens, setItens] = useState<AmostraChamadoItem[]>([])

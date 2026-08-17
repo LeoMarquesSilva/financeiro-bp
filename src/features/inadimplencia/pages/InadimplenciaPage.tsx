@@ -12,6 +12,7 @@ import { inadimplenciaService } from '../services/inadimplenciaService'
 import { useTeamMembers } from '../hooks/useTeamMembers'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { FiltrosInadimplencia } from '../components/FiltrosInadimplencia'
 import { KPIsHeader } from '../components/KPIsHeader'
 import { InadimplenciaCard } from '../components/InadimplenciaCard'
@@ -78,6 +79,7 @@ function groupByGestor(
 }
 
 export function InadimplenciaPage() {
+  useOfficialPhotos()
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
 

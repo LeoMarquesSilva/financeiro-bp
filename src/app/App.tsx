@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/AuthContext'
+import { OfficialPhotosProvider } from '@/lib/OfficialPhotosProvider'
 import type { ModuleKey } from '@/lib/moduleAccess'
 import { resolveHomePath } from '@/lib/homePath'
 import { canAccessRoutePath } from '@/lib/roleAccessConfig'
@@ -203,11 +204,13 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <RoleAccessDefaultsProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </RoleAccessDefaultsProvider>
+      <OfficialPhotosProvider>
+        <RoleAccessDefaultsProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </RoleAccessDefaultsProvider>
+      </OfficialPhotosProvider>
     </AuthProvider>
   )
 }

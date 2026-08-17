@@ -1,0 +1,33 @@
+---
+description: Fotos oficiais vêm só do ORQESTRAI (API official-photos). Nunca expor a chave no browser.
+alwaysApply: true
+---
+
+# Fotos oficiais (ORQESTRAI)
+
+A fonte canônica é a API `official-photos-api` do ORQESTRAI. O SIOE **só consulta**.
+
+## Obrigatório
+
+- Chamar a API **somente** pela Edge Function `official-photos` (secret `OFFICIAL_PHOTOS_API_KEY`).
+- No front: `officialPhotosService` + `useOfficialPhotos` / `getOfficialPhotoUrlByEmail`.
+- Preferir `photoUrl` da API. Se `source === "none"` ou URL vazia, usar fallback local (`teamAvatars`, `avatar_url`, iniciais).
+- Identidade: `colaboradores.id` como `externalUserId`. E-mail é fallback temporário (domínio pode ser `@bpplaw` ou `@bismarchipires` — match também pelo local-part).
+- Cache curto (10 min) via React Query. Invalidar por `version` / `updatedAt`.
+
+## Proibido
+
+```ts
+// ❌ BAD — chave no browser ou fetch direto no ORQESTRAI
+fetch(import.meta.env.VITE_ORQESTRAI_PHOTOS_URL, {
+  headers: { 'x-api-key': import.meta.env.VITE_OFFICIAL_PHOTOS_API_KEY },
+})
+
+// ❌ BAD — gravar a foto oficial no Storage do SIOE como fonte da verdade
+await supabase.storage.from('avatars').upload(path, officialBlob)
+
+// ✅ GOOD
+const url = getOfficialPhotoUrlByEmail(email) ?? fallbackLocal
+```
+
+Playbook: `docs/official-photos-consumer-playbook.md`.

@@ -1,8 +1,10 @@
 /**
  * Avatares e dados de exibição da equipe (gestores).
- * Fotos hospedadas em https://www.bismarchipires.com.br/img/team/ ou URL completa.
- * E-mails padronizados como @bismarchipires.com.br.
+ * Foto oficial: ORQESTRAI via `getOfficialPhotoUrlByEmail` (cache do provider).
+ * Fallback: site /team ou URL completa em TEAM_BY_EMAIL.
  */
+
+import { getOfficialPhotoUrlByEmail } from '@/lib/officialPhotos'
 
 const BASE_URL = 'https://www.bismarchipires.com.br/img/team'
 
@@ -123,10 +125,14 @@ export function normalizeEmailForLookup(email: string): string {
 
 /**
  * Retorna { avatar, tag, name } para um e-mail (com normalização).
+ * Prefere a foto oficial do ORQESTRAI quando o cache estiver hidratado.
  */
 export function getTeamMember(email: string | null | undefined): TeamMemberAvatar | null {
   const key = normalizeEmailForLookup(email ?? '')
-  return key ? TEAM_BY_EMAIL[key] ?? null : null
+  const base = key ? TEAM_BY_EMAIL[key] ?? null : null
+  if (!base) return null
+  const official = getOfficialPhotoUrlByEmail(key)
+  return official ? { ...base, avatar: official } : base
 }
 
 /**

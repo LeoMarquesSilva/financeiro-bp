@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
+import { getOfficialPhotoUrlByEmail } from '@/lib/officialPhotos'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 
 export type BpUsuarioAvatar = {
   nome: string
@@ -90,6 +92,7 @@ function mergeAvatarCatalog(
 }
 
 export function useBpUsuariosAvatar() {
+  const { version: officialVersion } = useOfficialPhotos()
   const { data, isLoading, error } = useQuery({
     queryKey: ['bp_usuarios_avatar', 'colaboradores'],
     queryFn: async () => {
@@ -112,7 +115,14 @@ export function useBpUsuariosAvatar() {
     staleTime: 1000 * 60 * 30,
   })
 
-  const usuarios = data ?? []
+  const usuarios = useMemo(
+    () =>
+      (data ?? []).map((u) => ({
+        ...u,
+        avatar_url: getOfficialPhotoUrlByEmail(u.email) ?? u.avatar_url,
+      })),
+    [data, officialVersion],
+  )
 
   const byNomeChave = useMemo(() => {
     const map = new Map<string, BpUsuarioAvatar>()

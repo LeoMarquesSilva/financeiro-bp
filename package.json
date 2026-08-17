@@ -8,6 +8,7 @@
     "build": "tsc -b && npx vite build",
     "lint": "eslint .",
     "test:marketing": "node --test tests/instagram-marketing.test.ts tests/instagram-marketing-access.test.ts tests/instagram-meta-normalize.test.ts",
+    "test:official-photos": "node --test tests/official-photos.test.ts",
     "preview": "npx vite preview",
     "import:cdi": "node scripts/import-cdi-xlsx.cjs",
     "verify:cdi": "node scripts/verify-cdi-xlsx.cjs",

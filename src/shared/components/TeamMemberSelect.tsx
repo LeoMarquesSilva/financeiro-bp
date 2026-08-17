@@ -55,6 +55,7 @@ export function TeamMemberSelect({
           <>
             <Avatar
               src={selectedAvatar?.avatar ?? selected.avatar_url}
+              email={selected.email}
               fullName={selected.full_name}
               size={compact ? 'sm' : 'md'}
             />
@@ -114,6 +115,7 @@ export function TeamMemberSelect({
               >
                 <Avatar
                   src={avatarInfo?.avatar ?? m.avatar_url}
+                  email={m.email}
                   fullName={m.full_name}
                   size="sm"
                 />

@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { getTeamMember } from '@/lib/teamAvatars'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { colaboradoresService } from '@/features/colaboradores/services/colaboradoresService'
 import type { ModuleKey } from '@/lib/moduleAccess'
 import {
@@ -161,6 +162,7 @@ function hasSioeAccess(
 }
 
 export function UsuariosPage() {
+  useOfficialPhotos()
   const [tab, setTab] = useState<UsuariosTab>('lista')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')

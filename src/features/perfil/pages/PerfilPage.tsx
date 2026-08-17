@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/lib/AuthContext'
 import { getTeamMember } from '@/lib/teamAvatars'
+import { getOfficialPhotoUrlByEmail } from '@/lib/officialPhotos'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,8 +22,10 @@ function getInitials(name: string | null): string {
 
 export function PerfilPage() {
   const { user, fullName, avatarUrl, role, markPasswordChanged } = useAuth()
+  useOfficialPhotos()
+  const officialAvatar = getOfficialPhotoUrlByEmail(user?.email)
   const localAvatar = user?.email ? getTeamMember(user.email)?.avatar : null
-  const displayAvatar = localAvatar ?? avatarUrl
+  const displayAvatar = officialAvatar ?? localAvatar ?? avatarUrl
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')

@@ -8,6 +8,7 @@ import {
 } from '@/lib/teamMembersService'
 import type { TeamMember, AppRole } from '@/lib/database.types'
 import { getTeamMember, getAreaTags } from '@/lib/teamAvatars'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { colaboradoresService } from '@/features/colaboradores/services/colaboradoresService'
 import type { Colaborador } from '@/features/colaboradores/types'
 import { MODULE_KEY_OPTIONS, type ModuleKey } from '@/lib/moduleAccess'
@@ -124,6 +125,7 @@ function ModuleAccessPopover({
 }
 
 export function TeamMembersPage() {
+  useOfficialPhotos()
   const queryClient = useQueryClient()
   const [form, setForm] = useState(initialForm)
   const [showForm, setShowForm] = useState(false)

@@ -1,6 +1,7 @@
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { Avatar } from '@/shared/components/Avatar'
 import type { RankingItem } from '../services/dashboardService'
 import { useDashboard } from '../hooks/useDashboard'
@@ -14,6 +15,7 @@ import { DashboardComposicaoBar } from '../components/DashboardComposicaoBar'
 import { AlertTriangle, Clock, Scale } from 'lucide-react'
 
 export function InadimplenciaDashboardPage() {
+  useOfficialPhotos()
   const { data, loading, error } = useDashboard()
   const { allTeamMembers } = useTeamMembers()
   const { exibirTaxaRecuperacaoComite } = useExibirTaxaRecuperacaoComite()

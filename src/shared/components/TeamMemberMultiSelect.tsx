@@ -69,6 +69,7 @@ export function TeamMemberMultiSelect({
               >
                 <Avatar
                   src={avatarInfo?.avatar ?? m.avatar_url}
+                  email={m.email}
                   fullName={m.full_name}
                   size="xs"
                 />
@@ -129,6 +130,7 @@ export function TeamMemberMultiSelect({
                 </div>
                 <Avatar
                   src={avatarInfo?.avatar ?? m.avatar_url}
+                  email={m.email}
                   fullName={m.full_name}
                   size="sm"
                 />

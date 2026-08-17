@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { cn } from '@/shared/utils/cn'
+import { getOfficialPhotoUrlByEmail } from '@/lib/officialPhotos'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 
 export function getInitials(name: string | null | undefined): string {
   const parts = String(name ?? '')
@@ -14,6 +16,8 @@ export function getInitials(name: string | null | undefined): string {
 interface AvatarProps {
   /** URL da imagem (recomendado: caminho local /team/xxx.jpg) */
   src: string | null | undefined
+  /** E-mail para preferir a foto oficial do ORQESTRAI quando o cache estiver hidratado. */
+  email?: string | null
   /** Fallback ao falhar (ex.: mesmo path com .png) */
   fallbackSrc?: string | null
   alt?: string
@@ -31,25 +35,29 @@ const sizeClasses = {
 
 export function Avatar({
   src,
+  email,
   fallbackSrc,
   alt = '',
   fullName,
   className,
   size = 'sm',
 }: AvatarProps) {
-  const [currentSrc, setCurrentSrc] = useState<string | null>(src ?? null)
+  useOfficialPhotos()
+  const officialSrc = getOfficialPhotoUrlByEmail(email)
+  const resolvedSrc = officialSrc ?? src ?? null
+  const [currentSrc, setCurrentSrc] = useState<string | null>(resolvedSrc)
   const [errored, setErrored] = useState(false)
   const initials = getInitials(fullName)
 
   useEffect(() => {
-    setCurrentSrc(src ?? null)
+    setCurrentSrc(resolvedSrc)
     setErrored(false)
-  }, [src])
+  }, [resolvedSrc])
 
   const showImg = currentSrc && !errored
 
   const handleError = () => {
-    if (fallbackSrc && currentSrc === src) {
+    if (fallbackSrc && currentSrc === resolvedSrc) {
       setCurrentSrc(fallbackSrc)
     } else {
       setErrored(true)

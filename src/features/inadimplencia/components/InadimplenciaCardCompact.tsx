@@ -2,6 +2,7 @@ import { formatCurrency } from '@/shared/utils/format'
 import type { ClientInadimplenciaRow, InadimplenciaClasse } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { usePrioridadeConfig } from '@/features/configuracoes/hooks/usePrioridadeConfig'
 import type { PrioridadeTipo } from '../types/inadimplencia.types'
 import { Card } from '@/components/ui/card'
@@ -50,6 +51,7 @@ export function InadimplenciaCardCompact({
   onMarcarResolvido: _onMarcarResolvido,
   onRefresh: _onRefresh,
 }: InadimplenciaCardCompactProps) {
+  useOfficialPhotos()
   const { allTeamMembers } = useTeamMembers()
   const { getPrioridade } = usePrioridadeConfig()
 

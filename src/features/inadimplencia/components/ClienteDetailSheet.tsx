@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/AuthContext'
 import type { ClientInadimplenciaRow, InadimplenciaClasse, InadimplenciaLogRow, ClienteEscritorioRow, ContagemCiPorGrupoRow, ProvidenciaRow, ProvidenciaFollowUpRow } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { usePrioridadeConfig } from '@/features/configuracoes/hooks/usePrioridadeConfig'
 import type { PrioridadeTipo } from '../types/inadimplencia.types'
 import { TIPOS_ACAO } from '@/shared/constants/inadimplencia'
@@ -508,6 +509,7 @@ export interface ClienteDetailSheetProps {
 }
 
 export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, onReabrir, onRefresh }: ClienteDetailSheetProps) {
+  useOfficialPhotos()
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
   const { allTeamMembers } = useTeamMembers()

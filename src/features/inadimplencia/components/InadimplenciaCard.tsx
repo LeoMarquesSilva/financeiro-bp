@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/AuthContext'
 import type { ClientInadimplenciaRow, InadimplenciaClasse, ClienteEscritorioRow, ProvidenciaFollowUpRow } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
+import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { usePrioridadeConfig } from '@/features/configuracoes/hooks/usePrioridadeConfig'
 import type { PrioridadeTipo } from '../types/inadimplencia.types'
 import { ModalEditarCliente } from './ModalEditarCliente'
@@ -62,6 +63,7 @@ function getIniciais(name: string | null | undefined): string {
 }
 
 export function InadimplenciaCard({ client, onMarcarResolvido, onReabrir, onRefresh, onSelectClient }: InadimplenciaCardProps) {
+  useOfficialPhotos()
   const { role } = useAuth()
   const canEdit = role === 'admin' || role === 'financeiro'
   const { allTeamMembers } = useTeamMembers()
