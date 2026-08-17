@@ -35,7 +35,17 @@ export function officialEmailLocalPart(email: string | null | undefined): string
 export function officialPhotoDisplayUrl(photo: OfficialPhoto | null | undefined): string | null {
   if (!photo || photo.source === 'none') return null
   const url = photo.photoUrl?.trim()
-  return url || null
+  if (!url) return null
+  const token = (photo.version || photo.updatedAt || '').trim()
+  if (!token) return url
+  try {
+    const parsed = new URL(url)
+    parsed.searchParams.set('v', token)
+    return parsed.toString()
+  } catch {
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}v=${encodeURIComponent(token)}`
+  }
 }
 
 export function officialPhotoCatalogFingerprint(

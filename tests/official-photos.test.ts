@@ -41,7 +41,10 @@ test('resolve avatar oficial por e-mail e local-part', () => {
   ])
 
   assert.equal(officialEmailLocalPart('Gustavo@bismarchipires.com.br'), 'gustavo')
-  assert.equal(getOfficialPhotoUrlByEmail('gustavo@bismarchipires.com.br'), 'https://cdn.example/gustavo.jpg')
+  assert.equal(
+    getOfficialPhotoUrlByEmail('gustavo@bismarchipires.com.br'),
+    'https://cdn.example/gustavo.jpg?v=v1',
+  )
   assert.equal(resolveOfficialAvatarUrl('desconhecido@bp.com', '/team/x.jpg'), '/team/x.jpg')
 })
 
@@ -60,14 +63,14 @@ test('alias de e-mail SIOE resolve foto indexada só por ID', () => {
   )
 
   assert.equal(getOfficialPhotoById('colab-1')?.photoUrl, 'https://cdn.example/ana.jpg')
-  assert.equal(getOfficialPhotoUrlByEmail('ana@bismarchipires.com.br'), 'https://cdn.example/ana.jpg')
+  assert.equal(getOfficialPhotoUrlByEmail('ana@bismarchipires.com.br'), 'https://cdn.example/ana.jpg?v=v1')
   assert.equal(
     resolveOfficialAvatarForIdentity({
       email: 'ana@bpplaw.com.br',
       colaboradorId: 'colab-1',
       fallback: '/local.jpg',
     }),
-    'https://cdn.example/ana.jpg',
+    'https://cdn.example/ana.jpg?v=v1',
   )
 })
 
@@ -86,9 +89,23 @@ test('catálogo só atualiza quando version/updatedAt/URL mudam', () => {
 
   const next = { ...first, version: 'v2', updatedAt: '2026-08-17T12:00:00.000Z' }
   assert.equal(applyOfficialPhotoCatalog([next]), true)
-  assert.equal(getOfficialPhotoUrlByEmail('bia@bpplaw.com.br'), 'https://cdn.example/bia.jpg')
+  assert.equal(getOfficialPhotoUrlByEmail('bia@bpplaw.com.br'), 'https://cdn.example/bia.jpg?v=v2')
   assert.notEqual(
     officialPhotoCatalogFingerprint([first]),
     officialPhotoCatalogFingerprint([next]),
+  )
+})
+
+test('URL de exibição leva version para quebrar cache do browser', () => {
+  assert.equal(
+    officialPhotoDisplayUrl(
+      photo({
+        userId: 'u4',
+        name: 'Leo',
+        photoUrl: 'https://cdn.example/leo.jpg?token=abc',
+        version: 'hash-novo',
+      }),
+    ),
+    'https://cdn.example/leo.jpg?token=abc&v=hash-novo',
   )
 })
