@@ -19,6 +19,11 @@ import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
 import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
 import { totaisVistagemFromResumo } from '../utils/periodoCurtoIndicadorTotais'
 import {
+  isSlaVistagemRiscoContratosSemCasos,
+  pctSlaVistagemAcumulado,
+  SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT,
+} from '../utils/slaVistagemKpi'
+import {
   emptyLabelDesvioResponsavel,
   rankingDesvioFiltrado,
 } from '../utils/responsavelMatch'
@@ -86,7 +91,7 @@ export function SlaVistagemTab({
     return {
       total,
       vistadoD1,
-      pctGeral: total > 0 ? (vistadoD1 / total) * 100 : null,
+      pctGeral: pctSlaVistagemAcumulado(vistadoD1, total),
     }
   }, [periodoCurto.periodoCurtoAtivo, periodoCurto.resumo, mensalFiltrado])
 
@@ -103,10 +108,12 @@ export function SlaVistagemTab({
   const pctGeral = indisponivel
     ? null
     : responsavel && !periodoCurto.periodoCurtoAtivo
-      ? totalPublicacoes > 0
-        ? (totalVistadoD1 / totalPublicacoes) * 100
-        : null
-      : periodoTotais.pctGeral
+      ? isSlaVistagemRiscoContratosSemCasos(area, risco, totalPublicacoes)
+        ? SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT
+        : pctSlaVistagemAcumulado(totalVistadoD1, totalPublicacoes)
+      : isSlaVistagemRiscoContratosSemCasos(area, risco, periodoTotais.total)
+        ? SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT
+        : periodoTotais.pctGeral
 
   const totalPublicacoesGav = indisponivel
     ? 0
@@ -117,7 +124,9 @@ export function SlaVistagemTab({
   const pctGestaoVista =
     !indisponivel && totalPublicacoesGav > 0
       ? (totalVistadoD1Gav / totalPublicacoesGav) * 100
-      : null
+      : isSlaVistagemRiscoContratosSemCasos(area, risco, totalPublicacoesGav)
+        ? SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT
+        : null
   const areaHint = area ? `Área ${area}` : undefined
 
   const resultadoRacional: HeatCell | null =

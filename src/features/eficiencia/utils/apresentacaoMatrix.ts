@@ -20,6 +20,12 @@ import {
 import type { EficienciaOverview } from '../types/eficiencia.types'
 import { acumuladoGestaoPdi } from './gestaoPdiCalc'
 import { atingiuMetaKpi } from './overviewKpiMeta'
+import {
+  isSlaVistagemRiscoContratosSemCasos,
+  pctSlaVistagemAcumulado,
+  SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT,
+  totalPublicacoesVistagem,
+} from './slaVistagemKpi'
 
 /** Colunas da slide (ordem do PPT). */
 export const APRESENTACAO_COLUNAS = [
@@ -277,6 +283,26 @@ function somaRazao(
   return { value: v, label: formatPercent(v) }
 }
 
+function cellVistagemPeriodo(
+  rows: Array<{ vistado_d1: number; total: number }>,
+  meta: number,
+  pctSemCasos: number | null = null,
+): ApresentacaoCell {
+  if (totalPublicacoesVistagem(rows) === 0) {
+    return pctSemCasos == null ? cellVazio() : cellPct(pctSemCasos, meta)
+  }
+  const pct = pctSlaVistagemAcumulado(
+    rows.reduce((s, r) => s + r.vistado_d1, 0),
+    totalPublicacoesVistagem(rows),
+  )
+  if (pct == null) return cellVazio()
+  return {
+    value: pct,
+    label: formatPercent(pct),
+    atingiu: atingiuMetaKpi(pct, meta),
+  }
+}
+
 function formatMinutos(min: number): string {
   const h = Math.floor(min / 60)
   const m = Math.round(min % 60)
@@ -409,11 +435,17 @@ export function cellApresentacaoKpi(
     case 'sla_vistagem_risco': {
       if (opsOuIndisp) return cellVazio()
       const rows = filterMensal(data.slaVistagemRisco)
-      const { value } = somaRazao(
-        rows.map((r) => r.vistado_d1),
-        rows.map((r) => r.total),
+      return cellVistagemPeriodo(
+        rows,
+        metaOverride ?? EFICIENCIA_META_VISTAGEM,
+        isSlaVistagemRiscoContratosSemCasos(
+          areaCanon,
+          true,
+          totalPublicacoesVistagem(rows),
+        )
+          ? SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT
+          : null,
       )
-      return cellPct(value, metaOverride ?? EFICIENCIA_META_VISTAGEM)
     }
     case 'sla_vistagem_normal': {
       if (
@@ -423,11 +455,7 @@ export function cellApresentacaoKpi(
         return cellVazio()
       }
       const rows = filterMensal(data.slaVistagemComum)
-      const { value } = somaRazao(
-        rows.map((r) => r.vistado_d1),
-        rows.map((r) => r.total),
-      )
-      return cellPct(value, metaOverride ?? EFICIENCIA_META_VISTAGEM)
+      return cellVistagemPeriodo(rows, metaOverride ?? EFICIENCIA_META_VISTAGEM)
     }
     case 'nps':
       return cellVazio()

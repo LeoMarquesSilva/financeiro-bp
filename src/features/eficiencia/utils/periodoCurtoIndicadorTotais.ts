@@ -1,4 +1,5 @@
 import type { RacionalResultado } from '../types/eficiencia.types'
+import { pctSlaVistagemAcumulado } from './slaVistagemKpi'
 
 type Resumo = NonNullable<RacionalResultado['resumo']>
 
@@ -82,7 +83,7 @@ export function totaisVistagemFromResumo(resumo: Resumo): VistagemPeriodoTotais 
   return {
     vistadoD1,
     total,
-    pctGeral: total > 0 ? (vistadoD1 / total) * 100 : null,
+    pctGeral: pctSlaVistagemAcumulado(vistadoD1, total),
   }
 }
 

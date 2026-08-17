@@ -42,6 +42,11 @@ import {
   totaisSlaProtocoloFromResumo,
   totaisVistagemFromResumo,
 } from '../utils/periodoCurtoIndicadorTotais'
+import {
+  isSlaVistagemRiscoContratosSemCasos,
+  SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT,
+  totalPublicacoesVistagem,
+} from '../utils/slaVistagemKpi'
 
 type Props = {
   ano: number
@@ -84,6 +89,25 @@ const CELULAS_VAZIAS: HeatCell[] = Array.from({ length: 12 }, () => ({
   label: '-',
 }))
 const ACUMULADO_VAZIO: HeatCell = { value: null, label: '-' }
+const ACUMULADO_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS: HeatCell = {
+  value: SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT,
+  label: formatPercent(SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT),
+}
+
+function cellsVistagemRiscoContratosSemCasos(ano: number, ref = new Date()): HeatCell[] {
+  const anoAtual = ref.getFullYear()
+  const mesAtual = ref.getMonth() + 1
+  return Array.from({ length: 12 }, (_, i) => {
+    const mes = i + 1
+    const futuro = ano > anoAtual || (ano === anoAtual && mes > mesAtual)
+    return futuro
+      ? { value: null, label: '-' }
+      : {
+          value: SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT,
+          label: formatPercent(SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT),
+        }
+  })
+}
 
 /** Monta as 12 células (Jan-Dez) de uma linha heat-strip a partir de um array mensal esparso. */
 function buildCells<T extends { mes: number }>(
@@ -252,11 +276,21 @@ export function OverviewTab({
   const acumuladoVistagemRisco = (() => {
     if (periodoCurtoAtivo && resumosPeriodo?.vistRisco) {
       const t = totaisVistagemFromResumo(resumosPeriodo.vistRisco)
-      if (t.total === 0) return ACUMULADO_VAZIO
+      if (t.total === 0) {
+        return isSlaVistagemRiscoContratosSemCasos(area, true, t.total)
+          ? ACUMULADO_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS
+          : ACUMULADO_VAZIO
+      }
       const pct = t.pctGeral ?? 0
       return { value: pct, label: PCT0(pct) }
     }
     const rows = filterMensal(data.slaVistagemRisco)
+    const total = totalPublicacoesVistagem(rows)
+    if (total === 0) {
+      return isSlaVistagemRiscoContratosSemCasos(area, true, total)
+        ? ACUMULADO_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS
+        : ACUMULADO_VAZIO
+    }
     return somaRazaoPct(
       rows.map((r) => r.vistado_d1),
       rows.map((r) => r.total),
@@ -270,6 +304,7 @@ export function OverviewTab({
       return { value: pct, label: PCT0(pct) }
     }
     const rows = filterMensal(data.slaVistagemComum)
+    if (totalPublicacoesVistagem(rows) === 0) return ACUMULADO_VAZIO
     return somaRazaoPct(
       rows.map((r) => r.vistado_d1),
       rows.map((r) => r.total),
@@ -317,7 +352,17 @@ export function OverviewTab({
     : acumuladoAgendamento
   const cellsVistagemRisco: HeatCell[] = agendamentoVistagemOpsLegais
     ? CELULAS_VAZIAS
-    : aplicarCelulasFiltro(buildCells(data.slaVistagemRisco, (r) => r.pct_d1), mesFiltro, ano)
+    : aplicarCelulasFiltro(
+        isSlaVistagemRiscoContratosSemCasos(
+          area,
+          true,
+          totalPublicacoesVistagem(data.slaVistagemRisco),
+        )
+          ? cellsVistagemRiscoContratosSemCasos(ano)
+          : buildCells(data.slaVistagemRisco, (r) => r.pct_d1),
+        mesFiltro,
+        ano,
+      )
   const acumuladoVistagemRiscoExibicao: HeatCell = agendamentoVistagemOpsLegais
     ? ACUMULADO_VAZIO
     : acumuladoVistagemRisco
