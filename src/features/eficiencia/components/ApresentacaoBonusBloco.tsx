@@ -498,7 +498,7 @@ function PremissasCard({ periodoLabel }: { periodoLabel: string }) {
         background: '#FFFFFF',
         width: '100%',
         height: 'fit-content',
-        alignSelf: 'start',
+        alignSelf: 'center',
         display: 'flex',
         flexDirection: 'column',
         boxShadow: CARD_SHADOW,

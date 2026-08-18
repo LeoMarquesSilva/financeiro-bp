@@ -2666,7 +2666,7 @@ function applyApresentacaoFillSlideLayout(
       const premissas = bonusBody.querySelector<HTMLElement>('[data-bonus-premissas]')
       if (premissas) {
         premissas.style.setProperty('height', 'fit-content', 'important')
-        premissas.style.setProperty('align-self', 'start', 'important')
+        premissas.style.setProperty('align-self', 'center', 'important')
       }
       bonusBody
         .querySelectorAll<HTMLElement>('[data-bonus-section-header]')
