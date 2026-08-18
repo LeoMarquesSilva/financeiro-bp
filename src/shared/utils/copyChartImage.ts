@@ -647,7 +647,6 @@ function prepareStackCardsExportElement(
   inlineNodeStyles(source, clone)
   clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
   replaceButtonsWithDivs(clone)
-  applyNestedFlexExportFix(clone, source)
 
   const sourceCards = source.querySelectorAll<HTMLElement>('article')
   const cloneCards = clone.querySelectorAll<HTMLElement>('article')
@@ -689,7 +688,14 @@ function prepareStackCardsExportElement(
   clone.style.setProperty('position', 'static', 'important')
   clone.style.setProperty('display', 'block', 'important')
   clone.style.setProperty('outline', 'none', 'important')
-  applyFullScrollExportLayout(clone, fixedWidth)
+  clone.style.setProperty('width', `${fixedWidth}px`, 'important')
+  clone.style.setProperty('min-width', `${fixedWidth}px`, 'important')
+  clone.style.setProperty('max-width', `${fixedWidth}px`, 'important')
+  clone.style.setProperty('height', 'auto', 'important')
+  clone.style.setProperty('min-height', '0', 'important')
+  clone.style.setProperty('max-height', 'none', 'important')
+  clone.style.setProperty('overflow', 'visible', 'important')
+  clone.style.setProperty('flex', 'none', 'important')
   return clone
 }
 
@@ -761,7 +767,8 @@ function preparePrintSnapshotElement(source: HTMLElement, options?: HtmlExportOp
 
   const sourceStyle = window.getComputedStyle(source)
   const rect = source.getBoundingClientRect()
-  const width = Math.max(1, Math.ceil(rect.width))
+  const compactList = source.hasAttribute('data-chart-export-compact-list')
+  const width = Math.max(1, Math.ceil(compactList ? Math.min(rect.width, 900) : rect.width))
   const height = Math.max(1, Math.ceil(rect.height))
 
   if (preserveBackground) {
@@ -792,13 +799,48 @@ function preparePrintSnapshotElement(source: HTMLElement, options?: HtmlExportOp
   clone.style.setProperty('position', 'static', 'important')
   clone.style.setProperty('outline', 'none', 'important')
 
-  const display = sourceStyle.display
-  if (display === 'flex' || display === 'inline-flex') {
-    applyPrintFlexRowFix(clone, source)
+  if (compactList) {
+    clone.querySelectorAll<HTMLElement>('ul').forEach((list) => {
+      list.style.setProperty('width', '100%', 'important')
+      list.style.setProperty('max-width', 'none', 'important')
+    })
+    clone.querySelectorAll<HTMLElement>('ul > li').forEach((row) => {
+      const cells = Array.from(row.children).filter(
+        (child): child is HTMLElement => child instanceof HTMLElement,
+      )
+      row.style.setProperty('display', 'flex', 'important')
+      row.style.setProperty('align-items', 'center', 'important')
+      row.style.setProperty('justify-content', 'flex-start', 'important')
+      row.style.setProperty('gap', '24px', 'important')
+      row.style.setProperty('width', '100%', 'important')
+      row.style.setProperty('box-sizing', 'border-box', 'important')
+
+      const person = cells[0]
+      if (person) {
+        person.style.setProperty('flex', '0 1 620px', 'important')
+        person.style.setProperty('width', '620px', 'important')
+        person.style.setProperty('max-width', '620px', 'important')
+        person.style.setProperty('min-width', '0', 'important')
+      }
+
+      const tenure = cells[1]
+      if (tenure) {
+        tenure.style.setProperty('flex', '0 0 160px', 'important')
+        tenure.style.setProperty('width', '160px', 'important')
+        tenure.style.setProperty('min-width', '160px', 'important')
+        tenure.style.setProperty('max-width', '160px', 'important')
+        tenure.style.setProperty('text-align', 'left', 'important')
+      }
+    })
+  } else {
+    const display = sourceStyle.display
+    if (display === 'flex' || display === 'inline-flex') {
+      applyPrintFlexRowFix(clone, source)
+    }
+    applyNestedFlexExportFix(clone, source, {
+      skipRoot: display === 'flex' || display === 'inline-flex',
+    })
   }
-  applyNestedFlexExportFix(clone, source, {
-    skipRoot: display === 'flex' || display === 'inline-flex',
-  })
 
   return clone
 }
@@ -1537,7 +1579,14 @@ async function htmlElementToPngBlob(
   if (printSnapshot) {
     const prepared = preparePrintSnapshotElement(element, options)
     const rect = element.getBoundingClientRect()
-    const width = Math.max(1, Math.ceil(rect.width))
+    const width = Math.max(
+      1,
+      Math.ceil(
+        element.hasAttribute('data-chart-export-compact-list')
+          ? Math.min(rect.width, 900)
+          : rect.width,
+      ),
+    )
     const height = Math.max(1, Math.ceil(rect.height))
     if (width === 0 || height === 0) {
       throw new Error('Legenda ainda não renderizada')

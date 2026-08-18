@@ -3,7 +3,7 @@ import { Check, ChevronDown, GraduationCap, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/shared/components/Avatar'
-import { formatDate } from '@/shared/utils/format'
+import { formatDate, formatPercent } from '@/shared/utils/format'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
@@ -217,7 +217,7 @@ export function TreinamentosPessoaCards({
                       ) : (
                         <>
                           <GraduationCap className="h-3 w-3" />
-                          {`${Math.round(pct)}%`}
+                          {formatPercent(pct)}
                         </>
                       )}
                     </span>

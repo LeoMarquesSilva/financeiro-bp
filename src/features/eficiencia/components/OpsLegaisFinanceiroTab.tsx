@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { formatPercent } from '@/shared/utils/format'
 import {
@@ -10,7 +10,10 @@ import {
 } from '../constants'
 import { useCobrancaKpiRows } from '@/features/cobranca/hooks/useWhatsapp'
 import { eficienciaService } from '../services/eficienciaService'
-import type { OpsLegaisAntecipacaoMesRow } from '../types/eficiencia.types'
+import type {
+  OpsLegaisAntecipacaoMesRow,
+  RacionalIndicador,
+} from '../types/eficiencia.types'
 import {
   agregarEfetividade,
   filtrarPainelEfetividade,
@@ -18,6 +21,8 @@ import {
 } from '../utils/opsEfetividadeCobranca'
 import { EficienciaEficDesvioCard } from './EficienciaEficDesvioCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { OverviewRacionalButton } from './OverviewKpiHeatRow'
+import { RacionalSheet } from './RacionalSheet'
 
 type Props = {
   ano: number
@@ -25,6 +30,7 @@ type Props = {
 }
 
 export function OpsLegaisFinanceiroTab({ ano, mesFiltro }: Props) {
+  const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
   const { data: antecipacaoData, isLoading: loadingAntecip } = useQuery({
     queryKey: ['eficiencia', 'ops-antecipacao-mensal', ano],
     queryFn: () => eficienciaService.fetchOpsLegaisAntecipacaoMensal(ano),
@@ -70,9 +76,15 @@ export function OpsLegaisFinanceiroTab({ ano, mesFiltro }: Props) {
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Antecipação de Faturamento de Honorários
-          </h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Antecipação de Faturamento de Honorários
+            </h3>
+            <OverviewRacionalButton
+              onClick={() => setRacionalAberto('ops_legais_antecipacao_faturamento')}
+              className="w-auto"
+            />
+          </div>
           <EficienciaEficDesvioCard
             okLabel="Dentro do prazo"
             nokLabel="Fora do prazo"
@@ -102,9 +114,15 @@ export function OpsLegaisFinanceiroTab({ ano, mesFiltro }: Props) {
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Efetividade na Cobrança
-          </h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Efetividade na Cobrança
+            </h3>
+            <OverviewRacionalButton
+              onClick={() => setRacionalAberto('ops_legais_efetividade_cobranca')}
+              className="w-auto"
+            />
+          </div>
           <EficienciaEficDesvioCard
             okLabel="Cobrados no D+1"
             nokLabel="Fora / sem cobrança"
@@ -132,6 +150,37 @@ export function OpsLegaisFinanceiroTab({ ano, mesFiltro }: Props) {
           />
         </div>
       </div>
+
+      <RacionalSheet
+        indicador={racionalAberto}
+        titulo={
+          racionalAberto === 'ops_legais_antecipacao_faturamento'
+            ? 'Antecipação de Faturamento de Honorários'
+            : 'Efetividade na Cobrança'
+        }
+        ano={ano}
+        mes={mesFiltro}
+        area={null}
+        resultado={
+          racionalAberto === 'ops_legais_antecipacao_faturamento'
+            ? {
+                value: antecipTotais.total > 0 ? antecipTotais.pct : null,
+                label:
+                  antecipTotais.total > 0 ? formatPercent(antecipTotais.pct) : '—',
+              }
+            : {
+                value: periodo.total > 0 ? periodo.pct_efetividade : null,
+                label:
+                  periodo.total > 0 ? formatPercent(periodo.pct_efetividade) : '—',
+              }
+        }
+        metaAcumulado={
+          racionalAberto === 'ops_legais_antecipacao_faturamento'
+            ? EFICIENCIA_META_OPS_ANTECIPACAO
+            : EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA
+        }
+        onClose={() => setRacionalAberto(null)}
+      />
     </div>
   )
 }

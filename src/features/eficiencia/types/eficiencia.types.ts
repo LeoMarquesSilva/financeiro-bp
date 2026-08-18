@@ -429,6 +429,8 @@ export type RacionalIndicador =
   | 'ops_legais_cadastro'
   | 'ops_legais_iniciativas'
   | 'ops_legais_marketing'
+  | 'ops_legais_antecipacao_faturamento'
+  | 'ops_legais_efetividade_cobranca'
   | 'sla_ciencia_agendamentos'
   | 'sla_vistagem_risco'
   | 'sla_vistagem_normal'
@@ -462,6 +464,9 @@ export interface RacionalResumo {
   /** SLA Vistagem — COUNT(*) por vistado_d1 */
   qtd_vistado_sim?: number
   qtd_vistado_nao?: number
+  /** Gestão de PDI — avaliações conforme e fora dos critérios. */
+  qtd_pdi_apta?: number
+  qtd_pdi_desvio?: number
   qtd_total?: number
 }
 

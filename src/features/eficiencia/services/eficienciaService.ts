@@ -5,6 +5,7 @@ import { receitaMetasService } from '@/features/receita/services/receitaMetasSer
 import { receitaService } from '@/features/receita/services/receitaService'
 import { computePostEngagementRate } from '@/features/operacoes-legais/marketing/instagramAnalytics'
 import { instagramService } from '@/features/operacoes-legais/marketing/instagramService'
+import { cobrancaService } from '@/features/cobranca/services/cobrancaService'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
   MES_INICIO_RESULTADO,
@@ -12,6 +13,7 @@ import {
   OPS_LEGAIS_CADASTRO_TIPOS_ABERTURA,
   areaFiltroParaIndicador,
   isAgendamentoVistagemIndisponivelPorArea,
+  mesNoFiltro,
   mesesEfetivosFiltro,
   rangePeriodoFiltro,
   type MesFiltroEficiencia,
@@ -69,6 +71,7 @@ import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
 import { agregarGestaoPdiMensal, avaliarGestaoPdi } from '../utils/gestaoPdiCalc'
 import { nomesResponsavelMatch, RACIONAL_COLUNA_RESPONSAVEL } from '../utils/responsavelMatch'
 import { marcarTreinamentosDuplicados } from '../utils/treinamentosDedupe'
+import { filtrarPainelEfetividade } from '../utils/opsEfetividadeCobranca'
 
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.rpc(name as never, args as never)
@@ -473,6 +476,44 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'congelado', label: 'Snapshot congelado' },
     ],
   },
+  ops_legais_antecipacao_faturamento: {
+    tabela: 'sp_tarefas',
+    dataColuna: 'data_conclusao',
+    areaColuna: null,
+    filtros: [
+      { tipo: 'eq', coluna: 'tarefa', valor: 'REALIZAR FATURAMENTO' },
+      { tipo: 'notNull', coluna: 'data_conclusao' },
+      { tipo: 'notNull', coluna: 'data_para_conclusao' },
+    ],
+    colunas: [
+      { key: 'ci', label: 'CI' },
+      { key: 'nro_cnj', label: 'Nº do Processo' },
+      { key: 'grupo_cliente', label: 'Grupo Cliente' },
+      { key: 'cliente', label: 'Cliente' },
+      { key: 'usuario_conclusao', label: 'Concluído por' },
+      { key: 'data_para_conclusao', label: 'Data para conclusão' },
+      { key: 'data_limite', label: 'Data limite' },
+      { key: 'data_conclusao', label: 'Data conclusão' },
+      { key: 'status_prazo', label: 'Resultado' },
+    ],
+  },
+  ops_legais_efetividade_cobranca: {
+    tabela: 'cobranca_painel',
+    dataColuna: 'data_vencimento',
+    areaColuna: null,
+    colunas: [
+      { key: 'nro_titulo', label: 'Título' },
+      { key: 'cliente', label: 'Cliente' },
+      { key: 'grupo_cliente', label: 'Grupo Cliente' },
+      { key: 'plano_contas', label: 'Plano de Contas' },
+      { key: 'data_vencimento', label: 'Vencimento' },
+      { key: 'data_prazo_d1', label: 'Prazo D+1' },
+      { key: 'valor', label: 'Valor' },
+      { key: 'status_cobranca', label: 'Resultado' },
+      { key: 'ultima_cobranca_at', label: 'Última cobrança' },
+      { key: 'ultima_cobranca_canal', label: 'Canal' },
+    ],
+  },
   ops_legais_iniciativas: {
     tabela: 'ops_legais_iniciativas',
     dataColuna: 'data',
@@ -507,6 +548,98 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'permalink', label: 'Link' },
     ],
   },
+}
+
+type OpsFinanceiroRacionalIndicador =
+  | 'ops_legais_antecipacao_faturamento'
+  | 'ops_legais_efetividade_cobranca'
+
+function mesDeDataIso(value: unknown): number {
+  const mes = Number(String(value ?? '').slice(5, 7))
+  return Number.isFinite(mes) ? mes : 0
+}
+
+async function fetchOpsLegaisFinanceiroRacional(
+  indicador: OpsFinanceiroRacionalIndicador,
+  ano: number,
+  mes: MesFiltroEficiencia,
+  limite: number | null,
+): Promise<RacionalResultado> {
+  const cfg = RACIONAL_CONFIG[indicador]
+  let linhas: Array<Record<string, unknown>>
+
+  if (indicador === 'ops_legais_antecipacao_faturamento') {
+    const select = cfg.colunas
+      .filter((coluna) => coluna.key !== 'status_prazo')
+      .map((coluna) => coluna.key)
+      .join(',')
+    const baseAno = await fetchRacionalLinhasCompletas(
+      cfg,
+      indicador,
+      ano,
+      null,
+      null,
+      select,
+    )
+    linhas = baseAno
+      .filter((row) => mesNoFiltro(mesDeDataIso(row.data_conclusao), mes, ano))
+      .map((row): Record<string, unknown> => {
+        const conclusao = String(row.data_conclusao ?? '')
+        const dataLimite = String(row.data_limite ?? '')
+        const dentroPrazo = Boolean(dataLimite) && conclusao <= dataLimite
+        return {
+          ...row,
+          status_prazo: dentroPrazo ? 'Dentro do prazo' : 'Fora do prazo',
+        }
+      })
+      .sort((a, b) => {
+        const aDentro = a['status_prazo'] === 'Dentro do prazo' ? 1 : 0
+        const bDentro = b['status_prazo'] === 'Dentro do prazo' ? 1 : 0
+        return (
+          aDentro - bDentro ||
+          String(b['data_conclusao']).localeCompare(String(a['data_conclusao']))
+        )
+      })
+  } else {
+    const base = await cobrancaService.listPainelKpi()
+    linhas = filtrarPainelEfetividade(base, ano, mes)
+      .map((row) => ({
+        nro_titulo: row.nro_titulo,
+        cliente: row.cliente,
+        grupo_cliente: row.grupo_cliente,
+        plano_contas: row.plano_contas,
+        data_vencimento: row.data_vencimento,
+        data_prazo_d1: row.data_prazo_d1,
+        valor: row.valor,
+        status_cobranca: row.tem_whatsapp_d1 ? 'Cobrado no D+1' : 'Fora / sem cobrança',
+        ultima_cobranca_at: row.ultima_cobranca_at,
+        ultima_cobranca_canal: row.ultima_cobranca_canal,
+      }))
+      .sort((a, b) => {
+        const aDentro = a.status_cobranca === 'Cobrado no D+1' ? 1 : 0
+        const bDentro = b.status_cobranca === 'Cobrado no D+1' ? 1 : 0
+        return aDentro - bDentro || String(b.data_vencimento).localeCompare(String(a.data_vencimento))
+      })
+  }
+
+  const statusKey =
+    indicador === 'ops_legais_antecipacao_faturamento' ? 'status_prazo' : 'status_cobranca'
+  const statusOk =
+    indicador === 'ops_legais_antecipacao_faturamento' ? 'Dentro do prazo' : 'Cobrado no D+1'
+  const qtdOk = linhas.filter((row) => row[statusKey] === statusOk).length
+  const qtdFora = linhas.length - qtdOk
+  const truncado = limite != null && linhas.length > limite
+
+  return {
+    colunas: cfg.colunas,
+    linhas: limite == null ? linhas : linhas.slice(0, limite),
+    truncado,
+    resumo: {
+      qtd_eficiencia: qtdOk,
+      qtd_inconsistencia: qtdFora,
+      qtd_total: linhas.length,
+    },
+  }
 }
 
 export const eficienciaService = {
@@ -1042,8 +1175,9 @@ export const eficienciaService = {
       linhas,
       truncado: false,
       resumo: {
-        qtd_d1: aptas,
-        qtd_fatal: desvios,
+        qtd_pdi_apta: aptas,
+        qtd_pdi_desvio: desvios,
+        qtd_total: detalhe.length,
       },
     }
   },
@@ -1274,6 +1408,13 @@ export const eficienciaService = {
       return this.fetchOpsLegaisMarketingRacional(ano, mes)
     }
 
+    if (
+      indicador === 'ops_legais_antecipacao_faturamento' ||
+      indicador === 'ops_legais_efetividade_cobranca'
+    ) {
+      return fetchOpsLegaisFinanceiroRacional(indicador, ano, mes, RACIONAL_LIMITE)
+    }
+
     const areaEfetiva = areaFiltroParaIndicador(indicador, area)
 
     let query = buildRacionalBaseQuery(
@@ -1374,6 +1515,13 @@ export const eficienciaService = {
 
     if (indicador === 'ops_legais_marketing') {
       return this.fetchOpsLegaisMarketingRacional(ano, mes)
+    }
+
+    if (
+      indicador === 'ops_legais_antecipacao_faturamento' ||
+      indicador === 'ops_legais_efetividade_cobranca'
+    ) {
+      return fetchOpsLegaisFinanceiroRacional(indicador, ano, mes, null)
     }
 
     const areaEfetiva = areaFiltroParaIndicador(indicador, area)

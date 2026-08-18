@@ -181,6 +181,7 @@ export function TurnoverTab({
       <section
         ref={ativosRef}
         data-chart-export-preserve-bg
+        data-chart-export-compact-list
         className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5"
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -223,7 +224,13 @@ export function TurnoverTab({
         ) : ativosFiltrados.length === 0 ? (
           <p className="py-6 text-center text-sm text-slate-400">Sem dados de colaboradores ativos.</p>
         ) : (
-          <ul className="max-h-[480px] divide-y divide-slate-50 overflow-y-auto">
+          <ul
+            className={
+              area
+                ? 'divide-y divide-slate-50'
+                : 'max-h-[480px] divide-y divide-slate-50 overflow-y-auto'
+            }
+          >
             {ativosFiltrados.map((p) => {
               const nome = resolvePessoaDisplayNome(p.nome, teamMembers, avatarCatalog)
               const avatarUrl = resolvePessoaAvatarUrl(p.nome, teamMembers, avatarCatalog)

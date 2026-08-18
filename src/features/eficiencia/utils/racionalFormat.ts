@@ -86,6 +86,10 @@ export function isRacionalLinhaForaMeta(
       )
     case 'ops_legais_cadastro':
       return !isOpsLegaisCadastroDeParaOk(row.adesao_indicador)
+    case 'ops_legais_antecipacao_faturamento':
+      return row.status_prazo === 'Fora do prazo'
+    case 'ops_legais_efetividade_cobranca':
+      return row.status_cobranca === 'Fora / sem cobrança'
     case 'sla_ciencia_agendamentos':
       return String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')
     case 'sla_vistagem_risco':
@@ -111,6 +115,10 @@ export function racionalLinhaForaMetaTitle(indicador: string): string | undefine
       return 'DESVIO — fora da eficiência de publicação'
     case 'ops_legais_cadastro':
       return 'Inconsistência — fora da conformidade de cadastro'
+    case 'ops_legais_antecipacao_faturamento':
+      return 'Conclusão após a data limite — fora da meta'
+    case 'ops_legais_efetividade_cobranca':
+      return 'Título fora ou sem cobrança no D+1 — fora da meta'
     case 'sla_ciencia_agendamentos':
       return 'Fora do prazo — fora da meta'
     case 'sla_vistagem_risco':
@@ -129,8 +137,15 @@ export function formatRacionalResumoLabel(resumo: {
   qtd_inconsistencia?: number
   qtd_vistado_sim?: number
   qtd_vistado_nao?: number
+  qtd_pdi_apta?: number
+  qtd_pdi_desvio?: number
   qtd_total?: number
 }): string | null {
+  if (resumo.qtd_pdi_apta != null && resumo.qtd_pdi_desvio != null) {
+    const total = resumo.qtd_total ?? resumo.qtd_pdi_apta + resumo.qtd_pdi_desvio
+    return `Total: ${resumo.qtd_pdi_apta} dentro da meta · ${resumo.qtd_pdi_desvio} fora da meta · ${total} registro${total === 1 ? '' : 's'}`
+  }
+
   if (resumo.qtd_d1 != null && resumo.qtd_fatal != null) {
     const partes = [
       `${resumo.qtd_d1} protocolo${resumo.qtd_d1 === 1 ? '' : 's'} em D-1`,
