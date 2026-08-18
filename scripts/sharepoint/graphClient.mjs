@@ -43,9 +43,19 @@ export async function getGraphToken() {
 
 async function graphGet(url) {
   const token = await getGraphToken()
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) throw new Error(`Graph GET ${url} falhou: ${res.status} ${await res.text()}`)
-  return res.json()
+  let lastErr = ''
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    if (res.status === 429) {
+      const wait = Number(res.headers.get('retry-after') ?? 3) * 1000
+      lastErr = `429 ${await res.text()}`
+      await new Promise((r) => setTimeout(r, wait * (attempt + 1)))
+      continue
+    }
+    if (!res.ok) throw new Error(`Graph GET ${url} falhou: ${res.status} ${await res.text()}`)
+    return res.json()
+  }
+  throw new Error(`Graph GET ${url} falhou após retries: ${lastErr}`)
 }
 
 /** Resolve o siteId a partir do hostname + caminho (ex.: 'bpplaw2.sharepoint.com', '/sites/CONTROLADORIAJURDICA'). */
@@ -54,29 +64,57 @@ export async function getSiteId(hostname, sitePath) {
   return json.id
 }
 
+function mapListItem(item) {
+  return {
+    ...item.fields,
+    _CreatedByDisplayName: item.createdBy?.user?.displayName ?? null,
+  }
+}
+
 /**
- * Busca todos os itens de uma lista (com fields expandidos), seguindo @odata.nextLink.
- * @param {string} filter OData filter opcional sobre campos do item (ex.: "createdDateTime ge 2025-01-01T00:00:00Z").
- *   Usa metadados do sistema (createdDateTime), que são sempre indexados — seguro mesmo em listas grandes.
+ * Busca itens de uma lista (com fields expandidos), seguindo @odata.nextLink.
+ * @param {string} filter OData filter opcional. Em listas grandes (>5k) $filter/$orderby
+ *   costuma falhar (400/422 — limiar de vista); use `createdSince` para não acumular tudo.
  * @param {string | null} fieldSelect Campos explícitos no $expand=fields($select=...).
- *   Necessário para colunas Pessoa (ex.: Colaborador) — o expand genérico só traz *LookupId.
+ * @param {{ createdSince?: Date, skipAfterId?: number }} [opts]
+ *   `createdSince` descarta itens mais antigos.
+ *   `skipAfterId` inicia a paginação depois desse ID (skiptoken SharePoint; evita varrer 2023+).
  */
-export async function fetchListItems(siteId, listId, filter = null, fieldSelect = null) {
+export async function fetchListItems(siteId, listId, filter = null, fieldSelect = null, opts = {}) {
   const items = []
+  const createdSince = opts.createdSince instanceof Date ? opts.createdSince : null
   const filterQs = filter ? `&$filter=${encodeURIComponent(filter)}` : ''
   const expand = fieldSelect ? `fields($select=${fieldSelect})` : 'fields'
-  let url = `${GRAPH}/sites/${siteId}/lists/${listId}/items?expand=${expand}&$top=500${filterQs}`
+  const skipAfterId = Number(opts.skipAfterId)
+  const skipQs =
+    Number.isFinite(skipAfterId) && skipAfterId > 0
+      ? `&$skiptoken=${Buffer.from(`Paged=TRUE&p_ID=${Math.floor(skipAfterId)}&ix_Paged=TRUE&ix_ID=${Math.floor(skipAfterId)}`).toString('base64')}`
+      : ''
+  let url = `${GRAPH}/sites/${siteId}/lists/${listId}/items?expand=${expand}&$top=500${filterQs}${skipQs}`
+  let pages = 0
+  let seen = 0
   while (url) {
     const json = await graphGet(url)
-    for (const item of json.value ?? []) {
-      // Campos "Pessoa" genéricos só trazem LookupId; inclua o nome no fieldSelect quando precisar.
-      // O metadado createdBy do próprio item já vem resolvido (nome + email) sem custo extra.
-      items.push({ ...item.fields, _CreatedByDisplayName: item.createdBy?.user?.displayName ?? null })
+    const page = json.value ?? []
+    seen += page.length
+    pages += 1
+    for (const item of page) {
+      if (createdSince) {
+        const created = item.createdDateTime ? new Date(item.createdDateTime) : null
+        if (!created || created < createdSince) continue
+      }
+      items.push(mapListItem(item))
+    }
+    if (pages % 10 === 0) {
+      console.log(
+        `[graph] lista ${listId.slice(0, 8)}… p.${pages} lidos=${seen} na janela=${items.length}`,
+      )
     }
     url = json['@odata.nextLink'] ?? null
   }
   return items
 }
+
 
 /**
  * Baixa um arquivo de biblioteca de documentos pelo caminho relativo ao drive raiz do site.

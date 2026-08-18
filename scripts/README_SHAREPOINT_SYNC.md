@@ -16,7 +16,7 @@ npm run sync:sharepoint -- --dump-fields publicacoes   # inspecionar nomes inter
 | `feriados` | `Feriados.xlsx` (site Controladoria) | `sp_feriados` | replace (apaga o que saiu da planilha) |
 | `turnover` | `Gestão/Indicadores Juridico/2025/Turnover BP (1).xlsx` (workbook **date1904**; sync corrige +1462 dias) | `sp_turnover` | replace (apaga o que saiu da planilha) |
 | `gestao_pdi` | `…/Base de Gestão de PDI.xlsx` — abas **Elegíveis** + **Desvio…** / Análise Desvios | `sp_gestao_pdi_elegiveis`, `sp_gestao_pdi_desvios` | replace (apaga o que saiu da planilha) |
-| `publicacoes` | Lista SharePoint `91e8ba11…` (CONTROLADORIAJURDICA) | `sp_publicacoes` | upsert + apaga órfão **só na janela** ainda na lista (rotativa ~7 dias; histórico antigo fica) |
+| `publicacoes` | Lista SharePoint `91e8ba11…` (CONTROLADORIAJURDICA) | `sp_publicacoes` | upsert + apaga órfão **só nos últimos 4 meses** (Graph não filtra essa lista; paginação só acumula a janela); histórico antigo no SIOE não é tocado |
 | `agendamento` | Lista SharePoint de solicitações | `sp_agendamento` | upsert + apaga IDs que sumiram da lista |
 | `protocolos` | Lista "CONTROLE DE PROTOCOLOS" `4e115aab…` | `sp_protocolos` | upsert + apaga IDs que sumiram da lista |
 | `treinamentos` | Lista `30ea2880…` | `sp_treinamentos_presenca` | upsert + apaga IDs que sumiram da lista |

@@ -60,11 +60,36 @@ dotenv.config({ path: path.join(__dirname, '..', '..', '.env.local'), override: 
 const HOSTNAME = 'bpplaw2.sharepoint.com'
 const SITE_JURIDICA = '/sites/CONTROLADORIAJURDICA'
 /**
- * Protocolos e Publicações são listas grandes/antigas — sincroniza só itens criados a partir desta data.
- * Filtrado no lado do cliente (após o fetch): o $filter do Graph nesses campos não está indexado
- * nessas listas e retorna vazio silenciosamente em vez de aplicar o filtro.
+ * Protocolos: recorte local após o fetch (2025+).
+ * Publicações: janela rolante de 4 meses. $filter/$orderby do Graph nessa lista
+ * estouram o limiar (>5k) ou voltam 400; a paginação lê a lista e só acumula a janela.
  */
 const DATA_CORTE_LISTAS_GRANDES = new Date('2025-01-01T00:00:00Z')
+/** Publicações: só os últimos N meses — o restante já está no SIOE e não muda. */
+const PUBLICACOES_MESES_JANELA = 4
+
+function dataCorteMesesAtras(meses) {
+  const d = new Date()
+  d.setUTCMonth(d.getUTCMonth() - meses)
+  d.setUTCHours(0, 0, 0, 0)
+  return d
+}
+
+/** Menor sp_id já gravado na janela (com 7 dias de folga) — usado para pular o histórico no Graph. */
+async function resolvePublicacoesSkipAfterId(corte) {
+  const folga = new Date(corte.getTime() - 7 * 86_400_000)
+  const { data, error } = await supabase
+    .from('sp_publicacoes')
+    .select('sp_id')
+    .gte('criado', folga.toISOString())
+    .order('sp_id', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(`ler min sp_id publicações: ${error.message}`)
+  const minId = Number(data?.sp_id)
+  if (!Number.isFinite(minId)) return null
+  return Math.max(0, minId - 1)
+}
 const SITE_CONTROLADORIA = '/sites/Controladoria'
 const BASES_DIR = 'Núcleo de Cadastro/Bases Atualizacoes'
 /** Planilha de Gestão de PDI (aba Elegíveis) — path relativo à biblioteca Documentos Compartilhados. */
@@ -758,19 +783,28 @@ const FONTES = {
   publicacoes: {
     tabela: 'sp_publicacoes',
     async run(ctx) {
+      const corte = dataCorteMesesAtras(PUBLICACOES_MESES_JANELA)
+      const skipAfterId = await resolvePublicacoesSkipAfterId(corte)
+      console.log(
+        `[publicacoes] janela ${PUBLICACOES_MESES_JANELA} meses (>= ${corte.toISOString().slice(0, 10)})${skipAfterId != null ? `; skip após ID ${skipAfterId}` : ''}`,
+      )
       const items = await fetchListItems(
         ctx.siteJuridica,
         LISTA_PUBLICACOES,
         null,
         PUBLICACOES_FIELD_SELECT,
+        { createdSince: corte, skipAfterId },
       )
       if (ctx.dumpFields) return dumpFields(items)
       const feriados = await loadFeriadosSet()
-      const rows = items
-        .filter((f) => {
-          const criado = parseDate(pick(f, ['Criado', 'Created']))
-          return criado && criado >= DATA_CORTE_LISTAS_GRANDES
-        })
+      const janela = items.filter((f) => {
+        const criado = parseDate(pick(f, ['Criado', 'Created']))
+        return criado && criado >= corte
+      })
+      console.log(
+        `[publicacoes] janela ${PUBLICACOES_MESES_JANELA} meses (>= ${corte.toISOString().slice(0, 10)}): ${janela.length} itens`,
+      )
+      const rows = janela
         .map((f) => {
           const disponibilizado = parseDate(
             pick(f, ['DISPONIBILIZADO PARA VISTAGEM', 'DISPONIBILIZADOPARAVISTAGEM'])
@@ -844,23 +878,14 @@ const FONTES = {
         .filter((r) => Number.isFinite(r.sp_id))
       const unique = dedupeBy(rows, (r) => r.sp_id)
       const upserted = await upsertChunks('sp_publicacoes', unique, 'sp_id')
-      // Lista rotativa (~7 dias): o histórico mora no SIOE. Só apaga órfão na janela
-      // ainda presente na origem — item excluído no SharePoint some daqui; o resto fica.
-      const keepIds = items
+      // Histórico antigo permanece no SIOE. Só apaga órfão na janela dos últimos N meses.
+      const keepIds = janela
         .map((f) => Number(pick(f, ['ID', 'id'])))
         .filter((id) => Number.isFinite(id))
-      const criados = items
-        .map((f) => parseDate(pick(f, ['Criado', 'Created'])))
-        .filter((d) => d instanceof Date && !Number.isNaN(d.getTime()))
-      const since = criados.length
-        ? new Date(Math.min(...criados.map((d) => d.getTime()))).toISOString()
-        : null
-      const deleted = since
-        ? await deleteMissingIds('sp_publicacoes', 'sp_id', keepIds, {
-            column: 'criado',
-            gte: since,
-          })
-        : 0
+      const deleted = await deleteMissingIds('sp_publicacoes', 'sp_id', keepIds, {
+        column: 'criado',
+        gte: corte.toISOString(),
+      })
       return { upserted, deleted }
     },
   },
