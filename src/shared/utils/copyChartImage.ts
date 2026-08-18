@@ -2207,6 +2207,16 @@ function prepareApresentacaoExportElement(source: HTMLElement): HTMLElement {
     el.style.setProperty('overflow', 'visible', 'important')
   })
 
+  // Iniciativas: no PPT, nomes longos devem quebrar em linha em vez de terminar em "...".
+  clone.querySelectorAll<HTMLElement>('[data-iniciativas-entrega-nome]').forEach((el) => {
+    el.style.setProperty('max-width', 'none', 'important')
+    el.style.setProperty('overflow', 'visible', 'important')
+    el.style.setProperty('text-overflow', 'clip', 'important')
+    el.style.setProperty('white-space', 'normal', 'important')
+    el.style.setProperty('overflow-wrap', 'break-word', 'important')
+    el.style.setProperty('line-height', '1.2', 'important')
+  })
+
   // Liderança: mantém avatar em coluna fixa e centraliza o nome no espaço
   // restante. O PowerPoint recalcula flex rows e deixava nomes quebrados tortos.
   clone

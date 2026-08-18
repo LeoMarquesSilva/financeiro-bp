@@ -346,6 +346,7 @@ export function ApresentacaoIniciativasBloco({
                         }}
                       >
                         <td
+                          data-iniciativas-entrega-nome
                           style={{
                             padding: '4px 6px',
                             color: '#0F172A',
