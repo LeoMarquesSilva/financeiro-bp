@@ -618,6 +618,81 @@ function shouldFullScrollExport(source: HTMLElement): boolean {
   return source.hasAttribute('data-chart-export-full-scroll')
 }
 
+function shouldStackCardsExport(source: HTMLElement): boolean {
+  return source.hasAttribute('data-chart-export-stack-cards')
+}
+
+/** foreignObject + `<button display:table>` esmaga o card (nome em cima da meta). */
+function replaceButtonsWithDivs(root: HTMLElement): void {
+  root.querySelectorAll('button').forEach((btn) => {
+    const div = document.createElement('div')
+    div.className = btn.className
+    const style = btn.getAttribute('style')
+    if (style) div.setAttribute('style', style)
+    while (btn.firstChild) div.appendChild(btn.firstChild)
+    btn.replaceWith(div)
+  })
+}
+
+/**
+ * Lista vertical de cards (treinamentos): trava a altura medida na tela e
+ * não converte flex em table — o recorte para PPT fica igual ao painel.
+ */
+function prepareStackCardsExportElement(
+  source: HTMLElement,
+  options?: HtmlExportOptions,
+): HTMLElement {
+  const { preserveBackground } = resolveHtmlExportOptions(source, options)
+  const clone = source.cloneNode(true) as HTMLElement
+  inlineNodeStyles(source, clone)
+  clone.querySelectorAll('[data-chart-export-ignore]').forEach((el) => el.remove())
+  replaceButtonsWithDivs(clone)
+  applyNestedFlexExportFix(clone, source)
+
+  const sourceCards = source.querySelectorAll<HTMLElement>('article')
+  const cloneCards = clone.querySelectorAll<HTMLElement>('article')
+  sourceCards.forEach((src, i) => {
+    const dst = cloneCards[i]
+    if (!dst) return
+    const r = src.getBoundingClientRect()
+    const h = Math.max(1, Math.ceil(r.height))
+    dst.style.setProperty('height', `${h}px`, 'important')
+    dst.style.setProperty('min-height', `${h}px`, 'important')
+    dst.style.setProperty('max-height', `${h}px`, 'important')
+    dst.style.setProperty('width', '100%', 'important')
+    dst.style.setProperty('box-sizing', 'border-box', 'important')
+    dst.style.setProperty('overflow', 'hidden', 'important')
+    dst.style.setProperty('display', 'block', 'important')
+  })
+
+  const sourceStyle = window.getComputedStyle(source)
+  const fixedWidth = Math.max(1, Math.ceil(source.getBoundingClientRect().width))
+
+  if (preserveBackground) {
+    const explicitBg = source.getAttribute('data-chart-export-bg')
+    const bg =
+      explicitBg ||
+      source.style.backgroundColor ||
+      sourceStyle.backgroundColor ||
+      sourceStyle.background
+    if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+      clone.style.setProperty('background', bg, 'important')
+    } else {
+      clone.style.setProperty('background', '#ffffff', 'important')
+    }
+    clone.style.setProperty('border-radius', sourceStyle.borderRadius, 'important')
+  }
+
+  clone.style.setProperty('margin', '0', 'important')
+  clone.style.setProperty('padding', sourceStyle.padding, 'important')
+  clone.style.setProperty('box-sizing', 'border-box', 'important')
+  clone.style.setProperty('position', 'static', 'important')
+  clone.style.setProperty('display', 'block', 'important')
+  clone.style.setProperty('outline', 'none', 'important')
+  applyFullScrollExportLayout(clone, fixedWidth)
+  return clone
+}
+
 function shouldInlineRowCardExport(source: HTMLElement): boolean {
   return source.hasAttribute('data-chart-export-inline-row')
 }
@@ -1429,6 +1504,21 @@ async function htmlElementToPngBlob(
   const { preserveBackground } = resolveHtmlExportOptions(element, options)
   const printSnapshot = shouldPrintSnapshotExport(element)
   const fullScroll = shouldFullScrollExport(element)
+  const stackCards = shouldStackCardsExport(element)
+
+  if (stackCards) {
+    const prepared = prepareStackCardsExportElement(element, options)
+    const width = Math.max(1, Math.ceil(element.getBoundingClientRect().width))
+    const height = measureFullScrollHeight(prepared.cloneNode(true) as HTMLElement)
+    if (width === 0 || height === 0) {
+      throw new Error('Conteúdo ainda não renderizado')
+    }
+    prepared.style.setProperty('height', `${height}px`, 'important')
+    prepared.style.setProperty('min-height', `${height}px`, 'important')
+    prepared.style.setProperty('max-height', `${height}px`, 'important')
+    prepared.style.setProperty('overflow', 'hidden', 'important')
+    return renderPreparedElementToPngBlob(prepared, width, height, scale)
+  }
 
   if (fullScroll) {
     const prepared = prepareFullScrollExportElement(element, options)

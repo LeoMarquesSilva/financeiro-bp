@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
+import { resolveLoginBlockReason } from './loginAccess'
 import type { AppRole, TeamMemberRow } from './database.types'
 import type { ModuleKey } from './moduleAccess'
 import type { ColaboradorNivelHierarquico } from '@/features/colaboradores/types'
@@ -127,13 +128,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const member = await fetchTeamMemberRole(user.email)
-
-    if (member && member.is_active === false) {
+    const blocked = await resolveLoginBlockReason(user.email)
+    if (blocked) {
       await supabase.auth.signOut()
       setState(emptyAuthState())
       return
     }
+
+    const member = await fetchTeamMemberRole(user.email)
 
     const [moduleAccess, colaborador] = await Promise.all([
       member?.id ? fetchModuleAccess(member.id) : Promise.resolve([] as ModuleKey[]),

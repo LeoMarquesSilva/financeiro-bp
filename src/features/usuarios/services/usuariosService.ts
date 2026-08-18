@@ -163,6 +163,7 @@ export const usuariosAccessService = {
     full_name: string
     area: string
     avatar_url?: string | null
+    is_active?: boolean
   }): Promise<TeamMember> {
     if (input.teamMember) {
       if (input.colaborador && !input.teamMember.colaborador_id) {
@@ -179,6 +180,7 @@ export const usuariosAccessService = {
       avatar_url: input.avatar_url ?? null,
       role: null,
       colaborador_id: input.colaborador?.id ?? null,
+      is_active: input.is_active ?? true,
     }
     return teamMembersService.create(createInput)
   },

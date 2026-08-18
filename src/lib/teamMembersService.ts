@@ -19,6 +19,7 @@ export interface CreateTeamMemberInput {
   avatar_url?: string | null
   role?: AppRole | null
   colaborador_id?: string | null
+  is_active?: boolean
 }
 
 export const teamMembersService = {
@@ -39,7 +40,7 @@ export const teamMembersService = {
       avatar_url: input.avatar_url?.trim() || null,
       role: input.role ?? null,
       colaborador_id: input.colaborador_id ?? null,
-      is_active: true,
+      is_active: input.is_active ?? true,
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase client infers Insert as never for some schemas
     const { data, error } = await supabase.from('team_members').insert(insertData as any).select().single()

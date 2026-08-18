@@ -174,10 +174,10 @@ export function TreinamentosPessoaCards({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-slate-900">
+                    <h3 className="truncate text-sm font-semibold leading-5 text-slate-900">
                       {nomeExibicao}
                     </h3>
-                    <p className="mt-0.5 text-xs text-slate-500">
+                    <p className="mt-0.5 block text-xs leading-4 text-slate-500">
                       {semMetaPessoa ? (
                         formatHorasMinutos(minutos)
                       ) : atingiu ? (

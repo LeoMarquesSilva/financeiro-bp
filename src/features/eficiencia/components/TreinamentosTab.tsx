@@ -160,7 +160,12 @@ export function TreinamentosTab({
         </div>
       </div>
 
-      <div ref={porColaboradorRef}>
+      <div
+        ref={porColaboradorRef}
+        data-chart-export-stack-cards
+        data-chart-export-bg="#ffffff"
+        className="rounded-xl bg-white"
+      >
         <TreinamentosPessoaCards
           porPessoa={porPessoaFiltrado}
           itens={itensFiltrados}

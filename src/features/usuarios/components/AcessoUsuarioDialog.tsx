@@ -66,12 +66,16 @@ export function AcessoUsuarioDialog({
     setEmail((usuario.email ?? '').toLowerCase())
     setRole((usuario.teamMember?.role as AppRole | null) ?? '')
     setModules(new Set(grantedModules))
-    setIsActive(usuario.teamMember?.is_active !== false)
+    setIsActive(
+      usuario.rhStatus !== 'ex_colaborador' && usuario.teamMember?.is_active !== false,
+    )
   }, [usuario, open, grantedModules])
 
+  const isExColaborador = usuario?.rhStatus === 'ex_colaborador'
   const hasLogin = Boolean(authMeta?.has_auth)
   const accessActive = Boolean(
-    usuario?.teamMember &&
+    !isExColaborador &&
+      usuario?.teamMember &&
       usuario.teamMember.is_active !== false &&
       (usuario.teamMember.role || grantedModules.size > 0),
   )
@@ -90,6 +94,8 @@ export function AcessoUsuarioDialog({
         throw new Error('E-mail inválido')
       }
 
+      const loginAtivo = usuario.rhStatus === 'ex_colaborador' ? false : isActive
+
       const member = await usuariosAccessService.ensureTeamMemberFromUsuario({
         colaborador: usuario.colaborador,
         teamMember: usuario.teamMember,
@@ -97,10 +103,11 @@ export function AcessoUsuarioDialog({
         full_name: usuario.full_name,
         area: usuario.area === '—' ? (usuario.colaborador?.area ?? 'Geral') : usuario.area,
         avatar_url: usuario.avatar_url,
+        is_active: loginAtivo,
       })
 
       await teamMembersService.updateRole(member.id, role || null)
-      await teamMembersService.updateActive(member.id, isActive)
+      await teamMembersService.updateActive(member.id, loginAtivo)
 
       // Coordenador sempre precisa do módulo Eficiência (visão Overview da área).
       const next = new Set(modules)
@@ -114,7 +121,7 @@ export function AcessoUsuarioDialog({
         if (!was && now) await teamMemberModuleAccessService.grant(member.id, key)
       }
 
-      if (isActive && (role || next.size > 0)) {
+      if (loginAtivo && (role || next.size > 0)) {
         await usuariosAccessService.ensureAuthLogin({
           email: emailTrim,
           full_name: usuario.full_name,
@@ -136,6 +143,9 @@ export function AcessoUsuarioDialog({
 
   const resetMutation = useMutation({
     mutationFn: async () => {
+      if (usuario?.rhStatus === 'ex_colaborador') {
+        throw new Error('Ex-colaboradores não podem ter login no sistema.')
+      }
       const emailTrim = email.trim().toLowerCase()
       if (!emailTrim) throw new Error('E-mail inválido')
       await usuariosAccessService.ensureAuthLogin({
@@ -214,7 +224,9 @@ export function AcessoUsuarioDialog({
             Acesso de {usuario.full_name}
           </DialogTitle>
           <DialogDescription className="text-sm leading-relaxed">
-            Ative o login com senha padrão e escolha o que este usuário pode ver no sistema.
+            {isExColaborador
+              ? 'Ex-colaboradores não podem acessar o sistema. O login permanece desativado.'
+              : 'Ative o login com senha padrão e escolha o que este usuário pode ver no sistema.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -274,15 +286,23 @@ export function AcessoUsuarioDialog({
                   )}
                 </div>
 
+                {isExColaborador && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
+                    Login desativado automaticamente porque o status no RH é{' '}
+                    <strong className="font-semibold">Ex-colaborador</strong>.
+                  </div>
+                )}
+
                 <div
                   role="button"
-                  tabIndex={pending ? -1 : 0}
+                  tabIndex={pending || isExColaborador ? -1 : 0}
                   aria-pressed={isActive}
+                  aria-disabled={pending || isExColaborador || undefined}
                   onClick={() => {
-                    if (!pending) setIsActive((v) => !v)
+                    if (!pending && !isExColaborador) setIsActive((v) => !v)
                   }}
                   onKeyDown={(e) => {
-                    if (pending) return
+                    if (pending || isExColaborador) return
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
                       setIsActive((v) => !v)
@@ -290,7 +310,8 @@ export function AcessoUsuarioDialog({
                   }}
                   className={cn(
                     'flex w-full cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left transition-colors hover:bg-slate-50/80',
-                    pending && 'pointer-events-none cursor-not-allowed opacity-50',
+                    (pending || isExColaborador) &&
+                      'pointer-events-none cursor-not-allowed opacity-50',
                   )}
                 >
                   <Checkbox
@@ -304,7 +325,9 @@ export function AcessoUsuarioDialog({
                       Conta ativa
                     </span>
                     <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">
-                      Desmarque para bloquear o login sem excluir o usuário.
+                      {isExColaborador
+                        ? 'Indisponível para ex-colaboradores.'
+                        : 'Desmarque para bloquear o login sem excluir o usuário.'}
                     </span>
                   </span>
                 </div>
@@ -313,7 +336,7 @@ export function AcessoUsuarioDialog({
                   <Button
                     type="button"
                     className="h-10 w-full gap-2 bg-teal-600 text-white shadow-sm hover:bg-teal-700"
-                    disabled={pending || !email.trim()}
+                    disabled={pending || !email.trim() || isExColaborador}
                     onClick={() => resetMutation.mutate()}
                   >
                     {resetMutation.isPending ? (

@@ -303,6 +303,12 @@ async function main() {
     .upsert(rows, { onConflict: 'orqestrai_employee_id' })
   if (upsertError) throw new Error(`Erro ao gravar colaboradores: ${upsertError.message}`)
 
+  console.log('Desativando login SIOE de ex-colaboradores...')
+  const { error: loginError } = await sioe.rpc('desativar_login_ex_colaboradores')
+  if (loginError) {
+    console.warn(`Aviso ao desativar login de ex-colaboradores: ${loginError.message}`)
+  }
+
   console.log('Atualizando diagnóstico de divergências (colaboradores_divergencias)...')
   const { error: deleteError } = await sioe
     .from('colaboradores_divergencias')

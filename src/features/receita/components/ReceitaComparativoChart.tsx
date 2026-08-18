@@ -59,7 +59,9 @@ import { buildAreaLinhaData, type AreaLinhaPoint } from '../utils/receitaGestaoV
 import {
   edgeAwareAnchor,
   labelYForPosition,
+  resolveClusteredLabelPlacement,
   resolveLabelVerticalPosition,
+  type ClusterLabelEntry,
 } from '../utils/chartLabelPlacement'
 import {
   departamentoNormKey,
@@ -157,6 +159,19 @@ function formatYAxis(value: number): string {
 
 function formatYAxisPercent(value: number): string {
   return formatPercent(value)
+}
+
+function comparativoClusterAt(
+  data: ChartPoint[],
+  visible: Set<SeriesKey>,
+  index: number,
+): ClusterLabelEntry[] {
+  const p = data[index]
+  if (!p) return []
+  return SERIES.filter((s) => visible.has(s.key)).map((s) => ({
+    key: s.key,
+    value: p[s.key],
+  }))
 }
 
 function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
@@ -348,6 +363,7 @@ function AreaLinhaChangeLabel({
   secondaryPctKey,
   dedupeFlat = false,
   valueKey,
+  clusterKey,
 }: {
   color: string
   data: AreaLinhaPoint[]
@@ -361,6 +377,7 @@ function AreaLinhaChangeLabel({
   secondaryPctKey?: keyof AreaLinhaPoint
   dedupeFlat?: boolean
   valueKey?: keyof AreaLinhaPoint
+  clusterKey?: 'meta' | 'previsto' | 'recebido' | 'inadimplencia'
 }) {
   return function Label(props: LabelProps & { index?: number }) {
     const { x, y, value, index } = props
@@ -394,7 +411,20 @@ function AreaLinhaChangeLabel({
     const cx = Number(x)
     const cy = Number(y)
     const anchor = edgeAwareAnchor(index, data.length)
-    const adjustedOffset = offset + (index % 2 === 0 ? 0 : stagger)
+    const clustered = clusterKey
+      ? resolveClusteredLabelPlacement(
+          [
+            { key: 'meta', value: data[index].meta },
+            { key: 'previsto', value: data[index].previsto },
+            { key: 'recebido', value: data[index].recebido },
+            { key: 'inadimplencia', value: data[index].inadimplencia },
+          ],
+          clusterKey,
+          offset,
+        )
+      : null
+    const preferred = clustered?.position ?? (position === 'below' ? 'below' : 'above')
+    const adjustedOffset = clustered?.offset ?? offset + (index % 2 === 0 ? 0 : stagger)
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
     if (position === 'right') {
@@ -416,7 +446,7 @@ function AreaLinhaChangeLabel({
       cy,
       adjustedOffset,
       secondaryText,
-      position === 'below' ? 'below' : 'above',
+      preferred,
     )
     const labelY = labelYForPosition(cy, adjustedOffset, vertical)
 
@@ -672,6 +702,8 @@ function ComparativoDotLabel({
   dedupeFlat = false,
   getValueAt,
   getSecondaryAt,
+  getClusterAt,
+  seriesKey,
   fontSize,
 }: {
   color: string
@@ -685,6 +717,8 @@ function ComparativoDotLabel({
   getValueAt?: (index: number) => number | null | undefined
   /** Segunda linha do rótulo (ex.: % inadimplência congelada). */
   getSecondaryAt?: (index: number) => string | undefined
+  getClusterAt?: (index: number) => ClusterLabelEntry[]
+  seriesKey?: string
   fontSize?: number
 }) {
   return function Label(props: LabelProps & { index?: number }) {
@@ -708,16 +742,22 @@ function ComparativoDotLabel({
 
     const cx = Number(x)
     const cy = Number(y)
+    const clustered =
+      index != null && seriesKey && getClusterAt
+        ? resolveClusteredLabelPlacement(getClusterAt(index), seriesKey, offset)
+        : null
+    const preferred = clustered?.position ?? (position === 'below' ? 'below' : 'above')
+    const adjustedOffset =
+      clustered?.offset ?? offset + (index != null && index % 2 === 1 ? stagger : 0)
     const anchor = edgeAwareAnchor(index, total)
-    const adjustedOffset = offset + (index != null && index % 2 === 1 ? stagger : 0)
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
-    if (position === 'above' || position === 'below') {
+    if (position === 'above' || position === 'below' || clustered) {
       const vertical = resolveLabelVerticalPosition(
         cy,
         adjustedOffset,
         secondaryText,
-        position,
+        preferred,
       )
       const labelY = labelYForPosition(cy, adjustedOffset, vertical)
       return (
@@ -744,7 +784,7 @@ function ComparativoDotLabel({
         color={color}
         textAnchor={rightAnchor}
         dominantBaseline="middle"
-      fontSize={fontSize}
+        fontSize={fontSize}
       />
     )
   }
@@ -1751,6 +1791,7 @@ export function ReceitaComparativoChart({
                         position: s.key === 'recebido' ? 'right' : 'above',
                         offset: s.key === 'previsto' ? 16 : 10,
                         stagger: 18,
+                        clusterKey: s.key,
                       })}
                     />
                   )}
@@ -1782,6 +1823,7 @@ export function ReceitaComparativoChart({
                         secondaryPctKey: s.key === 'inadimplencia' ? 'inadimplenciaPct' : undefined,
                         dedupeFlat: s.key === 'meta',
                         valueKey: s.key === 'meta' ? 'meta' : undefined,
+                        clusterKey: s.key === 'meta' ? 'meta' : 'inadimplencia',
                       })}
                     />
                   )}
@@ -2142,10 +2184,11 @@ export function ReceitaComparativoChart({
                     content={ComparativoDotLabel({
                       color: s.color,
                       percentMode,
-                      position: s.key === 'recebido' ? 'below' : 'above',
+                      position: 'above',
                       total: chartData.length,
                       offset: s.key === 'previsto' ? 18 : 12,
-                      stagger: s.key === 'previsto' ? 12 : 8,
+                      getClusterAt: (i) => comparativoClusterAt(chartData, visibleSeries, i),
+                      seriesKey: s.key,
                       fontSize: apresentacaoMode ? 9 : RECEITA_CHART_LABEL.linePoint,
                     })}
                   />
@@ -2251,10 +2294,7 @@ export function ReceitaComparativoChart({
                     content={ComparativoDotLabel({
                       color: s.color,
                       percentMode,
-                      position:
-                        s.key === 'inadimplencia' || s.key === 'projetadoReal'
-                          ? 'below'
-                          : 'above',
+                      position: 'above',
                       total: chartData.length,
                       offset:
                         s.key === 'meta'
@@ -2262,7 +2302,8 @@ export function ReceitaComparativoChart({
                           : s.key === 'inadimplencia'
                             ? 26
                             : 18,
-                      stagger: s.key === 'inadimplencia' ? 12 : 8,
+                      getClusterAt: (i) => comparativoClusterAt(chartData, visibleSeries, i),
+                      seriesKey: s.key,
                       fontSize: apresentacaoMode ? 9 : RECEITA_CHART_LABEL.linePoint,
                       getSecondaryAt:
                         !percentMode && s.key === 'inadimplencia'

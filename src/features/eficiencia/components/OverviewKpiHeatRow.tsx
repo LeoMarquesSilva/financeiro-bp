@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { FileSearch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MESES_EFICIENCIA } from '../constants'
@@ -15,7 +15,10 @@ const COL_ACUM_WIDTH = 64
 export const OVERVIEW_RACIONAL_SLOT_WIDTH = 100
 const RACIONAL_SLOT_CLASS = 'flex w-[100px] shrink-0 self-center'
 
-export type OverviewKpiHeatCardProps = Omit<Props, 'onRacionalClick'>
+export type OverviewKpiHeatCardProps = Omit<
+  Props,
+  'onRacionalClick' | 'copyAnualAcumulado' | 'copyAnualCells'
+>
 
 export function OverviewRacionalButton({
   onClick,
@@ -98,6 +101,15 @@ type Props = {
   showAcumulado?: boolean
   /** Quando informado, mostra o botão "Racional" que abre o detalhamento das linhas do indicador. */
   onRacionalClick?: () => void
+  /**
+   * Indicador anual no COPIAR (ex.: Desenvolvimento Equipe): a tela segue o filtro de
+   * meses; o snapshot do PowerPoint usa este Acum. e o ano todo, sem destaque.
+   */
+  copyAnualAcumulado?: HeatCell
+  /** Células Jan–Dez do clone anual (default = `cells` da tela). */
+  copyAnualCells?: HeatCell[]
+  /** Quando false, omite `data-overview-copy-card` (card só na tela). Default true. */
+  includeInCopy?: boolean
 }
 
 function mesesDestaqueSet(mesDestaque: number | number[] | null): Set<number> | null {
@@ -220,6 +232,7 @@ export function OverviewKpiHeatCard({
   cellColSpans,
   yearBands = false,
   showAcumulado = true,
+  includeInCopy = true,
 }: OverviewKpiHeatCardProps) {
   const metasDefinidas = (metasPorMes ?? []).filter((m): m is number => m != null)
   const metaFallbackAcum =
@@ -238,7 +251,7 @@ export function OverviewKpiHeatCard({
 
   return (
     <div
-      data-overview-copy-card
+      {...(includeInCopy ? { 'data-overview-copy-card': true } : {})}
       data-overview-kpi-title={title}
       data-chart-export-preserve-bg
       style={{
@@ -507,11 +520,49 @@ export function OverviewKpiHeatCard({
 
 export function OverviewKpiHeatRow({
   onRacionalClick,
+  copyAnualAcumulado,
+  copyAnualCells,
   ...cardProps
 }: Props) {
+  const copyAnual = copyAnualAcumulado != null
+  const visibleWrapRef = useRef<HTMLDivElement>(null)
+  const [copyWidth, setCopyWidth] = useState(0)
+
+  useLayoutEffect(() => {
+    const el = visibleWrapRef.current
+    if (!el || !copyAnual) return
+    const sync = () => setCopyWidth(Math.ceil(el.getBoundingClientRect().width))
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [copyAnual])
+
   return (
     <div className="flex items-stretch gap-2">
-      <OverviewKpiHeatCard {...cardProps} />
+      <div ref={visibleWrapRef} className="relative min-w-0 flex-1">
+        <OverviewKpiHeatCard {...cardProps} includeInCopy={!copyAnual} />
+        {copyAnual ? (
+          <div
+            aria-hidden
+            className="pointer-events-none"
+            style={{
+              position: 'fixed',
+              left: -10000,
+              top: 0,
+              width: copyWidth > 0 ? copyWidth : undefined,
+              minWidth: copyWidth > 0 ? copyWidth : 800,
+            }}
+          >
+            <OverviewKpiHeatCard
+              {...cardProps}
+              mesDestaque={null}
+              cells={copyAnualCells ?? cardProps.cells}
+              acumulado={copyAnualAcumulado}
+            />
+          </div>
+        ) : null}
+      </div>
       {onRacionalClick ? (
         <OverviewRacionalButton onClick={onRacionalClick} />
       ) : (

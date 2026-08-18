@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
+import { loginBlockMessage, resolveLoginBlockReason } from '@/lib/loginAccess'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -36,6 +37,14 @@ export function Login() {
     if (authError) {
       setError('E-mail ou senha incorretos.')
       setLoading(false)
+      return
+    }
+
+    const blocked = await resolveLoginBlockReason(emailTrim)
+    if (blocked) {
+      await supabase.auth.signOut()
+      setError(loginBlockMessage(blocked))
+      setLoading(false)
     }
   }
 
@@ -48,6 +57,12 @@ export function Login() {
     }
     setForgotLoading(true)
     setError(null)
+    const blocked = await resolveLoginBlockReason(emailTrim)
+    if (blocked) {
+      setError(loginBlockMessage(blocked))
+      setForgotLoading(false)
+      return
+    }
     const { error: resetError } = await (supabase.auth as any).resetPasswordForEmail(emailTrim, {
       redirectTo: `${window.location.origin}/reset-password`,
     })

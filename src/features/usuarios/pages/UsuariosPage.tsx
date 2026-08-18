@@ -155,6 +155,7 @@ function hasSioeAccess(
   item: UsuarioListItem,
   modulesByMember: Map<string, Set<ModuleKey>>,
 ): boolean {
+  if (item.rhStatus === 'ex_colaborador') return false
   const tm = item.teamMember
   if (!tm || tm.is_active === false) return false
   if (tm.role) return true
@@ -506,7 +507,9 @@ export function UsuariosPage() {
                                 <div>
                                   <p className="font-medium text-slate-900">{u.full_name}</p>
                                   {perfilBadges(u)}
-                                  {access ? (
+                                  {u.rhStatus === 'ex_colaborador' ? (
+                                    <p className="mt-0.5 text-xs text-amber-600">Login desativado</p>
+                                  ) : access ? (
                                     <p className="mt-0.5 text-xs text-teal-600">Com acesso</p>
                                   ) : (
                                     <p className="mt-0.5 text-xs text-slate-400">Sem acesso</p>

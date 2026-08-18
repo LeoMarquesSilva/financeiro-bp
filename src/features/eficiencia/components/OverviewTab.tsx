@@ -613,6 +613,7 @@ export function OverviewTab({
           mesDestaque={mesDestaque}
           cells={treinamentosCells}
           acumulado={acumuladoTreinamentos}
+          copyAnualAcumulado={treinamentosAcumulado}
           onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
         />
         <OverviewKpiHeatRow

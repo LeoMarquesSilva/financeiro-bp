@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { differenceInDays, differenceInMonths } from 'date-fns'
-import { UserMinus } from 'lucide-react'
+import { Eye, EyeOff, UserMinus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Avatar } from '@/shared/components/Avatar'
+import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import { formatDate, formatPercent } from '@/shared/utils/format'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import type { MesFiltroEficiencia } from '../constants'
@@ -77,6 +79,8 @@ export function TurnoverTab({
 }: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
+  const [mostrarFerias, setMostrarFerias] = useState(true)
+  const ativosRef = useRef<HTMLElement>(null)
   const { anual, desligamentos, loading } = useTurnover(ano, area)
   const { data: ativosData, isLoading: loadingAtivos } = useQuery({
     queryKey: ['eficiencia', 'turnover-ativos', ano, area],
@@ -174,13 +178,46 @@ export function TurnoverTab({
         />
       </div>
 
-      <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">
-          {area ? 'Ativos da área' : 'Colaboradores ativos'}
-          {!loadingAtivos && ativosFiltrados.length > 0 ? (
-            <span className="ml-1.5 font-normal text-slate-400">· {ativosFiltrados.length}</span>
-          ) : null}
-        </h2>
+      <section
+        ref={ativosRef}
+        data-chart-export-preserve-bg
+        className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5"
+      >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-slate-900">
+            {area ? 'Ativos da área' : 'Colaboradores ativos'}
+            {!loadingAtivos && ativosFiltrados.length > 0 ? (
+              <span className="ml-1.5 font-normal text-slate-400">· {ativosFiltrados.length}</span>
+            ) : null}
+          </h2>
+          <div className="flex flex-wrap items-center gap-2" data-chart-export-ignore>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 gap-1.5 text-xs text-slate-600"
+              onClick={() => setMostrarFerias((v) => !v)}
+              aria-pressed={mostrarFerias}
+              aria-label={
+                mostrarFerias
+                  ? 'Ocultar dias de férias pendentes'
+                  : 'Mostrar dias de férias pendentes'
+              }
+            >
+              {mostrarFerias ? (
+                <EyeOff className="h-3.5 w-3.5" aria-hidden />
+              ) : (
+                <Eye className="h-3.5 w-3.5" aria-hidden />
+              )}
+              {mostrarFerias ? 'Ocultar férias' : 'Mostrar férias'}
+            </Button>
+            <ElementCopyButton
+              containerRef={ativosRef}
+              label="Copiar"
+              preserveBackground
+            />
+          </div>
+        </div>
         {loadingAtivos ? (
           <div className="h-32 animate-pulse rounded-lg bg-slate-100" />
         ) : ativosFiltrados.length === 0 ? (
@@ -212,15 +249,17 @@ export function TurnoverTab({
                     <p className="font-semibold tabular-nums text-slate-700">
                       {p.tempoLabel}
                     </p>
-                    <p
-                      className={
-                        ferias?.em_ferias
-                          ? 'text-[11px] font-medium text-amber-700'
-                          : 'text-[11px] tabular-nums text-slate-400'
-                      }
-                    >
-                      {formatFeriasLinha(ferias)}
-                    </p>
+                    {mostrarFerias ? (
+                      <p
+                        className={
+                          ferias?.em_ferias
+                            ? 'text-[11px] font-medium text-amber-700'
+                            : 'text-[11px] tabular-nums text-slate-400'
+                        }
+                      >
+                        {formatFeriasLinha(ferias)}
+                      </p>
+                    ) : null}
                   </div>
                 </li>
               )
