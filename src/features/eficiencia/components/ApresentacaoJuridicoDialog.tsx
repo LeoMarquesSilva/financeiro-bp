@@ -274,6 +274,8 @@ export function ApresentacaoJuridicoDialog({
                                 ? loadingFinanceiroOps || !financeiroOps
                                 : bloco.id === 'composicao'
                                   ? loadingComposicao || !composicao
+                                  : bloco.id === 'governanca_interna'
+                                    ? false
                                   : bloco.id === 'programa_bonus'
                                     ? loading || !bonus
                                     : loading

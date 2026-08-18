@@ -59,7 +59,7 @@ export type ApresentacaoSecaoId =
   | 'desenvolver_equipe'
   | 'resultado_financeiro'
 
-/** Bloco 1–8: jurídico, financeiro, composição, big numbers, controladoria, iniciativas, marketing, financeiro ops. */
+/** Blocos da apresentação Jurídico. */
 export type ApresentacaoBlocoId =
   | 'juridico'
   | 'juridico_unificado'
@@ -71,6 +71,7 @@ export type ApresentacaoBlocoId =
   | 'iniciativas'
   | 'marketing'
   | 'financeiro_ops'
+  | 'governanca_interna'
   | 'programa_bonus'
 
 export const APRESENTACAO_BLOCOS: {
@@ -139,8 +140,14 @@ export const APRESENTACAO_BLOCOS: {
     semGradeAreas: true,
   },
   {
+    id: 'governanca_interna',
+    label: 'Bloco 11 — Governança Interna',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
     id: 'programa_bonus',
-    label: 'Bloco 11 — Programa de Bônus',
+    label: 'Bloco 12 — Programa de Bônus',
     secoes: [],
     semGradeAreas: true,
   },

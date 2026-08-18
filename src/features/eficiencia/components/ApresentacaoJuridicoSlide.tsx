@@ -32,6 +32,7 @@ import { ApresentacaoBonusBloco } from './ApresentacaoBonusBloco'
 import { ApresentacaoComposicaoBloco } from './ApresentacaoComposicaoBloco'
 import { ApresentacaoControladoriaBloco } from './ApresentacaoControladoriaBloco'
 import { ApresentacaoFinanceiroOpsBloco } from './ApresentacaoFinanceiroOpsBloco'
+import { ApresentacaoGovernancaInternaBloco } from './ApresentacaoGovernancaInternaBloco'
 import { ApresentacaoIniciativasBloco } from './ApresentacaoIniciativasBloco'
 import { ApresentacaoJuridicoUnificadoBloco } from './ApresentacaoJuridicoUnificadoBloco'
 import { ApresentacaoLiderancaBloco } from './ApresentacaoLiderancaBloco'
@@ -728,6 +729,8 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
               onMesFiltroChange={onFinanceiroOpsMesFiltroChange ?? (() => {})}
             />
           )
+        } else if (bloco.id === 'governanca_interna') {
+          content = <ApresentacaoGovernancaInternaBloco ano={ano} />
         } else if (bloco.id === 'programa_bonus') {
           content = (
             <ApresentacaoBonusBloco
