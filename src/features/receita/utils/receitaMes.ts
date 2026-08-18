@@ -28,7 +28,7 @@ export type ReceitaGraficoMesOptions = {
   omitMesAtual?: boolean
   /**
    * Oculta meses anteriores ao início da meta institucional no eixo do gráfico
-   * (modo Resultado: jan–mai quando a meta começa em jun).
+   * (modo % da meta: jan–mai quando a meta começa em jun).
    */
   mesInicioExibicao?: number
 }
@@ -40,6 +40,20 @@ export function mesExibicaoGraficoComparativo(
 ): boolean {
   if (options?.mesInicioExibicao != null && mes < options.mesInicioExibicao) return false
   return true
+}
+
+/** Garante jan–dez no eixo; meses ausentes em `rows` são preenchidos por `buildMissing`. */
+export function completarMesesAno<T extends { mes: number }>(
+  rows: T[],
+  buildMissing: (mes: number) => T,
+  mesMax = 12,
+): T[] {
+  const byMes = new Map(rows.map((r) => [r.mes, r]))
+  const out: T[] = []
+  for (let mes = 1; mes <= mesMax; mes++) {
+    out.push(byMes.get(mes) ?? buildMissing(mes))
+  }
+  return out
 }
 
 /** Recebido: null em mês futuro (ainda não houve pagamento); zero mantém zero em mês passado/atual. */

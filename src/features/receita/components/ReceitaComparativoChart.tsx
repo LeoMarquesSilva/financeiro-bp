@@ -41,6 +41,7 @@ import {
   RECEITA_COLORS,
   RECEITA_DEPARTAMENTO_CORES,
   RECEITA_DEPARTAMENTO_LABELS,
+  mesAbrev,
 } from '../constants'
 import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
 import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
@@ -52,6 +53,7 @@ import {
   inadimplenciaGraficoComparativo,
   isMesAtual,
   mesExibicaoGraficoComparativo,
+  completarMesesAno,
   type ReceitaGraficoMesOptions,
 } from '../utils/receitaMes'
 import { valorExibicaoEvolucao, aplicarSelecaoGrupos, type SelecaoGruposPorMes } from '../utils/receitaInadimplenciaCalc'
@@ -59,6 +61,7 @@ import { buildAreaLinhaData, type AreaLinhaPoint } from '../utils/receitaGestaoV
 import {
   edgeAwareAnchor,
   labelYForPosition,
+  lockClusterLabelOffset,
   resolveClusteredLabelPlacement,
   resolveLabelVerticalPosition,
   type ClusterLabelEntry,
@@ -177,7 +180,9 @@ function comparativoClusterAt(
 function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
   return data.map((p) => {
     const meta = p.meta ?? 0
-    if (meta <= 0) {
+    // Sem meta (jan–mai): usa previsto como 100% para não zerar o mês no eixo.
+    const base = meta > 0 ? meta : (p.previsto ?? 0)
+    if (base <= 0) {
       return {
         mes: p.mes,
         mesLabel: p.mesLabel,
@@ -186,22 +191,22 @@ function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
         projetadoReal: null,
         previsto: null,
         recebido: null,
-        inadimplencia: null,
+        inadimplencia: p.inadimplenciaPct ?? null,
       }
     }
     return {
       mesLabel: p.mesLabel,
       mes: p.mes,
-      meta: 100,
-      projetadoBaseAbril: ((p.projetadoBaseAbril ?? 0) / meta) * 100,
-      projetadoReal: ((p.projetadoReal ?? 0) / meta) * 100,
-      previsto: ((p.previsto ?? 0) / meta) * 100,
-      recebido: p.recebido != null ? (p.recebido / meta) * 100 : null,
+      meta: meta > 0 ? 100 : null,
+      projetadoBaseAbril: ((p.projetadoBaseAbril ?? 0) / base) * 100,
+      projetadoReal: ((p.projetadoReal ?? 0) / base) * 100,
+      previsto: ((p.previsto ?? 0) / base) * 100,
+      recebido: p.recebido != null ? (p.recebido / base) * 100 : null,
       inadimplencia:
         p.inadimplenciaPct != null
           ? p.inadimplenciaPct
           : p.inadimplencia != null
-            ? (p.inadimplencia / meta) * 100
+            ? (p.inadimplencia / base) * 100
             : null,
     }
   })
@@ -424,7 +429,9 @@ function AreaLinhaChangeLabel({
         )
       : null
     const preferred = clustered?.position ?? (position === 'below' ? 'below' : 'above')
-    const adjustedOffset = clustered?.offset ?? offset + (index % 2 === 0 ? 0 : stagger)
+    const adjustedOffset = clustered
+      ? lockClusterLabelOffset(cy, clustered.offset, secondaryText, clustered.position)
+      : offset + (index % 2 === 0 ? 0 : stagger)
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
     if (position === 'right') {
@@ -442,12 +449,9 @@ function AreaLinhaChangeLabel({
       )
     }
 
-    const vertical = resolveLabelVerticalPosition(
-      cy,
-      adjustedOffset,
-      secondaryText,
-      preferred,
-    )
+    const vertical = clustered
+      ? clustered.position
+      : resolveLabelVerticalPosition(cy, adjustedOffset, secondaryText, preferred)
     const labelY = labelYForPosition(cy, adjustedOffset, vertical)
 
     return (
@@ -747,18 +751,16 @@ function ComparativoDotLabel({
         ? resolveClusteredLabelPlacement(getClusterAt(index), seriesKey, offset)
         : null
     const preferred = clustered?.position ?? (position === 'below' ? 'below' : 'above')
-    const adjustedOffset =
-      clustered?.offset ?? offset + (index != null && index % 2 === 1 ? stagger : 0)
+    const adjustedOffset = clustered
+      ? lockClusterLabelOffset(cy, clustered.offset, secondaryText, clustered.position)
+      : offset + (index != null && index % 2 === 1 ? stagger : 0)
     const anchor = edgeAwareAnchor(index, total)
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
     if (position === 'above' || position === 'below' || clustered) {
-      const vertical = resolveLabelVerticalPosition(
-        cy,
-        adjustedOffset,
-        secondaryText,
-        preferred,
-      )
+      const vertical = clustered
+        ? clustered.position
+        : resolveLabelVerticalPosition(cy, adjustedOffset, secondaryText, preferred)
       const labelY = labelYForPosition(cy, adjustedOffset, vertical)
       return (
         <ChartLabelWithBackdrop
@@ -1026,7 +1028,30 @@ export function ReceitaComparativoChart({
   const [visible, setVisible] = useState<Set<SeriesKey>>(() => new Set(DEFAULT_VISIBLE))
   const [areaLinhaSelecionada, setAreaLinhaSelecionada] = useState<string | null>(null)
   const chartExportRef = useRef<HTMLDivElement>(null)
-  const meses = useMemo(() => rows.map((r) => r.mes), [rows])
+  const { data: totaisAno } = useQuery({
+    queryKey: ['receita', 'totais-mensais', ano],
+    queryFn: () => receitaService.fetchTotaisMensais(ano),
+  })
+
+  const rowsGrafico = useMemo(() => {
+    const ref = rows[0]
+    return completarMesesAno(rows, (mes) => {
+      const t = totaisAno?.get(mes)
+      return {
+        mes,
+        mesLabel: mesAbrev(mes),
+        meta: 0,
+        metaBase: 0,
+        projetadoBaseAbril: ref?.projetadoBaseAbril ?? 0,
+        projetadoReal: 0,
+        recebido: t?.recebido ?? 0,
+        previsto: t?.previsto ?? 0,
+        encargos: t?.encargos ?? 0,
+      }
+    })
+  }, [rows, totaisAno])
+
+  const meses = useMemo(() => rowsGrafico.map((r) => r.mes), [rowsGrafico])
 
   const {
     data: deptRows,
@@ -1123,32 +1148,18 @@ export function ReceitaComparativoChart({
   }, [inadimplenciaEvolucaoExibicao])
 
   const mesInicioResultado = useMemo(() => {
-    const mesesComMeta = rows.filter((r) => r.metaBase > 0).map((r) => r.mes)
+    const mesesComMeta = rowsGrafico.filter((r) => r.metaBase > 0).map((r) => r.mes)
     return mesesComMeta.length > 0 ? Math.min(...mesesComMeta) : null
-  }, [rows])
+  }, [rowsGrafico])
 
   const resultadoAtivo = resultadoMode && resultadoDisponivel
 
   const graficoOpts = useMemo<ReceitaGraficoMesOptions>(
     () => ({
       omitMesAtual: resultadoAtivo,
-      mesInicioExibicao:
-        resultadoAtivo && mesInicioResultado != null ? mesInicioResultado : undefined,
     }),
-    [resultadoAtivo, mesInicioResultado],
+    [resultadoAtivo],
   )
-
-  const togglePercentMode = () => {
-    setPercentMode((v) => {
-      const next = !v
-      if (next) {
-        setPorAreaMode(false)
-      } else if (areaLinhaSelecionada) {
-        setPorAreaMode(true)
-      }
-      return next
-    })
-  }
 
   const togglePorAreaMode = () => {
     setPorAreaMode((v) => {
@@ -1194,7 +1205,7 @@ export function ReceitaComparativoChart({
 
   const rawChartData: ChartPoint[] = useMemo(
     () =>
-      rows.map((r) => {
+      rowsGrafico.map((r) => {
         const inadCongelada = inadimplenciaCongeladaPorMes.get(r.mes)
         return {
           mes: r.mes,
@@ -1214,14 +1225,14 @@ export function ReceitaComparativoChart({
           inadimplenciaPct: inadCongelada?.pct ?? null,
         }
       }),
-    [rows, ano, inadimplenciaCongeladaPorMes, graficoOpts],
+    [rowsGrafico, ano, inadimplenciaCongeladaPorMes, graficoOpts],
   )
 
   const visibleSeries = visible
 
   const rowsComDados = useMemo(
-    () => rows.filter((r) => !isMesFuturo(ano, r.mes)),
-    [rows, ano],
+    () => rowsGrafico.filter((r) => !isMesFuturo(ano, r.mes)),
+    [rowsGrafico, ano],
   )
 
   const metaAreaSlices = useMemo(
@@ -1232,7 +1243,7 @@ export function ReceitaComparativoChart({
   const areaGapData = useMemo(
     () =>
       buildAreaGapData(
-        rows,
+        rowsGrafico,
         rowsComDados,
         deptRows ?? [],
         areaMesesSelecionados,
@@ -1240,12 +1251,12 @@ export function ReceitaComparativoChart({
         ano,
         graficoOpts,
       ),
-    [rows, rowsComDados, deptRows, areaMesesSelecionados, metaAreaSlices, ano, graficoOpts],
+    [rowsGrafico, rowsComDados, deptRows, areaMesesSelecionados, metaAreaSlices, ano, graficoOpts],
   )
 
   const areaGapTributarioRecebido = useMemo(() => {
     const recebidoPorArea = buildRecebidoPorAreaMap(
-      rows,
+      rowsGrafico,
       rowsComDados,
       deptRows ?? [],
       areaMesesSelecionados,
@@ -1253,7 +1264,7 @@ export function ReceitaComparativoChart({
       graficoOpts,
     )
     return recebidoPorArea.get(TRIBUTARIO_AREA_KEY) ?? 0
-  }, [rows, rowsComDados, deptRows, areaMesesSelecionados, ano, graficoOpts])
+  }, [rowsGrafico, rowsComDados, deptRows, areaMesesSelecionados, ano, graficoOpts])
 
   const areaGapTableRows = useMemo((): AreaGapRow[] => {
     const tributarioRow: AreaGapRow = {
@@ -1284,7 +1295,7 @@ export function ReceitaComparativoChart({
   const areaLinhaResumoGap = useMemo(() => {
     if (!areaLinhaSelecionada || !deptRows?.length) return null
     const data = buildAreaGapData(
-      rows,
+      rowsGrafico,
       rowsComDados,
       deptRows,
       null,
@@ -1296,7 +1307,7 @@ export function ReceitaComparativoChart({
   }, [
     areaLinhaSelecionada,
     deptRows,
-    rows,
+    rowsGrafico,
     rowsComDados,
     metaAreaSlices,
     ano,
@@ -1306,7 +1317,7 @@ export function ReceitaComparativoChart({
   const areaLinhaData = useMemo(() => {
     if (!areaLinhaSelecionada || !areaLinhaAtual) return []
     const data = buildAreaLinhaData(
-      rows,
+      rowsGrafico,
       deptRows ?? [],
       previstoDeptRows ?? [],
       inadDeptPorMes ?? {},
@@ -1319,7 +1330,7 @@ export function ReceitaComparativoChart({
     if (graficoOpts.mesInicioExibicao == null) return data
     return data.filter((d) => mesExibicaoGraficoComparativo(d.mes, graficoOpts))
   }, [
-    rows,
+    rowsGrafico,
     deptRows,
     previstoDeptRows,
     inadDeptPorMes,
@@ -1369,7 +1380,7 @@ export function ReceitaComparativoChart({
 
   const abrirRecebidoDetalhe = (mes: number) => {
     if (isMesFuturo(ano, mes)) return
-    const row = rows.find((r) => r.mes === mes)
+    const row = rowsGrafico.find((r) => r.mes === mes)
     if (row && (row.recebido > 0 || row.previsto > 0)) setDetalheMes(row)
   }
 
@@ -1390,13 +1401,13 @@ export function ReceitaComparativoChart({
   const totais = useMemo(
     () => ({
       meta: rowsComDados.reduce((s, r) => s + r.meta, 0),
-      metaBase: rows.filter((r) => r.metaBase > 0).reduce((s, r) => s + r.metaBase, 0),
+      metaBase: rowsGrafico.filter((r) => r.metaBase > 0).reduce((s, r) => s + r.metaBase, 0),
       projetadoBaseAbril: rowsComDados.reduce((s, r) => s + r.projetadoBaseAbril, 0),
       projetadoReal: rowsComDados.reduce((s, r) => s + r.projetadoReal, 0),
       recebido: rowsComDados.reduce((s, r) => s + r.recebido, 0),
-      previsto: rows.reduce((s, r) => s + r.previsto, 0),
+      previsto: rowsGrafico.reduce((s, r) => s + r.previsto, 0),
     }),
-    [rows, rowsComDados],
+    [rowsGrafico, rowsComDados],
   )
 
   const pctTotal = pctMeta(totais.recebido, totais.meta)
@@ -1405,10 +1416,10 @@ export function ReceitaComparativoChart({
     if (areaMesesSelecionados == null) {
       return rowsComDados.reduce((s, r) => s + r.recebido, 0)
     }
-    return rows
+    return rowsGrafico
       .filter((r) => areaMesesSelecionados.has(r.mes))
       .reduce((s, r) => s + r.recebido, 0)
-  }, [areaMesesSelecionados, rows, rowsComDados])
+  }, [areaMesesSelecionados, rowsGrafico, rowsComDados])
 
   const semAreaMesUnico = useMemo(() => {
     if (areaMesesSelecionados == null || areaMesesSelecionados.size !== 1) return null
@@ -1422,10 +1433,10 @@ export function ReceitaComparativoChart({
   const semAreaPeriodoLabel = useMemo(() => {
     if (areaMesesSelecionados == null) return `Acumulado ${ano}`
     const meses = [...areaMesesSelecionados].sort((a, b) => a - b)
-    const labels = meses.map((m) => rows.find((r) => r.mes === m)?.mesLabel ?? String(m))
+    const labels = meses.map((m) => rowsGrafico.find((r) => r.mes === m)?.mesLabel ?? String(m))
     if (labels.length === 1) return `${labels[0]} / ${ano}`
     return `${labels[0]}–${labels[labels.length - 1]} / ${ano}`
-  }, [areaMesesSelecionados, rows, ano])
+  }, [areaMesesSelecionados, rowsGrafico, ano])
 
   const porAreaAtivo = porAreaMode
 
@@ -1468,7 +1479,7 @@ export function ReceitaComparativoChart({
               {resultadoAtivo && (
                 <p className="text-[11px] text-amber-800">
                   Período resultado (a partir de{' '}
-                  {rows.find((r) => r.mes === mesInicioResultado)?.mesLabel ?? 'jun'}) · recebido e
+                  {rowsGrafico.find((r) => r.mes === mesInicioResultado)?.mesLabel ?? 'jun'}) · recebido e
                   inadimplência até o mês anterior · meta e previsto inalterados
                 </p>
               )}
@@ -1491,7 +1502,7 @@ export function ReceitaComparativoChart({
               aria-pressed={resultadoAtivo}
               title={
                 resultadoDisponivel
-                  ? 'Exibe só meses com meta (jun+); oculta recebido e inadimplência do mês corrente'
+                  ? 'Oculta recebido e inadimplência do mês corrente'
                   : 'Disponível apenas no ano corrente'
               }
             >
@@ -1531,7 +1542,7 @@ export function ReceitaComparativoChart({
               aria-pressed={resultadoAtivo}
               title={
                 resultadoDisponivel
-                  ? 'Exibe só meses com meta (jun+); oculta recebido e inadimplência do mês corrente'
+                  ? 'Oculta recebido e inadimplência do mês corrente'
                   : 'Disponível apenas no ano corrente'
               }
             >
@@ -1541,7 +1552,26 @@ export function ReceitaComparativoChart({
 
           <button
             type="button"
-            onClick={togglePercentMode}
+            onClick={() => {
+              setPercentMode(false)
+              if (areaLinhaSelecionada) setPorAreaMode(true)
+            }}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+              !percentMode
+                ? 'border-violet-200 bg-violet-50 text-violet-800 shadow-sm'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+            )}
+            aria-pressed={!percentMode}
+          >
+            Valores (R$)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPercentMode(true)
+              setPorAreaMode(false)
+            }}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
               percentMode
@@ -1551,7 +1581,7 @@ export function ReceitaComparativoChart({
             aria-pressed={percentMode}
           >
             <Percent className="h-3 w-3 shrink-0" aria-hidden />
-            {percentMode ? 'Ver valores (R$)' : 'Ver % da meta'}
+            % da meta
           </button>
 
           <button
@@ -2105,7 +2135,7 @@ export function ReceitaComparativoChart({
                       serie != null &&
                       point.mes != null &&
                       !isMesFuturo(ano, point.mes) &&
-                      (rows.find((r) => r.mes === point.mes)?.[serie] ?? 0) > 0
+                      (rowsGrafico.find((r) => r.mes === point.mes)?.[serie] ?? 0) > 0
                     if (!clicavel) {
                       return (
                         <circle
@@ -2145,7 +2175,7 @@ export function ReceitaComparativoChart({
                       serie != null &&
                       point.mes != null &&
                       !isMesFuturo(ano, point.mes) &&
-                      (rows.find((r) => r.mes === point.mes)?.[serie] ?? 0) > 0
+                      (rowsGrafico.find((r) => r.mes === point.mes)?.[serie] ?? 0) > 0
                     if (!clicavel) {
                       return (
                         <circle
@@ -2211,7 +2241,7 @@ export function ReceitaComparativoChart({
                           const clicavel =
                             point.mes != null &&
                             !isMesFuturo(ano, point.mes) &&
-                            (rows.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
+                            (rowsGrafico.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
                           if (!clicavel) {
                             return (
                               <circle
@@ -2253,7 +2283,7 @@ export function ReceitaComparativoChart({
                           const clicavel =
                             point.mes != null &&
                             !isMesFuturo(ano, point.mes) &&
-                            (rows.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
+                            (rowsGrafico.find((r) => r.mes === point.mes)?.recebido ?? 0) > 0
                           if (!clicavel) {
                             return (
                               <circle
@@ -2396,7 +2426,7 @@ export function ReceitaComparativoChart({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => {
+              {rowsGrafico.map((r, i) => {
                 const futuro = isMesFuturo(ano, r.mes)
                 const pct = futuro ? null : pctMeta(r.recebido, r.meta)
                 return (

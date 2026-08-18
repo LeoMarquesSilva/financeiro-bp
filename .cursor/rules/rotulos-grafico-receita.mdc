@@ -1,13 +1,17 @@
 ---
-description: Rótulos de pontos nos gráficos Receita não podem ser cortados pelo topo ou laterais
+description: Rótulos de gráficos Receita — nunca cortar nem inverter ordem dos valores
 alwaysApply: true
 ---
 
 # Rótulos em gráficos Receita (Recharts)
 
 Rótulos de valor nos pontos (LabelList, dots, linhas de meta) **nunca** podem ser
-cortados ("comidos") pelo limite do SVG. O texto deve permanecer **inteiro e legível**
-dentro da área visível do gráfico.
+cortados pelo SVG **nem invertidos** (valor maior com rótulo abaixo do valor menor).
+Erro recorrente: abr (100,37% vs 100%) e jul (recebido vs previsto).
+
+Ao criar ou alterar um gráfico com rótulos, **validar a ordem** com
+`resolveClusterLabelSides` / `clusterLabelSidesAreInverted` em
+`@/features/receita/utils/chartLabelPlacement`.
 
 ## Regras obrigatórias
 
@@ -15,18 +19,20 @@ dentro da área visível do gráfico.
    `RECEITA_CHART_LAYOUT.marginWithPointLabels` e
    `padding={{ top: RECEITA_CHART_LAYOUT.yAxisPaddingTopWithLabels }}` no `YAxis`.
 
-2. **Posicionamento inteligente** — use `resolveLabelVerticalPosition` e
-   `labelYForPosition` de `@/features/receita/utils/chartLabelPlacement` para
-   preferir acima, mas **inverter para abaixo** quando não couber no topo.
+2. **Cluster no mesmo mês** — use `resolveClusteredLabelPlacement` + `lockClusterLabelOffset`.
+   Valores distantes: maior acima, menor abaixo. **Par próximo** (abr 100,37% / 100%):
+   previsto/meta **acima**; recebido **abaixo no espaço livre** — nunca um rótulo em cima
+   do outro. Se não couber no topo, reduza o offset; não empilhe os dois acima.
 
-3. **Ancoragem nas bordas** — use `edgeAwareAnchor` para o 1º e último ponto, evitando
-   que o texto ultrapasse o eixo Y ou a borda direita.
+3. **Posicionamento solo** — série isolada: `resolveLabelVerticalPosition` +
+   `labelYForPosition` (aí sim pode ir para baixo se não couber no topo).
 
-4. **Backdrop com clamp** — `ChartLabelWithBackdrop` (ou equivalente) deve limitar
-   `boxY` com `RECEITA_CHART_LAYOUT.labelMinY`.
+4. **Ancoragem nas bordas** — `edgeAwareAnchor` no 1º e último ponto.
 
-5. **Altura do plot** — cálculos de `cy` usam a área útil interna via
-   `receitaChartInnerPlotHeight()`, não a altura total do container (`300px`).
+5. **Backdrop com clamp** — `ChartLabelWithBackdrop` limita `boxY` com
+   `RECEITA_CHART_LAYOUT.labelMinY`.
+
+6. **Altura do plot** — `receitaChartInnerPlotHeight()`, não os 300px do container.
 
 ## Exemplo (ComposedChart com rótulos)
 
@@ -62,13 +68,18 @@ import {
 ## O que evitar
 
 ```tsx
-// ❌ BAD — rótulo fixo acima sem checar espaço nem padding no eixo Y
+// ❌ BAD — lado fixo por série (previsto sempre acima) — inverte quando o recebido é maior
+position={s.key === 'recebido' ? 'below' : 'above'}
+
+// ❌ BAD — inverter no topo um par já definido pelo cluster
+resolveLabelVerticalPosition(cy, offset, undefined, clustered.position)
+
+// ❌ BAD — rótulo fixo acima sem checar espaço
 <text y={cy - 10}>...</text>
 
-// ❌ BAD — margem mínima em gráfico com LabelList acima dos pontos
-margin={{ top: 16 }}
-
-// ✅ GOOD — layout + utilitário + padding no YAxis
+// ✅ GOOD — cluster por valor + lock do lado
+const clustered = resolveClusteredLabelPlacement(cluster, seriesKey, offset)
+const offsetFit = lockClusterLabelOffset(cy, clustered.offset, undefined, clustered.position)
 ```
 
 ## Escopo

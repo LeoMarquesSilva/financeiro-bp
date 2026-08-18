@@ -80,7 +80,10 @@ import {
 import {
   edgeAwareAnchor,
   labelYForPosition,
+  lockClusterLabelOffset,
+  resolveClusteredLabelPlacement,
   resolveLabelVerticalPosition,
+  type ClusterLabelEntry,
 } from '../utils/chartLabelPlacement'
 import {
   buildReceitaMetaAreaSlices,
@@ -271,12 +274,16 @@ function ColunasLinePointLabel({
   total,
   offset = 22,
   stagger = 0,
+  getClusterAt,
+  seriesKey,
 }: {
   color: string
   percentMetaMode: boolean
   total: number
   offset?: number
   stagger?: number
+  getClusterAt?: (index: number) => ClusterLabelEntry[]
+  seriesKey?: string
 }) {
   return function Label(props: LabelProps & { index?: number }) {
     const { x, y, value, index } = props
@@ -292,9 +299,17 @@ function ColunasLinePointLabel({
 
     const cx = Number(x)
     const cy = Number(y)
+    const clustered =
+      index != null && seriesKey && getClusterAt
+        ? resolveClusteredLabelPlacement(getClusterAt(index), seriesKey, offset)
+        : null
     const anchor = edgeAwareAnchor(index, total)
-    const adjustedOffset = offset + (index != null && stagger > 0 && index % 2 === 1 ? stagger : 0)
-    const vertical = resolveLabelVerticalPosition(cy, adjustedOffset, undefined, 'above')
+    const adjustedOffset = clustered
+      ? lockClusterLabelOffset(cy, clustered.offset, undefined, clustered.position)
+      : offset + (index != null && stagger > 0 && index % 2 === 1 ? stagger : 0)
+    const vertical = clustered
+      ? clustered.position
+      : resolveLabelVerticalPosition(cy, adjustedOffset, undefined, 'above')
     const labelY = labelYForPosition(cy, adjustedOffset, vertical)
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
     const charWidth = 6.4
@@ -2226,6 +2241,11 @@ export function ReceitaComparativoColunasChart({
                             total: chartData.length,
                             offset: COLUNAS_LINE_LABEL_SERIES[m.key]!.offset,
                             stagger: COLUNAS_LINE_LABEL_SERIES[m.key]!.stagger,
+                            seriesKey: m.key,
+                            getClusterAt: (i) => [
+                              { key: 'meta', value: chartData[i]?.meta },
+                              { key: 'previsto', value: chartData[i]?.previsto },
+                            ],
                           })}
                         />
                       )}
