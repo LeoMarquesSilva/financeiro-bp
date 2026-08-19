@@ -1336,6 +1336,17 @@ async function main() {
       })
     }
   }
+
+  if (!ctx.dumpFields) {
+    const { error } = await supabase.rpc('registrar_sioe_sync', {
+      p_fonte: 'sharepoint',
+    })
+    if (error) {
+      hadError = true
+      console.error(`[Sync SharePoint] heartbeat do SIOE FALHOU: ${error.message}`)
+    }
+  }
+
   if (hadError) process.exitCode = 1
 }
 

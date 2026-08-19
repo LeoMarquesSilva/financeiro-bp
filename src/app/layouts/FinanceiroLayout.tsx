@@ -9,6 +9,7 @@ import {
   ErrorReportingProvider,
   FinanceiroErrorBoundaryConnected,
 } from '@/shared/error-reporting/ErrorReportingProvider'
+import { SioeSyncAutoRefresh } from '@/shared/providers/SioeSyncAutoRefresh'
 
 export function FinanceiroLayout() {
   const { passwordChanged } = useAuth()
@@ -18,6 +19,7 @@ export function FinanceiroLayout() {
   return (
     <WhatsappNotificationsProvider>
       <ErrorReportingProvider>
+        <SioeSyncAutoRefresh />
         <div className="min-h-screen bg-slate-50" data-error-report-root>
           <AppSidebar />
 

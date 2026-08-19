@@ -2,10 +2,14 @@ name: Sync SharePoint (Eficiência)
 
 on:
   schedule:
-    # 08:00 e 12:00 horário de Brasília (IANA — sem conversão manual UTC)
+    # Horário de Brasília (IANA — sem conversão manual UTC)
     - cron: '0 8 * * *'
       timezone: America/Sao_Paulo
     - cron: '0 12 * * *'
+      timezone: America/Sao_Paulo
+    - cron: '0 14 * * *'
+      timezone: America/Sao_Paulo
+    - cron: '0 17 * * *'
       timezone: America/Sao_Paulo
   workflow_dispatch:
     inputs:

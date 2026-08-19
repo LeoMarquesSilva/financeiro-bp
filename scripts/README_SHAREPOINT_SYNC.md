@@ -76,6 +76,8 @@ O sync roda **na nuvem**, sem depender do Mac ligado:
 |---|---|
 | **08:00** | cron (`timezone: America/Sao_Paulo`) |
 | **12:00** | cron (`timezone: America/Sao_Paulo`) |
+| **14:00** | cron (`timezone: America/Sao_Paulo`) |
+| **17:00** | cron (`timezone: America/Sao_Paulo`) |
 
 Workflow: `.github/workflows/sync-sharepoint.yml`
 

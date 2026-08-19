@@ -60,6 +60,25 @@ export interface Database {
         Insert: { key: string; value?: unknown; updated_at?: string }
         Update: { value?: unknown; updated_at?: string }
       }
+      sioe_sync_estado: {
+        Row: {
+          id: number
+          versao: number
+          fonte: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: number
+          versao?: number
+          fonte?: string
+          atualizado_em?: string
+        }
+        Update: {
+          versao?: number
+          fonte?: string
+          atualizado_em?: string
+        }
+      }
       clients_inadimplencia: {
         Row: {
           id: string
