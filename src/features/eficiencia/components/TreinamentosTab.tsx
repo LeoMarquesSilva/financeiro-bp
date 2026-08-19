@@ -11,8 +11,13 @@ import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { filtrarPorResponsavel } from '../utils/responsavelMatch'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
+import { TreinamentosCursoCards } from './TreinamentosCursoCards'
 import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
-import type { HeatCell } from './OverviewKpiHeatRow'
+import {
+  TreinamentosVisaoToggle,
+  type TreinamentosVisao,
+} from './TreinamentosVisaoToggle'
+import { OverviewRacionalButton, type HeatCell } from './OverviewKpiHeatRow'
 
 function formatMinutosParaHoras(minutos: number): string {
   const h = Math.floor(minutos / 60)
@@ -40,6 +45,7 @@ export function TreinamentosTab({
 }: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
+  const [visao, setVisao] = useState<TreinamentosVisao>('equipe')
   const resumoRef = useRef<HTMLElement>(null)
   const porColaboradorRef = useRef<HTMLDivElement>(null)
   const { anual, porPessoa, itens, loading } = useTreinamentos(ano, area)
@@ -81,7 +87,11 @@ export function TreinamentosTab({
       />
 
       <div className="mx-auto w-full max-w-md space-y-2">
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <OverviewRacionalButton
+            onClick={() => setRacionalAberto(true)}
+            className="w-auto"
+          />
           <ElementCopyButton
             containerRef={resumoRef}
             label="Copiar gráfico"
@@ -143,21 +153,12 @@ export function TreinamentosTab({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-slate-900">Por colaborador</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <ElementCopyButton
-            containerRef={porColaboradorRef}
-            label="Copiar gráfico"
-            preserveBackground
-          />
-          <button
-            type="button"
-            className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
-            onClick={() => setRacionalAberto(true)}
-          >
-            Racional
-          </button>
-        </div>
+        <TreinamentosVisaoToggle value={visao} onChange={setVisao} />
+        <ElementCopyButton
+          containerRef={porColaboradorRef}
+          label="Copiar gráfico"
+          preserveBackground
+        />
       </div>
 
       <div
@@ -166,11 +167,19 @@ export function TreinamentosTab({
         data-chart-export-bg="#ffffff"
         className="rounded-xl bg-white"
       >
-        <TreinamentosPessoaCards
-          porPessoa={porPessoaFiltrado}
-          itens={itensFiltrados}
-          loading={loading}
-        />
+        {visao === 'equipe' ? (
+          <TreinamentosPessoaCards
+            porPessoa={porPessoaFiltrado}
+            itens={itensFiltrados}
+            loading={loading}
+          />
+        ) : (
+          <TreinamentosCursoCards
+            porPessoa={porPessoaFiltrado}
+            itens={itensFiltrados}
+            loading={loading}
+          />
+        )}
       </div>
 
       <RacionalSheet

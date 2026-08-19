@@ -13,13 +13,20 @@ import {
 } from '../utils/opsTreinamentosCategorias'
 import { metaTreinamentoMinutosProporcional } from '../utils/treinamentoMetaProporcional'
 import { toPriMaiuscula } from '../utils/textFormat'
+import { OverviewRacionalButton } from './OverviewKpiHeatRow'
+import { TreinamentosCursoCards } from './TreinamentosCursoCards'
 import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
+import {
+  TreinamentosVisaoToggle,
+  type TreinamentosVisao,
+} from './TreinamentosVisaoToggle'
 
 type Props = {
   ativos: OpsTurnoverAtivo[]
   itens: TreinamentoItemRow[]
   ano: number
   loading?: boolean
+  onRacionalClick?: () => void
 }
 
 const CARD_STYLE: Record<
@@ -46,8 +53,15 @@ const CARD_STYLE: Record<
   },
 }
 
-export function OpsLegaisTreinamentosSection({ ativos, itens, ano, loading }: Props) {
+export function OpsLegaisTreinamentosSection({
+  ativos,
+  itens,
+  ano,
+  loading,
+  onRacionalClick,
+}: Props) {
   const [categoriaAtiva, setCategoriaAtiva] = useState<OpsTreinamentoCategoria>('Equipe')
+  const [visao, setVisao] = useState<TreinamentosVisao>('equipe')
   const { resumos, pessoas, equipeEmLideranca } = useMemo(
     () => buildOpsTreinamentosCategorias(ativos, itens, ano),
     [ativos, itens, ano],
@@ -100,6 +114,13 @@ export function OpsLegaisTreinamentosSection({ ativos, itens, ano, loading }: Pr
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <TreinamentosVisaoToggle value={visao} onChange={setVisao} />
+        {onRacionalClick ? (
+          <OverviewRacionalButton onClick={onRacionalClick} className="w-auto" />
+        ) : null}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {resumos.map((r) => {
           const style = CARD_STYLE[r.categoria]
@@ -177,25 +198,31 @@ export function OpsLegaisTreinamentosSection({ ativos, itens, ano, loading }: Pr
       <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
           <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-          {categoriaAtiva === 'Gerente'
-            ? toPriMaiuscula('Treinamentos — Gerente')
-            : toPriMaiuscula(
-                `Colaboradores — ${categoriaAtiva} (${resumoAtivo?.qtdPessoas ?? 0} pessoas)`,
-              )}
+          {visao === 'treinamentos'
+            ? toPriMaiuscula(`Treinamentos — ${categoriaAtiva}`)
+            : categoriaAtiva === 'Gerente'
+              ? toPriMaiuscula('Treinamentos — Gerente')
+              : toPriMaiuscula(
+                  `Colaboradores — ${categoriaAtiva} (${resumoAtivo?.qtdPessoas ?? 0} pessoas)`,
+                )}
         </div>
-        <TreinamentosPessoaCards
-          porPessoa={pessoasLista}
-          itens={itensFiltrados}
-          metaMinutos={categoriaAtiva === 'Gerente' ? null : undefined}
-          badgeLabel={categoriaAtiva === 'Gerente' ? 'Total' : undefined}
-          accentClass={
-            categoriaAtiva === 'Liderança'
-              ? 'violet'
-              : categoriaAtiva === 'Gerente'
-                ? 'amber'
-                : 'default'
-          }
-        />
+        {visao === 'equipe' ? (
+          <TreinamentosPessoaCards
+            porPessoa={pessoasLista}
+            itens={itensFiltrados}
+            metaMinutos={categoriaAtiva === 'Gerente' ? null : undefined}
+            badgeLabel={categoriaAtiva === 'Gerente' ? 'Total' : undefined}
+            accentClass={
+              categoriaAtiva === 'Liderança'
+                ? 'violet'
+                : categoriaAtiva === 'Gerente'
+                  ? 'amber'
+                  : 'default'
+            }
+          />
+        ) : (
+          <TreinamentosCursoCards porPessoa={pessoasLista} itens={itensFiltrados} />
+        )}
       </section>
 
       {categoriaAtiva === 'Liderança' && equipeEmLiderancaCards.length > 0 ? (

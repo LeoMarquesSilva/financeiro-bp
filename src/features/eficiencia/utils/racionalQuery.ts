@@ -281,7 +281,13 @@ export async function fetchDesenvolvimentoRacional(
       return { ...row, area: tv?.area ?? null }
     })
 
-  const linhasMarcadas = marcarTreinamentoLinhasRacional(linhas)
+  const linhasMarcadas = marcarTreinamentoLinhasRacional(linhas).sort(
+    (a, b) =>
+      String(a.colaborador ?? '').localeCompare(String(b.colaborador ?? ''), 'pt-BR', {
+        sensitivity: 'base',
+      }) ||
+      String(b.data ?? '').localeCompare(String(a.data ?? '')),
+  )
 
   return {
     colunas: [

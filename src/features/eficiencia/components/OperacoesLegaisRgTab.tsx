@@ -575,6 +575,7 @@ export function OperacoesLegaisRgTab({
           itens={itens}
           ano={ano}
           loading={loadingTreino || loadingAtivosTreino}
+          onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
         />
       )}
 
@@ -789,11 +790,22 @@ export function OperacoesLegaisRgTab({
                   ? 'AGENDAMENTO DE PUBLICAÇÃO'
                   : racionalAberto === 'ops_legais_cadastro'
                     ? 'Eficiência Cadastro'
-                    : ''
+                    : racionalAberto === 'desenvolvimento_equipe'
+                      ? 'Desenvolvimento Contínuo'
+                      : ''
         }
         ano={ano}
-        mes={mesFiltro}
-        area={null}
+        mes={
+          racionalAberto === 'desenvolvimento_equipe' && mesFiltro === 'resultado'
+            ? null
+            : mesFiltro
+        }
+        area={
+          racionalAberto === 'desenvolvimento_equipe'
+            ? EFICIENCIA_AREA_OPS_LEGAIS
+            : null
+        }
+        metaAcumulado={racionalAberto === 'desenvolvimento_equipe' ? 100 : null}
         onClose={() => setRacionalAberto(null)}
       />
     </div>
