@@ -146,10 +146,7 @@ function EvolucaoPointLabel(props: {
   )
 }
 
-function resolveMelhorPonto(
-  data: EvolucaoPoint[],
-  granularidade: EvolucaoGranularidade,
-): { label: string; valor: number } | null {
+function resolveMelhorPonto(data: EvolucaoPoint[]): { label: string; valor: number } | null {
   const validos = data
     .map((d, index) => ({ d, index, valor: d.valor == null ? NaN : Number(d.valor) }))
     .filter((x) => Number.isFinite(x.valor))
@@ -182,7 +179,7 @@ export function EficienciaEvolucaoChart({
   const chartExportRef = useRef<HTMLDivElement>(null)
   const pointCount = data.length
   const melhor = useMemo(
-    () => resolveMelhorPonto(data, granularidade),
+    () => resolveMelhorPonto(data),
     [data, granularidade],
   )
   const melhorRotulo = granularidade === 'dia' ? 'Melhor dia' : 'Melhor mês'
