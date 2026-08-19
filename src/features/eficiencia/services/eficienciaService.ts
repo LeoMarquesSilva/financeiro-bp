@@ -1389,7 +1389,15 @@ export const eficienciaService = {
     const cfg = RACIONAL_CONFIG[indicador]
 
     if (indicador === 'desenvolvimento_equipe') {
-      return fetchDesenvolvimentoRacional(cfg, ano, area, mes, responsavel)
+      return fetchDesenvolvimentoRacional(
+        cfg,
+        ano,
+        area,
+        mes,
+        responsavel,
+        escopo,
+        RACIONAL_LIMITE,
+      )
     }
 
     if (indicador === 'gestao_pdi') {
@@ -1498,7 +1506,7 @@ export const eficienciaService = {
     const cfg = RACIONAL_CONFIG[indicador]
 
     if (indicador === 'desenvolvimento_equipe') {
-      return fetchDesenvolvimentoRacional(cfg, ano, area, mes, responsavel)
+      return fetchDesenvolvimentoRacional(cfg, ano, area, mes, responsavel, escopo, null)
     }
 
     if (indicador === 'gestao_pdi') {

@@ -10,6 +10,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { formatPercent } from '@/shared/utils/format'
 import { eficienciaService } from '../services/eficienciaService'
 import { exportRacionalExcel } from '../utils/racionalExport'
 import { formatRacionalCell, formatRacionalResumoLabel, isRacionalLinhaForaMeta, isRacionalLinhaTreinamentoDuplicado, racionalLinhaForaMetaTitle } from '../utils/racionalFormat'
@@ -42,6 +43,14 @@ type Props = {
   metaLabel?: string
   metaComparacao?: MetaComparacaoKpi
   onClose: () => void
+}
+
+function formatRacionalColumnCell(coluna: RacionalColuna, value: unknown): string {
+  if (coluna.format === 'percentual' && value != null) {
+    const percentual = Number(value)
+    if (Number.isFinite(percentual)) return formatPercent(percentual)
+  }
+  return formatRacionalCell(value)
 }
 
 export function RacionalSheet({
@@ -239,7 +248,7 @@ export function RacionalSheet({
                       >
                         {colunas.map((c) => (
                           <td key={c.key} className="whitespace-nowrap py-1.5 pr-4">
-                            {formatRacionalCell(row[c.key])}
+                            {formatRacionalColumnCell(c, row[c.key])}
                           </td>
                         ))}
                       </tr>

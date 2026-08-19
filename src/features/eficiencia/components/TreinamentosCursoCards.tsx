@@ -20,7 +20,7 @@ type ParticipanteCurso = {
 type TreinamentoCurso = {
   key: string
   treinamento: string
-  minutos: number
+  duracaoMinutos: number
   participantes: ParticipanteCurso[]
   duplicado: boolean
 }
@@ -55,7 +55,7 @@ export function buildTreinamentosPorCurso(
     string,
     {
       treinamento: string
-      minutos: number
+      duracaoMinutos: number
       duplicado: boolean
       participantes: Map<
         string,
@@ -78,7 +78,7 @@ export function buildTreinamentosPorCurso(
     const minutos = Math.max(0, Number(item.duracao_minutos) || 0)
     const curso = cursos.get(treinamentoKey) ?? {
       treinamento,
-      minutos: 0,
+      duracaoMinutos: 0,
       duplicado: false,
       participantes: new Map(),
     }
@@ -89,9 +89,9 @@ export function buildTreinamentosPorCurso(
       duplicado: false,
     }
 
-    curso.minutos += minutos
+    curso.duracaoMinutos = Math.max(curso.duracaoMinutos, minutos)
     curso.duplicado ||= item.duplicado === true
-    participante.minutos += minutos
+    participante.minutos = Math.max(participante.minutos, minutos)
     participante.duplicado ||= item.duplicado === true
     if (item.data) participante.datas.add(item.data)
     curso.participantes.set(colaboradorKey, participante)
@@ -101,7 +101,7 @@ export function buildTreinamentosPorCurso(
   return Array.from(cursos, ([key, curso]) => ({
     key,
     treinamento: curso.treinamento,
-    minutos: curso.minutos,
+    duracaoMinutos: curso.duracaoMinutos,
     duplicado: curso.duplicado,
     participantes: Array.from(curso.participantes.values())
       .map((participante) => ({
@@ -175,7 +175,7 @@ export function TreinamentosCursoCards({ porPessoa, itens, loading }: Props) {
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <Clock3 className="h-3 w-3" aria-hidden />
-                    {formatHorasMinutos(curso.minutos)}
+                    {formatHorasMinutos(curso.duracaoMinutos)}
                   </span>
                   {curso.duplicado ? (
                     <span className="inline-flex items-center gap-1 font-medium text-red-600">

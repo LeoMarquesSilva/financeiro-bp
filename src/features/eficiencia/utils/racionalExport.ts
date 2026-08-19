@@ -22,6 +22,68 @@ function emptySummaryRow(colunas: RacionalColuna[]): Record<string, string> {
   return Object.fromEntries(colunas.map((coluna) => [coluna.label, '']))
 }
 
+function normalizeExcelGroupKey(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .replace(/\s+/g, ' ')
+}
+
+function buildTreinamentoResumoRows(
+  linhas: Array<Record<string, unknown>>,
+): Array<Record<string, string | number>> {
+  const grupos = new Map<
+    string,
+    {
+      treinamento: string
+      pessoas: Map<string, string>
+      participacoes: Set<string>
+      duracaoMinutos: number
+    }
+  >()
+
+  for (const row of linhas) {
+    const treinamento = String(row.treinamento ?? '').trim() || 'Treinamento não informado'
+    const colaborador = String(row.colaborador ?? '').trim() || 'Colaborador não informado'
+    const treinamentoKey = normalizeExcelGroupKey(treinamento)
+    const colaboradorKey = normalizeExcelGroupKey(colaborador)
+    const dataKey = String(row.data ?? '').slice(0, 10)
+    const participacaoKey = `${colaboradorKey}|${dataKey}`
+    const grupo = grupos.get(treinamentoKey) ?? {
+      treinamento,
+      pessoas: new Map<string, string>(),
+      participacoes: new Set<string>(),
+      duracaoMinutos: 0,
+    }
+
+    grupo.pessoas.set(colaboradorKey, colaborador)
+    grupo.duracaoMinutos = Math.max(
+      grupo.duracaoMinutos,
+      Math.max(0, Number(row.duracao_minutos) || 0),
+    )
+    if (!grupo.participacoes.has(participacaoKey)) {
+      grupo.participacoes.add(participacaoKey)
+    }
+    grupos.set(treinamentoKey, grupo)
+  }
+
+  return Array.from(grupos.values())
+    .sort((a, b) =>
+      a.treinamento.localeCompare(b.treinamento, 'pt-BR', { sensitivity: 'base' }),
+    )
+    .map((grupo) => ({
+      Treinamento: grupo.treinamento,
+      Participantes: grupo.pessoas.size,
+      Participações: grupo.participacoes.size,
+      'Duração do treinamento (min)': grupo.duracaoMinutos,
+      Pessoas: Array.from(grupo.pessoas.values())
+        .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+        .join(' | '),
+    }))
+}
+
 export async function exportRacionalExcel(
   colunas: RacionalColuna[],
   linhas: Array<Record<string, unknown>>,
@@ -45,11 +107,18 @@ export async function buildRacionalExcelBlob(
   meta: RacionalExportMeta,
 ): Promise<{ blob: Blob; filename: string }> {
   const XLSX = await import('xlsx')
+  const treinamentoBase =
+    colunas.some((coluna) => coluna.key === 'treinamento') &&
+    colunas.some((coluna) => coluna.key === 'colaborador')
+  const desenvolvimentoEquipe = colunas.some((coluna) => coluna.key === 'pct_atingimento')
+  const preservarNumeros = treinamentoBase || desenvolvimentoEquipe
 
-  const rows: Array<Record<string, string>> = linhas.map((row) => {
-    const out: Record<string, string> = {}
+  const rows: Array<Record<string, string | number>> = linhas.map((row) => {
+    const out: Record<string, string | number> = {}
     for (const coluna of colunas) {
-      out[coluna.label] = formatRacionalCell(row[coluna.key])
+      const value = row[coluna.key]
+      out[coluna.label] =
+        preservarNumeros && typeof value === 'number' ? value : formatRacionalCell(value)
     }
     return out
   })
@@ -72,7 +141,15 @@ export async function buildRacionalExcelBlob(
 
   const ws = XLSX.utils.json_to_sheet(rows)
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Racional')
+  if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] }
+  XLSX.utils.book_append_sheet(wb, ws, treinamentoBase ? 'Base' : 'Racional')
+
+  if (treinamentoBase) {
+    const resumoTreinamentos = buildTreinamentoResumoRows(linhas)
+    const wsResumo = XLSX.utils.json_to_sheet(resumoTreinamentos)
+    if (wsResumo['!ref']) wsResumo['!autofilter'] = { ref: wsResumo['!ref'] }
+    XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo por treinamento')
+  }
 
   const filename = [
     'racional',

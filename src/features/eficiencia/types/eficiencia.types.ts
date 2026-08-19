@@ -445,11 +445,16 @@ export type RacionalIndicador =
  * `sla_protocolo_fatal` = só FATAL não-excludente (mesma base dos gráficos
  * Justificativa / % / Qtd Fatal Responsáveis).
  */
-export type RacionalEscopo = 'default' | 'sla_protocolo_fatal'
+export type RacionalEscopo =
+  | 'default'
+  | 'sla_protocolo_fatal'
+  | 'desenvolvimento_equipe'
+  | 'desenvolvimento_treinamentos'
 
 export interface RacionalColuna {
   key: string
   label: string
+  format?: 'percentual'
 }
 
 export interface RacionalResumo {

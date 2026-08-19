@@ -44,7 +44,7 @@ export function TreinamentosTab({
   responsavelHintDisabled,
 }: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
-  const [racionalAberto, setRacionalAberto] = useState(false)
+  const [racionalAberto, setRacionalAberto] = useState<TreinamentosVisao | null>(null)
   const [visao, setVisao] = useState<TreinamentosVisao>('equipe')
   const resumoRef = useRef<HTMLElement>(null)
   const porColaboradorRef = useRef<HTMLDivElement>(null)
@@ -87,11 +87,7 @@ export function TreinamentosTab({
       />
 
       <div className="mx-auto w-full max-w-md space-y-2">
-        <div className="flex justify-end gap-2">
-          <OverviewRacionalButton
-            onClick={() => setRacionalAberto(true)}
-            className="w-auto"
-          />
+        <div className="flex justify-end">
           <ElementCopyButton
             containerRef={resumoRef}
             label="Copiar gráfico"
@@ -154,11 +150,17 @@ export function TreinamentosTab({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <TreinamentosVisaoToggle value={visao} onChange={setVisao} />
-        <ElementCopyButton
-          containerRef={porColaboradorRef}
-          label="Copiar gráfico"
-          preserveBackground
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <OverviewRacionalButton
+            onClick={() => setRacionalAberto(visao)}
+            className="w-auto"
+          />
+          <ElementCopyButton
+            containerRef={porColaboradorRef}
+            label="Copiar gráfico"
+            preserveBackground
+          />
+        </div>
       </div>
 
       <div
@@ -183,22 +185,31 @@ export function TreinamentosTab({
       </div>
 
       <RacionalSheet
-        indicador={racionalAberto ? 'desenvolvimento_equipe' : null}
-        titulo="Desenvolvimento Equipe"
+        indicador={racionalAberto != null ? 'desenvolvimento_equipe' : null}
+        titulo={
+          racionalAberto === 'treinamentos'
+            ? 'Desenvolvimento — Treinamentos'
+            : 'Desenvolvimento — Equipe'
+        }
         ano={ano}
         mes={mesRacional}
         area={area}
+        escopo={
+          racionalAberto === 'treinamentos'
+            ? 'desenvolvimento_treinamentos'
+            : 'desenvolvimento_equipe'
+        }
         responsavel={responsavel}
         resultado={
-          pct != null
+          racionalAberto === 'equipe' && pct != null
             ? ({
                 value: pct,
                 label: formatPercent(pct),
               } satisfies HeatCell)
             : null
         }
-        metaAcumulado={100}
-        onClose={() => setRacionalAberto(false)}
+        metaAcumulado={racionalAberto === 'equipe' ? 100 : null}
+        onClose={() => setRacionalAberto(null)}
       />
     </div>
   )

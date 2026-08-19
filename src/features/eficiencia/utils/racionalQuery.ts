@@ -19,6 +19,7 @@ import type {
   RacionalEscopo,
   RacionalIndicador,
   RacionalResultado,
+  TreinamentoItemRow,
 } from '../types/eficiencia.types'
 import { isVistadoD1Sim, isOpsLegaisCadastroDeParaOk } from './racionalFormat'
 import {
@@ -27,7 +28,11 @@ import {
   nomesResponsavelMatch,
   stripAcentoNome,
 } from './responsavelMatch'
-import { marcarTreinamentoLinhasRacional } from './treinamentosDedupe'
+import {
+  dedupeTreinamentoItens,
+  marcarTreinamentoLinhasRacional,
+} from './treinamentosDedupe'
+import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
 
 const RACIONAL_LIMITE = 500
 
@@ -216,6 +221,8 @@ export async function fetchDesenvolvimentoRacional(
   area: string | null,
   mes: MesFiltroEficiencia,
   responsavel: string | null = null,
+  escopo: RacionalEscopo = 'desenvolvimento_equipe',
+  limite: number | null = RACIONAL_LIMITE,
 ): Promise<RacionalResultado> {
   // Indicador anual: filtro Resultado = ano todo (mesmos minutos/meta do KPI).
   const mesPeriodo: MesFiltroEficiencia =
@@ -262,40 +269,143 @@ export async function fetchDesenvolvimentoRacional(
     .from('sp_treinamentos_presenca')
     .select(cfg.colunas.map((c) => c.key).join(','))
     .order(cfg.dataColuna, { ascending: false })
-    .limit(RACIONAL_LIMITE + 200)
+    .limit(5000)
 
   trainingQuery = applyRacionalPeriodo(trainingQuery, cfg.dataColuna, ano, mesPeriodo)
 
   const { data: trainingRows, error: trainingError } = await trainingQuery
   if (trainingError) throw trainingError
 
-  const linhas = ((trainingRows ?? []) as Array<Record<string, unknown>>)
+  const linhas: Array<Record<string, unknown>> = (
+    (trainingRows ?? []) as Array<Record<string, unknown>>
+  )
     .filter((row) => nomesElegiveis.has(normalizeNomeChave(String(row.colaborador ?? ''))))
     .filter((row) =>
       responsavel
         ? nomesResponsavelMatch(String(row.colaborador ?? ''), responsavel)
         : true,
     )
-    .map((row) => {
+    .map((row): Record<string, unknown> => {
       const tv = porNome.get(normalizeNomeChave(String(row.colaborador ?? '')))
       return { ...row, area: tv?.area ?? null }
     })
 
-  const linhasMarcadas = marcarTreinamentoLinhasRacional(linhas).sort(
-    (a, b) =>
-      String(a.colaborador ?? '').localeCompare(String(b.colaborador ?? ''), 'pt-BR', {
-        sensitivity: 'base',
-      }) ||
-      String(b.data ?? '').localeCompare(String(a.data ?? '')),
+  const limiteEfetivo = limite ?? Number.POSITIVE_INFINITY
+
+  if (escopo === 'desenvolvimento_treinamentos') {
+    const linhasPorTreinamento = marcarTreinamentoLinhasRacional(linhas)
+      .map((row): Record<string, unknown> => ({
+        ...row,
+        duplicado: row._duplicado === true ? 'Sim' : 'Não',
+      }))
+      .sort(
+        (a, b) =>
+          String(a.treinamento ?? '').localeCompare(String(b.treinamento ?? ''), 'pt-BR', {
+            sensitivity: 'base',
+          }) ||
+          String(a.colaborador ?? '').localeCompare(String(b.colaborador ?? ''), 'pt-BR', {
+            sensitivity: 'base',
+          }) ||
+          String(b.data ?? '').localeCompare(String(a.data ?? '')),
+      )
+
+    return {
+      colunas: [
+        { key: 'treinamento', label: 'Treinamento' },
+        { key: 'colaborador', label: 'Colaborador' },
+        { key: 'area', label: 'Área' },
+        { key: 'data', label: 'Data' },
+        { key: 'duracao_minutos', label: 'Duração (min)' },
+        { key: 'status', label: 'Status' },
+        { key: 'duplicado', label: 'Duplicado' },
+        { key: 'sp_id', label: 'ID' },
+      ],
+      linhas: linhasPorTreinamento.slice(0, limiteEfetivo),
+      truncado: linhasPorTreinamento.length > limiteEfetivo,
+    }
+  }
+
+  const itensDedupe = dedupeTreinamentoItens(
+    linhas.map(
+      (row): TreinamentoItemRow => ({
+        colaborador: String(row.colaborador ?? ''),
+        treinamento: row.treinamento == null ? null : String(row.treinamento),
+        data: row.data == null ? null : String(row.data),
+        duracao_minutos: Number(row.duracao_minutos ?? 0),
+      }),
+    ),
   )
+  const itensPorPessoa = new Map<string, TreinamentoItemRow[]>()
+  for (const item of itensDedupe) {
+    const key = normalizeNomeChave(item.colaborador)
+    const lista = itensPorPessoa.get(key) ?? []
+    lista.push(item)
+    itensPorPessoa.set(key, lista)
+  }
+
+  const linhasPorEquipe = Array.from(nomesElegiveis)
+    .map((key) => {
+      const pessoa = porNome.get(key)
+      if (!pessoa) return null
+      if (responsavel && !nomesResponsavelMatch(String(pessoa.nome ?? ''), responsavel)) {
+        return null
+      }
+
+      const itensPessoa = itensPorPessoa.get(key) ?? []
+      const minutosRealizados = itensPessoa.reduce(
+        (total, item) => total + Math.max(0, Number(item.duracao_minutos) || 0),
+        0,
+      )
+      const metaMinutos = metaTreinamentoMinutosProporcional(pessoa.admissao, ano)
+      const pctAtingimento =
+        metaMinutos > 0
+          ? Math.round(((minutosRealizados / metaMinutos) * 100 + Number.EPSILON) * 100) / 100
+          : null
+      const treinamentos = Array.from(
+        new Set(
+          itensPessoa
+            .map((item) => item.treinamento?.trim())
+            .filter((nome): nome is string => Boolean(nome)),
+        ),
+      ).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+
+      return {
+        area: pessoa.area,
+        colaborador: pessoa.nome,
+        cargo: pessoa.cargo,
+        admissao: pessoa.admissao,
+        horas_realizadas: Math.round((minutosRealizados / 60) * 100) / 100,
+        meta_horas: Math.round((metaMinutos / 60) * 100) / 100,
+        pct_atingimento: pctAtingimento,
+        situacao: pctAtingimento != null && pctAtingimento >= 100 ? 'Meta atingida' : 'Abaixo da meta',
+        qtd_treinamentos: treinamentos.length,
+        qtd_participacoes: itensPessoa.length,
+        treinamentos: treinamentos.join(' | '),
+      }
+    })
+    .filter((row): row is NonNullable<typeof row> => row != null)
+    .sort((a, b) =>
+      String(a.colaborador).localeCompare(String(b.colaborador), 'pt-BR', {
+        sensitivity: 'base',
+      }),
+    )
 
   return {
     colunas: [
       { key: 'area', label: 'Área' },
-      ...cfg.colunas,
+      { key: 'colaborador', label: 'Colaborador' },
+      { key: 'cargo', label: 'Cargo' },
+      { key: 'admissao', label: 'Admissão' },
+      { key: 'horas_realizadas', label: 'Horas realizadas' },
+      { key: 'meta_horas', label: 'Meta (horas)' },
+      { key: 'pct_atingimento', label: 'Atingimento', format: 'percentual' },
+      { key: 'situacao', label: 'Situação' },
+      { key: 'qtd_treinamentos', label: 'Treinamentos distintos' },
+      { key: 'qtd_participacoes', label: 'Participações' },
+      { key: 'treinamentos', label: 'Treinamentos realizados' },
     ],
-    linhas: linhasMarcadas.slice(0, RACIONAL_LIMITE),
-    truncado: linhasMarcadas.length > RACIONAL_LIMITE,
+    linhas: linhasPorEquipe.slice(0, limiteEfetivo),
+    truncado: linhasPorEquipe.length > limiteEfetivo,
   }
 }
 
