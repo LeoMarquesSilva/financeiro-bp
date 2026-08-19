@@ -9,6 +9,7 @@ import type { RacionalIndicador } from '../types/eficiencia.types'
 import type { EvolucaoPoint } from '../components/EficienciaEvolucaoChart'
 import {
   acumularEvolucaoPorResponsavel,
+  agregarEvolucaoDiariaPorResponsavel,
   agregarEvolucaoPorResponsavel,
 } from '../utils/evolucaoPorResponsavel'
 
@@ -22,6 +23,7 @@ export function useEvolucaoPorResponsavel(
   area: string | null,
   responsavel: string | null,
   mesFiltro: MesFiltroEficiencia = null,
+  mesDrill: number | null = null,
 ) {
   const enabled = Boolean(responsavel?.trim())
 
@@ -49,6 +51,11 @@ export function useEvolucaoPorResponsavel(
     return filtrarMensalPorMesFiltro(base, mesFiltro, ano)
   }, [data?.pontos, mesFiltro, ano])
 
+  const chartDataDiario: EvolucaoPoint[] = useMemo(() => {
+    if (!enabled || mesDrill == null || !data?.linhas) return []
+    return agregarEvolucaoDiariaPorResponsavel(indicador, data.linhas, ano, mesDrill)
+  }, [enabled, mesDrill, data?.linhas, indicador, ano])
+
   const acumulado = useMemo(() => {
     if (!enabled || !data?.linhas) return { pct: null as number | null, ok: 0, total: 0 }
     return acumularEvolucaoPorResponsavel(data.linhas, indicador, ano, mesFiltro)
@@ -56,6 +63,7 @@ export function useEvolucaoPorResponsavel(
 
   return {
     chartData,
+    chartDataDiario,
     acumulado,
     /** Inclui refetch — evita gráfico “preso” na série anterior com array vazio. */
     loading: enabled && (isLoading || (isFetching && !data)),

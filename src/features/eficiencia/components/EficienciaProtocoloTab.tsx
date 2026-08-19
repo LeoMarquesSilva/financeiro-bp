@@ -7,16 +7,28 @@ import {
   filtrarMensalPorMesFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
-import { useEficienciaProtocolo, useEficienciaProtocoloRanking } from '../hooks/useEficiencia'
+import {
+  useEficienciaProtocolo,
+  useEficienciaProtocoloDiario,
+  useEficienciaProtocoloRanking,
+} from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
+import { useEvolucaoDrilldownState } from '../hooks/useEvolucaoDrilldownState'
 import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { totaisEficienciaProtocoloFromResumo } from '../utils/periodoCurtoIndicadorTotais'
+import {
+  buildEvolucaoDiarioChart,
+  evolucaoDrilldownSubtitle,
+  resolveEvolucaoDrilldownChart,
+} from '../utils/evolucaoDrilldown'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { EvolucaoDrilldownToolbar } from './EvolucaoDrilldownToolbar'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
+import type { EficienciaProtocoloDiaRow } from '../types/eficiencia.types'
 import type { HeatCell } from './OverviewKpiHeatRow'
 import {
   emptyLabelDesvioResponsavel,
@@ -44,6 +56,9 @@ export function EficienciaProtocoloTab({
 }: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
+  const drill = useEvolucaoDrilldownState(mesFiltro, [mesFiltro, ano, area, responsavel])
+  const mesDrillTarget = drill.mesDrillTarget
+
   const { data: mensal, loading } = useEficienciaProtocolo(ano, area)
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
   const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
@@ -54,9 +69,23 @@ export function EficienciaProtocoloTab({
   )
   const {
     chartData: evolucaoResp,
+    chartDataDiario: evolucaoDiarioResp,
     acumulado: acumResp,
     loading: loadingEvol,
-  } = useEvolucaoPorResponsavel('eficiencia_protocolo', ano, area, responsavel, mesFiltro)
+  } = useEvolucaoPorResponsavel(
+    'eficiencia_protocolo',
+    ano,
+    area,
+    responsavel,
+    mesFiltro,
+    drill.chartGranularidade === 'dia' ? mesDrillTarget : null,
+  )
+
+  const { data: diario, loading: loadingDiario } = useEficienciaProtocoloDiario(
+    ano,
+    drill.chartGranularidade === 'dia' && !responsavel ? mesDrillTarget : null,
+    area,
+  )
 
   const periodoCurto = usePeriodoCurtoResumo(
     'eficiencia_protocolo',
@@ -118,9 +147,65 @@ export function EficienciaProtocoloTab({
     periodoCurto.loading ||
     Boolean(responsavel && !periodoCurto.periodoCurtoAtivo && loadingEvol)
 
-  const chartData = responsavel
-    ? evolucaoResp
-    : mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia }))
+  const chartDataMes = responsavel
+    ? evolucaoResp.map((p) => ({ mes: p.mes, valor: p.valor, meta: EFICIENCIA_META_EFICIENCIA_PROTOCOLO }))
+    : mensalFiltrado.map((m) => ({
+        mes: m.mes,
+        valor: m.pct_eficiencia,
+        meta: EFICIENCIA_META_EFICIENCIA_PROTOCOLO,
+      }))
+
+  const chartDataDiarioRpc = useMemo(
+    () =>
+      buildEvolucaoDiarioChart(
+        diario.map((row: EficienciaProtocoloDiaRow) => ({
+          dia: row.dia,
+          total: row.total,
+          pct: row.pct_eficiencia,
+        })),
+        EFICIENCIA_META_EFICIENCIA_PROTOCOLO,
+      ),
+    [diario],
+  )
+
+  const chartDataDiarioResp = useMemo(
+    () =>
+      evolucaoDiarioResp.map((p) => ({
+        mes: p.mes,
+        label: p.label,
+        valor: p.valor,
+        meta: EFICIENCIA_META_EFICIENCIA_PROTOCOLO,
+      })),
+    [evolucaoDiarioResp],
+  )
+
+  const chartData = resolveEvolucaoDrilldownChart({
+    granularidade: drill.chartGranularidade,
+    mesDrillTarget,
+    responsavel,
+    chartDataMes,
+    chartDataDiarioResp,
+    chartDataDiarioRpc,
+  })
+
+  const selectedChartIndex =
+    drill.chartGranularidade === 'mes' && drill.mesClicadoGrafico != null
+      ? chartDataMes.findIndex((point) => point.mes === drill.mesClicadoGrafico)
+      : null
+
+  const chartSubtitle = evolucaoDrilldownSubtitle(
+    drill.chartGranularidade,
+    mesDrillTarget,
+    ano,
+    '% de protocolos sem inconsistência jurídica',
+    `% sem inconsistência · ${responsavel ?? ''}`,
+    responsavel,
+  )
+
+  const loadingChart =
+    loading ||
+    Boolean(responsavel && loadingEvol) ||
+    (drill.chartGranularidade === 'dia' && !responsavel && loadingDiario)
 
   const resultadoRacional: HeatCell = {
     value: pctGeral,
@@ -180,14 +265,23 @@ export function EficienciaProtocoloTab({
 
       <EficienciaEvolucaoChart
         title="Eficiência de Protocolo"
-        subtitle={
-          responsavel
-            ? `% sem inconsistência · ${responsavel}`
-            : '% de protocolos sem inconsistência jurídica'
-        }
-        data={chartData}
+        subtitle={chartSubtitle}
+        data={loadingChart ? [] : chartData}
         color="#059669"
         metaFixa={EFICIENCIA_META_EFICIENCIA_PROTOCOLO}
+        granularidade={drill.chartGranularidade}
+        selectedIndex={selectedChartIndex != null && selectedChartIndex >= 0 ? selectedChartIndex : null}
+        onPointClick={drill.onPointClickMes}
+        toolbarExtra={
+          <EvolucaoDrilldownToolbar
+            granularidade={drill.chartGranularidade}
+            drillDisponivel={drill.drillDisponivel}
+            mesDrillTarget={mesDrillTarget}
+            mesFiltro={mesFiltro}
+            onPorDia={() => drill.setChartGranularidade('dia')}
+            onPorMes={() => drill.setChartGranularidade('mes')}
+          />
+        }
         onRacionalClick={() => setRacionalAberto(true)}
       />
 

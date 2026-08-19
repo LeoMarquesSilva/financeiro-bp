@@ -752,7 +752,7 @@ function applyPrintFlexRowFix(root: HTMLElement, source: HTMLElement): void {
       child.style.setProperty('display', 'inline-flex', 'important')
       child.style.setProperty('align-items', 'center', 'important')
       child.style.setProperty('justify-content', 'center', 'important')
-      child.style.setProperty('border-radius', '9999px', 'important')
+      child.style.setProperty('border-radius', childStyle.borderRadius, 'important')
       child.style.setProperty('overflow', 'hidden', 'important')
     }
   })
@@ -1091,10 +1091,11 @@ function prepareFullScrollExportElement(source: HTMLElement, options?: HtmlExpor
 function isFixedSizeIcon(el: HTMLElement): boolean {
   const cls = el.className
   if (typeof cls !== 'string') return false
+  if (!el.classList.contains('shrink-0')) return false
   return (
-    el.classList.contains('shrink-0') &&
-    (/\bh-10\b/.test(cls) || /\bh-11\b/.test(cls)) &&
-    (/\bw-10\b/.test(cls) || /\bw-11\b/.test(cls))
+    (/\bh-8\b/.test(cls) && /\bw-8\b/.test(cls)) ||
+    (/\bh-10\b/.test(cls) && /\bw-10\b/.test(cls)) ||
+    (/\bh-11\b/.test(cls) && /\bw-11\b/.test(cls))
   )
 }
 
@@ -1162,13 +1163,24 @@ function lockIconDimensions(cell: HTMLElement, sourceCell: HTMLElement): void {
   const w = Math.ceil(sourceCell.getBoundingClientRect().width)
   const h = Math.ceil(sourceCell.getBoundingClientRect().height)
   const size = Math.max(w, h, 1)
+  const sourceStyle = window.getComputedStyle(sourceCell)
   cell.style.setProperty('width', `${size}px`, 'important')
   cell.style.setProperty('min-width', `${size}px`, 'important')
   cell.style.setProperty('max-width', `${size}px`, 'important')
   cell.style.setProperty('height', `${size}px`, 'important')
   cell.style.setProperty('min-height', `${size}px`, 'important')
   cell.style.setProperty('max-height', `${size}px`, 'important')
-  cell.style.setProperty('border-radius', '9999px', 'important')
+  cell.style.setProperty('border-radius', sourceStyle.borderRadius, 'important')
+  if (
+    sourceStyle.backgroundColor &&
+    sourceStyle.backgroundColor !== 'transparent' &&
+    sourceStyle.backgroundColor !== 'rgba(0, 0, 0, 0)'
+  ) {
+    cell.style.setProperty('background-color', sourceStyle.backgroundColor, 'important')
+  }
+  if (sourceStyle.color) {
+    cell.style.setProperty('color', sourceStyle.color, 'important')
+  }
   cell.style.setProperty('overflow', 'hidden', 'important')
   cell.style.setProperty('box-sizing', 'border-box', 'important')
   cell.style.setProperty('display', 'inline-flex', 'important')

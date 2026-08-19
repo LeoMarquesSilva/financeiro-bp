@@ -14,6 +14,7 @@ import type {
   OpsLegaisTarefasRankingRow,
   RankingUsuarioRow,
   SlaProtocoloMesRow,
+  SlaProtocoloDiaRow,
   SlaVistagemMesRow,
   TreinamentoItemRow,
   TreinamentosAnualRow,
@@ -84,6 +85,60 @@ export function useSlaProtocolo(ano: number, area: string | null = null) {
   })
   const rows: SlaProtocoloMesRow[] = data ?? []
   return { data: rows, loading: isLoading, error }
+}
+
+export function useSlaProtocoloDiario(
+  ano: number,
+  mes: number | null,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'sla-protocolo-diario', ano, mes, area],
+    queryFn: () => eficienciaService.fetchSlaProtocoloDiario(ano, mes!, area),
+    enabled: mes != null && mes >= 1 && mes <= 12,
+  })
+  const rows: SlaProtocoloDiaRow[] = data ?? []
+  return { data: rows, loading: isLoading, error }
+}
+
+export function useEficienciaProtocoloDiario(
+  ano: number,
+  mes: number | null,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'eficiencia-protocolo-diario', ano, mes, area],
+    queryFn: () => eficienciaService.fetchEficienciaProtocoloDiario(ano, mes!, area),
+    enabled: mes != null && mes >= 1 && mes <= 12,
+  })
+  return { data: data ?? [], loading: isLoading, error }
+}
+
+export function useAgendamentoDiario(
+  ano: number,
+  mes: number | null,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'agendamento-diario', ano, mes, area],
+    queryFn: () => eficienciaService.fetchAgendamentoDiario(ano, mes!, area),
+    enabled: mes != null && mes >= 1 && mes <= 12,
+  })
+  return { data: data ?? [], loading: isLoading, error }
+}
+
+export function useSlaVistagemDiario(
+  ano: number,
+  mes: number | null,
+  risco: boolean | null,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'sla-vistagem-diario', ano, mes, risco, area],
+    queryFn: () => eficienciaService.fetchSlaVistagemDiario(ano, mes!, risco, area),
+    enabled: mes != null && mes >= 1 && mes <= 12,
+  })
+  return { data: data ?? [], loading: isLoading, error }
 }
 
 export function useSlaProtocoloRankingFatal(

@@ -9,16 +9,19 @@ import {
 } from '../constants'
 import {
   useSlaProtocolo,
+  useSlaProtocoloDiario,
   useSlaProtocoloJustificativaFatal,
   useSlaProtocoloRankingFatal,
 } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
+import { useEvolucaoDrilldownState } from '../hooks/useEvolucaoDrilldownState'
 import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { totaisSlaProtocoloFromResumo } from '../utils/periodoCurtoIndicadorTotais'
 import { toPriMaiuscula } from '../utils/textFormat'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { EvolucaoDrilldownToolbar } from './EvolucaoDrilldownToolbar'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
@@ -28,6 +31,11 @@ import {
   emptyLabelDesvioResponsavel,
   rankingDesvioFiltrado,
 } from '../utils/responsavelMatch'
+import {
+  buildEvolucaoDiarioChart,
+  evolucaoDrilldownSubtitle,
+  resolveEvolucaoDrilldownChart,
+} from '../utils/evolucaoDrilldown'
 
 /** Cor das barras no visual BI (cinza). */
 const BI_BAR = '#94a3b8'
@@ -53,6 +61,8 @@ export function SlaProtocoloTab({
   const [racionalEscopo, setRacionalEscopo] = useState<RacionalEscopo>('default')
   const [racionalAberto, setRacionalAberto] = useState(false)
 
+  const drill = useEvolucaoDrilldownState(mesFiltro, [mesFiltro, ano, area, responsavel])
+
   const { data: mensal, loading } = useSlaProtocolo(ano, area)
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
 
@@ -64,11 +74,21 @@ export function SlaProtocoloTab({
   const { data: justificativas, loading: loadingJustificativas } =
     useSlaProtocoloJustificativaFatal(ano, mesFiltro, area)
 
+  const mesDrillTarget = drill.mesDrillTarget
+
   const {
     chartData: evolucaoResp,
+    chartDataDiario: evolucaoDiarioResp,
     acumulado: acumResp,
     loading: loadingEvol,
-  } = useEvolucaoPorResponsavel('sla_protocolo', ano, area, responsavel, mesFiltro)
+  } = useEvolucaoPorResponsavel(
+    'sla_protocolo',
+    ano,
+    area,
+    responsavel,
+    mesFiltro,
+    drill.chartGranularidade === 'dia' ? mesDrillTarget : null,
+  )
 
   const periodoCurto = usePeriodoCurtoResumo(
     'sla_protocolo',
@@ -153,13 +173,75 @@ export function SlaProtocoloTab({
 
   const metaRacional = metaAtual ?? EFICIENCIA_META_SLA_PROTOCOLO
 
-  const chartData = responsavel
+  const { data: diario, loading: loadingDiario } = useSlaProtocoloDiario(
+    ano,
+    drill.chartGranularidade === 'dia' && !responsavel ? mesDrillTarget : null,
+    area,
+  )
+
+  const chartDataMes = responsavel
     ? evolucaoResp.map((p) => ({
         mes: p.mes,
         valor: p.valor,
         meta: mensal.find((m) => m.mes === p.mes)?.meta ?? metaRacional,
       }))
-    : mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_eficiencia, meta: m.meta }))
+    : mensalFiltrado.map((m) => ({
+        mes: m.mes,
+        valor: m.pct_eficiencia,
+        meta: m.meta,
+      }))
+
+  const chartDataDiarioRpc = useMemo(
+    () =>
+      buildEvolucaoDiarioChart(
+        diario.map((row) => ({
+          dia: row.dia,
+          total: row.qtd_total,
+          pct: row.pct_eficiencia,
+        })),
+        metaRacional,
+      ),
+    [diario, metaRacional],
+  )
+
+  const chartDataDiarioResp = useMemo(
+    () =>
+      evolucaoDiarioResp.map((p) => ({
+        mes: p.mes,
+        label: p.label,
+        valor: p.valor,
+        meta: metaRacional,
+      })),
+    [evolucaoDiarioResp, metaRacional],
+  )
+
+  const chartData = resolveEvolucaoDrilldownChart({
+    granularidade: drill.chartGranularidade,
+    mesDrillTarget,
+    responsavel,
+    chartDataMes,
+    chartDataDiarioResp,
+    chartDataDiarioRpc,
+  })
+
+  const selectedChartIndex =
+    drill.chartGranularidade === 'mes' && drill.mesClicadoGrafico != null
+      ? chartDataMes.findIndex((point) => point.mes === drill.mesClicadoGrafico)
+      : null
+
+  const chartSubtitle = evolucaoDrilldownSubtitle(
+    drill.chartGranularidade,
+    mesDrillTarget,
+    ano,
+    '% de CIs concluídos dentro do prazo D-1, com meta vigente no período',
+    `% D-1 do responsável · ${responsavel ?? ''}`,
+    responsavel,
+  )
+
+  const loadingChart =
+    loading ||
+    Boolean(responsavel && loadingEvol) ||
+    (drill.chartGranularidade === 'dia' && !responsavel && loadingDiario)
 
   return (
     <div className="space-y-5">
@@ -222,14 +304,23 @@ export function SlaProtocoloTab({
 
       <EficienciaEvolucaoChart
         title="SLA de Protocolo (D-1 vs FATAL)"
-        subtitle={
-          responsavel
-            ? `% D-1 do responsável · ${responsavel}`
-            : '% de CIs concluídos dentro do prazo D-1, com meta vigente no período'
-        }
-        data={chartData}
+        subtitle={chartSubtitle}
+        data={loadingChart ? [] : chartData}
         color="#7c3aed"
         metaFixa={metaRacional}
+        granularidade={drill.chartGranularidade}
+        selectedIndex={selectedChartIndex != null && selectedChartIndex >= 0 ? selectedChartIndex : null}
+        onPointClick={drill.onPointClickMes}
+        toolbarExtra={
+          <EvolucaoDrilldownToolbar
+            granularidade={drill.chartGranularidade}
+            drillDisponivel={drill.drillDisponivel}
+            mesDrillTarget={mesDrillTarget}
+            mesFiltro={mesFiltro}
+            onPorDia={() => drill.setChartGranularidade('dia')}
+            onPorMes={() => drill.setChartGranularidade('mes')}
+          />
+        }
         onRacionalClick={() => openRacional('default')}
       />
 

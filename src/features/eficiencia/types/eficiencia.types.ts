@@ -46,6 +46,40 @@ export interface SlaProtocoloMesRow {
   meta: number | null
 }
 
+export interface SlaProtocoloDiaRow {
+  dia: number
+  qtd_d1: number
+  qtd_fatal: number
+  qtd_excludente?: number
+  qtd_total: number
+  pct_eficiencia: number
+  meta: number | null
+}
+
+export interface EficienciaEvolucaoDiaRow {
+  dia: number
+  total: number
+  pct: number
+}
+
+export interface EficienciaProtocoloDiaRow {
+  dia: number
+  total: number
+  pct_eficiencia: number
+}
+
+export interface AgendamentoDiaRow {
+  dia: number
+  total: number
+  pct_dentro_prazo: number
+}
+
+export interface SlaVistagemDiaRow {
+  dia: number
+  total: number
+  pct_d1: number
+}
+
 export interface EficienciaProtocoloMesRow {
   mes: number
   total: number

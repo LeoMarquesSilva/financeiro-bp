@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, type ReactNode } from 'react'
 import {
   CartesianGrid,
   LabelList,
@@ -31,9 +31,11 @@ const LABEL_NOK = '#dc2626'
 const LABEL_NEUTRO = '#334155'
 const META_LABEL = '#b45309'
 
+export type EvolucaoGranularidade = 'mes' | 'dia'
+
 export type EvolucaoPoint = {
   mes: number
-  valor: number
+  valor: number | null
   meta?: number | null
   /** Rótulo do eixo X (ex.: filtro semana). Default = mês abreviado. */
   label?: string
@@ -50,6 +52,11 @@ type Props = {
   metaAbaixoMelhor?: boolean
   /** Abre o sheet de Racional (mesma base do Overview). */
   onRacionalClick?: () => void
+  granularidade?: EvolucaoGranularidade
+  /** Destaca o ponto selecionado (ex.: mês clicado antes do drill-down). */
+  selectedIndex?: number | null
+  onPointClick?: (index: number, point: EvolucaoPoint) => void
+  toolbarExtra?: ReactNode
 }
 
 function EvolucaoTooltip({
@@ -139,10 +146,12 @@ function EvolucaoPointLabel(props: {
   )
 }
 
-function resolveMelhorPonto(data: EvolucaoPoint[]): { label: string; valor: number } | null {
-  // Precisa de 2+ pontos para “melhor mês” fazer sentido (ex.: semana única some).
+function resolveMelhorPonto(
+  data: EvolucaoPoint[],
+  granularidade: EvolucaoGranularidade,
+): { label: string; valor: number } | null {
   const validos = data
-    .map((d, index) => ({ d, index, valor: Number(d.valor) }))
+    .map((d, index) => ({ d, index, valor: d.valor == null ? NaN : Number(d.valor) }))
     .filter((x) => Number.isFinite(x.valor))
   if (validos.length < 2) return null
 
@@ -165,10 +174,22 @@ export function EficienciaEvolucaoChart({
   metaFixa = null,
   metaAbaixoMelhor = false,
   onRacionalClick,
+  granularidade = 'mes',
+  selectedIndex = null,
+  onPointClick,
+  toolbarExtra,
 }: Props) {
   const chartExportRef = useRef<HTMLDivElement>(null)
   const pointCount = data.length
-  const melhor = useMemo(() => resolveMelhorPonto(data), [data])
+  const melhor = useMemo(
+    () => resolveMelhorPonto(data, granularidade),
+    [data, granularidade],
+  )
+  const melhorRotulo = granularidade === 'dia' ? 'Melhor dia' : 'Melhor mês'
+  const axisTickX =
+    granularidade === 'dia'
+      ? { fontSize: 10, fill: '#64748b', fontWeight: 600 }
+      : AXIS_TICK_X
 
   const metaLinha =
     metaFixa ??
@@ -176,10 +197,11 @@ export function EficienciaEvolucaoChart({
     null
   const metaNum = metaLinha == null ? null : Number(metaLinha)
 
-  const chartData = data.map((d) => ({
+  const chartData = data.map((d, index) => ({
     mesLabel: d.label ?? MESES_LABEL[d.mes - 1] ?? String(d.mes),
     valor: d.valor,
     meta: metaNum ?? d.meta ?? undefined,
+    _index: index,
   }))
 
   return (
@@ -199,6 +221,7 @@ export function EficienciaEvolucaoChart({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {toolbarExtra}
           {onRacionalClick && <OverviewRacionalButton onClick={onRacionalClick} className="w-auto" />}
           <ChartCopyButton containerRef={chartExportRef} />
         </div>
@@ -211,7 +234,7 @@ export function EficienciaEvolucaoChart({
             {melhor ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
                 <Trophy className="h-3 w-3 shrink-0" aria-hidden />
-                Melhor mês: {melhor.label} · {formatPercent(melhor.valor)}
+                {melhorRotulo}: {melhor.label} · {formatPercent(melhor.valor)}
               </span>
             ) : null}
             {metaNum != null && Number.isFinite(metaNum) ? (
@@ -237,7 +260,14 @@ export function EficienciaEvolucaoChart({
               margin={{ left: 4, right: 20, top: 28, bottom: 8 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
-              <XAxis dataKey="mesLabel" tick={AXIS_TICK_X} axisLine={false} tickLine={false} />
+              <XAxis
+                dataKey="mesLabel"
+                tick={axisTickX}
+                axisLine={false}
+                tickLine={false}
+                interval={granularidade === 'dia' ? 1 : 'preserveStartEnd'}
+                minTickGap={granularidade === 'dia' ? 4 : undefined}
+              />
               <YAxis
                 tickFormatter={(v: number) => formatPercent(v)}
                 tick={AXIS_TICK_Y}
@@ -257,7 +287,32 @@ export function EficienciaEvolucaoChart({
                 name={toPriMaiuscula(title)}
                 stroke={LINE_COLOR}
                 strokeWidth={2.5}
-                dot={{ r: 4, fill: LINE_COLOR, strokeWidth: 0 }}
+                connectNulls={false}
+                dot={(props) => {
+                  const idx = props.index ?? 0
+                  const selected = selectedIndex === idx
+                  const clickable = Boolean(onPointClick)
+                  return (
+                    <circle
+                      cx={props.cx}
+                      cy={props.cy}
+                      r={selected ? 6 : 4}
+                      fill={LINE_COLOR}
+                      stroke={selected ? '#fff' : 'none'}
+                      strokeWidth={selected ? 2 : 0}
+                      style={clickable ? { cursor: 'pointer' } : undefined}
+                      onClick={
+                        clickable
+                          ? (event) => {
+                              event.stopPropagation()
+                              const point = data[idx]
+                              if (point) onPointClick?.(idx, point)
+                            }
+                          : undefined
+                      }
+                    />
+                  )
+                }}
                 activeDot={{ r: 6, fill: LINE_COLOR, stroke: '#fff', strokeWidth: 2 }}
               >
                 <LabelList

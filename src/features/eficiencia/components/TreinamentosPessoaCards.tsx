@@ -117,7 +117,11 @@ export function TreinamentosPessoaCards({
     )
   }
 
-  const ordenados = [...porPessoa].sort((a, b) => b.minutos_lancados - a.minutos_lancados)
+  const ordenados = [...porPessoa].sort(
+    (a, b) =>
+      b.minutos_lancados - a.minutos_lancados ||
+      a.colaborador.localeCompare(b.colaborador, 'pt-BR', { sensitivity: 'base' }),
+  )
   const qtdDuplicados = itens.filter((item) => item.duplicado).length
 
   return (

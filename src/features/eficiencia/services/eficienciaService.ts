@@ -20,10 +20,12 @@ import {
 } from '../constants'
 import { buildGestaoConsolidadoFromInadDashboard } from '../utils/overviewFinanceiroKpis'
 import type {
+  AgendamentoDiaRow,
   AgendamentoMesRow,
   AgendamentoUsuarioRow,
   BeneficioEconomicoRow,
   EficienciaOverview,
+  EficienciaProtocoloDiaRow,
   EficienciaProtocoloMesRow,
   OpsLegaisProtocoloMesRow,
   OpsLegaisProtocoloRankingRow,
@@ -41,6 +43,8 @@ import type {
   JustificativaFatalRow,
   RankingUsuarioRow,
   SlaProtocoloMesRow,
+  SlaProtocoloDiaRow,
+  SlaVistagemDiaRow,
   SlaVistagemMesRow,
   GestaoPdiDesvioPlanilhaRow,
   GestaoPdiDetalheRow,
@@ -731,6 +735,59 @@ export const eficienciaService = {
 
   async fetchSlaProtocoloMensal(ano: number, area: string | null = null): Promise<SlaProtocoloMesRow[]> {
     return rpc('eficiencia_sla_protocolo_mensal', { p_ano: ano, p_area: area })
+  },
+
+  async fetchSlaProtocoloDiario(
+    ano: number,
+    mes: number,
+    area: string | null = null,
+  ): Promise<SlaProtocoloDiaRow[]> {
+    return rpc('eficiencia_sla_protocolo_diario', {
+      p_ano: ano,
+      p_mes: mes,
+      p_area: area,
+    })
+  },
+
+  async fetchEficienciaProtocoloDiario(
+    ano: number,
+    mes: number,
+    area: string | null = null,
+  ): Promise<EficienciaProtocoloDiaRow[]> {
+    return rpc('eficiencia_protocolo_diario', {
+      p_ano: ano,
+      p_mes: mes,
+      p_area: area,
+    })
+  },
+
+  async fetchAgendamentoDiario(
+    ano: number,
+    mes: number,
+    area: string | null = null,
+  ): Promise<AgendamentoDiaRow[]> {
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
+    return rpc('eficiencia_agendamento_diario', {
+      p_ano: ano,
+      p_mes: mes,
+      p_area: area,
+    })
+  },
+
+  async fetchSlaVistagemDiario(
+    ano: number,
+    mes: number,
+    risco: boolean | null,
+    area: string | null = null,
+  ): Promise<SlaVistagemDiaRow[]> {
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
+    if (risco === false && area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) return []
+    return rpc('eficiencia_sla_vistagem_diario', {
+      p_ano: ano,
+      p_mes: mes,
+      p_risco: risco,
+      p_area: area,
+    })
   },
 
   async fetchSlaProtocoloRankingFatal(

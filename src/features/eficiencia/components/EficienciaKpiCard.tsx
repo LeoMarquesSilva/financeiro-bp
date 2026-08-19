@@ -1,8 +1,18 @@
-import { ArrowDown, ArrowUp, Minus } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, Check, Copy, Loader2, Minus } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { formatPercent } from '@/shared/utils/format'
+import { copyElementImageToClipboard } from '@/shared/utils/copyChartImage'
 import { toPriMaiuscula } from '../utils/textFormat'
 
 type Props = {
@@ -22,6 +32,8 @@ type Props = {
   currentPct?: number | null
   /** % da equipe no card Gestão à Vista. */
   vsEquipePct?: number | null
+  /** Exibe botão de copiar o card (PowerPoint). */
+  copyable?: boolean
 }
 
 function formatPp(value: number): string {
@@ -44,7 +56,10 @@ export function EficienciaKpiCard({
   pessoaNome = null,
   currentPct = null,
   vsEquipePct = null,
+  copyable = true,
 }: Props) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const temPessoa = Boolean(pessoaNome?.trim())
   const delta =
     temPessoa &&
@@ -57,16 +72,80 @@ export function EficienciaKpiCard({
   const direcao =
     delta == null ? null : delta > 0.005 ? 'up' : delta < -0.005 ? 'down' : 'flat'
 
+  const handleCopy = async () => {
+    const container = cardRef.current
+    if (!container) {
+      toast.error('Card não disponível para cópia')
+      return
+    }
+
+    setCopyStatus('loading')
+    try {
+      await copyElementImageToClipboard(container, undefined, { preserveBackground: true })
+      setCopyStatus('done')
+      toast.success('Card copiado — cole no PowerPoint com Ctrl+V')
+      window.setTimeout(() => setCopyStatus('idle'), 2000)
+    } catch (error) {
+      setCopyStatus('idle')
+      const message =
+        error instanceof Error ? error.message : 'Não foi possível copiar o card'
+      toast.error(message)
+    }
+  }
+
+  const CopyIcon =
+    copyStatus === 'loading' ? Loader2 : copyStatus === 'done' ? Check : Copy
+
   return (
-    <div className="flex flex-col rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
-      <div className="mb-2 flex items-center gap-2">
-        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', accentClass)}>
-          <Icon className="h-4 w-4" />
-        </span>
-        <h3 className="truncate text-xs font-medium text-slate-500">
-          {toPriMaiuscula(title)}
-        </h3>
-      </div>
+    <div className="group relative">
+      {copyable ? (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                data-chart-export-ignore
+                className={cn(
+                  'absolute right-1 top-1 z-10 h-7 w-7 text-slate-400 transition-opacity hover:bg-slate-100 hover:text-slate-600',
+                  copyStatus === 'done'
+                    ? 'opacity-100 text-emerald-600'
+                    : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                )}
+                onClick={() => void handleCopy()}
+                disabled={copyStatus === 'loading' || loading}
+                aria-label="Copiar card"
+              >
+                <CopyIcon
+                  className={cn('h-3.5 w-3.5', copyStatus === 'loading' && 'animate-spin')}
+                  aria-hidden
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Copiar card</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : null}
+
+      <div
+        ref={cardRef}
+        data-chart-export-preserve-bg
+        className="flex flex-col rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm"
+      >
+        <div className="mb-2 flex items-center gap-2">
+          <span
+            className={cn(
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+              accentClass,
+            )}
+          >
+            <Icon className="h-4 w-4 shrink-0" aria-hidden />
+          </span>
+          <h3 className="min-w-0 truncate text-xs font-medium text-slate-500">
+            {toPriMaiuscula(title)}
+          </h3>
+        </div>
 
       {loading ? (
         <div className="h-8 w-24 animate-pulse rounded bg-slate-200/60" />
@@ -131,6 +210,7 @@ export function EficienciaKpiCard({
           )}
         </div>
       )}
+      </div>
     </div>
   )
 }

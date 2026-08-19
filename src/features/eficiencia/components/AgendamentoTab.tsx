@@ -8,16 +8,24 @@ import {
   isAgendamentoVistagemIndisponivelPorArea,
   type MesFiltroEficiencia,
 } from '../constants'
-import { useAgendamento, useAgendamentoRanking } from '../hooks/useEficiencia'
+import { useAgendamento, useAgendamentoDiario, useAgendamentoRanking } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
+import { useEvolucaoDrilldownState } from '../hooks/useEvolucaoDrilldownState'
 import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { totaisAgendamentoFromResumo } from '../utils/periodoCurtoIndicadorTotais'
+import {
+  buildEvolucaoDiarioChart,
+  evolucaoDrilldownSubtitle,
+  resolveEvolucaoDrilldownChart,
+} from '../utils/evolucaoDrilldown'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { EvolucaoDrilldownToolbar } from './EvolucaoDrilldownToolbar'
 import { EficienciaRankingChart } from './EficienciaRankingChart'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
+import type { AgendamentoDiaRow } from '../types/eficiencia.types'
 import type { HeatCell } from './OverviewKpiHeatRow'
 import {
   emptyLabelDesvioResponsavel,
@@ -45,11 +53,20 @@ export function AgendamentoTab({
 }: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
+  const indisponivel = isAgendamentoVistagemIndisponivelPorArea(area)
+  const drill = useEvolucaoDrilldownState(
+    mesFiltro,
+    [mesFiltro, ano, area, responsavel],
+    indisponivel,
+  )
+  const mesDrillTarget = drill.mesDrillTarget
+
   const { data: mensal, loading } = useAgendamento(ano, area)
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
   const { data: ranking, loading: loadingRanking } = useAgendamentoRanking(ano, mesFiltro, area)
   const {
     chartData: evolucaoResp,
+    chartDataDiario: evolucaoDiarioResp,
     acumulado: acumResp,
     loading: loadingEvol,
   } = useEvolucaoPorResponsavel(
@@ -58,9 +75,15 @@ export function AgendamentoTab({
     area,
     responsavel,
     mesFiltro,
+    drill.chartGranularidade === 'dia' ? mesDrillTarget : null,
   )
 
-  const indisponivel = isAgendamentoVistagemIndisponivelPorArea(area)
+  const { data: diario, loading: loadingDiario } = useAgendamentoDiario(
+    ano,
+    drill.chartGranularidade === 'dia' && !responsavel ? mesDrillTarget : null,
+    area,
+  )
+
   const mensalGestaoVista = filtrarMensalGestaoAVista(mensal, ano)
 
   const periodoCurto = usePeriodoCurtoResumo(
@@ -121,9 +144,65 @@ export function AgendamentoTab({
     periodoCurto.loading ||
     Boolean(responsavel && !periodoCurto.periodoCurtoAtivo && loadingEvol)
 
-  const chartData = responsavel
-    ? evolucaoResp
-    : mensalFiltrado.map((m) => ({ mes: m.mes, valor: m.pct_dentro_prazo }))
+  const chartDataMes = responsavel
+    ? evolucaoResp.map((p) => ({ mes: p.mes, valor: p.valor, meta: EFICIENCIA_META_AGENDAMENTO }))
+    : mensalFiltrado.map((m) => ({
+        mes: m.mes,
+        valor: m.pct_dentro_prazo,
+        meta: EFICIENCIA_META_AGENDAMENTO,
+      }))
+
+  const chartDataDiarioRpc = useMemo(
+    () =>
+      buildEvolucaoDiarioChart(
+        diario.map((row: AgendamentoDiaRow) => ({
+          dia: row.dia,
+          total: row.total,
+          pct: row.pct_dentro_prazo,
+        })),
+        EFICIENCIA_META_AGENDAMENTO,
+      ),
+    [diario],
+  )
+
+  const chartDataDiarioResp = useMemo(
+    () =>
+      evolucaoDiarioResp.map((p) => ({
+        mes: p.mes,
+        label: p.label,
+        valor: p.valor,
+        meta: EFICIENCIA_META_AGENDAMENTO,
+      })),
+    [evolucaoDiarioResp],
+  )
+
+  const chartData = resolveEvolucaoDrilldownChart({
+    granularidade: drill.chartGranularidade,
+    mesDrillTarget,
+    responsavel,
+    chartDataMes,
+    chartDataDiarioResp,
+    chartDataDiarioRpc,
+  })
+
+  const selectedChartIndex =
+    drill.chartGranularidade === 'mes' && drill.mesClicadoGrafico != null
+      ? chartDataMes.findIndex((point) => point.mes === drill.mesClicadoGrafico)
+      : null
+
+  const chartSubtitle = evolucaoDrilldownSubtitle(
+    drill.chartGranularidade,
+    mesDrillTarget,
+    ano,
+    '% de tarefas concluídas dentro do prazo D+1',
+    `% no prazo · ${responsavel ?? ''}`,
+    responsavel,
+  )
+
+  const loadingChart =
+    loading ||
+    Boolean(responsavel && loadingEvol) ||
+    (drill.chartGranularidade === 'dia' && !responsavel && loadingDiario)
 
   const rankingFatal = useMemo(() => {
     const rankingFiltrado = rankingDesvioFiltrado(
@@ -212,14 +291,23 @@ export function AgendamentoTab({
 
       <EficienciaEvolucaoChart
         title="Agendamento / Ciência D+1"
-        subtitle={
-          responsavel
-            ? `% no prazo · ${responsavel}`
-            : '% de tarefas concluídas dentro do prazo D+1'
-        }
-        data={chartData}
+        subtitle={chartSubtitle}
+        data={loadingChart ? [] : chartData}
         color="#d97706"
         metaFixa={EFICIENCIA_META_AGENDAMENTO}
+        granularidade={drill.chartGranularidade}
+        selectedIndex={selectedChartIndex != null && selectedChartIndex >= 0 ? selectedChartIndex : null}
+        onPointClick={drill.onPointClickMes}
+        toolbarExtra={
+          <EvolucaoDrilldownToolbar
+            granularidade={drill.chartGranularidade}
+            drillDisponivel={drill.drillDisponivel}
+            mesDrillTarget={mesDrillTarget}
+            mesFiltro={mesFiltro}
+            onPorDia={() => drill.setChartGranularidade('dia')}
+            onPorMes={() => drill.setChartGranularidade('mes')}
+          />
+        }
         onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
       />
 
