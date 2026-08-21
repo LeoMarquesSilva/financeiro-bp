@@ -52,6 +52,7 @@ import type {
   GestaoPdiElegivelRow,
   GestaoPdiMesRow,
   TreinamentoItemRow,
+  TreinamentoSessaoFuturaRow,
   TreinamentosAnualRow,
   TreinamentosMesRow,
   TreinamentosPorPessoaRow,
@@ -1165,6 +1166,33 @@ export const eficienciaService = {
             : String(r.ministrado_por),
       })),
     )
+  },
+
+  /** Sessões com data futura (lista mestre SharePoint). */
+  async fetchTreinamentosSessoesFuturas(ano: number): Promise<TreinamentoSessaoFuturaRow[]> {
+    const hoje = new Date().toISOString().slice(0, 10)
+    const { data, error } = await supabase
+      .from('sp_treinamentos_sessoes')
+      .select('sp_id, nome, data, duracao_minutos, ministrado_por')
+      .gt('data', hoje)
+      .gte('data', `${ano}-01-01`)
+      .lte('data', `${ano}-12-31`)
+      .order('data', { ascending: true })
+      .limit(500)
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+      sp_id: Number(r.sp_id),
+      nome: String(r.nome ?? ''),
+      data: String(r.data ?? ''),
+      duracao_minutos:
+        r.duracao_minutos == null || r.duracao_minutos === ''
+          ? null
+          : Number(r.duracao_minutos),
+      ministrado_por:
+        r.ministrado_por == null || String(r.ministrado_por).trim() === ''
+          ? null
+          : String(r.ministrado_por),
+    }))
   },
 
   async fetchGestaoPdiElegiveis(ano: number): Promise<GestaoPdiElegivelRow[]> {

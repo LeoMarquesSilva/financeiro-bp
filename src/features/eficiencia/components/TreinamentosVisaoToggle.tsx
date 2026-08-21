@@ -1,8 +1,8 @@
-import { GraduationCap, Users } from 'lucide-react'
+import { CalendarClock, GraduationCap, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-export type TreinamentosVisao = 'equipe' | 'treinamentos'
+export type TreinamentosVisao = 'equipe' | 'treinamentos' | 'futuros'
 
 type Props = {
   value: TreinamentosVisao
@@ -34,7 +34,7 @@ export function TreinamentosVisaoToggle({ value, onChange, className }: Props) {
         )}
       >
         <Users className="h-3.5 w-3.5" aria-hidden />
-        Equipe
+        Visão Equipe
       </Button>
       <Button
         type="button"
@@ -50,7 +50,23 @@ export function TreinamentosVisaoToggle({ value, onChange, className }: Props) {
         )}
       >
         <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-        Treinamentos
+        Visão Treinamentos
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        aria-pressed={value === 'futuros'}
+        onClick={() => onChange('futuros')}
+        className={cn(
+          'h-8 gap-1.5 px-3 text-xs',
+          value === 'futuros'
+            ? 'bg-white text-slate-900 shadow-sm hover:bg-white'
+            : 'text-slate-500 hover:text-slate-800',
+        )}
+      >
+        <CalendarClock className="h-3.5 w-3.5" aria-hidden />
+        Treinamentos Futuros
       </Button>
     </div>
   )

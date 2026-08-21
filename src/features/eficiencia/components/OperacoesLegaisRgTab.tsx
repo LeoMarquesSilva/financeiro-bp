@@ -108,7 +108,7 @@ export function OperacoesLegaisRgTab({
     error: errorTarefas,
   } = useOpsLegaisTarefas(ano, mesFiltro, secao === 'tarefas')
 
-  const { itens, loading: loadingTreino } = useTreinamentos(ano, EFICIENCIA_AREA_OPS_LEGAIS)
+  const { itens, sessoesFuturas, loading: loadingTreino } = useTreinamentos(ano, EFICIENCIA_AREA_OPS_LEGAIS)
   const { anual: turnAnual, desligamentos, loading: loadingTurn } = useTurnover(
     ano,
     EFICIENCIA_AREA_OPS_LEGAIS,
@@ -573,6 +573,7 @@ export function OperacoesLegaisRgTab({
         <OpsLegaisTreinamentosSection
           ativos={ativosOps}
           itens={itens}
+          sessoesFuturas={sessoesFuturas}
           ano={ano}
           loading={loadingTreino || loadingAtivosTreino}
           onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}

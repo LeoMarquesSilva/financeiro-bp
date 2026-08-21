@@ -14,6 +14,7 @@ import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { RacionalSheet } from './RacionalSheet'
 import { TreinamentosCursoCards } from './TreinamentosCursoCards'
+import { TreinamentosFuturosCards } from './TreinamentosFuturosCards'
 import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
 import {
   TreinamentosVisaoToggle,
@@ -46,7 +47,7 @@ export function TreinamentosTab({
   const [racionalAberto, setRacionalAberto] = useState(false)
   const [visao, setVisao] = useState<TreinamentosVisao>('equipe')
   const porColaboradorRef = useRef<HTMLDivElement>(null)
-  const { anual, porPessoa, itens, loading } = useTreinamentos(ano, area)
+  const { anual, porPessoa, itens, sessoesFuturas, loading } = useTreinamentos(ano, area)
   const porPessoaFiltrado = filtrarPorResponsavel(porPessoa, (p) => p.colaborador, responsavel)
   const itensFiltrados = filtrarPorResponsavel(itens, (i) => i.colaborador, responsavel)
   const mesRacional: MesFiltroEficiencia =
@@ -148,7 +149,9 @@ export function TreinamentosTab({
         data-chart-export-bg="#ffffff"
         className="rounded-xl bg-white"
       >
-        {visao === 'equipe' ? (
+        {visao === 'futuros' ? (
+          <TreinamentosFuturosCards sessoes={sessoesFuturas} loading={loading} />
+        ) : visao === 'equipe' ? (
           <TreinamentosPessoaCards
             porPessoa={porPessoaFiltrado}
             itens={itensFiltrados}

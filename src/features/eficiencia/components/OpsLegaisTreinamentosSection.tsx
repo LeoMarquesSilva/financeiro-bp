@@ -6,7 +6,7 @@ import {
   isTreinamentoLideranca,
   type OpsTreinamentoCategoria,
 } from '../constants'
-import type { TreinamentoItemRow } from '../types/eficiencia.types'
+import type { TreinamentoItemRow, TreinamentoSessaoFuturaRow } from '../types/eficiencia.types'
 import {
   buildOpsTreinamentosCategorias,
   type OpsTurnoverAtivo,
@@ -15,6 +15,7 @@ import { metaTreinamentoMinutosProporcional } from '../utils/treinamentoMetaProp
 import { toPriMaiuscula } from '../utils/textFormat'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 import { TreinamentosCursoCards } from './TreinamentosCursoCards'
+import { TreinamentosFuturosCards } from './TreinamentosFuturosCards'
 import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
 import {
   TreinamentosVisaoToggle,
@@ -24,6 +25,7 @@ import {
 type Props = {
   ativos: OpsTurnoverAtivo[]
   itens: TreinamentoItemRow[]
+  sessoesFuturas: TreinamentoSessaoFuturaRow[]
   ano: number
   loading?: boolean
   onRacionalClick?: () => void
@@ -56,6 +58,7 @@ const CARD_STYLE: Record<
 export function OpsLegaisTreinamentosSection({
   ativos,
   itens,
+  sessoesFuturas,
   ano,
   loading,
   onRacionalClick,
@@ -124,92 +127,98 @@ export function OpsLegaisTreinamentosSection({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        {resumos.map((r) => {
-          const style = CARD_STYLE[r.categoria]
-          const ativo = categoriaAtiva === r.categoria
-          const pct = r.pctAtingimento
-          const ok = pct != null && pct >= 100
-          const barPct = pct == null ? 100 : Math.min(100, pct)
-          return (
-            <button
-              key={r.categoria}
-              type="button"
-              onClick={() => setCategoriaAtiva(r.categoria)}
-              className={cn(
-                'rounded-xl border border-slate-200/70 border-t-[5px] bg-white p-4 text-left shadow-sm transition-all',
-                style.border,
-                ativo ? 'ring-2 ring-slate-300 scale-[1.01]' : 'hover:shadow-md',
-              )}
-            >
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                {r.categoria === 'Gerente'
-                  ? toPriMaiuscula('Total de horas realizadas')
-                  : toPriMaiuscula('Meta proporcional à admissão')}
-              </p>
-              <p className="mt-1 text-sm font-extrabold text-slate-900">
-                {r.categoria === 'Gerente'
-                  ? toPriMaiuscula('Gerente')
-                  : `${r.categoria} (${r.qtdPessoas} ${r.qtdPessoas === 1 ? 'pessoa' : 'pessoas'})`}
-              </p>
-              <p
+      {visao !== 'futuros' ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {resumos.map((r) => {
+            const style = CARD_STYLE[r.categoria]
+            const ativo = categoriaAtiva === r.categoria
+            const pct = r.pctAtingimento
+            const ok = pct != null && pct >= 100
+            const barPct = pct == null ? 100 : Math.min(100, pct)
+            return (
+              <button
+                key={r.categoria}
+                type="button"
+                onClick={() => setCategoriaAtiva(r.categoria)}
                 className={cn(
-                  'mt-3 text-3xl font-black tabular-nums',
-                  r.categoria === 'Gerente'
-                    ? style.accent
-                    : ok
-                      ? 'text-emerald-600'
-                      : r.categoria === 'Liderança'
-                        ? 'text-violet-600'
-                        : 'text-rose-600',
+                  'rounded-xl border border-slate-200/70 border-t-[5px] bg-white p-4 text-left shadow-sm transition-all',
+                  style.border,
+                  ativo ? 'ring-2 ring-slate-300 scale-[1.01]' : 'hover:shadow-md',
                 )}
               >
-                {r.categoria === 'Gerente'
-                  ? r.horasLabel
-                  : pct != null
-                    ? formatPercent(pct)
-                    : '—'}
-              </p>
-              <p className="mt-1 text-xs font-semibold text-slate-600">
-                {r.categoria === 'Gerente'
-                  ? `${Math.round(r.minutos)} minutos no total`
-                  : `${r.horasLabel} realizadas`}
-              </p>
-              {r.categoria !== 'Gerente' ? (
-                <>
-                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className={cn('h-full rounded-full', ok ? style.fillOk : style.fillNok)}
-                      style={{ width: `${barPct}%` }}
-                    />
-                  </div>
-                  <p className="mt-1.5 text-[10px] text-slate-400">
-                    Meta:{' '}
-                    {r.metaMinutos != null
-                      ? `${Math.round(r.metaMinutos / 60)}h total (${r.qtdPessoas} pessoas · proporcional)`
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                  {r.categoria === 'Gerente'
+                    ? toPriMaiuscula('Total de horas realizadas')
+                    : toPriMaiuscula('Meta proporcional à admissão')}
+                </p>
+                <p className="mt-1 text-sm font-extrabold text-slate-900">
+                  {r.categoria === 'Gerente'
+                    ? toPriMaiuscula('Gerente')
+                    : `${r.categoria} (${r.qtdPessoas} ${r.qtdPessoas === 1 ? 'pessoa' : 'pessoas'})`}
+                </p>
+                <p
+                  className={cn(
+                    'mt-3 text-3xl font-black tabular-nums',
+                    r.categoria === 'Gerente'
+                      ? style.accent
+                      : ok
+                        ? 'text-emerald-600'
+                        : r.categoria === 'Liderança'
+                          ? 'text-violet-600'
+                          : 'text-rose-600',
+                  )}
+                >
+                  {r.categoria === 'Gerente'
+                    ? r.horasLabel
+                    : pct != null
+                      ? formatPercent(pct)
                       : '—'}
-                  </p>
-                </>
-              ) : (
-                <p className="mt-3 text-[10px] text-slate-400">Sem meta definida</p>
-              )}
-            </button>
-          )
-        })}
-      </div>
+                </p>
+                <p className="mt-1 text-xs font-semibold text-slate-600">
+                  {r.categoria === 'Gerente'
+                    ? `${Math.round(r.minutos)} minutos no total`
+                    : `${r.horasLabel} realizadas`}
+                </p>
+                {r.categoria !== 'Gerente' ? (
+                  <>
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={cn('h-full rounded-full', ok ? style.fillOk : style.fillNok)}
+                        style={{ width: `${barPct}%` }}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-slate-400">
+                      Meta:{' '}
+                      {r.metaMinutos != null
+                        ? `${Math.round(r.metaMinutos / 60)}h total (${r.qtdPessoas} pessoas · proporcional)`
+                        : '—'}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-3 text-[10px] text-slate-400">Sem meta definida</p>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
 
       <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
           <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-          {visao === 'treinamentos'
-            ? toPriMaiuscula(`Treinamentos — ${categoriaAtiva}`)
-            : categoriaAtiva === 'Gerente'
-              ? toPriMaiuscula('Treinamentos — Gerente')
-              : toPriMaiuscula(
-                  `Colaboradores — ${categoriaAtiva} (${resumoAtivo?.qtdPessoas ?? 0} pessoas)`,
-                )}
+          {visao === 'futuros'
+            ? toPriMaiuscula(`Treinamentos previstos — ${ano}`)
+            : visao === 'treinamentos'
+              ? toPriMaiuscula(`Treinamentos — ${categoriaAtiva}`)
+              : categoriaAtiva === 'Gerente'
+                ? toPriMaiuscula('Treinamentos — Gerente')
+                : toPriMaiuscula(
+                    `Colaboradores — ${categoriaAtiva} (${resumoAtivo?.qtdPessoas ?? 0} pessoas)`,
+                  )}
         </div>
-        {visao === 'equipe' ? (
+        {visao === 'futuros' ? (
+          <TreinamentosFuturosCards sessoes={sessoesFuturas} />
+        ) : visao === 'equipe' ? (
           <TreinamentosPessoaCards
             porPessoa={pessoasLista}
             itens={itensFiltrados}
@@ -228,7 +237,9 @@ export function OpsLegaisTreinamentosSection({
         )}
       </section>
 
-      {categoriaAtiva === 'Liderança' && equipeEmLiderancaCards.length > 0 ? (
+      {visao !== 'futuros' &&
+      categoriaAtiva === 'Liderança' &&
+      equipeEmLiderancaCards.length > 0 ? (
         <section className="rounded-xl border border-indigo-100 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-1 flex items-center gap-3">
             <hr className="flex-1 border-dashed border-indigo-200" />

@@ -392,6 +392,15 @@ export interface TreinamentoItemRow {
   duplicado?: boolean
 }
 
+/** Sessão prevista com data futura (lista mestre SharePoint). */
+export interface TreinamentoSessaoFuturaRow {
+  sp_id: number
+  nome: string
+  data: string
+  duracao_minutos: number | null
+  ministrado_por: string | null
+}
+
 export interface VistagemDesvioRankingRow {
   usuario?: string
   tipo_publicacao?: string

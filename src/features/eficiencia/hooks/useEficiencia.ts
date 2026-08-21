@@ -18,6 +18,7 @@ import type {
   SlaProtocoloDiaRow,
   SlaVistagemMesRow,
   TreinamentoItemRow,
+  TreinamentoSessaoFuturaRow,
   TreinamentosAnualRow,
   TreinamentosPorPessoaRow,
   TurnoverAnualRow,
@@ -271,18 +272,20 @@ export function useTreinamentos(ano: number, area: string | null = null) {
   const { data, error, isLoading } = useQuery({
     queryKey: ['eficiencia', 'treinamentos', ano, area],
     queryFn: async () => {
-      const [anual, porPessoa, itens] = await Promise.all([
+      const [anual, porPessoa, itens, sessoesFuturas] = await Promise.all([
         eficienciaService.fetchTreinamentosAnual(ano, area),
         eficienciaService.fetchTreinamentosPorPessoa(ano, area),
         eficienciaService.fetchTreinamentosItens(ano),
+        eficienciaService.fetchTreinamentosSessoesFuturas(ano),
       ])
-      return { anual, porPessoa, itens }
+      return { anual, porPessoa, itens, sessoesFuturas }
     },
   })
   const anual: TreinamentosAnualRow | null = data?.anual ?? null
   const porPessoa: TreinamentosPorPessoaRow[] = data?.porPessoa ?? []
   const itens: TreinamentoItemRow[] = data?.itens ?? []
-  return { anual, porPessoa, itens, loading: isLoading, error }
+  const sessoesFuturas: TreinamentoSessaoFuturaRow[] = data?.sessoesFuturas ?? []
+  return { anual, porPessoa, itens, sessoesFuturas, loading: isLoading, error }
 }
 
 export function useOpsLegaisRg(ano: number, mesFiltro: MesFiltroEficiencia) {

@@ -1013,6 +1013,47 @@ const FONTES = {
       const sessoes = await fetchListItems(ctx.siteJuridica, LISTA_TREINAMENTOS_SESSOES)
       const sessaoPorId = new Map(sessoes.map((s) => [String(pick(s, ['ID', 'id'])), s]))
 
+      const sessoesRows = sessoes
+        .map((s) => {
+          const spId = Number(pick(s, ['ID', 'id']))
+          const data = toIsoDate(parseDate(pick(s, ['Data'])))
+          const nome = strOrNull(pick(s, ['NomedoTreinamento', 'Title']))
+          if (!Number.isFinite(spId) || !data || !nome) return null
+          return {
+            sp_id: spId,
+            nome,
+            data,
+            duracao_minutos: numOrNull(
+              pick(s, ['Duração (Minutos)', 'Dura_x00e7__x00e3_o_x0028_Minuto']),
+            ),
+            ministrado_por: resolveNomeCanonico(
+              expandUserField(
+                pick(s, [
+                  'Facilitador',
+                  'Ministrado por',
+                  'Ministradopor',
+                  'MinistradoPor',
+                  'Ministrado_x0020_por',
+                  'Responsável',
+                  'Responsavel',
+                ]),
+              ),
+            ),
+          }
+        })
+        .filter(Boolean)
+      const sessoesUnique = dedupeBy(sessoesRows, (r) => r.sp_id)
+      const sessoesUpserted = await upsertChunks(
+        'sp_treinamentos_sessoes',
+        sessoesUnique,
+        'sp_id',
+      )
+      const sessoesDeleted = await deleteMissingIds(
+        'sp_treinamentos_sessoes',
+        'sp_id',
+        sessoesUnique.map((r) => r.sp_id),
+      )
+
       const rows = items
         .map((f) => {
           const sessaoId = String(pick(f, ['NomedoTreinamento0LookupId', 'Nome_x0020_do_x0020_Treinamento_0LookupId']) ?? '')
@@ -1057,7 +1098,7 @@ const FONTES = {
         'sp_id',
         unique.map((r) => r.sp_id),
       )
-      return { upserted, deleted }
+      return { upserted, deleted, sessoesUpserted, sessoesDeleted }
     },
   },
 
