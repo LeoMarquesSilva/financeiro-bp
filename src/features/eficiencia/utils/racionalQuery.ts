@@ -296,6 +296,7 @@ export async function fetchDesenvolvimentoRacional(
     const linhasPorTreinamento = marcarTreinamentoLinhasRacional(linhas)
       .map((row): Record<string, unknown> => ({
         ...row,
+        duracao_minutos: Math.max(0, Number(row.duracao_minutos) || 0),
         duplicado: row._duplicado === true ? 'Sim' : 'Não',
       }))
       .sort(
@@ -315,7 +316,7 @@ export async function fetchDesenvolvimentoRacional(
         { key: 'colaborador', label: 'Colaborador' },
         { key: 'area', label: 'Área' },
         { key: 'data', label: 'Data' },
-        { key: 'duracao_minutos', label: 'Duração (min)' },
+        { key: 'duracao_minutos', label: 'Duração (HH:MM)', format: 'duracao_minutos' },
         { key: 'status', label: 'Status' },
         { key: 'duplicado', label: 'Duplicado' },
         { key: 'sp_id', label: 'ID' },
@@ -374,8 +375,8 @@ export async function fetchDesenvolvimentoRacional(
         colaborador: pessoa.nome,
         cargo: pessoa.cargo,
         admissao: pessoa.admissao,
-        horas_realizadas: Math.round((minutosRealizados / 60) * 100) / 100,
-        meta_horas: Math.round((metaMinutos / 60) * 100) / 100,
+        horas_realizadas: minutosRealizados,
+        meta_horas: metaMinutos,
         pct_atingimento: pctAtingimento,
         situacao: pctAtingimento != null && pctAtingimento >= 100 ? 'Meta atingida' : 'Abaixo da meta',
         qtd_treinamentos: treinamentos.length,
@@ -396,8 +397,8 @@ export async function fetchDesenvolvimentoRacional(
       { key: 'colaborador', label: 'Colaborador' },
       { key: 'cargo', label: 'Cargo' },
       { key: 'admissao', label: 'Admissão' },
-      { key: 'horas_realizadas', label: 'Horas realizadas' },
-      { key: 'meta_horas', label: 'Meta (horas)' },
+      { key: 'horas_realizadas', label: 'Horas realizadas (HH:MM)', format: 'duracao_minutos' },
+      { key: 'meta_horas', label: 'Meta (HH:MM)', format: 'duracao_minutos' },
       { key: 'pct_atingimento', label: 'Atingimento', format: 'percentual' },
       { key: 'situacao', label: 'Situação' },
       { key: 'qtd_treinamentos', label: 'Treinamentos distintos' },

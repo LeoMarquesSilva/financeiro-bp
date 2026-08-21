@@ -82,3 +82,41 @@ export function toPriMaiuscula(value: string | null | undefined): string {
     })
     .join('')
 }
+
+/** Chave canônica de tipo publicação — unifica ordens diferentes (ex.: "Providências, Prazo" = "Prazo, Providências"). */
+export function canonicalTipoPublicacao(value: string | null | undefined): string {
+  const cleaned = stripJsonArrayDecorators(value).trim()
+  if (!cleaned) return cleaned
+
+  const segments = cleaned
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  if (segments.length <= 1) {
+    return toPriMaiuscula(cleaned)
+  }
+
+  segments.sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+  return toPriMaiuscula(segments.join(', '))
+}
+
+export function aggregateRankingPorTipoPublicacao<
+  T extends { tipo_publicacao?: string; qtd_desvio: number; pct_do_total: number },
+>(rows: T[]): T[] {
+  const totals = new Map<string, number>()
+  for (const row of rows) {
+    const key = canonicalTipoPublicacao(String(row.tipo_publicacao ?? ''))
+    totals.set(key, (totals.get(key) ?? 0) + row.qtd_desvio)
+  }
+
+  const grandTotal = [...totals.values()].reduce((sum, n) => sum + n, 0)
+  return [...totals.entries()]
+    .map(([tipo_publicacao, qtd_desvio]) => ({
+      tipo_publicacao,
+      qtd_desvio,
+      pct_do_total:
+        grandTotal > 0 ? Math.round((qtd_desvio / grandTotal) * 10000) / 100 : 0,
+    }) as T)
+    .sort((a, b) => b.qtd_desvio - a.qtd_desvio)
+}

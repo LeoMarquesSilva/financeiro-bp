@@ -42,7 +42,6 @@ import { RacionalSheet } from './RacionalSheet'
 import { OpsLegaisTreinamentosSection } from './OpsLegaisTreinamentosSection'
 import { OpsLegaisInconsistenciasCard } from './OpsLegaisInconsistenciasCard'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
-import type { TreinamentosVisao } from './TreinamentosVisaoToggle'
 import { Avatar } from '@/shared/components/Avatar'
 import { formatDate } from '@/shared/utils/format'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
@@ -94,8 +93,6 @@ export function OperacoesLegaisRgTab({
   const secao = secaoProp ?? secaoInterna
   const setSecao = setSecaoInterna
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
-  const [desenvolvimentoRacionalVisao, setDesenvolvimentoRacionalVisao] =
-    useState<TreinamentosVisao>('equipe')
   const {
     protocoloMensal,
     cadastroMensal,
@@ -578,10 +575,7 @@ export function OperacoesLegaisRgTab({
           itens={itens}
           ano={ano}
           loading={loadingTreino || loadingAtivosTreino}
-          onRacionalClick={(visao) => {
-            setDesenvolvimentoRacionalVisao(visao)
-            setRacionalAberto('desenvolvimento_equipe')
-          }}
+          onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
         />
       )}
 
@@ -797,9 +791,7 @@ export function OperacoesLegaisRgTab({
                   : racionalAberto === 'ops_legais_cadastro'
                     ? 'Eficiência Cadastro'
                     : racionalAberto === 'desenvolvimento_equipe'
-                      ? desenvolvimentoRacionalVisao === 'treinamentos'
-                        ? 'Desenvolvimento Contínuo — Treinamentos'
-                        : 'Desenvolvimento Contínuo — Equipe'
+                      ? 'Desenvolvimento Contínuo — Treinamentos'
                       : ''
         }
         ano={ano}
@@ -815,16 +807,11 @@ export function OperacoesLegaisRgTab({
         }
         escopo={
           racionalAberto === 'desenvolvimento_equipe'
-            ? desenvolvimentoRacionalVisao === 'treinamentos'
-              ? 'desenvolvimento_treinamentos'
-              : 'desenvolvimento_equipe'
+            ? 'desenvolvimento_treinamentos'
             : 'default'
         }
         metaAcumulado={
-          racionalAberto === 'desenvolvimento_equipe' &&
-          desenvolvimentoRacionalVisao === 'equipe'
-            ? 100
-            : null
+          racionalAberto === 'desenvolvimento_equipe' ? 100 : null
         }
         onClose={() => setRacionalAberto(null)}
       />

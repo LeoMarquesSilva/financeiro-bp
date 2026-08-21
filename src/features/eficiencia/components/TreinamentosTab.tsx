@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { GraduationCap } from 'lucide-react'
+import { GraduationCap, Timer, Users } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import {
@@ -9,7 +9,9 @@ import {
 import { useTreinamentos } from '../hooks/useEficiencia'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { filtrarPorResponsavel } from '../utils/responsavelMatch'
+import { formatMinutosHeatLabel } from '../utils/desenvolvimentoEquipeHeatCell'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
+import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { RacionalSheet } from './RacionalSheet'
 import { TreinamentosCursoCards } from './TreinamentosCursoCards'
 import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
@@ -19,12 +21,9 @@ import {
 } from './TreinamentosVisaoToggle'
 import { OverviewRacionalButton, type HeatCell } from './OverviewKpiHeatRow'
 
-function formatMinutosParaHoras(minutos: number): string {
-  const h = Math.floor(minutos / 60)
-  const m = Math.round(minutos % 60)
-  return `${h}:${String(m).padStart(2, '0')}h`
+function formatHorasKpi(minutos: number): string {
+  return `${formatMinutosHeatLabel(minutos)}h`
 }
-
 type Props = {
   ano: number
   /** Indicador anual: Resultado = ano todo (mesma regra do Overview). */
@@ -44,9 +43,8 @@ export function TreinamentosTab({
   responsavelHintDisabled,
 }: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
-  const [racionalAberto, setRacionalAberto] = useState<TreinamentosVisao | null>(null)
+  const [racionalAberto, setRacionalAberto] = useState(false)
   const [visao, setVisao] = useState<TreinamentosVisao>('equipe')
-  const resumoRef = useRef<HTMLElement>(null)
   const porColaboradorRef = useRef<HTMLDivElement>(null)
   const { anual, porPessoa, itens, loading } = useTreinamentos(ano, area)
   const porPessoaFiltrado = filtrarPorResponsavel(porPessoa, (p) => p.colaborador, responsavel)
@@ -70,6 +68,7 @@ export function TreinamentosTab({
         ? 0
         : (anual?.pct_atingimento ?? null)
   const abaixoMeta = pct != null && pct < 100
+  const pctEquipe = anual?.pct_atingimento ?? null
 
   return (
     <div className="space-y-5">
@@ -86,73 +85,53 @@ export function TreinamentosTab({
         responsavelHintDisabled={responsavelHintDisabled}
       />
 
-      <div className="mx-auto w-full max-w-md space-y-2">
-        <div className="flex justify-end">
-          <ElementCopyButton
-            containerRef={resumoRef}
-            label="Copiar gráfico"
-            preserveBackground
-          />
-        </div>
-        <section
-          ref={resumoRef}
-          className="rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm"
-        >
-          <div className="flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            <GraduationCap className="h-4 w-4" aria-hidden />
-            Desenvolvimento Contínuo da Equipe
-          </div>
-          {loading ? (
-            <div className="mt-4 h-28 animate-pulse rounded-lg bg-slate-100" />
-          ) : (
-            <>
-              <p
-                className={`mt-3 text-center text-4xl font-bold tabular-nums ${
-                  abaixoMeta ? 'text-rose-600' : 'text-emerald-600'
-                }`}
-              >
-                {pct != null ? formatPercent(pct) : '—'}
-              </p>
-              <dl className="mt-4 space-y-1.5 text-sm text-slate-600">
-                <div className="flex items-center justify-between gap-3">
-                  <dt>Horas Realizadas</dt>
-                  <dd className="font-semibold tabular-nums text-slate-900">
-                    {minutosLancados != null
-                      ? formatMinutosParaHoras(minutosLancados)
-                      : '—'}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <dt>Meta Total</dt>
-                  <dd className="font-semibold tabular-nums text-slate-900">
-                    {metaMinutos != null ? formatMinutosParaHoras(metaMinutos) : '—'}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <dt>Colaboradores Ativos Área</dt>
-                  <dd className="font-semibold tabular-nums text-slate-900">
-                    {pessoasAtivas != null ? pessoasAtivas : '—'}
-                  </dd>
-                </div>
-              </dl>
-              <p className="mt-3 text-center text-xs font-medium text-emerald-700">
-                Meta proporcional à admissão
-              </p>
-              <p className="mt-2 text-center text-[11px] leading-relaxed text-slate-400">
-                Garantir a realização de pelo menos 14 horas anuais de treinamento por
-                colaborador, alinhando o desenvolvimento contínuo da equipe às estratégias
-                organizacionais.
-              </p>
-            </>
-          )}
-        </section>
+      <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-3">
+        <EficienciaKpiCard
+          title="Desenvolvimento Contínuo da Equipe"
+          value={pct != null ? formatPercent(pct) : '—'}
+          hint="Horas realizadas ÷ meta · ano inteiro"
+          meta="100,00%"
+          atingiuMeta={pct != null ? !abaixoMeta : null}
+          icon={GraduationCap}
+          accentClass="bg-emerald-100 text-emerald-700"
+          loading={loading}
+          pessoaNome={responsavel}
+          currentPct={pessoaUnica ? pct : null}
+          vsEquipePct={pessoaUnica ? pctEquipe : null}
+        />
+        <EficienciaKpiCard
+          title="Horas Realizadas"
+          value={
+            minutosLancados != null ? formatHorasKpi(minutosLancados) : '—'
+          }
+          hint="Total de treinamento no período"
+          meta={metaMinutos != null ? formatHorasKpi(metaMinutos) : undefined}
+          atingiuMeta={
+            minutosLancados != null && metaMinutos != null && metaMinutos > 0
+              ? minutosLancados >= metaMinutos
+              : null
+          }
+          icon={Timer}
+          accentClass="bg-sky-100 text-sky-700"
+          loading={loading}
+          pessoaNome={responsavel}
+        />
+        <EficienciaKpiCard
+          title="Colaboradores Ativos"
+          value={pessoasAtivas != null ? String(pessoasAtivas) : '—'}
+          hint="Meta proporcional à admissão · mín. 14h/ano"
+          icon={Users}
+          accentClass="bg-violet-100 text-violet-700"
+          loading={loading}
+          pessoaNome={responsavel}
+        />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <TreinamentosVisaoToggle value={visao} onChange={setVisao} />
         <div className="flex flex-wrap items-center gap-2">
           <OverviewRacionalButton
-            onClick={() => setRacionalAberto(visao)}
+            onClick={() => setRacionalAberto(true)}
             className="w-auto"
           />
           <ElementCopyButton
@@ -185,31 +164,23 @@ export function TreinamentosTab({
       </div>
 
       <RacionalSheet
-        indicador={racionalAberto != null ? 'desenvolvimento_equipe' : null}
-        titulo={
-          racionalAberto === 'treinamentos'
-            ? 'Desenvolvimento — Treinamentos'
-            : 'Desenvolvimento — Equipe'
-        }
+        indicador={racionalAberto ? 'desenvolvimento_equipe' : null}
+        titulo="Desenvolvimento — Treinamentos"
         ano={ano}
         mes={mesRacional}
         area={area}
-        escopo={
-          racionalAberto === 'treinamentos'
-            ? 'desenvolvimento_treinamentos'
-            : 'desenvolvimento_equipe'
-        }
+        escopo="desenvolvimento_treinamentos"
         responsavel={responsavel}
         resultado={
-          racionalAberto === 'equipe' && pct != null
+          pct != null
             ? ({
                 value: pct,
                 label: formatPercent(pct),
               } satisfies HeatCell)
             : null
         }
-        metaAcumulado={racionalAberto === 'equipe' ? 100 : null}
-        onClose={() => setRacionalAberto(null)}
+        metaAcumulado={100}
+        onClose={() => setRacionalAberto(false)}
       />
     </div>
   )

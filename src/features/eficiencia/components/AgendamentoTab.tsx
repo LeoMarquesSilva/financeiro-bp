@@ -8,12 +8,13 @@ import {
   isAgendamentoVistagemIndisponivelPorArea,
   type MesFiltroEficiencia,
 } from '../constants'
-import { useAgendamento, useAgendamentoDiario, useAgendamentoRanking } from '../hooks/useEficiencia'
+import { useAgendamento, useAgendamentoDiario, useAgendamentoRanking, useAgendamentoRankingGrupo } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
 import { useEvolucaoDrilldownState } from '../hooks/useEvolucaoDrilldownState'
 import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { totaisAgendamentoFromResumo } from '../utils/periodoCurtoIndicadorTotais'
+import { toPriMaiuscula } from '../utils/textFormat'
 import {
   buildEvolucaoDiarioChart,
   evolucaoDrilldownSubtitle,
@@ -53,6 +54,7 @@ export function AgendamentoTab({
 }: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
+  const [rankingPorGrupo, setRankingPorGrupo] = useState(false)
   const indisponivel = isAgendamentoVistagemIndisponivelPorArea(area)
   const drill = useEvolucaoDrilldownState(
     mesFiltro,
@@ -64,6 +66,11 @@ export function AgendamentoTab({
   const { data: mensal, loading } = useAgendamento(ano, area)
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
   const { data: ranking, loading: loadingRanking } = useAgendamentoRanking(ano, mesFiltro, area)
+  const { data: rankingGrupo, loading: loadingRankingGrupo } = useAgendamentoRankingGrupo(
+    ano,
+    mesFiltro,
+    area,
+  )
   const {
     chartData: evolucaoResp,
     chartDataDiario: evolucaoDiarioResp,
@@ -205,6 +212,12 @@ export function AgendamentoTab({
     (drill.chartGranularidade === 'dia' && !responsavel && loadingDiario)
 
   const rankingFatal = useMemo(() => {
+    if (rankingPorGrupo) {
+      return rankingGrupo.map((r) => ({
+        ...r,
+        grupo_cliente: toPriMaiuscula(String(r.grupo_cliente ?? '')),
+      }))
+    }
     const rankingFiltrado = rankingDesvioFiltrado(
       ranking,
       (r) => r.usuario,
@@ -230,7 +243,32 @@ export function AgendamentoTab({
             : 0,
       }))
       .sort((a, b) => b.qtd_fatal - a.qtd_fatal)
-  }, [ranking, responsavel, acumResp.total, dentroPrazo, foraPrazo])
+  }, [
+    rankingPorGrupo,
+    rankingGrupo,
+    ranking,
+    responsavel,
+    acumResp.total,
+    dentroPrazo,
+    foraPrazo,
+  ])
+
+  const rankingDesvioLabelKey = rankingPorGrupo ? 'grupo_cliente' : 'usuario'
+  const rankingDesvioLoading = rankingPorGrupo ? loadingRankingGrupo : loadingRanking
+  const rankingDesvioShowAvatars = !rankingPorGrupo
+  const rankingDesvioEmptyLabel = rankingPorGrupo
+    ? 'Sem dados no período.'
+    : indisponivel
+      ? 'Indicador não se aplica a Operações Legais'
+      : emptyLabelDesvioResponsavel(
+          responsavel,
+          Boolean(responsavel && acumResp.total > 0),
+          'Sem fatals no período.',
+        )
+  const grupoClienteToggle = {
+    active: rankingPorGrupo,
+    onToggle: () => setRankingPorGrupo((v) => !v),
+  }
 
   const resultadoRacional: HeatCell | null =
     pctGeral != null ? { value: pctGeral, label: formatPercent(pctGeral) } : null
@@ -250,7 +288,7 @@ export function AgendamentoTab({
         responsavelHintDisabled={responsavelHintDisabled}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="SLA Ciência Agendamentos Gestão a Vista"
           value={pctGestaoVista != null ? formatPercent(pctGestaoVista) : '—'}
@@ -286,6 +324,7 @@ export function AgendamentoTab({
           icon={CalendarCheck2}
           accentClass="bg-rose-100 text-rose-700"
           loading={loadingPeriodo}
+          reservePessoaSlot={Boolean(responsavel?.trim())}
         />
       </div>
 
@@ -313,9 +352,10 @@ export function AgendamentoTab({
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <EficienciaRankingChart
-          title="% Desvio Responsáveis"
+          title={rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsáveis'}
           subtitle={areaHint}
           rows={rankingFatal}
+          labelKey={rankingDesvioLabelKey}
           valueKey="pct_do_total"
           valueLabel="% do total"
           formatValue={(v) => formatPercent(v)}
@@ -324,25 +364,19 @@ export function AgendamentoTab({
           truncateLabels={false}
           biStyle
           compact
-          showAvatars
-          loading={loadingRanking}
+          showAvatars={rankingDesvioShowAvatars}
+          loading={rankingDesvioLoading}
           maxItems={9}
           scrollAll
-          emptyLabel={
-            indisponivel
-              ? 'Indicador não se aplica a Operações Legais'
-              : emptyLabelDesvioResponsavel(
-                  responsavel,
-                  Boolean(responsavel && acumResp.total > 0),
-                  'Sem fatals no período.',
-                )
-          }
+          emptyLabel={rankingDesvioEmptyLabel}
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
+          grupoClienteToggle={indisponivel ? undefined : grupoClienteToggle}
         />
         <EficienciaRankingChart
-          title="Qtd Desvio Responsáveis"
+          title={rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsáveis'}
           subtitle={areaHint}
           rows={rankingFatal}
+          labelKey={rankingDesvioLabelKey}
           valueKey="qtd_fatal"
           valueLabel="Fora do prazo"
           pctKey={null}
@@ -350,20 +384,13 @@ export function AgendamentoTab({
           truncateLabels={false}
           biStyle
           compact
-          showAvatars
-          loading={loadingRanking}
+          showAvatars={rankingDesvioShowAvatars}
+          loading={rankingDesvioLoading}
           maxItems={9}
           scrollAll
-          emptyLabel={
-            indisponivel
-              ? 'Indicador não se aplica a Operações Legais'
-              : emptyLabelDesvioResponsavel(
-                  responsavel,
-                  Boolean(responsavel && acumResp.total > 0),
-                  'Sem fatals no período.',
-                )
-          }
+          emptyLabel={rankingDesvioEmptyLabel}
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
+          grupoClienteToggle={indisponivel ? undefined : grupoClienteToggle}
         />
       </div>
 

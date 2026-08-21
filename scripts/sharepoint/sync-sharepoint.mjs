@@ -1031,6 +1031,21 @@ const FONTES = {
             duracao_minutos: sessao
               ? numOrNull(pick(sessao, ['Duração (Minutos)', 'Dura_x00e7__x00e3_o_x0028_Minuto']))
               : null,
+            ministrado_por: sessao
+              ? resolveNomeCanonico(
+                  expandUserField(
+                    pick(sessao, [
+                      'Facilitador',
+                      'Ministrado por',
+                      'Ministradopor',
+                      'MinistradoPor',
+                      'Ministrado_x0020_por',
+                      'Responsável',
+                      'Responsavel',
+                    ]),
+                  ),
+                )
+              : null,
             criado: toIsoDateTime(parseDate(pick(f, ['Criado', 'Created']))),
           }
         })

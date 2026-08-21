@@ -9,7 +9,7 @@ import {
   isAgendamentoVistagemIndisponivelPorArea,
   type MesFiltroEficiencia,
 } from '../constants'
-import { stripJsonArrayDecorators, toPriMaiuscula } from '../utils/textFormat'
+import { toPriMaiuscula, aggregateRankingPorTipoPublicacao } from '../utils/textFormat'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import {
   useSlaVistagem,
@@ -67,6 +67,7 @@ export function SlaVistagemTab({
 }: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
+  const [rankingPorGrupo, setRankingPorGrupo] = useState(false)
   const indicador: RacionalIndicador = risco ? 'sla_vistagem_risco' : 'sla_vistagem_normal'
   const indisponivelOps = isAgendamentoVistagemIndisponivelPorArea(area)
   const indisponivelNormal =
@@ -185,6 +186,27 @@ export function SlaVistagemTab({
           'Sem desvios no período.',
         )
 
+  const rankingDesvioRows = rankingPorGrupo
+    ? porGrupo.map((r) => ({
+        ...r,
+        grupo_cliente: toPriMaiuscula(String(r.grupo_cliente ?? '')),
+      }))
+    : porUsuarioFiltrado
+  const rankingDesvioLabelKey = rankingPorGrupo ? 'grupo_cliente' : 'usuario'
+  const rankingDesvioShowAvatars = !rankingPorGrupo
+  const rankingDesvioEmptyLabel = rankingPorGrupo
+    ? 'Sem dados no período.'
+    : emptyDesvio
+  const grupoClienteToggle = {
+    active: rankingPorGrupo,
+    onToggle: () => setRankingPorGrupo((v) => !v),
+  }
+
+  const porTipoAgregado = useMemo(
+    () => aggregateRankingPorTipoPublicacao(porTipo),
+    [porTipo],
+  )
+
   const loadingKpi =
     loading ||
     periodoCurto.loading ||
@@ -265,7 +287,7 @@ export function SlaVistagemTab({
         responsavelHintDisabled={responsavelHintDisabled}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title={`SLA Vistagem ${risco ? 'Risco' : 'Normal'} Gestão a Vista`}
           value={pctGestaoVista != null ? formatPercent(pctGestaoVista) : '—'}
@@ -303,6 +325,7 @@ export function SlaVistagemTab({
           icon={ShieldCheck}
           accentClass="bg-slate-100 text-slate-700"
           loading={loadingKpi}
+          reservePessoaSlot={Boolean(responsavel?.trim())}
         />
       </div>
 
@@ -330,10 +353,10 @@ export function SlaVistagemTab({
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <EficienciaRankingChart
-          title="% Desvio Responsável"
+          title={rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsável'}
           subtitle={areaHint}
-          rows={porUsuarioFiltrado}
-          labelKey="usuario"
+          rows={rankingDesvioRows}
+          labelKey={rankingDesvioLabelKey}
           valueKey="pct_do_total"
           valueLabel="% do total"
           formatValue={(v) => formatPercent(v)}
@@ -342,22 +365,18 @@ export function SlaVistagemTab({
           truncateLabels={false}
           biStyle
           compact
-          showAvatars
+          showAvatars={rankingDesvioShowAvatars}
           loading={loadingDesvio}
           maxItems={9}
           scrollAll
-          emptyLabel={emptyDesvio}
+          emptyLabel={rankingDesvioEmptyLabel}
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
+          grupoClienteToggle={indisponivel ? undefined : grupoClienteToggle}
         />
         <EficienciaRankingChart
           title="Tipo Publicação"
           subtitle={areaHint}
-          rows={porTipo.map((r) => ({
-            ...r,
-            tipo_publicacao: toPriMaiuscula(
-              stripJsonArrayDecorators(String(r.tipo_publicacao ?? '')),
-            ),
-          }))}
+          rows={porTipoAgregado}
           labelKey="tipo_publicacao"
           valueKey="qtd_desvio"
           valueLabel="Desvios"
@@ -373,10 +392,10 @@ export function SlaVistagemTab({
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
         />
         <EficienciaRankingChart
-          title="Grupo Cliente Desvio"
+          title={rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsável'}
           subtitle={areaHint}
-          rows={porGrupo}
-          labelKey="grupo_cliente"
+          rows={rankingDesvioRows}
+          labelKey={rankingDesvioLabelKey}
           valueKey="qtd_desvio"
           valueLabel="Desvios"
           pctKey={null}
@@ -384,11 +403,13 @@ export function SlaVistagemTab({
           truncateLabels={false}
           biStyle
           compact
+          showAvatars={rankingDesvioShowAvatars}
           loading={loadingDesvio}
           maxItems={9}
           scrollAll
-          emptyLabel={emptyDesvio}
+          emptyLabel={rankingDesvioEmptyLabel}
           onRacionalClick={indisponivel ? undefined : () => setRacionalAberto(true)}
+          grupoClienteToggle={indisponivel ? undefined : grupoClienteToggle}
         />
       </div>
 

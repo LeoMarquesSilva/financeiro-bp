@@ -34,6 +34,8 @@ type Props = {
   vsEquipePct?: number | null
   /** Exibe botão de copiar o card (PowerPoint). */
   copyable?: boolean
+  /** Reserva espaço do bloco “Filtrado por…” para alinhar altura com os demais cards da linha. */
+  reservePessoaSlot?: boolean
 }
 
 function formatPp(value: number): string {
@@ -57,10 +59,12 @@ export function EficienciaKpiCard({
   currentPct = null,
   vsEquipePct = null,
   copyable = true,
+  reservePessoaSlot = false,
 }: Props) {
   const cardRef = useRef<HTMLDivElement>(null)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const temPessoa = Boolean(pessoaNome?.trim())
+  const filtroSlotAtivo = temPessoa || reservePessoaSlot
   const delta =
     temPessoa &&
     currentPct != null &&
@@ -97,7 +101,7 @@ export function EficienciaKpiCard({
     copyStatus === 'loading' ? Loader2 : copyStatus === 'done' ? Check : Copy
 
   return (
-    <div className="group relative">
+    <div className="group relative h-full">
       {copyable ? (
         <TooltipProvider delayDuration={200}>
           <Tooltip>
@@ -131,7 +135,10 @@ export function EficienciaKpiCard({
       <div
         ref={cardRef}
         data-chart-export-preserve-bg
-        className="flex flex-col rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm"
+        className={cn(
+          'flex h-full flex-col rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm',
+          filtroSlotAtivo && 'min-h-[8.75rem]',
+        )}
       >
         <div className="mb-2 flex items-center gap-2">
           <span
@@ -153,46 +160,55 @@ export function EficienciaKpiCard({
         <p className="text-2xl font-bold tabular-nums text-slate-900">{value}</p>
       )}
 
-      {temPessoa && !loading && scopeEquipe && (
-        <Badge
-          variant="secondary"
-          className="mt-1.5 h-5 w-fit px-2 py-0 text-[10px] font-medium text-slate-500"
-        >
-          Equipe · filtro de pessoa não altera
-        </Badge>
-      )}
-
-      {temPessoa && !loading && !scopeEquipe && (
-        <div className="mt-1.5 flex flex-col gap-1">
-          <Badge
-            variant="secondary"
-            className="h-5 w-fit max-w-full truncate px-2 py-0 text-[10px] font-medium text-slate-600"
-            title={pessoaNome ?? undefined}
-          >
-            Filtrado por {pessoaNome}
-          </Badge>
-          {direcao && delta != null && vsEquipePct != null && (
-            <p
-              className={cn(
-                'inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums',
-                direcao === 'up' && 'text-emerald-600',
-                direcao === 'down' && 'text-rose-600',
-                direcao === 'flat' && 'text-slate-500',
-              )}
+      {filtroSlotAtivo && !loading ? (
+        <div className="mt-1.5 flex min-h-[2.625rem] flex-col justify-start gap-1">
+          {temPessoa && scopeEquipe ? (
+            <Badge
+              variant="secondary"
+              className="h-5 w-fit px-2 py-0 text-[10px] font-medium text-slate-500"
             >
-              {direcao === 'up' && <ArrowUp className="h-3.5 w-3.5 shrink-0" aria-hidden />}
-              {direcao === 'down' && <ArrowDown className="h-3.5 w-3.5 shrink-0" aria-hidden />}
-              {direcao === 'flat' && <Minus className="h-3.5 w-3.5 shrink-0" aria-hidden />}
-              {direcao === 'flat'
-                ? `Igual à equipe (${formatPercent(vsEquipePct)})`
-                : `${direcao === 'up' ? '+' : '−'}${formatPp(Math.abs(delta))} vs equipe (${formatPercent(vsEquipePct)})`}
-            </p>
-          )}
+              Equipe · filtro de pessoa não altera
+            </Badge>
+          ) : null}
+
+          {temPessoa && !scopeEquipe ? (
+            <>
+              <Badge
+                variant="secondary"
+                className="h-5 w-fit max-w-full truncate px-2 py-0 text-[10px] font-medium text-slate-600"
+                title={pessoaNome ?? undefined}
+              >
+                Filtrado por {pessoaNome}
+              </Badge>
+              {direcao && delta != null && vsEquipePct != null ? (
+                <p
+                  title="pontos percentuais em relação à equipe (Gestão à Vista)"
+                  className={cn(
+                    'inline-flex items-center gap-0.5 text-[11px] font-semibold tabular-nums',
+                    direcao === 'up' && 'text-emerald-600',
+                    direcao === 'down' && 'text-rose-600',
+                    direcao === 'flat' && 'text-slate-500',
+                  )}
+                >
+                  {direcao === 'up' && <ArrowUp className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+                  {direcao === 'down' && (
+                    <ArrowDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  )}
+                  {direcao === 'flat' && <Minus className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+                  {direcao === 'flat'
+                    ? `Igual à equipe (${formatPercent(vsEquipePct)})`
+                    : `${direcao === 'up' ? '+' : '−'}${formatPp(Math.abs(delta))} vs equipe (${formatPercent(vsEquipePct)})`}
+                </p>
+              ) : (
+                <span className="sr-only">Sem comparativo vs equipe</span>
+              )}
+            </>
+          ) : null}
         </div>
-      )}
+      ) : null}
 
       {(hint || meta) && !loading && (
-        <div className="mt-1.5 flex items-center gap-2 text-xs">
+        <div className="mt-auto flex items-center gap-2 pt-1.5 text-xs">
           {hint && <span className="text-slate-400">{hint}</span>}
           {meta && (
             <span

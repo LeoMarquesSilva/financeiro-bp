@@ -11,12 +11,14 @@ import {
   useEficienciaProtocolo,
   useEficienciaProtocoloDiario,
   useEficienciaProtocoloRanking,
+  useEficienciaProtocoloRankingGrupo,
 } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
 import { useEvolucaoDrilldownState } from '../hooks/useEvolucaoDrilldownState'
 import { usePeriodoCurtoResumo } from '../hooks/usePeriodoCurtoResumo'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { totaisEficienciaProtocoloFromResumo } from '../utils/periodoCurtoIndicadorTotais'
+import { toPriMaiuscula } from '../utils/textFormat'
 import {
   buildEvolucaoDiarioChart,
   evolucaoDrilldownSubtitle,
@@ -56,6 +58,7 @@ export function EficienciaProtocoloTab({
 }: Props) {
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalAberto, setRacionalAberto] = useState(false)
+  const [rankingPorGrupo, setRankingPorGrupo] = useState(false)
   const drill = useEvolucaoDrilldownState(mesFiltro, [mesFiltro, ano, area, responsavel])
   const mesDrillTarget = drill.mesDrillTarget
 
@@ -67,6 +70,8 @@ export function EficienciaProtocoloTab({
     mesFiltro,
     area,
   )
+  const { data: rankingGrupo, loading: loadingRankingGrupo } =
+    useEficienciaProtocoloRankingGrupo(ano, mesFiltro, area)
   const {
     chartData: evolucaoResp,
     chartDataDiario: evolucaoDiarioResp,
@@ -131,6 +136,25 @@ export function EficienciaProtocoloTab({
         }
       : null,
   )
+  const rankingDesvioRows = rankingPorGrupo
+    ? rankingGrupo.map((r) => ({
+        ...r,
+        grupo_cliente: toPriMaiuscula(String(r.grupo_cliente ?? '')),
+      }))
+    : rankingFiltrado
+  const rankingDesvioLabelKey = rankingPorGrupo ? 'grupo_cliente' : 'usuario'
+  const rankingDesvioLoading = rankingPorGrupo ? loadingRankingGrupo : loadingRanking
+  const rankingDesvioShowAvatars = !rankingPorGrupo
+  const rankingDesvioEmptyLabel = rankingPorGrupo
+    ? 'Sem dados no período.'
+    : emptyLabelDesvioResponsavel(
+        responsavel,
+        Boolean(responsavel && acumResp.total > 0),
+      )
+  const grupoClienteToggle = {
+    active: rankingPorGrupo,
+    onToggle: () => setRankingPorGrupo((v) => !v),
+  }
   const pctGeral =
     responsavel && !periodoCurto.periodoCurtoAtivo
       ? total > 0
@@ -227,7 +251,7 @@ export function EficienciaProtocoloTab({
         responsavelHintDisabled={responsavelHintDisabled}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="Eficiência de Protocolo Gestão a Vista"
           value={pctGestaoVista != null ? formatPercent(pctGestaoVista) : '—'}
@@ -260,6 +284,7 @@ export function EficienciaProtocoloTab({
           icon={ClipboardCheck}
           accentClass="bg-slate-100 text-slate-700"
           loading={loadingPeriodo}
+          reservePessoaSlot={Boolean(responsavel?.trim())}
         />
       </div>
 
@@ -287,9 +312,10 @@ export function EficienciaProtocoloTab({
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <EficienciaRankingChart
-          title="% Desvio Responsáveis"
+          title={rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsáveis'}
           subtitle={areaHint}
-          rows={rankingFiltrado}
+          rows={rankingDesvioRows}
+          labelKey={rankingDesvioLabelKey}
           valueKey="pct_do_total"
           valueLabel="% do total"
           formatValue={(v) => formatPercent(v)}
@@ -298,20 +324,19 @@ export function EficienciaProtocoloTab({
           truncateLabels={false}
           biStyle
           compact
-          showAvatars
-          loading={loadingRanking}
+          showAvatars={rankingDesvioShowAvatars}
+          loading={rankingDesvioLoading}
           maxItems={9}
           scrollAll
-          emptyLabel={emptyLabelDesvioResponsavel(
-            responsavel,
-            Boolean(responsavel && acumResp.total > 0),
-          )}
+          emptyLabel={rankingDesvioEmptyLabel}
           onRacionalClick={() => setRacionalAberto(true)}
+          grupoClienteToggle={grupoClienteToggle}
         />
         <EficienciaRankingChart
-          title="Qtd Desvio Responsáveis"
+          title={rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsáveis'}
           subtitle={areaHint}
-          rows={rankingFiltrado}
+          rows={rankingDesvioRows}
+          labelKey={rankingDesvioLabelKey}
           valueKey="qtd_inconsistencia"
           valueLabel="Inconsistências"
           pctKey={null}
@@ -319,15 +344,13 @@ export function EficienciaProtocoloTab({
           truncateLabels={false}
           biStyle
           compact
-          showAvatars
-          loading={loadingRanking}
+          showAvatars={rankingDesvioShowAvatars}
+          loading={rankingDesvioLoading}
           maxItems={9}
           scrollAll
-          emptyLabel={emptyLabelDesvioResponsavel(
-            responsavel,
-            Boolean(responsavel && acumResp.total > 0),
-          )}
+          emptyLabel={rankingDesvioEmptyLabel}
           onRacionalClick={() => setRacionalAberto(true)}
+          grupoClienteToggle={grupoClienteToggle}
         />
       </div>
 

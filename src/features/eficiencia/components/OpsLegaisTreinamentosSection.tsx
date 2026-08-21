@@ -26,7 +26,7 @@ type Props = {
   itens: TreinamentoItemRow[]
   ano: number
   loading?: boolean
-  onRacionalClick?: (visao: TreinamentosVisao) => void
+  onRacionalClick?: () => void
 }
 
 const CARD_STYLE: Record<
@@ -118,7 +118,7 @@ export function OpsLegaisTreinamentosSection({
         <TreinamentosVisaoToggle value={visao} onChange={setVisao} />
         {onRacionalClick ? (
           <OverviewRacionalButton
-            onClick={() => onRacionalClick(visao)}
+            onClick={() => onRacionalClick?.()}
             className="w-auto"
           />
         ) : null}

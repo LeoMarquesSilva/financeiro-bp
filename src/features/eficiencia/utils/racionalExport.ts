@@ -1,4 +1,8 @@
 import type { RacionalColuna, RacionalResultado } from '../types/eficiencia.types'
+import {
+  EXCEL_DURACAO_NUMFMT,
+  minutosParaExcelDuracao,
+} from './formatTreinamentoDuracao'
 import { formatRacionalCell, formatRacionalResumoLabel } from './racionalFormat'
 
 export type RacionalExportMeta = {
@@ -20,6 +24,43 @@ function safeFilenamePart(value: string): string {
 
 function emptySummaryRow(colunas: RacionalColuna[]): Record<string, string> {
   return Object.fromEntries(colunas.map((coluna) => [coluna.label, '']))
+}
+
+function isDuracaoColuna(coluna: RacionalColuna): boolean {
+  return coluna.format === 'duracao_minutos'
+}
+
+/** Converte colunas de minutos em serial Excel + `[h]:mm` para somar em pivot. */
+function applyExcelDuracaoFormat(
+  ws: import('xlsx').WorkSheet,
+  utils: typeof import('xlsx').utils,
+  durationLabels: string[],
+): void {
+  if (!ws['!ref'] || durationLabels.length === 0) return
+
+  const range = utils.decode_range(ws['!ref'])
+  const headerRow = range.s.r
+  const labelToCol = new Map<string, number>()
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const addr = utils.encode_cell({ r: headerRow, c })
+    const label = String(ws[addr]?.v ?? '').trim()
+    if (label) labelToCol.set(label, c)
+  }
+
+  const colIndexes = durationLabels
+    .map((label) => labelToCol.get(label))
+    .filter((c): c is number => c != null)
+
+  for (let r = headerRow + 1; r <= range.e.r; r++) {
+    for (const c of colIndexes) {
+      const addr = utils.encode_cell({ r, c })
+      const cell = ws[addr]
+      if (!cell || typeof cell.v !== 'number') continue
+      cell.t = 'n'
+      cell.v = minutosParaExcelDuracao(cell.v)
+      cell.z = EXCEL_DURACAO_NUMFMT
+    }
+  }
 }
 
 function normalizeExcelGroupKey(value: unknown): string {
@@ -51,6 +92,7 @@ function buildTreinamentoResumoRows(
     const colaboradorKey = normalizeExcelGroupKey(colaborador)
     const dataKey = String(row.data ?? '').slice(0, 10)
     const participacaoKey = `${colaboradorKey}|${dataKey}`
+    const minutos = Math.max(0, Number(row.duracao_minutos) || 0)
     const grupo = grupos.get(treinamentoKey) ?? {
       treinamento,
       pessoas: new Map<string, string>(),
@@ -59,10 +101,7 @@ function buildTreinamentoResumoRows(
     }
 
     grupo.pessoas.set(colaboradorKey, colaborador)
-    grupo.duracaoMinutos = Math.max(
-      grupo.duracaoMinutos,
-      Math.max(0, Number(row.duracao_minutos) || 0),
-    )
+    grupo.duracaoMinutos = Math.max(grupo.duracaoMinutos, minutos)
     if (!grupo.participacoes.has(participacaoKey)) {
       grupo.participacoes.add(participacaoKey)
     }
@@ -77,7 +116,7 @@ function buildTreinamentoResumoRows(
       Treinamento: grupo.treinamento,
       Participantes: grupo.pessoas.size,
       Participações: grupo.participacoes.size,
-      'Duração do treinamento (min)': grupo.duracaoMinutos,
+      'Duração (HH:MM)': grupo.duracaoMinutos,
       Pessoas: Array.from(grupo.pessoas.values())
         .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
         .join(' | '),
@@ -113,12 +152,16 @@ export async function buildRacionalExcelBlob(
   const desenvolvimentoEquipe = colunas.some((coluna) => coluna.key === 'pct_atingimento')
   const preservarNumeros = treinamentoBase || desenvolvimentoEquipe
 
+  const duracaoLabels = colunas.filter(isDuracaoColuna).map((c) => c.label)
+
   const rows: Array<Record<string, string | number>> = linhas.map((row) => {
     const out: Record<string, string | number> = {}
     for (const coluna of colunas) {
       const value = row[coluna.key]
-      out[coluna.label] =
-        preservarNumeros && typeof value === 'number' ? value : formatRacionalCell(value)
+      const exportarNumero =
+        typeof value === 'number' &&
+        ((preservarNumeros && !isDuracaoColuna(coluna)) || isDuracaoColuna(coluna))
+      out[coluna.label] = exportarNumero ? value : formatRacionalCell(value)
     }
     return out
   })
@@ -140,6 +183,7 @@ export async function buildRacionalExcelBlob(
   }
 
   const ws = XLSX.utils.json_to_sheet(rows)
+  applyExcelDuracaoFormat(ws, XLSX.utils, duracaoLabels)
   const wb = XLSX.utils.book_new()
   if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] }
   XLSX.utils.book_append_sheet(wb, ws, treinamentoBase ? 'Base' : 'Racional')
@@ -147,6 +191,7 @@ export async function buildRacionalExcelBlob(
   if (treinamentoBase) {
     const resumoTreinamentos = buildTreinamentoResumoRows(linhas)
     const wsResumo = XLSX.utils.json_to_sheet(resumoTreinamentos)
+    applyExcelDuracaoFormat(wsResumo, XLSX.utils, ['Duração (HH:MM)'])
     if (wsResumo['!ref']) wsResumo['!autofilter'] = { ref: wsResumo['!ref'] }
     XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo por treinamento')
   }

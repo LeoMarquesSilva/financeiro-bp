@@ -21,6 +21,15 @@ export interface RankingUsuarioRow {
   [key: string]: string | number | undefined
 }
 
+export interface RankingGrupoClienteRow {
+  grupo_cliente: string
+  qtd_fatal?: number
+  qtd_inconsistencia?: number
+  qtd_desvio?: number
+  pct_do_total: number
+  [key: string]: string | number | undefined
+}
+
 export interface JustificativaFatalRow {
   justificativa: string
   qtd: number
@@ -378,6 +387,7 @@ export interface TreinamentoItemRow {
   treinamento: string | null
   data: string | null
   duracao_minutos: number
+  ministrado_por?: string | null
   /** Mesma pessoa + treinamento + data em mais de um ID (espelho/SharePoint). */
   duplicado?: boolean
 }
@@ -488,7 +498,7 @@ export type RacionalEscopo =
 export interface RacionalColuna {
   key: string
   label: string
-  format?: 'percentual'
+  format?: 'percentual' | 'duracao_minutos'
 }
 
 export interface RacionalResumo {

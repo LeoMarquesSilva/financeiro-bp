@@ -42,6 +42,7 @@ import type {
   AreaParticipacaoRow,
   JustificativaFatalRow,
   RankingUsuarioRow,
+  RankingGrupoClienteRow,
   SlaProtocoloMesRow,
   SlaProtocoloDiaRow,
   SlaVistagemDiaRow,
@@ -804,6 +805,20 @@ export const eficienciaService = {
     })
   },
 
+  async fetchSlaProtocoloRankingFatalGrupo(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+    area: string | null = null,
+  ): Promise<RankingGrupoClienteRow[]> {
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_sla_protocolo_ranking_fatal_grupo', {
+      p_ano: ano,
+      p_meses: meses,
+      p_area: area,
+    })
+  },
+
   async fetchSlaProtocoloJustificativaFatal(
     ano: number,
     mesFiltro: MesFiltroEficiencia = null,
@@ -850,6 +865,20 @@ export const eficienciaService = {
     })
   },
 
+  async fetchEficienciaProtocoloRankingGrupo(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+    area: string | null = null,
+  ): Promise<RankingGrupoClienteRow[]> {
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_protocolo_ranking_inconsistencia_grupo', {
+      p_ano: ano,
+      p_meses: meses,
+      p_area: area,
+    })
+  },
+
   async fetchAgendamentoMensal(ano: number, area: string | null = null): Promise<AgendamentoMesRow[]> {
     if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
     return rpc('eficiencia_agendamento_mensal', {
@@ -867,6 +896,21 @@ export const eficienciaService = {
     const meses = mesesEfetivosFiltro(mesFiltro, ano)
     if (meses && meses.length === 0) return []
     return rpc('eficiencia_agendamento_por_usuario', {
+      p_ano: ano,
+      p_meses: meses,
+      p_area: area,
+    })
+  },
+
+  async fetchAgendamentoPorGrupo(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+    area: string | null = null,
+  ): Promise<RankingGrupoClienteRow[]> {
+    if (isAgendamentoVistagemIndisponivelPorArea(area)) return []
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_agendamento_por_grupo', {
       p_ano: ano,
       p_meses: meses,
       p_area: area,
@@ -1103,7 +1147,7 @@ export const eficienciaService = {
   async fetchTreinamentosItens(ano: number): Promise<TreinamentoItemRow[]> {
     const { data, error } = await supabase
       .from('sp_treinamentos_presenca')
-      .select('colaborador, treinamento, data, duracao_minutos')
+      .select('colaborador, treinamento, data, duracao_minutos, ministrado_por')
       .gte('data', `${ano}-01-01`)
       .lte('data', `${ano}-12-31`)
       .order('data', { ascending: false })
@@ -1115,6 +1159,10 @@ export const eficienciaService = {
         treinamento: r.treinamento == null ? null : String(r.treinamento),
         data: r.data == null ? null : String(r.data),
         duracao_minutos: Number(r.duracao_minutos ?? 0),
+        ministrado_por:
+          r.ministrado_por == null || String(r.ministrado_por).trim() === ''
+            ? null
+            : String(r.ministrado_por),
       })),
     )
   },

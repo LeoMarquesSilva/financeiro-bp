@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, Building2 } from 'lucide-react'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import { getInitials } from '@/shared/components/Avatar'
 import { formatPercent } from '@/shared/utils/format'
@@ -58,6 +58,11 @@ type Props = {
   compact?: boolean
   /** Abre o sheet de Racional (mesma base do Overview). */
   onRacionalClick?: () => void
+  /** Alterna visão Responsável ↔ Grupo Cliente (botão ao lado do Racional). */
+  grupoClienteToggle?: {
+    active: boolean
+    onToggle: () => void
+  }
   /** Miniatura do responsável (catálogo ticket-bp / team_members). */
   showAvatars?: boolean
   className?: string
@@ -273,6 +278,7 @@ export function EficienciaRankingChart({
   biStyle = false,
   compact: compactProp,
   onRacionalClick,
+  grupoClienteToggle,
   showAvatars = false,
   className,
 }: Props) {
@@ -432,6 +438,23 @@ export function EficienciaRankingChart({
                 compact && 'h-7 gap-1 px-2 py-1 text-[11px]',
               )}
             />
+          )}
+          {grupoClienteToggle && (
+            <button
+              type="button"
+              onClick={grupoClienteToggle.onToggle}
+              aria-pressed={grupoClienteToggle.active}
+              className={cn(
+                'flex w-auto shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold shadow-sm transition-colors',
+                compact && 'h-7 gap-1 px-2 py-1 text-[11px]',
+                grupoClienteToggle.active
+                  ? 'border-violet-300 bg-violet-50 text-violet-800 hover:border-violet-400 hover:bg-violet-100'
+                  : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50',
+              )}
+            >
+              <Building2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Grupo Cliente
+            </button>
           )}
           <ChartCopyButton
             containerRef={chartExportRef}

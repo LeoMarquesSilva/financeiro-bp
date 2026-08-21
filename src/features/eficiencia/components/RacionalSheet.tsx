@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { formatPercent } from '@/shared/utils/format'
 import { eficienciaService } from '../services/eficienciaService'
 import { exportRacionalExcel } from '../utils/racionalExport'
+import { formatMinutosHHMM } from '../utils/formatTreinamentoDuracao'
 import { formatRacionalCell, formatRacionalResumoLabel, isRacionalLinhaForaMeta, isRacionalLinhaTreinamentoDuplicado, racionalLinhaForaMetaTitle } from '../utils/racionalFormat'
 import { formatRacionalPeriodoLabel } from '../utils/racionalQuery'
 import {
@@ -49,6 +50,10 @@ function formatRacionalColumnCell(coluna: RacionalColuna, value: unknown): strin
   if (coluna.format === 'percentual' && value != null) {
     const percentual = Number(value)
     if (Number.isFinite(percentual)) return formatPercent(percentual)
+  }
+  if (coluna.format === 'duracao_minutos' && value != null) {
+    const minutos = Number(value)
+    if (Number.isFinite(minutos)) return formatMinutosHHMM(minutos)
   }
   return formatRacionalCell(value)
 }

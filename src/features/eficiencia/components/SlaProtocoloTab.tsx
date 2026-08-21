@@ -12,6 +12,7 @@ import {
   useSlaProtocoloDiario,
   useSlaProtocoloJustificativaFatal,
   useSlaProtocoloRankingFatal,
+  useSlaProtocoloRankingFatalGrupo,
 } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
 import { useEvolucaoDrilldownState } from '../hooks/useEvolucaoDrilldownState'
@@ -60,6 +61,7 @@ export function SlaProtocoloTab({
   const { area, setArea, allowedAreas, allowTodas } = useEficienciaAreaFilter()
   const [racionalEscopo, setRacionalEscopo] = useState<RacionalEscopo>('default')
   const [racionalAberto, setRacionalAberto] = useState(false)
+  const [rankingPorGrupo, setRankingPorGrupo] = useState(false)
 
   const drill = useEvolucaoDrilldownState(mesFiltro, [mesFiltro, ano, area, responsavel])
 
@@ -71,6 +73,8 @@ export function SlaProtocoloTab({
     mesFiltro,
     area,
   )
+  const { data: rankingGrupo, loading: loadingRankingGrupo } =
+    useSlaProtocoloRankingFatalGrupo(ano, mesFiltro, area)
   const { data: justificativas, loading: loadingJustificativas } =
     useSlaProtocoloJustificativaFatal(ano, mesFiltro, area)
 
@@ -138,6 +142,26 @@ export function SlaProtocoloTab({
       ? { usuario: responsavel, qtd_fatal: qtdFatal, pct_do_total: 100 }
       : null,
   )
+  const rankingDesvioRows = rankingPorGrupo
+    ? rankingGrupo.map((r) => ({
+        ...r,
+        grupo_cliente: toPriMaiuscula(String(r.grupo_cliente ?? '')),
+      }))
+    : rankingFiltrado
+  const rankingDesvioLabelKey = rankingPorGrupo ? 'grupo_cliente' : 'usuario'
+  const rankingDesvioLoading = rankingPorGrupo ? loadingRankingGrupo : loadingRanking
+  const rankingDesvioShowAvatars = !rankingPorGrupo
+  const rankingDesvioEmptyLabel = rankingPorGrupo
+    ? 'Sem dados no período.'
+    : emptyLabelDesvioResponsavel(
+        responsavel,
+        Boolean(responsavel && acumResp.total > 0),
+      )
+  const toggleRankingGrupo = () => setRankingPorGrupo((v) => !v)
+  const grupoClienteToggle = {
+    active: rankingPorGrupo,
+    onToggle: toggleRankingGrupo,
+  }
   const pctGeral =
     responsavel && !periodoCurto.periodoCurtoAtivo
       ? qtdTotal > 0
@@ -258,7 +282,7 @@ export function SlaProtocoloTab({
         responsavelHintDisabled={responsavelHintDisabled}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-3">
         <EficienciaKpiCard
           title="SLA de Protocolo Gestão a Vista"
           value={pctGestaoVista != null ? formatPercent(pctGestaoVista) : '—'}
@@ -299,6 +323,7 @@ export function SlaProtocoloTab({
           icon={FileCheck2}
           accentClass="bg-rose-100 text-rose-700"
           loading={loadingPeriodo}
+          reservePessoaSlot={Boolean(responsavel?.trim())}
         />
       </div>
 
@@ -346,9 +371,10 @@ export function SlaProtocoloTab({
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
         />
         <EficienciaRankingChart
-          title="% Desvio Responsáveis"
+          title={rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsáveis'}
           subtitle={areaHint}
-          rows={rankingFiltrado}
+          rows={rankingDesvioRows}
+          labelKey={rankingDesvioLabelKey}
           valueKey="pct_do_total"
           valueLabel="% do total"
           formatValue={(v) => formatPercent(v)}
@@ -357,20 +383,19 @@ export function SlaProtocoloTab({
           truncateLabels={false}
           biStyle
           compact
-          showAvatars
-          loading={loadingRanking}
+          showAvatars={rankingDesvioShowAvatars}
+          loading={rankingDesvioLoading}
           maxItems={9}
           scrollAll
-          emptyLabel={emptyLabelDesvioResponsavel(
-            responsavel,
-            Boolean(responsavel && acumResp.total > 0),
-          )}
+          emptyLabel={rankingDesvioEmptyLabel}
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
+          grupoClienteToggle={grupoClienteToggle}
         />
         <EficienciaRankingChart
-          title="Qtd Desvio Responsáveis"
+          title={rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsáveis'}
           subtitle={areaHint}
-          rows={rankingFiltrado}
+          rows={rankingDesvioRows}
+          labelKey={rankingDesvioLabelKey}
           valueKey="qtd_fatal"
           valueLabel="Desvio"
           pctKey={null}
@@ -378,15 +403,13 @@ export function SlaProtocoloTab({
           truncateLabels={false}
           biStyle
           compact
-          showAvatars
-          loading={loadingRanking}
+          showAvatars={rankingDesvioShowAvatars}
+          loading={rankingDesvioLoading}
           maxItems={9}
           scrollAll
-          emptyLabel={emptyLabelDesvioResponsavel(
-            responsavel,
-            Boolean(responsavel && acumResp.total > 0),
-          )}
+          emptyLabel={rankingDesvioEmptyLabel}
           onRacionalClick={() => openRacional('sla_protocolo_fatal')}
+          grupoClienteToggle={grupoClienteToggle}
         />
       </div>
 

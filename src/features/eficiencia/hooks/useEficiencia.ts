@@ -13,6 +13,7 @@ import type {
   OpsLegaisResponsumDashboard,
   OpsLegaisTarefasRankingRow,
   RankingUsuarioRow,
+  RankingGrupoClienteRow,
   SlaProtocoloMesRow,
   SlaProtocoloDiaRow,
   SlaVistagemMesRow,
@@ -154,6 +155,19 @@ export function useSlaProtocoloRankingFatal(
   return { data: rows, loading: isLoading, error }
 }
 
+export function useSlaProtocoloRankingFatalGrupo(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'sla-protocolo-ranking-grupo', ano, mesFiltro, area],
+    queryFn: () => eficienciaService.fetchSlaProtocoloRankingFatalGrupo(ano, mesFiltro, area),
+  })
+  const rows: RankingGrupoClienteRow[] = data ?? []
+  return { data: rows, loading: isLoading, error }
+}
+
 export function useSlaProtocoloJustificativaFatal(
   ano: number,
   mesFiltro: MesFiltroEficiencia,
@@ -189,6 +203,19 @@ export function useEficienciaProtocoloRanking(
   return { data: rows, loading: isLoading, error }
 }
 
+export function useEficienciaProtocoloRankingGrupo(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'protocolo-ranking-grupo', ano, mesFiltro, area],
+    queryFn: () => eficienciaService.fetchEficienciaProtocoloRankingGrupo(ano, mesFiltro, area),
+  })
+  const rows: RankingGrupoClienteRow[] = data ?? []
+  return { data: rows, loading: isLoading, error }
+}
+
 export function useAgendamento(ano: number, area: string | null = null) {
   const { data, error, isLoading } = useQuery({
     queryKey: ['eficiencia', 'agendamento', ano, area],
@@ -208,6 +235,19 @@ export function useAgendamentoRanking(
     queryFn: () => eficienciaService.fetchAgendamentoPorUsuario(ano, mesFiltro, area),
   })
   const rows: AgendamentoUsuarioRow[] = data ?? []
+  return { data: rows, loading: isLoading, error }
+}
+
+export function useAgendamentoRankingGrupo(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'agendamento-ranking-grupo', ano, mesFiltro, area],
+    queryFn: () => eficienciaService.fetchAgendamentoPorGrupo(ano, mesFiltro, area),
+  })
+  const rows: RankingGrupoClienteRow[] = data ?? []
   return { data: rows, loading: isLoading, error }
 }
 
