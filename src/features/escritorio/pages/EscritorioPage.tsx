@@ -2,14 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { Building2, Download, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LevantamentoFiltros } from '../components/LevantamentoFiltros'
 import { LevantamentoKpiCards } from '../components/LevantamentoKpiCards'
 import { LevantamentoRacionalSheet } from '../components/LevantamentoRacionalSheet'
+import { RentabilidadeContratosSection } from '../components/RentabilidadeContratosSection'
 import {
   useLevantamentoFiltrosOpcoes,
   useLevantamentoGruposPeriodo,
   useLevantamentoResumo,
 } from '../hooks/useEscritorioLevantamento'
+import { useRentabilidadeContratos } from '../hooks/useEscritorioRentabilidade'
 import {
   defaultMesCorrente,
   type LevantamentoBloco,
@@ -29,6 +32,7 @@ export function EscritorioPage() {
   const [area, setArea] = useState<string | null>(null)
   const [exportando, setExportando] = useState(false)
   const [racionalBloco, setRacionalBloco] = useState<LevantamentoBloco | null>(null)
+  const [aba, setAba] = useState<'levantamento' | 'rentabilidade'>('levantamento')
 
   const filtros: Filtros = useMemo(
     () => ({ dataInicio, dataFim, grupos: gruposSelecionados, area }),
@@ -41,6 +45,11 @@ export function EscritorioPage() {
     dataFim,
   )
   const { data: resumo, isLoading, error, refetch, isFetching } = useLevantamentoResumo(filtros)
+  const {
+    data: rentabilidade,
+    isLoading: loadingRentabilidade,
+    error: errorRentabilidade,
+  } = useRentabilidadeContratos(filtros, aba === 'rentabilidade')
 
   useEffect(() => {
     if (periodoInicializado || !opcoes?.timesheetDataMax) return
@@ -82,7 +91,7 @@ export function EscritorioPage() {
             Escritório
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
-            Levantamento e visualização — publicações, timesheet, processos e tarefas
+            Levantamento operacional e rentabilidade de contratos por grupo cliente
             {timesheetAteLabel ? ` · timesheet até ${timesheetAteLabel}` : null}
           </p>
         </div>
@@ -137,30 +146,52 @@ export function EscritorioPage() {
         </p>
       ) : null}
 
-      <LevantamentoKpiCards
-        resumo={resumo}
-        loading={isLoading}
-        onRacional={setRacionalBloco}
-      />
+      <Tabs
+        value={aba}
+        onValueChange={(v) => setAba(v as 'levantamento' | 'rentabilidade')}
+        className="space-y-4"
+      >
+        <TabsList>
+          <TabsTrigger value="levantamento">Levantamento</TabsTrigger>
+          <TabsTrigger value="rentabilidade">Rentabilidade</TabsTrigger>
+        </TabsList>
 
-      {resumo?.processos_por_situacao?.length ? (
-        <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
-          <h2 className="mb-3 text-sm font-semibold text-slate-900">Processos por situação</h2>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-            {resumo.processos_por_situacao.map((s: LevantamentoSituacaoRow) => (
-              <div
-                key={s.situacao}
-                className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
-              >
-                <p className="truncate text-xs text-slate-500">{s.situacao}</p>
-                <p className="text-lg font-semibold tabular-nums text-slate-900">
-                  {s.qtd.toLocaleString('pt-BR')}
-                </p>
+        <TabsContent value="levantamento" className="mt-0 space-y-6">
+          <LevantamentoKpiCards
+            resumo={resumo}
+            loading={isLoading}
+            onRacional={setRacionalBloco}
+          />
+
+          {resumo?.processos_por_situacao?.length ? (
+            <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
+              <h2 className="mb-3 text-sm font-semibold text-slate-900">Processos por situação</h2>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                {resumo.processos_por_situacao.map((s: LevantamentoSituacaoRow) => (
+                  <div
+                    key={s.situacao}
+                    className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                  >
+                    <p className="truncate text-xs text-slate-500">{s.situacao}</p>
+                    <p className="text-lg font-semibold tabular-nums text-slate-900">
+                      {s.qtd.toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+            </section>
+          ) : null}
+        </TabsContent>
+
+        <TabsContent value="rentabilidade" className="mt-0">
+          <RentabilidadeContratosSection
+            filtros={filtros}
+            data={rentabilidade}
+            loading={loadingRentabilidade}
+            error={errorRentabilidade instanceof Error ? errorRentabilidade : null}
+          />
+        </TabsContent>
+      </Tabs>
 
       <LevantamentoRacionalSheet
         bloco={racionalBloco}
