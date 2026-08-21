@@ -4,10 +4,10 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { LevantamentoFiltros } from '../components/LevantamentoFiltros'
 import { LevantamentoKpiCards } from '../components/LevantamentoKpiCards'
-import { LevantamentoTiposAgendamento } from '../components/LevantamentoTiposAgendamento'
 import { LevantamentoRacionalSheet } from '../components/LevantamentoRacionalSheet'
 import {
   useLevantamentoFiltrosOpcoes,
+  useLevantamentoGruposPeriodo,
   useLevantamentoResumo,
 } from '../hooks/useEscritorioLevantamento'
 import {
@@ -17,6 +17,7 @@ import {
   type LevantamentoSituacaoRow,
 } from '../services/escritorioLevantamentoService'
 import { mesContainingIso } from '../utils/levantamentoAreas'
+import { LEVANTAMENTO_AREA_OPCOES } from '../utils/levantamentoAreaFiltro'
 import { exportLevantamentoRelatorioCompleto } from '../utils/levantamentoExport'
 
 export function EscritorioPage() {
@@ -28,7 +29,6 @@ export function EscritorioPage() {
   const [area, setArea] = useState<string | null>(null)
   const [exportando, setExportando] = useState(false)
   const [racionalBloco, setRacionalBloco] = useState<LevantamentoBloco | null>(null)
-  const [racionalTipo, setRacionalTipo] = useState<string | null>(null)
 
   const filtros: Filtros = useMemo(
     () => ({ dataInicio, dataFim, grupos: gruposSelecionados, area }),
@@ -36,9 +36,12 @@ export function EscritorioPage() {
   )
 
   const { data: opcoes } = useLevantamentoFiltrosOpcoes()
+  const { data: grupos = [], isLoading: loadingGrupos } = useLevantamentoGruposPeriodo(
+    dataInicio,
+    dataFim,
+  )
   const { data: resumo, isLoading, error, refetch, isFetching } = useLevantamentoResumo(filtros)
 
-  // Se o mês corrente ainda não tem timesheet, abre no mês da última sync.
   useEffect(() => {
     if (periodoInicializado || !opcoes?.timesheetDataMax) return
     if (mes.dataInicio > opcoes.timesheetDataMax) {
@@ -117,8 +120,9 @@ export function EscritorioPage() {
         dataFim={dataFim}
         gruposSelecionados={gruposSelecionados}
         area={area}
-        grupos={opcoes?.grupos ?? []}
-        areas={opcoes?.areas ?? []}
+        grupos={grupos}
+        gruposLoading={loadingGrupos}
+        areas={[...LEVANTAMENTO_AREA_OPCOES]}
         onChange={(next) => {
           if (next.dataInicio !== undefined) setDataInicio(next.dataInicio)
           if (next.dataFim !== undefined) setDataFim(next.dataFim)
@@ -133,28 +137,10 @@ export function EscritorioPage() {
         </p>
       ) : null}
 
-      {gruposSelecionados.length > 0 ? (
-        <p className="text-xs text-slate-500">
-          Filtro de grupo não se aplica a <strong>Agendamentos</strong> (tabela sem grupo_cliente).
-        </p>
-      ) : null}
-
       <LevantamentoKpiCards
         resumo={resumo}
         loading={isLoading}
-        onRacional={(bloco) => {
-          setRacionalTipo(null)
-          setRacionalBloco(bloco)
-        }}
-      />
-
-      <LevantamentoTiposAgendamento
-        rows={resumo?.agendamento_por_tipo ?? []}
-        loading={isLoading}
-        onSelectTipo={(tipo) => {
-          setRacionalTipo(tipo)
-          setRacionalBloco('agendamento')
-        }}
+        onRacional={setRacionalBloco}
       />
 
       {resumo?.processos_por_situacao?.length ? (
@@ -179,11 +165,7 @@ export function EscritorioPage() {
       <LevantamentoRacionalSheet
         bloco={racionalBloco}
         filtros={filtros}
-        tipoAgendamento={racionalTipo}
-        onClose={() => {
-          setRacionalBloco(null)
-          setRacionalTipo(null)
-        }}
+        onClose={() => setRacionalBloco(null)}
       />
     </div>
   )

@@ -1,11 +1,10 @@
 import { supabase } from '@/lib/supabaseClient'
-import { unifyAreaOptions, unifyGrupoOptions } from '../utils/levantamentoAreas'
+import { unifyGrupoOptions } from '../utils/levantamentoAreas'
 
 export type LevantamentoBloco =
   | 'publicacoes'
   | 'timesheet'
   | 'processos'
-  | 'agendamento'
   | 'tarefas'
 
 export type LevantamentoFiltros = {
@@ -54,8 +53,6 @@ export type LevantamentoRacional = {
 }
 
 export type LevantamentoFiltrosOpcoes = {
-  grupos: string[]
-  areas: string[]
   timesheetDataMax: string | null
   timesheetDataMin: string | null
 }
@@ -112,8 +109,6 @@ export const escritorioLevantamentoService = {
     if (error) throw error
     const o = (data ?? {}) as Record<string, unknown>
     return {
-      grupos: unifyGrupoOptions(asStringArray(o.grupos)),
-      areas: unifyAreaOptions(asStringArray(o.areas)),
       timesheetDataMax: o.timesheet_data_max
         ? String(o.timesheet_data_max).slice(0, 10)
         : null,
@@ -121,6 +116,18 @@ export const escritorioLevantamentoService = {
         ? String(o.timesheet_data_min).slice(0, 10)
         : null,
     }
+  },
+
+  async fetchGruposPeriodo(dataInicio: string, dataFim: string): Promise<string[]> {
+    const { data, error } = await supabase.rpc(
+      'escritorio_levantamento_grupos_periodo' as never,
+      {
+        p_data_inicio: dataInicio,
+        p_data_fim: dataFim,
+      } as never,
+    )
+    if (error) throw error
+    return unifyGrupoOptions(asStringArray(data))
   },
 
   async fetchResumo(filtros: LevantamentoFiltros): Promise<LevantamentoResumo> {
@@ -157,7 +164,6 @@ export const BLOCO_LABELS: Record<LevantamentoBloco, string> = {
   publicacoes: 'Publicações',
   timesheet: 'Timesheet',
   processos: 'Processos',
-  agendamento: 'Tarefas por tipo (Agendamento)',
   tarefas: 'Tarefas VIOS',
 }
 

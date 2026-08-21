@@ -67,7 +67,7 @@ function KpiCard({
 
 export function LevantamentoKpiCards({ resumo, loading, onRacional }: Props) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <KpiCard
         title="Publicações"
         value={(resumo?.publicacoes_total ?? 0).toLocaleString('pt-BR')}
@@ -98,15 +98,6 @@ export function LevantamentoKpiCards({ resumo, loading, onRacional }: Props) {
         accentClass="bg-amber-100 text-amber-800"
         loading={loading}
         onRacional={() => onRacional('processos')}
-      />
-      <KpiCard
-        title="Agendamentos"
-        value={(resumo?.agendamento_total ?? 0).toLocaleString('pt-BR')}
-        hint="Distinct por tipo abaixo"
-        icon={ClipboardList}
-        accentClass="bg-emerald-100 text-emerald-700"
-        loading={loading}
-        onRacional={() => onRacional('agendamento')}
       />
       <KpiCard
         title="Tarefas VIOS"

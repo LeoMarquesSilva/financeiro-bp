@@ -23,16 +23,10 @@ import { exportLevantamentoRacionalExcel, formatRacionalCell } from '../utils/le
 type Props = {
   bloco: LevantamentoBloco | null
   filtros: LevantamentoFiltros
-  tipoAgendamento?: string | null
   onClose: () => void
 }
 
-export function LevantamentoRacionalSheet({
-  bloco,
-  filtros,
-  tipoAgendamento = null,
-  onClose,
-}: Props) {
+export function LevantamentoRacionalSheet({ bloco, filtros, onClose }: Props) {
   const [exportando, setExportando] = useState(false)
   const open = bloco != null
 
@@ -46,20 +40,13 @@ export function LevantamentoRacionalSheet({
       filtros.dataFim,
       [...filtros.grupos].sort().join('\0'),
       filtros.area,
-      tipoAgendamento,
     ],
     queryFn: (): Promise<LevantamentoRacional> =>
-      escritorioLevantamentoService.fetchRacional(bloco as LevantamentoBloco, filtros, {
-        tipoAgendamento,
-      }),
+      escritorioLevantamentoService.fetchRacional(bloco as LevantamentoBloco, filtros),
     enabled: open,
   })
 
-  const titulo = bloco
-    ? tipoAgendamento
-      ? `${BLOCO_LABELS[bloco]} — ${tipoAgendamento}`
-      : BLOCO_LABELS[bloco]
-    : ''
+  const titulo = bloco ? BLOCO_LABELS[bloco] : ''
 
   async function handleExport() {
     if (!data || exportando) return
@@ -139,7 +126,7 @@ export function LevantamentoRacionalSheet({
                   <tr key={i} className="border-t border-slate-100 odd:bg-white even:bg-slate-50/40">
                     {data.colunas.map((c: LevantamentoColuna) => (
                       <td key={c.key} className="max-w-[16rem] truncate px-3 py-1.5 text-slate-800">
-                        {formatRacionalCell(row[c.key])}
+                        {formatRacionalCell(row[c.key], bloco ?? undefined, c.key)}
                       </td>
                     ))}
                   </tr>

@@ -13,6 +13,23 @@ export function useLevantamentoFiltrosOpcoes() {
   })
 }
 
+export function useLevantamentoGruposPeriodo(
+  dataInicio: string,
+  dataFim: string,
+  enabled = true,
+) {
+  const periodoValido =
+    Boolean(dataInicio) && Boolean(dataFim) && dataInicio <= dataFim
+
+  return useQuery({
+    queryKey: ['escritorio', 'levantamento', 'grupos', dataInicio, dataFim],
+    queryFn: () => escritorioLevantamentoService.fetchGruposPeriodo(dataInicio, dataFim),
+    enabled: enabled && periodoValido,
+    staleTime: 2 * 60_000,
+    placeholderData: (prev: string[] | undefined) => prev,
+  })
+}
+
 export function useLevantamentoResumo(filtros: LevantamentoFiltros, enabled = true) {
   return useQuery({
     queryKey: [
@@ -36,7 +53,6 @@ export function useLevantamentoResumo(filtros: LevantamentoFiltros, enabled = tr
 export function useLevantamentoRacional(
   bloco: LevantamentoBloco | null,
   filtros: LevantamentoFiltros,
-  tipoAgendamento: string | null = null,
 ) {
   return useQuery({
     queryKey: [
@@ -48,12 +64,9 @@ export function useLevantamentoRacional(
       filtros.dataFim,
       [...filtros.grupos].sort().join('\0'),
       filtros.area,
-      tipoAgendamento,
     ],
     queryFn: () =>
-      escritorioLevantamentoService.fetchRacional(bloco as LevantamentoBloco, filtros, {
-        tipoAgendamento,
-      }),
+      escritorioLevantamentoService.fetchRacional(bloco as LevantamentoBloco, filtros),
     enabled: bloco != null,
   })
 }

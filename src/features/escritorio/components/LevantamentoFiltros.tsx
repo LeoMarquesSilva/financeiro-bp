@@ -17,6 +17,7 @@ type Props = {
   gruposSelecionados: string[]
   area: string | null
   grupos: string[]
+  gruposLoading?: boolean
   areas: string[]
   onChange: (next: {
     dataInicio?: string
@@ -81,10 +82,12 @@ function MultiGrupoCombobox({
   options,
   value,
   onChange,
+  loading,
 }: {
   options: string[]
   value: string[]
   onChange: (next: string[]) => void
+  loading?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [busca, setBusca] = useState('')
@@ -102,8 +105,9 @@ function MultiGrupoCombobox({
     else onChange([...value, nome])
   }
 
-  const label =
-    value.length === 0
+  const label = loading
+    ? 'Carregando grupos…'
+    : value.length === 0
       ? 'Todos os grupos'
       : value.length === 1
         ? value[0]
@@ -118,6 +122,7 @@ function MultiGrupoCombobox({
             type="button"
             variant="outline"
             role="combobox"
+            disabled={loading}
             className="h-10 w-full justify-between font-normal"
           >
             <span className="truncate">{label}</span>
@@ -210,6 +215,7 @@ export function LevantamentoFiltros({
   gruposSelecionados,
   area,
   grupos,
+  gruposLoading,
   areas,
   onChange,
 }: Props) {
@@ -234,6 +240,7 @@ export function LevantamentoFiltros({
       <MultiGrupoCombobox
         options={grupos}
         value={gruposSelecionados}
+        loading={gruposLoading}
         onChange={(next) => onChange({ gruposSelecionados: next })}
       />
       <div className="min-w-[12rem] max-w-xs flex-1 space-y-1.5">

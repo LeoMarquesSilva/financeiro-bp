@@ -9,6 +9,13 @@ import {
   type LevantamentoRacional,
   escritorioLevantamentoService,
 } from '../services/escritorioLevantamentoService'
+import {
+  formatHorasTimesheetHHMM,
+  formatHorasTimesheetLinhaHHMM,
+  formatHorasTimesheetTotalHHMM,
+  minutosTimesheetLinha,
+  parseHorasDecimaisValor,
+} from './timesheetHorasExcel'
 
 function safeFilenamePart(value: string): string {
   return value
@@ -30,13 +37,41 @@ function cellToString(value: unknown): string {
 }
 
 function rowsFromRacional(racional: LevantamentoRacional): Array<Record<string, string>> {
-  return racional.linhas.map((row) => {
+  const isTimesheet = racional.bloco === 'timesheet'
+  let totalMinutos = 0
+
+  const rows = racional.linhas.map((row) => {
     const out: Record<string, string> = {}
     for (const col of racional.colunas) {
-      out[col.label] = cellToString(row[col.key])
+      if (isTimesheet && col.key === 'total_horas_decimal') {
+        const horas = parseHorasDecimaisValor(row[col.key])
+        const minutos = minutosTimesheetLinha(horas)
+        totalMinutos += minutos
+        out['Horas (HH:MM)'] = formatHorasTimesheetLinhaHHMM(horas)
+        out[col.label] = cellToString(row[col.key])
+      } else {
+        out[col.label] = cellToString(row[col.key])
+      }
     }
     return out
   })
+
+  if (isTimesheet && rows.length > 0) {
+    const totalRow: Record<string, string> = {}
+    for (const col of racional.colunas) {
+      if (col.key === 'total_horas_decimal') {
+        totalRow['Horas (HH:MM)'] = formatHorasTimesheetHHMM(totalMinutos)
+        totalRow[col.label] = ''
+      } else if (col.key === 'data') {
+        totalRow[col.label] = 'TOTAL'
+      } else {
+        totalRow[col.label] = ''
+      }
+    }
+    rows.push(totalRow)
+  }
+
+  return rows
 }
 
 export async function exportLevantamentoRacionalExcel(
@@ -77,9 +112,12 @@ export async function exportLevantamentoRelatorioCompleto(
       Indicador: 'Timesheet — horas',
       Valor: formatHorasDuracao(resumo.timesheet_horas),
     },
+    {
+      Indicador: 'Timesheet — horas (HH:MM)',
+      Valor: formatHorasTimesheetTotalHHMM(resumo.timesheet_horas),
+    },
     { Indicador: 'Timesheet — apontamentos', Valor: resumo.timesheet_apontamentos },
     { Indicador: 'Processos (estoque)', Valor: resumo.processos_total },
-    { Indicador: 'Agendamentos (distinct)', Valor: resumo.agendamento_total },
     { Indicador: 'Tarefas VIOS', Valor: resumo.tarefas_total },
     { Indicador: 'Data início', Valor: filtros.dataInicio },
     { Indicador: 'Data fim', Valor: filtros.dataFim },
@@ -88,26 +126,7 @@ export async function exportLevantamentoRelatorioCompleto(
   ]
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumoRows), 'Resumo')
 
-  if (resumo.agendamento_por_tipo.length) {
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
-        resumo.agendamento_por_tipo.map((r) => ({
-          'Tipo agendamento': r.tipo_agendamento,
-          Qtd: r.qtd,
-        })),
-      ),
-      'Por tipo',
-    )
-  }
-
-  const blocos: LevantamentoBloco[] = [
-    'publicacoes',
-    'timesheet',
-    'processos',
-    'agendamento',
-    'tarefas',
-  ]
+  const blocos: LevantamentoBloco[] = ['publicacoes', 'timesheet', 'processos', 'tarefas']
 
   for (const bloco of blocos) {
     const racional = await escritorioLevantamentoService.fetchRacional(bloco, filtros, {
@@ -132,7 +151,14 @@ export async function exportLevantamentoRelatorioCompleto(
   return { truncado }
 }
 
-export function formatRacionalCell(value: unknown): string {
+export function formatRacionalCell(
+  value: unknown,
+  bloco?: LevantamentoBloco,
+  colKey?: string,
+): string {
+  if (bloco === 'timesheet' && colKey === 'total_horas_decimal') {
+    return formatHorasTimesheetLinhaHHMM(parseHorasDecimaisValor(value))
+  }
   return cellToString(value)
 }
 
