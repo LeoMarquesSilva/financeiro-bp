@@ -35,6 +35,8 @@ import {
   agruparRecebidoDetalhe,
   agruparRecebidoPorCategoria,
   filtrarItensDetalheRecebido,
+  gruposComNovosContratos,
+  isItemPrevistoContratoNovo,
   RECEBIDO_DETALHE_DESCRICOES,
   RECEBIDO_DETALHE_LABELS,
   somaRecebidoClassificado,
@@ -45,8 +47,10 @@ import {
   agruparPrevistoPorGrupo,
   agruparPrevistoPorTitulo,
   agruparPrevistoPorVencimentoComQuitado,
+  agruparPrevistoQuitadoPorGrupoComVencimentos,
   agruparPrevistoTituloComQuitado,
   agruparInadMesPorGrupoSemCompensacao,
+  agruparInadMesPorGrupoComVencimentos,
   agruparInadMesFlatPorVencimento,
   filtrarPrevistoItensPorBusca,
   normalizePrevistoVencimentoKey,
@@ -66,6 +70,7 @@ import {
 } from '../utils/receitaPrevistoFechamento'
 import { filtrarClassificacaoPorArea } from '../utils/receitaInadimplenciaAreaFilter'
 import { ReceitaMesVisaoGerencialPanel } from './ReceitaMesVisaoGerencialPanel'
+import { AgruparVencimentoGrupoToggle } from './ReceitaVencimentoGrupoDrillTable'
 import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 
 type Props = {
@@ -99,6 +104,14 @@ const INAD_GRUPO_SORT_DEFAULT: { key: InadGrupoSortKey; dir: SortDir } = {
   dir: 'asc',
 }
 
+function BadgeContratoNovo() {
+  return (
+    <span className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+      Novo
+    </span>
+  )
+}
+
 export function ReceitaRecebidoClassificacaoSheet({
   open,
   onOpenChange,
@@ -130,6 +143,10 @@ export function ReceitaRecebidoClassificacaoSheet({
   const [busca, setBusca] = useState('')
   const [previstoGrupoSort, setPrevistoGrupoSort] = useState(PREVISTO_GRUPO_SORT_DEFAULT)
   const [inadGrupoSort, setInadGrupoSort] = useState(INAD_GRUPO_SORT_DEFAULT)
+  const [fechamentoAgruparPor, setFechamentoAgruparPor] = useState<'vencimento' | 'grupo'>(
+    'vencimento',
+  )
+  const [previstoOrigem, setPrevistoOrigem] = useState<'todos' | 'novos' | 'recorrentes'>('todos')
   const [previstoMesItensArea, setPrevistoMesItensArea] = useState<ReceitaPrevistoFechamentoItemRow[]>(
     [],
   )
@@ -150,6 +167,8 @@ export function ReceitaRecebidoClassificacaoSheet({
       setFechamentoItens([])
       setInadGrupos([])
       setInadGrupoSort(INAD_GRUPO_SORT_DEFAULT)
+      setFechamentoAgruparPor('vencimento')
+      setPrevistoOrigem('todos')
       setPrevistoMesItensArea([])
       setFechamentoError(null)
       setError(null)
@@ -287,10 +306,37 @@ export function ReceitaRecebidoClassificacaoSheet({
     return agruparPrevistoPorGrupo(fechamentoItens, clienteGrupoMap)
   }, [fechamentoItens, clienteGrupoMap, fechamentoDrill])
 
+  const gruposNovos = useMemo(
+    () => gruposComNovosContratos(itens, clienteGrupoMap),
+    [itens, clienteGrupoMap],
+  )
+
+  const previstoItensComFlag = useMemo(() => {
+    if (fechamentoDrill !== 'previsto_grupo') return []
+    return fechamentoItens.map((item) => ({
+      ...item,
+      contrato_novo: isItemPrevistoContratoNovo(item, gruposNovos, clienteGrupoMap),
+    }))
+  }, [fechamentoItens, fechamentoDrill, gruposNovos, clienteGrupoMap])
+
   const previstoItensFiltrados = useMemo(() => {
     if (fechamentoDrill !== 'previsto_grupo') return []
-    return filtrarPrevistoItensPorBusca(fechamentoItens, buscaDebounced, clienteGrupoMap)
-  }, [fechamentoItens, buscaDebounced, clienteGrupoMap, fechamentoDrill])
+    const porBusca = filtrarPrevistoItensPorBusca(
+      previstoItensComFlag,
+      buscaDebounced,
+      clienteGrupoMap,
+    )
+    if (previstoOrigem === 'todos') return porBusca
+    return porBusca.filter((item) =>
+      previstoOrigem === 'novos' ? item.contrato_novo : !item.contrato_novo,
+    )
+  }, [
+    previstoItensComFlag,
+    buscaDebounced,
+    clienteGrupoMap,
+    fechamentoDrill,
+    previstoOrigem,
+  ])
 
   const previstoVencimentoAgg = useMemo(() => {
     if (fechamentoDrill !== 'previsto_grupo') return []
@@ -344,6 +390,17 @@ export function ReceitaRecebidoClassificacaoSheet({
 
   const previstoGrupoOrdenados = previstoGrupoAgg
 
+  const previstoGrupoComVencOrdenados = useMemo(() => {
+    const grupos = agruparPrevistoQuitadoPorGrupoComVencimentos(previstoVencimentoAgg)
+    const { key, dir } = previstoGrupoSort
+    const mult = dir === 'asc' ? 1 : -1
+    return [...grupos].sort((a, b) => {
+      if (key === 'grupo') return mult * a.grupo.localeCompare(b.grupo, 'pt-BR')
+      if (key === 'inadimplencia') return mult * (a.inadimplencia - b.inadimplencia)
+      return mult * (a[key] - b[key])
+    })
+  }, [previstoVencimentoAgg, previstoGrupoSort])
+
   const previstoGrupoSoma = useMemo(() => {
     const previsto = previstoItensFiltrados.reduce((s, i) => s + i.valor_item, 0)
     const quitado = previstoItensFiltrados.reduce((s, i) => {
@@ -360,12 +417,18 @@ export function ReceitaRecebidoClassificacaoSheet({
       quitado,
       inadimplencia,
       pctInadimplencia: previsto > 0 ? (inadimplencia / previsto) * 100 : null,
+      novos: previstoItensFiltrados
+        .filter((i) => i.contrato_novo)
+        .reduce((s, i) => s + i.valor_item, 0),
+      recorrentes: previstoItensFiltrados
+        .filter((i) => !i.contrato_novo)
+        .reduce((s, i) => s + i.valor_item, 0),
     }
   }, [previstoItensFiltrados, ano, mes])
 
   const previstoTitulosPorGrupo = (vencimentoKey: string, grupo: string) => {
     const q = buscaDebounced.trim().toLowerCase()
-    const itensVenc = fechamentoItens.filter(
+    const itensVenc = previstoItensFiltrados.filter(
       (i) => normalizePrevistoVencimentoKey(i.data_vencimento) === vencimentoKey,
     )
     let titulos = agruparPrevistoTituloComQuitado(
@@ -539,6 +602,19 @@ export function ReceitaRecebidoClassificacaoSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ordenadores usam inadGrupoSort
   }, [inadGruposFiltrados, inadGrupoSort])
 
+  const inadGrupoComVencOrdenados = useMemo(() => {
+    const grupos = agruparInadMesPorGrupoComVencimentos(inadGruposFiltrados)
+    const { key, dir } = inadGrupoSort
+    const mult = dir === 'asc' ? 1 : -1
+    return [...grupos].sort((a, b) => {
+      if (key === 'grupo' || key === 'data_vencimento') {
+        return mult * a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR')
+      }
+      return mult * (a[key] - b[key])
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ordenador usa inadGrupoSort
+  }, [inadGruposFiltrados, inadGrupoSort])
+
   const inadGruposSoma = useMemo(
     () => inadGrupos.reduce((s, g) => s + g.inadimplencia, 0),
     [inadGrupos],
@@ -586,7 +662,9 @@ export function ReceitaRecebidoClassificacaoSheet({
     setPrevistoVencExpandido(null)
     if (key === 'previsto_grupo') {
       setPrevistoGrupoSort(PREVISTO_GRUPO_SORT_DEFAULT)
+      setPrevistoOrigem('todos')
     }
+    setFechamentoAgruparPor('vencimento')
     if (key === 'inad_grupo') {
       setInadGrupoSort(INAD_GRUPO_SORT_DEFAULT)
     }
@@ -636,6 +714,8 @@ export function ReceitaRecebidoClassificacaoSheet({
     setFechamentoError(null)
     setGrupoExpandido(null)
     setPrevistoVencExpandido(null)
+    setFechamentoAgruparPor('vencimento')
+    setPrevistoOrigem('todos')
     setBusca('')
   }
 
@@ -682,7 +762,11 @@ export function ReceitaRecebidoClassificacaoSheet({
                 {fechamentoDrill === 'inad_grupo'
                   ? ` · ${inadVencimentoOrdenados.length} ${inadVencimentoOrdenados.length === 1 ? 'vencimento' : 'vencimentos'} · ${inadGruposFiltrados.length} ${inadGruposFiltrados.length === 1 ? 'grupo' : 'grupos'}`
                   : fechamentoDrill === 'previsto_grupo'
-                    ? ` · ${previstoVencimentoOrdenados.length} ${previstoVencimentoOrdenados.length === 1 ? 'vencimento' : 'vencimentos'} · ${previstoGrupoOrdenados.length} ${previstoGrupoOrdenados.length === 1 ? 'grupo' : 'grupos'}`
+                    ? ` · ${
+                        fechamentoAgruparPor === 'grupo'
+                          ? `${previstoGrupoComVencOrdenados.length} ${previstoGrupoComVencOrdenados.length === 1 ? 'grupo' : 'grupos'} · ${previstoVencimentoOrdenados.length} ${previstoVencimentoOrdenados.length === 1 ? 'vencimento' : 'vencimentos'}`
+                          : `${previstoVencimentoOrdenados.length} ${previstoVencimentoOrdenados.length === 1 ? 'vencimento' : 'vencimentos'} · ${previstoGrupoOrdenados.length} ${previstoGrupoOrdenados.length === 1 ? 'grupo' : 'grupos'}`
+                      }`
                     : ` · ${fechamentoGruposFiltrados.length} ${fechamentoGruposFiltrados.length === 1 ? 'grupo' : 'grupos'} · ${fechamentoItens.length} ${fechamentoItens.length === 1 ? 'item' : 'itens'}`}
               </SheetDescription>
               {fechamentoDrill === 'previsto_grupo' ? (
@@ -695,6 +779,11 @@ export function ReceitaRecebidoClassificacaoSheet({
                       <p className="text-lg font-bold tabular-nums text-white">
                         {formatCurrency(previstoGrupoSoma.previsto)}
                       </p>
+                      {previstoOrigem === 'todos' && previstoGrupoSoma.novos > 0.01 ? (
+                        <p className="text-[10px] font-medium tabular-nums text-violet-100">
+                          Novos {formatCurrency(previstoGrupoSoma.novos)}
+                        </p>
+                      ) : null}
                     </div>
                     <div>
                       <p className="text-[10px] font-medium uppercase tracking-wide text-sky-100/90">
@@ -845,22 +934,64 @@ export function ReceitaRecebidoClassificacaoSheet({
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {(view === 'titulos' || view === 'fechamento') && (
-            <div className="shrink-0 border-b border-slate-100 px-6 py-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder={
-                    view === 'fechamento' && fechamentoDrill === 'inad_grupo'
-                      ? 'Buscar grupo ou vencimento…'
-                      : view === 'fechamento' && fechamentoDrill === 'previsto_grupo'
-                        ? 'Buscar grupo, título, cliente…'
-                        : 'Buscar grupo, título, cliente…'
-                  }
-                  className="pl-9"
-                />
+            <div className="shrink-0 space-y-2 border-b border-slate-100 px-6 py-3">
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    placeholder={
+                      view === 'fechamento' && fechamentoDrill === 'inad_grupo'
+                        ? 'Buscar grupo ou vencimento…'
+                        : view === 'fechamento' && fechamentoDrill === 'previsto_grupo'
+                          ? 'Buscar grupo, título, cliente…'
+                          : 'Buscar grupo, título, cliente…'
+                    }
+                    className="pl-9"
+                  />
+                </div>
+                {(fechamentoDrill === 'previsto_grupo' || fechamentoDrill === 'inad_grupo') && (
+                  <AgruparVencimentoGrupoToggle
+                    value={fechamentoAgruparPor}
+                    onChange={(next) => {
+                      setFechamentoAgruparPor(next)
+                      setPrevistoVencExpandido(null)
+                      setGrupoExpandido(null)
+                    }}
+                    className="border-slate-200 bg-white"
+                  />
+                )}
               </div>
+              {fechamentoDrill === 'previsto_grupo' ? (
+                <div className="flex flex-wrap gap-1.5" data-chart-export-ignore>
+                  {(
+                    [
+                      ['todos', 'Todos'],
+                      ['novos', 'Novos contratos'],
+                      ['recorrentes', 'Recorrentes'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setPrevistoOrigem(key)
+                        setPrevistoVencExpandido(null)
+                        setGrupoExpandido(null)
+                      }}
+                      aria-pressed={previstoOrigem === key}
+                      className={
+                        previstoOrigem === key
+                          ? 'rounded-full bg-violet-700 px-2.5 py-1 text-[11px] font-medium text-white'
+                          : 'rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50'
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -943,7 +1074,9 @@ export function ReceitaRecebidoClassificacaoSheet({
                                 : 'Ordenar blocos por data de vencimento'
                             }
                           >
-                            Vencimento / Grupo
+                            {fechamentoAgruparPor === 'grupo'
+                              ? 'Grupo / Vencimento'
+                              : 'Vencimento / Grupo'}
                             {inadHierarchySortIcon()}
                           </button>
                         </th>
@@ -980,7 +1113,96 @@ export function ReceitaRecebidoClassificacaoSheet({
                       </tr>
                     </thead>
                     <tbody>
-                      {inadVencimentoOrdenados.map((venc) => {
+                      {fechamentoAgruparPor === 'grupo'
+                        ? inadGrupoComVencOrdenados.map((grupo) => {
+                            const expandido = previstoVencExpandido === grupo.grupo_cliente
+                            return (
+                              <Fragment key={grupo.grupo_cliente}>
+                                <tr
+                                  className="cursor-pointer border-t border-slate-200 bg-red-50/40 hover:bg-red-50/70"
+                                  onClick={() => togglePrevistoVencimento(grupo.grupo_cliente)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault()
+                                      togglePrevistoVencimento(grupo.grupo_cliente)
+                                    }
+                                  }}
+                                  tabIndex={0}
+                                  role="button"
+                                  aria-expanded={expandido}
+                                >
+                                  <td className="px-3 py-2.5 align-top">
+                                    <div className="flex items-start gap-2">
+                                      {expandido ? (
+                                        <ChevronDown
+                                          className="mt-0.5 h-4 w-4 shrink-0 text-red-700"
+                                          aria-hidden
+                                        />
+                                      ) : (
+                                        <ChevronRight
+                                          className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                                          aria-hidden
+                                        />
+                                      )}
+                                      <Building2
+                                        className="mt-0.5 h-4 w-4 shrink-0 text-sky-600"
+                                        aria-hidden
+                                      />
+                                      <div className="min-w-0">
+                                        <p className="font-semibold text-slate-900">
+                                          {grupo.grupo_cliente}
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] text-slate-500">
+                                          {grupo.qtd_vencimentos}{' '}
+                                          {grupo.qtd_vencimentos === 1
+                                            ? 'vencimento'
+                                            : 'vencimentos'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-bold tabular-nums text-slate-700">
+                                    {formatCurrency(grupo.faturado)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-emerald-700">
+                                    {formatCurrency(grupo.recebido)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-bold tabular-nums text-red-700">
+                                    {formatCurrency(grupo.inadimplencia)}
+                                  </td>
+                                </tr>
+                                {expandido &&
+                                  grupo.vencimentos.map((row) => (
+                                    <tr
+                                      key={`${grupo.grupo_cliente}::${row.data_vencimento}`}
+                                      className="border-t border-slate-100 bg-slate-50/60"
+                                    >
+                                      <td className="px-3 py-2.5 align-top pl-10">
+                                        <div className="flex items-start gap-2">
+                                          <Calendar
+                                            className="mt-0.5 h-4 w-4 shrink-0 text-red-700"
+                                            aria-hidden
+                                          />
+                                          <p className="font-semibold text-slate-800">
+                                            {labelPrevistoVencimento(row.data_vencimento)}
+                                          </p>
+                                        </div>
+                                      </td>
+                                      <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-slate-600">
+                                        {formatCurrency(row.faturado)}
+                                      </td>
+                                      <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-slate-600">
+                                        {formatCurrency(row.recebido)}
+                                      </td>
+                                      <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-red-700">
+                                        {formatCurrency(row.inadimplencia)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                              </Fragment>
+                            )
+                          })
+                        : inadVencimentoOrdenados.map((venc) => {
                         const vencExpandido = previstoVencExpandido === venc.vencimentoKey
                         return (
                           <Fragment key={venc.vencimentoKey}>
@@ -1107,7 +1329,11 @@ export function ReceitaRecebidoClassificacaoSheet({
                 <p className="py-10 text-center text-sm text-slate-500">
                   {buscaDebounced
                     ? 'Nenhum vencimento ou grupo corresponde à busca.'
-                    : 'Nenhum vencimento previsto neste mês.'}
+                    : previstoOrigem === 'novos'
+                      ? 'Nenhum contrato novo neste previsto.'
+                      : previstoOrigem === 'recorrentes'
+                        ? 'Nenhum contrato recorrente neste previsto.'
+                        : 'Nenhum vencimento previsto neste mês.'}
                 </p>
               )}
 
@@ -1126,7 +1352,9 @@ export function ReceitaRecebidoClassificacaoSheet({
                             onClick={() => togglePrevistoGrupoSort('grupo')}
                             className="inline-flex items-center gap-1 hover:text-slate-800"
                           >
-                            Vencimento / Grupo
+                            {fechamentoAgruparPor === 'grupo'
+                              ? 'Grupo / Vencimento'
+                              : 'Vencimento / Grupo'}
                             {previstoGrupoSortIcon('grupo')}
                           </button>
                         </th>
@@ -1163,7 +1391,189 @@ export function ReceitaRecebidoClassificacaoSheet({
                       </tr>
                     </thead>
                     <tbody>
-                      {previstoVencimentoOrdenados.map((venc) => {
+                      {fechamentoAgruparPor === 'grupo'
+                        ? previstoGrupoComVencOrdenados.map((grupo) => {
+                            const grupoExpandidoPai = previstoVencExpandido === grupo.grupo
+                            return (
+                              <Fragment key={grupo.grupo}>
+                                <tr
+                                  className="cursor-pointer border-t border-slate-200 bg-violet-50/50 hover:bg-violet-50"
+                                  onClick={() => togglePrevistoVencimento(grupo.grupo)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault()
+                                      togglePrevistoVencimento(grupo.grupo)
+                                    }
+                                  }}
+                                  tabIndex={0}
+                                  role="button"
+                                  aria-expanded={grupoExpandidoPai}
+                                >
+                                  <td className="px-3 py-2.5 align-top">
+                                    <div className="flex items-start gap-2">
+                                      {grupoExpandidoPai ? (
+                                        <ChevronDown
+                                          className="mt-0.5 h-4 w-4 shrink-0 text-violet-700"
+                                          aria-hidden
+                                        />
+                                      ) : (
+                                        <ChevronRight
+                                          className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                                          aria-hidden
+                                        />
+                                      )}
+                                      <Building2
+                                        className="mt-0.5 h-4 w-4 shrink-0 text-sky-600"
+                                        aria-hidden
+                                      />
+                                      <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <p className="font-semibold text-slate-900">
+                                            {grupo.grupo}
+                                          </p>
+                                          {grupo.contrato_novo ? <BadgeContratoNovo /> : null}
+                                        </div>
+                                        <p className="mt-0.5 text-[11px] text-slate-500">
+                                          {grupo.qtd_vencimentos}{' '}
+                                          {grupo.qtd_vencimentos === 1
+                                            ? 'vencimento'
+                                            : 'vencimentos'}{' '}
+                                          · {grupo.quantidadeTitulos}{' '}
+                                          {grupo.quantidadeTitulos === 1 ? 'título' : 'títulos'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-bold tabular-nums text-sky-900">
+                                    {formatCurrency(grupo.previsto)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-emerald-700">
+                                    {formatCurrency(grupo.quitado_no_mes)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-bold tabular-nums text-red-700">
+                                    {formatCurrency(grupo.inadimplencia)}
+                                  </td>
+                                </tr>
+                                {grupoExpandidoPai &&
+                                  grupo.vencimentos.map((venc) => {
+                                    const grupoKey = previstoGrupoExpandidoKey(
+                                      venc.vencimentoKey,
+                                      grupo.grupo,
+                                    )
+                                    const expandido = grupoExpandido === grupoKey
+                                    const titulos = previstoTitulosPorGrupo(
+                                      venc.vencimentoKey,
+                                      grupo.grupo,
+                                    )
+                                    return (
+                                      <Fragment key={grupoKey}>
+                                        <tr
+                                          className="cursor-pointer border-t border-slate-100 bg-slate-50/60 hover:bg-sky-50/50"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            togglePrevistoGrupo(venc.vencimentoKey, grupo.grupo)
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                              e.preventDefault()
+                                              e.stopPropagation()
+                                              togglePrevistoGrupo(venc.vencimentoKey, grupo.grupo)
+                                            }
+                                          }}
+                                          tabIndex={0}
+                                          role="button"
+                                          aria-expanded={expandido}
+                                        >
+                                          <td className="px-3 py-2.5 align-top pl-8">
+                                            <div className="flex items-start gap-2">
+                                              {expandido ? (
+                                                <ChevronDown
+                                                  className="mt-0.5 h-4 w-4 shrink-0 text-violet-700"
+                                                  aria-hidden
+                                                />
+                                              ) : (
+                                                <ChevronRight
+                                                  className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                                                  aria-hidden
+                                                />
+                                              )}
+                                              <Calendar
+                                                className="mt-0.5 h-4 w-4 shrink-0 text-violet-700"
+                                                aria-hidden
+                                              />
+                                              <div className="min-w-0">
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                  <p className="font-semibold text-slate-800">
+                                                    {labelPrevistoVencimento(venc.vencimentoKey)}
+                                                  </p>
+                                                  {venc.contrato_novo ? <BadgeContratoNovo /> : null}
+                                                </div>
+                                                <p className="mt-0.5 text-[11px] text-slate-500">
+                                                  {venc.quantidadeTitulos}{' '}
+                                                  {venc.quantidadeTitulos === 1
+                                                    ? 'título'
+                                                    : 'títulos'}
+                                                </p>
+                                              </div>
+                                            </div>
+                                          </td>
+                                          <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-sky-800">
+                                            {formatCurrency(venc.previsto)}
+                                          </td>
+                                          <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-emerald-700">
+                                            {formatCurrency(venc.quitado_no_mes)}
+                                          </td>
+                                          <td className="whitespace-nowrap px-3 py-2.5 text-right align-top font-semibold tabular-nums text-red-700">
+                                            {formatCurrency(venc.inadimplencia)}
+                                          </td>
+                                        </tr>
+                                        {expandido &&
+                                          titulos.map((titulo) => (
+                                            <tr
+                                              key={`${grupoKey}-${titulo.ci_titulo}`}
+                                              className="border-t border-slate-100 bg-white hover:bg-slate-50/80"
+                                            >
+                                              <td className="px-3 py-2.5 align-top pl-14">
+                                                <div className="flex items-start gap-2">
+                                                  <FileText
+                                                    className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
+                                                    aria-hidden
+                                                  />
+                                                  <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                      <p className="font-medium text-slate-800">
+                                                        {titulo.nro_titulo
+                                                          ? `Tít. ${titulo.nro_titulo}`
+                                                          : `CI ${titulo.ci_titulo}`}
+                                                      </p>
+                                                      {titulo.contrato_novo ? (
+                                                        <BadgeContratoNovo />
+                                                      ) : null}
+                                                    </div>
+                                                    <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">
+                                                      {titulo.descricao || '—'}
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                              </td>
+                                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-sky-700">
+                                                {formatCurrency(titulo.total)}
+                                              </td>
+                                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-emerald-700">
+                                                {formatCurrency(titulo.quitado_no_mes)}
+                                              </td>
+                                              <td className="whitespace-nowrap px-3 py-2.5 text-right align-top tabular-nums text-red-700">
+                                                {formatCurrency(titulo.inadimplencia)}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                      </Fragment>
+                                    )
+                                  })}
+                              </Fragment>
+                            )
+                          })
+                        : previstoVencimentoOrdenados.map((venc) => {
                         const vencExpandido = previstoVencExpandido === venc.vencimentoKey
                         return (
                           <Fragment key={venc.vencimentoKey}>
@@ -1198,9 +1608,12 @@ export function ReceitaRecebidoClassificacaoSheet({
                                     aria-hidden
                                   />
                                   <div className="min-w-0">
-                                    <p className="font-semibold text-slate-900">
-                                      {labelPrevistoVencimento(venc.vencimentoKey)}
-                                    </p>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <p className="font-semibold text-slate-900">
+                                        {labelPrevistoVencimento(venc.vencimentoKey)}
+                                      </p>
+                                      {venc.contrato_novo ? <BadgeContratoNovo /> : null}
+                                    </div>
                                     <p className="mt-0.5 text-[11px] text-slate-500">
                                       {venc.grupos.length}{' '}
                                       {venc.grupos.length === 1 ? 'grupo' : 'grupos'} ·{' '}
@@ -1268,9 +1681,12 @@ export function ReceitaRecebidoClassificacaoSheet({
                                             aria-hidden
                                           />
                                           <div className="min-w-0">
-                                            <p className="font-semibold text-slate-800">
-                                              {grupo.grupo}
-                                            </p>
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                              <p className="font-semibold text-slate-800">
+                                                {grupo.grupo}
+                                              </p>
+                                              {grupo.contrato_novo ? <BadgeContratoNovo /> : null}
+                                            </div>
                                             <p className="mt-0.5 text-[11px] text-slate-500">
                                               {grupo.quantidadeTitulos}{' '}
                                               {grupo.quantidadeTitulos === 1 ? 'título' : 'títulos'}{' '}
@@ -1303,11 +1719,14 @@ export function ReceitaRecebidoClassificacaoSheet({
                                                 aria-hidden
                                               />
                                               <div className="min-w-0">
-                                                <p className="font-medium text-slate-800">
-                                                  {titulo.nro_titulo
-                                                    ? `Tít. ${titulo.nro_titulo}`
-                                                    : `CI ${titulo.ci_titulo}`}
-                                                </p>
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                  <p className="font-medium text-slate-800">
+                                                    {titulo.nro_titulo
+                                                      ? `Tít. ${titulo.nro_titulo}`
+                                                      : `CI ${titulo.ci_titulo}`}
+                                                  </p>
+                                                  {titulo.contrato_novo ? <BadgeContratoNovo /> : null}
+                                                </div>
                                                 <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">
                                                   {titulo.descricao || '—'}
                                                 </p>

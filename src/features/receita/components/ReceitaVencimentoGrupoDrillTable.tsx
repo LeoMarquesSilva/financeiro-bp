@@ -1,14 +1,55 @@
 import { Fragment, type ReactNode } from 'react'
 import { Building2, Calendar, ChevronDown, ChevronRight } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/shared/utils/format'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { PREVISTO_SEM_VENCIMENTO_KEY } from '../utils/previstoGrupos'
 import type {
   ReceitaInadMesGrupoAgg,
   ReceitaInadMesGrupoComVencAgg,
   ReceitaInadMesVencimentoAgg,
 } from '../utils/previstoGrupos'
-import type { ReceitaRecebidoVencimentoGrupoAgg } from '../utils/recebidoClassificacao'
+import type {
+  ReceitaRecebidoGrupoComVencAgg,
+  ReceitaRecebidoVencimentoGrupoAgg,
+} from '../utils/recebidoClassificacao'
 import type { ReceitaRecebidoGrupoAgg } from '../utils/recebidoGrupos'
+
+export type AgruparVencimentoGrupo = 'vencimento' | 'grupo'
+
+export function AgruparVencimentoGrupoToggle({
+  value,
+  onChange,
+  className,
+}: {
+  value: AgruparVencimentoGrupo
+  onChange: (next: AgruparVencimentoGrupo) => void
+  className?: string
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className={cn('h-8 shrink-0 gap-1.5 text-xs text-slate-600', className)}
+      onClick={() => onChange(value === 'vencimento' ? 'grupo' : 'vencimento')}
+      aria-pressed={value === 'grupo'}
+      title="Alternar agrupamento"
+    >
+      {value === 'vencimento' ? (
+        <>
+          <Building2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          Por grupo
+        </>
+      ) : (
+        <>
+          <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          Por vencimento
+        </>
+      )}
+    </Button>
+  )
+}
 
 export function labelVencimentoDrill(vencimentoKey: string): string {
   return vencimentoKey === PREVISTO_SEM_VENCIMENTO_KEY
@@ -27,6 +68,8 @@ type VencRowProps = {
 type RecebidoProps = VencRowProps & {
   variant: 'recebido'
   vencimentos: ReceitaRecebidoVencimentoGrupoAgg[]
+  grupos?: ReceitaRecebidoGrupoComVencAgg[]
+  agruparPor?: AgruparVencimentoGrupo
 }
 
 type InadProps = VencRowProps & {
@@ -91,6 +134,33 @@ function DrillHeaderRow({
         </div>
       </td>
       {children}
+    </tr>
+  )
+}
+
+function RecebidoVencimentoChildRow({
+  grupoKey,
+  row,
+}: {
+  grupoKey: string
+  row: ReceitaRecebidoGrupoComVencAgg['vencimentos'][number]
+}) {
+  return (
+    <tr key={`${grupoKey}::${row.vencimentoKey}`} className="border-t border-slate-100 bg-slate-50/60">
+      <td className="px-3 py-2 align-top pl-10">
+        <div className="flex items-start gap-2">
+          <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" aria-hidden />
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-800">{labelVencimentoDrill(row.vencimentoKey)}</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              {row.quantidadeTitulos} {row.quantidadeTitulos === 1 ? 'título' : 'títulos'}
+            </p>
+          </div>
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-right align-top font-semibold tabular-nums text-sky-800">
+        {formatCurrency(row.total)}
+      </td>
     </tr>
   )
 }
@@ -195,19 +265,16 @@ function InadGrupoRow({
 export function ReceitaVencimentoGrupoDrillTable(props: Props) {
   const accent = props.variant === 'recebido' ? (props.accent ?? 'sky') : 'red'
   const expandAll = props.expandAllVencimentos ?? false
-  const agruparPorGrupo =
-    props.variant === 'inad' && props.agruparPor === 'grupo' && (props.grupos?.length ?? 0) > 0
-  const vazio =
-    props.variant === 'inad' && agruparPorGrupo
-      ? (props.grupos?.length ?? 0) === 0
-      : props.vencimentos.length === 0
+  const agruparPorGrupo = props.agruparPor === 'grupo' && (props.grupos?.length ?? 0) > 0
+  const vazio = agruparPorGrupo
+    ? (props.grupos?.length ?? 0) === 0
+    : props.vencimentos.length === 0
 
   if (vazio) {
     return <p className="py-4 text-center text-xs text-slate-500">Nenhum item nesta linha.</p>
   }
 
-  const colunaPrincipal =
-    props.variant === 'inad' && agruparPorGrupo ? 'Grupo / Vencimento' : 'Vencimento / Grupo'
+  const colunaPrincipal = agruparPorGrupo ? 'Grupo / Vencimento' : 'Vencimento / Grupo'
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200/80 bg-white/80">
@@ -228,7 +295,35 @@ export function ReceitaVencimentoGrupoDrillTable(props: Props) {
         </thead>
         <tbody>
           {props.variant === 'recebido'
-            ? props.vencimentos.map((venc) => {
+            ? agruparPorGrupo
+              ? (props.grupos ?? []).map((grupo) => {
+                  const expandido = expandAll || props.vencExpandido === grupo.grupo
+                  return (
+                    <Fragment key={grupo.grupo}>
+                      <DrillHeaderRow
+                        icon="building"
+                        title={grupo.grupo}
+                        subtitle={`${grupo.qtd_vencimentos} ${grupo.qtd_vencimentos === 1 ? 'vencimento' : 'vencimentos'}`}
+                        expandido={expandido}
+                        onToggle={() => props.onToggleVenc(grupo.grupo)}
+                        accent={accent}
+                      >
+                        <td className="whitespace-nowrap px-3 py-2 text-right align-top font-bold tabular-nums text-sky-900">
+                          {formatCurrency(grupo.total)}
+                        </td>
+                      </DrillHeaderRow>
+                      {expandido &&
+                        grupo.vencimentos.map((row) => (
+                          <RecebidoVencimentoChildRow
+                            key={`${grupo.grupo}::${row.vencimentoKey}`}
+                            grupoKey={grupo.grupo}
+                            row={row}
+                          />
+                        ))}
+                    </Fragment>
+                  )
+                })
+              : props.vencimentos.map((venc) => {
                 const expandido = expandAll || props.vencExpandido === venc.vencimentoKey
                 return (
                   <Fragment key={venc.vencimentoKey}>

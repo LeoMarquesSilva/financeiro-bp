@@ -185,6 +185,7 @@ export type ReceitaPrevistoFechamentoBucket =
 
 export type ReceitaPrevistoFechamentoItemRow = ReceitaPrevistoItemRow & {
   data_pagamento: string | null
+  contrato_novo?: boolean
 }
 
 export type ReceitaEncargosItemRow = {
@@ -228,4 +229,6 @@ export type ReceitaPrevistoItemRow = {
   situacao_titulo: string | null
   /** Área VIOS do item (quando a RPC expõe departamento). */
   departamento?: string | null
+  /** 1º pagamento na cota em M, ou 1º vencimento na cota em M sem pagamento anterior. */
+  contrato_novo?: boolean
 }

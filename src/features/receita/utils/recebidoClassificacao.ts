@@ -273,6 +273,82 @@ export function agruparRecebidoPorVencimentoEGrupo(
   })
 }
 
+export type ReceitaRecebidoGrupoComVencAgg = {
+  grupo: string
+  total: number
+  quantidadeTitulos: number
+  quantidadeItens: number
+  qtd_vencimentos: number
+  vencimentos: Array<{
+    vencimentoKey: string
+    total: number
+    quantidadeTitulos: number
+    quantidadeItens: number
+  }>
+}
+
+/** Inverte vencimento→grupos para grupo→vencimentos (toggle Por grupo). */
+export function agruparRecebidoPorGrupoComVencimentos(
+  vencimentos: ReceitaRecebidoVencimentoGrupoAgg[],
+): ReceitaRecebidoGrupoComVencAgg[] {
+  const byGrupo = new Map<string, ReceitaRecebidoGrupoComVencAgg>()
+  for (const venc of vencimentos) {
+    for (const g of venc.grupos) {
+      const cur = byGrupo.get(g.grupo) ?? {
+        grupo: g.grupo,
+        total: 0,
+        quantidadeTitulos: 0,
+        quantidadeItens: 0,
+        qtd_vencimentos: 0,
+        vencimentos: [],
+      }
+      cur.total += g.total
+      cur.quantidadeTitulos += g.quantidadeTitulos
+      cur.quantidadeItens += g.quantidadeItens
+      cur.qtd_vencimentos += 1
+      cur.vencimentos.push({
+        vencimentoKey: venc.vencimentoKey,
+        total: g.total,
+        quantidadeTitulos: g.quantidadeTitulos,
+        quantidadeItens: g.quantidadeItens,
+      })
+      byGrupo.set(g.grupo, cur)
+    }
+  }
+
+  return [...byGrupo.values()]
+    .map((g) => ({
+      ...g,
+      vencimentos: [...g.vencimentos].sort((a, b) => {
+        if (a.vencimentoKey === PREVISTO_SEM_VENCIMENTO_KEY) return 1
+        if (b.vencimentoKey === PREVISTO_SEM_VENCIMENTO_KEY) return -1
+        return a.vencimentoKey.localeCompare(b.vencimentoKey)
+      }),
+    }))
+    .sort((a, b) => b.total - a.total || a.grupo.localeCompare(b.grupo, 'pt-BR'))
+}
+
+export function gruposComNovosContratos(
+  itens: ReceitaRecebidoClassificacaoItemRow[],
+  clienteGrupoMap: Map<string, string>,
+): Set<string> {
+  const set = new Set<string>()
+  for (const item of itens) {
+    if (item.categoria !== 'novos_contratos') continue
+    set.add(resolverGrupoCliente(item.cliente, clienteGrupoMap))
+  }
+  return set
+}
+
+export function isItemPrevistoContratoNovo(
+  item: { cliente: string | null; contrato_novo?: boolean | null },
+  gruposNovos: Set<string>,
+  clienteGrupoMap: Map<string, string>,
+): boolean {
+  if (item.contrato_novo) return true
+  return gruposNovos.has(resolverGrupoCliente(item.cliente, clienteGrupoMap))
+}
+
 /** Soma das três categorias de recebido no mês. */
 export function somaRecebidoClassificado(
   categorias: ReceitaRecebidoCategoriaAgg[],

@@ -1,9 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Building2, Calendar, ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import type {
   ReceitaPrevistoFechamentoItemRow,
@@ -12,6 +11,7 @@ import type {
 } from '../types/receita.types'
 import type { ReceitaRecebidoDetalheKey } from '../utils/recebidoClassificacao'
 import {
+  agruparRecebidoPorGrupoComVencimentos,
   agruparRecebidoPorVencimentoEGrupo,
   filtrarItensDetalheRecebido,
 } from '../utils/recebidoClassificacao'
@@ -26,7 +26,10 @@ import {
   agruparInadMesPorGrupoSemCompensacao,
 } from '../utils/previstoGrupos'
 import { ReceitaPrevistoFechamentoContabilPanel } from './ReceitaPrevistoFechamentoContabilPanel'
-import { ReceitaVencimentoGrupoDrillTable } from './ReceitaVencimentoGrupoDrillTable'
+import {
+  AgruparVencimentoGrupoToggle,
+  ReceitaVencimentoGrupoDrillTable,
+} from './ReceitaVencimentoGrupoDrillTable'
 
 type Props = {
   fechamento: ReceitaPrevistoFechamentoMes
@@ -59,6 +62,9 @@ export function ReceitaMesVisaoGerencialPanel({
   const [vencExpandidoRecebido, setVencExpandidoRecebido] = useState<string | null>(null)
   const [vencExpandidoInad, setVencExpandidoInad] = useState<string | null>(null)
   const [inadAgruparPor, setInadAgruparPor] = useState<'vencimento' | 'grupo'>('vencimento')
+  const [recebidoAgruparPor, setRecebidoAgruparPor] = useState<'vencimento' | 'grupo'>(
+    'vencimento',
+  )
   const composicaoRecebidoRef = useRef<HTMLDivElement>(null)
   const inadExportRef = useRef<HTMLDivElement>(null)
 
@@ -85,6 +91,17 @@ export function ReceitaMesVisaoGerencialPanel({
     }
     return map
   }, [itens, clienteGrupoMap, ano, mes])
+
+  const recebidoGruposPorLinha = useMemo(() => {
+    const map = new Map<
+      ReceitaRecebidoDetalheKey,
+      ReturnType<typeof agruparRecebidoPorGrupoComVencimentos>
+    >()
+    for (const [key, vencimentos] of recebidoVencimentosPorLinha) {
+      map.set(key, agruparRecebidoPorGrupoComVencimentos(vencimentos))
+    }
+    return map
+  }, [recebidoVencimentosPorLinha])
 
   const inadLinhasFlat = useMemo(
     () => agruparInadMesPorGrupoSemCompensacao(previstoMesItens, clienteGrupoMap, ano, mes),
@@ -150,30 +167,14 @@ export function ReceitaMesVisaoGerencialPanel({
         )}
         {options.interactive ? (
           <div className="flex shrink-0 items-center gap-1.5" data-chart-export-ignore>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 shrink-0 gap-1.5 border-red-200/80 bg-white/80 text-xs text-slate-600 hover:bg-white"
-              onClick={() => {
-                setInadAgruparPor((prev) => (prev === 'vencimento' ? 'grupo' : 'vencimento'))
+            <AgruparVencimentoGrupoToggle
+              value={inadAgruparPor}
+              onChange={(next) => {
+                setInadAgruparPor(next)
                 setVencExpandidoInad(null)
               }}
-              aria-pressed={inadAgruparPor === 'grupo'}
-              title="Alternar agrupamento da inadimplência"
-            >
-              {inadAgruparPor === 'vencimento' ? (
-                <>
-                  <Building2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Por grupo
-                </>
-              ) : (
-                <>
-                  <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Por vencimento
-                </>
-              )}
-            </Button>
+              className="border-red-200/80 bg-white/80 hover:bg-white"
+            />
             <ElementCopyButton
               containerRef={inadExportRef}
               preserveBackground
@@ -208,11 +209,19 @@ export function ReceitaMesVisaoGerencialPanel({
         data-chart-export-bg="#eff6ff"
         className="overflow-hidden rounded-xl border border-sky-200/70 bg-sky-50/40 p-3"
       >
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="min-w-0 text-sm font-semibold uppercase tracking-wide text-sky-900">
             Composição do recebido
           </h3>
-          <div className="shrink-0" data-chart-export-ignore>
+          <div className="flex shrink-0 items-center gap-1.5" data-chart-export-ignore>
+            <AgruparVencimentoGrupoToggle
+              value={recebidoAgruparPor}
+              onChange={(next) => {
+                setRecebidoAgruparPor(next)
+                setVencExpandidoRecebido(null)
+              }}
+              className="border-sky-200/80 bg-white/80 hover:bg-white"
+            />
             <ElementCopyButton
               containerRef={composicaoRecebidoRef}
               preserveBackground
@@ -236,6 +245,7 @@ export function ReceitaMesVisaoGerencialPanel({
             const pct = totalRecebido > 0 ? (valor / totalRecebido) * 100 : 0
             const expandido = recebidoExpandido === linha.key
             const vencimentos = recebidoVencimentosPorLinha.get(linha.key) ?? []
+            const gruposRecebido = recebidoGruposPorLinha.get(linha.key) ?? []
             return (
               <li key={linha.key}>
                 <button
@@ -284,6 +294,8 @@ export function ReceitaMesVisaoGerencialPanel({
                     <ReceitaVencimentoGrupoDrillTable
                       variant="recebido"
                       vencimentos={vencimentos}
+                      grupos={gruposRecebido}
+                      agruparPor={recebidoAgruparPor}
                       vencExpandido={vencExpandidoRecebido}
                       onToggleVenc={(key) =>
                         setVencExpandidoRecebido((prev) => (prev === key ? null : key))

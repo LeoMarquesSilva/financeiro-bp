@@ -17,6 +17,7 @@ type PrevistoItemComVencimento = {
   valor_item: number
   data_vencimento?: string | null
   data_pagamento?: string | null
+  contrato_novo?: boolean
 }
 
 function agruparItensPrevistoPorVencimento<T extends PrevistoItemComVencimento>(
@@ -56,7 +57,32 @@ export type ReceitaPrevistoVencimentoQuitadoAgg = {
   inadimplencia: number
   quantidadeTitulos: number
   quantidadeItens: number
+  contrato_novo: boolean
   grupos: ReceitaPrevistoGrupoQuitadoAgg[]
+}
+
+export type ReceitaPrevistoVencimentoQuitadoSlice = {
+  vencimentoKey: string
+  previsto: number
+  quitado_no_mes: number
+  em_aberto: number
+  inadimplencia: number
+  quantidadeTitulos: number
+  quantidadeItens: number
+  contrato_novo: boolean
+}
+
+export type ReceitaPrevistoGrupoComVencQuitadoAgg = {
+  grupo: string
+  previsto: number
+  quitado_no_mes: number
+  em_aberto: number
+  inadimplencia: number
+  quantidadeTitulos: number
+  quantidadeItens: number
+  qtd_vencimentos: number
+  contrato_novo: boolean
+  vencimentos: ReceitaPrevistoVencimentoQuitadoSlice[]
 }
 
 export function agruparPrevistoPorVencimentoEGrupo(
@@ -98,9 +124,67 @@ export function agruparPrevistoPorVencimentoComQuitado(
       inadimplencia: grupos.reduce((s, g) => s + g.inadimplencia, 0),
       quantidadeTitulos: new Set(vencItens.map((i) => i.ci_titulo)).size,
       quantidadeItens: vencItens.length,
+      contrato_novo: grupos.some((g) => g.contrato_novo),
       grupos,
     }
   })
+}
+
+export function agruparPrevistoQuitadoPorGrupoComVencimentos(
+  vencimentos: ReceitaPrevistoVencimentoQuitadoAgg[],
+): ReceitaPrevistoGrupoComVencQuitadoAgg[] {
+  const byGrupo = new Map<string, ReceitaPrevistoGrupoComVencQuitadoAgg>()
+  for (const venc of vencimentos) {
+    for (const g of venc.grupos) {
+      const cur = byGrupo.get(g.grupo) ?? {
+        grupo: g.grupo,
+        previsto: 0,
+        quitado_no_mes: 0,
+        em_aberto: 0,
+        inadimplencia: 0,
+        quantidadeTitulos: 0,
+        quantidadeItens: 0,
+        qtd_vencimentos: 0,
+        contrato_novo: false,
+        vencimentos: [],
+      }
+      cur.previsto += g.previsto
+      cur.quitado_no_mes += g.quitado_no_mes
+      cur.em_aberto += g.em_aberto
+      cur.inadimplencia += g.inadimplencia
+      cur.quantidadeTitulos += g.quantidadeTitulos
+      cur.quantidadeItens += g.quantidadeItens
+      cur.qtd_vencimentos += 1
+      if (g.contrato_novo) cur.contrato_novo = true
+      cur.vencimentos.push({
+        vencimentoKey: venc.vencimentoKey,
+        previsto: g.previsto,
+        quitado_no_mes: g.quitado_no_mes,
+        em_aberto: g.em_aberto,
+        inadimplencia: g.inadimplencia,
+        quantidadeTitulos: g.quantidadeTitulos,
+        quantidadeItens: g.quantidadeItens,
+        contrato_novo: g.contrato_novo,
+      })
+      byGrupo.set(g.grupo, cur)
+    }
+  }
+
+  return [...byGrupo.values()]
+    .map((g) => ({
+      ...g,
+      vencimentos: [...g.vencimentos].sort((a, b) => {
+        if (a.vencimentoKey === PREVISTO_SEM_VENCIMENTO_KEY) return 1
+        if (b.vencimentoKey === PREVISTO_SEM_VENCIMENTO_KEY) return -1
+        return a.vencimentoKey.localeCompare(b.vencimentoKey)
+      }),
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.contrato_novo) - Number(a.contrato_novo) ||
+        b.previsto - a.previsto ||
+        a.grupo.localeCompare(b.grupo, 'pt-BR'),
+    )
 }
 
 export function filtrarPrevistoItensPorBusca<
@@ -213,6 +297,7 @@ export type ReceitaPrevistoGrupoQuitadoAgg = {
   inadimplencia: number
   quantidadeTitulos: number
   quantidadeItens: number
+  contrato_novo: boolean
 }
 
 function pagamentoNoMes(dataPagamento: string | null, ano: number, mes: number): boolean {
@@ -228,6 +313,7 @@ export function agruparPrevistoGrupoComQuitado(
     valor_item: number
     data_vencimento?: string | null
     data_pagamento?: string | null
+    contrato_novo?: boolean
   }>,
   clienteGrupoMap: Map<string, string>,
   ano: number,
@@ -243,6 +329,7 @@ export function agruparPrevistoGrupoComQuitado(
       inadimplencia: number
       titulos: Set<number>
       itens: number
+      contrato_novo: boolean
     }
   >()
 
@@ -255,6 +342,7 @@ export function agruparPrevistoGrupoComQuitado(
       inadimplencia: 0,
       titulos: new Set<number>(),
       itens: 0,
+      contrato_novo: false,
     }
     cur.previsto += item.valor_item
     if (pagamentoNoMes(item.data_pagamento ?? null, ano, mes)) {
@@ -265,6 +353,7 @@ export function agruparPrevistoGrupoComQuitado(
     cur.inadimplencia += inadimplenciaItemMesFaturadoNaoPago(item, ano, mes, ref)
     cur.titulos.add(item.ci_titulo)
     cur.itens += 1
+    if (item.contrato_novo) cur.contrato_novo = true
     byGrupo.set(grupo, cur)
   }
 
@@ -277,6 +366,7 @@ export function agruparPrevistoGrupoComQuitado(
       inadimplencia: v.inadimplencia,
       quantidadeTitulos: v.titulos.size,
       quantidadeItens: v.itens,
+      contrato_novo: v.contrato_novo,
     }))
     .sort((a, b) => b.previsto - a.previsto)
 }
@@ -290,6 +380,7 @@ export function agruparPrevistoTituloComQuitado(
     data_vencimento: string | null
     data_pagamento?: string | null
     valor_item: number
+    contrato_novo?: boolean
   }>,
   grupo: string,
   clienteGrupoMap: Map<string, string>,
@@ -302,6 +393,7 @@ export function agruparPrevistoTituloComQuitado(
     em_aberto: number
     inadimplencia: number
     data_pagamento: string | null
+    contrato_novo: boolean
   }
 > {
   const filtrados = itens.filter(
@@ -314,6 +406,7 @@ export function agruparPrevistoTituloComQuitado(
       em_aberto: number
       inadimplencia: number
       data_pagamento: string | null
+      contrato_novo: boolean
     }
   >()
 
@@ -335,6 +428,7 @@ export function agruparPrevistoTituloComQuitado(
         em_aberto: aberto ? item.valor_item : 0,
         inadimplencia: inadItem,
         data_pagamento: item.data_pagamento ?? null,
+        contrato_novo: Boolean(item.contrato_novo),
       })
       continue
     }
@@ -343,6 +437,7 @@ export function agruparPrevistoTituloComQuitado(
     if (quitado) cur.quitado_no_mes += item.valor_item
     if (aberto) cur.em_aberto += item.valor_item
     cur.inadimplencia += inadItem
+    if (item.contrato_novo) cur.contrato_novo = true
     if (!cur.nro_titulo && item.nro_titulo) cur.nro_titulo = item.nro_titulo
     if (!cur.descricao && item.descricao) cur.descricao = item.descricao
     if (

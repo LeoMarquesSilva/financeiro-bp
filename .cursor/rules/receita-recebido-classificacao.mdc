@@ -83,6 +83,12 @@ Drill contábil: `receita_previsto_fechamento_itens(ano, mes, bucket)`; inad gru
 `receita_previsto_mes_itens(ano, mes)` — agrupa por grupo com `quitado_no_mes`
 (baixa no mês M). **Inadimplência do previsto** = `previsto − quitado_no_mes` (header e coluna da tabela).
 
+`receita_previsto_mes_itens` expõe `contrato_novo`:
+- 1º pagamento na cota do cliente/grupo cai em M, **ou**
+- ainda sem pagamento e o 1º vencimento na cota é em M.
+
+Na UI do drill de previsto: badge **Novo** + filtro Todos / Novos contratos / Recorrentes.
+
 ---
 
 ## 5. Migração canônica
