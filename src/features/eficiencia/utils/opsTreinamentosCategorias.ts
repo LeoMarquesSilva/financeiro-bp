@@ -3,7 +3,7 @@ import {
   resolveOpsTreinamentoCategoria,
   type OpsTreinamentoCategoria,
 } from '../constants'
-import type { TreinamentoItemRow } from '../types/eficiencia.types'
+import type { TreinamentoItemRow, TreinamentoSessaoFuturaRow } from '../types/eficiencia.types'
 import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
 import { dedupeTreinamentoItens } from './treinamentosDedupe'
 
@@ -28,6 +28,8 @@ export type OpsTreinamentoCategoriaResumo = {
   minutos: number
   metaMinutos: number | null
   pctAtingimento: number | null
+  /** % se todos da categoria participarem dos treinamentos já agendados. */
+  pctProjetado: number | null
   horasLabel: string
 }
 
@@ -46,11 +48,24 @@ function formatHorasMinutos(minutos: number): string {
   return `${h}h ${String(m).padStart(2, '0')}min`
 }
 
+function minutosFuturosCategoria(
+  qtdPessoas: number,
+  sessoesFuturas: TreinamentoSessaoFuturaRow[],
+): number {
+  if (qtdPessoas <= 0 || sessoesFuturas.length === 0) return 0
+  return sessoesFuturas.reduce((s, sessao) => {
+    const min = Number(sessao.duracao_minutos ?? 0)
+    if (!Number.isFinite(min) || min <= 0) return s
+    return s + min * qtdPessoas
+  }, 0)
+}
+
 /** Consolida presença + headcount Ops Legais nas 3 categorias do BI. */
 export function buildOpsTreinamentosCategorias(
   ativos: OpsTurnoverAtivo[],
   itens: TreinamentoItemRow[],
   ano: number = new Date().getFullYear(),
+  sessoesFuturas: TreinamentoSessaoFuturaRow[] = [],
 ): {
   resumos: OpsTreinamentoCategoriaResumo[]
   pessoas: OpsTreinamentoPessoaDetalhe[]
@@ -104,12 +119,20 @@ export function buildOpsTreinamentosCategorias(
       temMeta && metaMinutos && metaMinutos > 0
         ? Math.round((minutos / metaMinutos) * 10000) / 100
         : null
+    const minutosFuturos = temMeta
+      ? minutosFuturosCategoria(qtdPessoas, sessoesFuturas)
+      : 0
+    const pctProjetado =
+      temMeta && metaMinutos && metaMinutos > 0
+        ? Math.round(((minutos + minutosFuturos) / metaMinutos) * 10000) / 100
+        : null
     return {
       categoria,
       qtdPessoas,
       minutos,
       metaMinutos,
       pctAtingimento,
+      pctProjetado,
       horasLabel: formatHorasMinutos(minutos),
     }
   })

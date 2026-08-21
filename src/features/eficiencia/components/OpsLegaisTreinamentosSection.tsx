@@ -66,8 +66,8 @@ export function OpsLegaisTreinamentosSection({
   const [categoriaAtiva, setCategoriaAtiva] = useState<OpsTreinamentoCategoria>('Equipe')
   const [visao, setVisao] = useState<TreinamentosVisao>('equipe')
   const { resumos, pessoas, equipeEmLideranca } = useMemo(
-    () => buildOpsTreinamentosCategorias(ativos, itens, ano),
-    [ativos, itens, ano],
+    () => buildOpsTreinamentosCategorias(ativos, itens, ano, sessoesFuturas),
+    [ativos, itens, ano, sessoesFuturas],
   )
 
   const resumoAtivo = resumos.find((r) => r.categoria === categoriaAtiva)
@@ -133,7 +133,15 @@ export function OpsLegaisTreinamentosSection({
             const style = CARD_STYLE[r.categoria]
             const ativo = categoriaAtiva === r.categoria
             const pct = r.pctAtingimento
+            const pctProj = r.pctProjetado
+            const mostraProjecao =
+              r.categoria !== 'Gerente' &&
+              sessoesFuturas.length > 0 &&
+              pctProj != null &&
+              pct != null &&
+              pctProj > pct
             const ok = pct != null && pct >= 100
+            const okProj = pctProj != null && pctProj >= 100
             const barPct = pct == null ? 100 : Math.min(100, pct)
             return (
               <button
@@ -179,6 +187,17 @@ export function OpsLegaisTreinamentosSection({
                     ? `${Math.round(r.minutos)} minutos no total`
                     : `${r.horasLabel} realizadas`}
                 </p>
+                {mostraProjecao ? (
+                  <p
+                    className={cn(
+                      'mt-1 text-xs font-semibold tabular-nums',
+                      okProj ? 'text-emerald-600' : 'text-sky-600',
+                    )}
+                    title="Projeção se todos da categoria participarem dos treinamentos já agendados"
+                  >
+                    Projeção c/ agendados: {formatPercent(pctProj!)}
+                  </p>
+                ) : null}
                 {r.categoria !== 'Gerente' ? (
                   <>
                     <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
