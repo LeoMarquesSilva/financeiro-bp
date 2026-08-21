@@ -1109,9 +1109,12 @@ async function renderPreparedElementToPngBlob(
   // Clona para não mover o nó original (ex.: wrapper montado em document.body).
   const snapshot = prepared.cloneNode(true) as HTMLElement
   await inlineRasterImagesForExport(snapshot)
-  snapshot.style.position = 'static'
-  snapshot.style.left = 'auto'
-  snapshot.style.visibility = 'visible'
+  snapshot.style.setProperty('position', 'static', 'important')
+  snapshot.style.setProperty('left', 'auto', 'important')
+  snapshot.style.setProperty('top', 'auto', 'important')
+  snapshot.style.setProperty('transform', 'none', 'important')
+  snapshot.style.setProperty('visibility', 'visible', 'important')
+  snapshot.style.setProperty('opacity', '1', 'important')
   snapshot.style.width = `${width}px`
   snapshot.style.height = `${height}px`
   snapshot.style.minHeight = `${height}px`
@@ -1302,6 +1305,15 @@ function applyFitContentExportReset(root: HTMLElement): void {
   })
 }
 
+function elementLayoutWidth(el: HTMLElement): number {
+  return Math.max(
+    1,
+    Math.ceil(el.getBoundingClientRect().width),
+    el.offsetWidth,
+    el.scrollWidth,
+  )
+}
+
 function applyPreserveBackgroundExportLayout(
   root: HTMLElement,
   source: HTMLElement,
@@ -1310,11 +1322,21 @@ function applyPreserveBackgroundExportLayout(
 ): void {
   const inlineRow = shouldInlineRowCardExport(source)
   const sourceStyle = window.getComputedStyle(source)
-  const sourceWidth = Math.ceil(source.getBoundingClientRect().width)
+  const sourceWidth = elementLayoutWidth(source)
 
   stripInlineHeights(root)
 
+  // Clone off-screen (fixed / -10000px) herda left/transform no inline —
+  // sem reset o PNG sai em branco ou o clipboard "funciona" sem imagem.
   root.style.setProperty('position', 'static', 'important')
+  root.style.setProperty('left', 'auto', 'important')
+  root.style.setProperty('top', 'auto', 'important')
+  root.style.setProperty('right', 'auto', 'important')
+  root.style.setProperty('bottom', 'auto', 'important')
+  root.style.setProperty('transform', 'none', 'important')
+  root.style.setProperty('z-index', 'auto', 'important')
+  root.style.setProperty('visibility', 'visible', 'important')
+  root.style.setProperty('opacity', '1', 'important')
   root.style.setProperty('box-sizing', 'border-box', 'important')
   root.style.setProperty('align-self', 'auto', 'important')
   root.style.setProperty('flex', 'none', 'important')
@@ -1610,9 +1632,7 @@ async function htmlElementToPngBlob(
   const fitContent = preserveBackground && !inlineRow && shouldFitContentExport(element)
   const expandWidth = preserveBackground && !fitContent && !inlineRow && shouldExpandExportWidth(element)
   const prepared = prepareHtmlExportElement(element, options)
-  const fixedWidth = preserveBackground
-    ? Math.ceil(element.getBoundingClientRect().width)
-    : undefined
+  const fixedWidth = preserveBackground ? elementLayoutWidth(element) : undefined
   const { width, height } = measurePreparedElement(prepared, {
     fixedWidth,
     cardSnapshot: preserveBackground,
@@ -1704,13 +1724,25 @@ async function embedPngDpi(blob: Blob, dpi: number): Promise<Blob> {
   return new Blob([result], { type: 'image/png' })
 }
 
-async function copyPngBlobToClipboard(blob: Blob, dpi?: number): Promise<void> {
+async function copyPngBlobToClipboard(
+  blobOrPromise: Blob | Promise<Blob>,
+  dpi?: number,
+): Promise<void> {
   if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
     throw new Error('Cópia de imagem não suportada neste navegador')
   }
 
-  const finalBlob = dpi ? await embedPngDpi(blob, dpi) : blob
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': finalBlob })])
+  const blobPromise = Promise.resolve(blobOrPromise).then((blob) =>
+    dpi ? embedPngDpi(blob, dpi) : blob,
+  )
+
+  // Promise no ClipboardItem preserva o gesto do clique enquanto o PNG gera.
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })])
+  } catch {
+    const finalBlob = await blobPromise
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': finalBlob })])
+  }
 }
 
 const DETALHE_COL_WIDTH = 420
@@ -2202,8 +2234,7 @@ export async function copyElementImageToClipboard(
   scale = DEFAULT_SCALE,
   options?: ElementImageExportOptions,
 ): Promise<void> {
-  const blob = await htmlElementToPngBlob(element, scale, options)
-  await copyPngBlobToClipboard(blob, 96 * scale)
+  await copyPngBlobToClipboard(htmlElementToPngBlob(element, scale, options), 96 * scale)
 }
 
 /**

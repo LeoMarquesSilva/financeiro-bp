@@ -381,6 +381,16 @@ export type ReceitaInadMesVencimentoAgg = {
   grupos: ReceitaInadMesGrupoAgg[]
 }
 
+export type ReceitaInadMesGrupoComVencAgg = {
+  grupo_cliente: string
+  faturado: number
+  recebido: number
+  inadimplencia: number
+  qtd_vencimentos: number
+  qtd_clientes_inad: number
+  vencimentos: ReceitaInadMesGrupoAgg[]
+}
+
 /** Agrupa linhas grupo×vencimento em blocos por data de vencimento. */
 export function agruparInadMesFlatPorVencimento(
   linhas: ReceitaInadMesGrupoAgg[],
@@ -403,6 +413,38 @@ export function agruparInadMesFlatPorVencimento(
       grupos,
     }
   })
+}
+
+/** Agrupa linhas grupo×vencimento em blocos por grupo (vencimentos como filhos). */
+export function agruparInadMesPorGrupoComVencimentos(
+  linhas: ReceitaInadMesGrupoAgg[],
+): ReceitaInadMesGrupoComVencAgg[] {
+  const byGrupo = new Map<string, ReceitaInadMesGrupoAgg[]>()
+  for (const row of linhas) {
+    const list = byGrupo.get(row.grupo_cliente) ?? []
+    list.push(row)
+    byGrupo.set(row.grupo_cliente, list)
+  }
+
+  return [...byGrupo.entries()]
+    .map(([grupo_cliente, vencimentos]) => {
+      const vencOrdenados = [...vencimentos].sort((a, b) =>
+        a.data_vencimento.localeCompare(b.data_vencimento),
+      )
+      return {
+        grupo_cliente,
+        faturado: vencOrdenados.reduce((s, v) => s + v.faturado, 0),
+        recebido: vencOrdenados.reduce((s, v) => s + v.recebido, 0),
+        inadimplencia: vencOrdenados.reduce((s, v) => s + v.inadimplencia, 0),
+        qtd_vencimentos: vencOrdenados.length,
+        qtd_clientes_inad: vencOrdenados.reduce((s, v) => s + v.qtd_clientes_inad, 0),
+        vencimentos: vencOrdenados,
+      }
+    })
+    .sort(
+      (a, b) =>
+        b.inadimplencia - a.inadimplencia || a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR'),
+    )
 }
 
 /** Inad. do mês por vencimento e grupo — soma item a item, sem compensação entre razões sociais. */

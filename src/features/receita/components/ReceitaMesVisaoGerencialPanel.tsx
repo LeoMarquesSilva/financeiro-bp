@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Building2, Calendar, ChevronDown, ChevronRight } from 'lucide-react'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import type {
   ReceitaPrevistoFechamentoItemRow,
@@ -18,7 +20,11 @@ import {
   inadimplenciaMesFaturadoNaoPago,
   type FechamentoDrillKey,
 } from '../utils/receitaPrevistoFechamento'
-import { agruparInadMesPorVencimentoEGrupo } from '../utils/previstoGrupos'
+import {
+  agruparInadMesFlatPorVencimento,
+  agruparInadMesPorGrupoComVencimentos,
+  agruparInadMesPorGrupoSemCompensacao,
+} from '../utils/previstoGrupos'
 import { ReceitaPrevistoFechamentoContabilPanel } from './ReceitaPrevistoFechamentoContabilPanel'
 import { ReceitaVencimentoGrupoDrillTable } from './ReceitaVencimentoGrupoDrillTable'
 
@@ -52,6 +58,7 @@ export function ReceitaMesVisaoGerencialPanel({
   const [inadGrupoExpandido, setInadGrupoExpandido] = useState(false)
   const [vencExpandidoRecebido, setVencExpandidoRecebido] = useState<string | null>(null)
   const [vencExpandidoInad, setVencExpandidoInad] = useState<string | null>(null)
+  const [inadAgruparPor, setInadAgruparPor] = useState<'vencimento' | 'grupo'>('vencimento')
   const composicaoRecebidoRef = useRef<HTMLDivElement>(null)
   const inadExportRef = useRef<HTMLDivElement>(null)
 
@@ -79,12 +86,17 @@ export function ReceitaMesVisaoGerencialPanel({
     return map
   }, [itens, clienteGrupoMap, ano, mes])
 
-  const inadVencimentos = useMemo(
-    () =>
-      agruparInadMesPorVencimentoEGrupo(previstoMesItens, clienteGrupoMap, ano, mes).filter(
-        (v) => v.inadimplencia > 0,
-      ),
+  const inadLinhasFlat = useMemo(
+    () => agruparInadMesPorGrupoSemCompensacao(previstoMesItens, clienteGrupoMap, ano, mes),
     [previstoMesItens, clienteGrupoMap, ano, mes],
+  )
+  const inadVencimentos = useMemo(
+    () => agruparInadMesFlatPorVencimento(inadLinhasFlat).filter((v) => v.inadimplencia > 0),
+    [inadLinhasFlat],
+  )
+  const inadGrupos = useMemo(
+    () => agruparInadMesPorGrupoComVencimentos(inadLinhasFlat).filter((g) => g.inadimplencia > 0),
+    [inadLinhasFlat],
   )
 
   const toggleRecebidoLinha = (key: ReceitaRecebidoDetalheKey) => {
@@ -109,7 +121,7 @@ export function ReceitaMesVisaoGerencialPanel({
 
   const inadHeaderConteudo = (options: { interactive?: boolean } = {}) => (
     <>
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         {options.interactive ? (
           <button
             type="button"
@@ -127,17 +139,41 @@ export function ReceitaMesVisaoGerencialPanel({
                 />
               )}
               <h3 className="text-sm font-semibold uppercase tracking-wide text-red-900">
-                Inadimplência do mês — por grupo
+                Inadimplência do mês — {inadAgruparPor === 'grupo' ? 'por grupo' : 'por vencimento'}
               </h3>
             </div>
           </button>
         ) : (
           <h3 className="min-w-0 text-sm font-semibold uppercase tracking-wide text-red-900">
-            Inadimplência do mês — por grupo
+            Inadimplência do mês — {inadAgruparPor === 'grupo' ? 'por grupo' : 'por vencimento'}
           </h3>
         )}
         {options.interactive ? (
-          <div className="shrink-0" data-chart-export-ignore>
+          <div className="flex shrink-0 items-center gap-1.5" data-chart-export-ignore>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 gap-1.5 border-red-200/80 bg-white/80 text-xs text-slate-600 hover:bg-white"
+              onClick={() => {
+                setInadAgruparPor((prev) => (prev === 'vencimento' ? 'grupo' : 'vencimento'))
+                setVencExpandidoInad(null)
+              }}
+              aria-pressed={inadAgruparPor === 'grupo'}
+              title="Alternar agrupamento da inadimplência"
+            >
+              {inadAgruparPor === 'vencimento' ? (
+                <>
+                  <Building2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Por grupo
+                </>
+              ) : (
+                <>
+                  <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Por vencimento
+                </>
+              )}
+            </Button>
             <ElementCopyButton
               containerRef={inadExportRef}
               preserveBackground
@@ -281,6 +317,8 @@ export function ReceitaMesVisaoGerencialPanel({
             <ReceitaVencimentoGrupoDrillTable
               variant="inad"
               vencimentos={inadVencimentos}
+              grupos={inadGrupos}
+              agruparPor={inadAgruparPor}
               vencExpandido={vencExpandidoInad}
               onToggleVenc={(key) =>
                 setVencExpandidoInad((prev) => (prev === key ? null : key))
@@ -291,28 +329,32 @@ export function ReceitaMesVisaoGerencialPanel({
         {inadTotalRodape}
       </section>
 
-      <div
-        ref={inadExportRef}
-        aria-hidden
-        data-chart-export-ignore
-        data-chart-export-preserve-bg
-        data-chart-export-bg="#fef2f2"
-        data-chart-export-fit-content
-        className="pointer-events-none fixed top-0 -left-[10000px] z-[-1] w-[640px] rounded-xl border border-red-200/80 p-3"
-        style={{ backgroundColor: '#fef2f2' }}
-      >
-        {inadHeaderConteudo()}
-        <div className="mt-3">
-          <ReceitaVencimentoGrupoDrillTable
-            variant="inad"
-            vencimentos={inadVencimentos}
-            vencExpandido={null}
-            onToggleVenc={() => {}}
-            expandAllVencimentos
-          />
-        </div>
-        {inadTotalRodape}
-      </div>
+      {createPortal(
+        <div
+          ref={inadExportRef}
+          aria-hidden
+          data-chart-export-preserve-bg
+          data-chart-export-bg="#fef2f2"
+          data-chart-export-fit-content
+          className="pointer-events-none fixed top-0 w-[640px] rounded-xl border border-red-200/80 p-3"
+          style={{ left: -10000, backgroundColor: '#fef2f2' }}
+        >
+          {inadHeaderConteudo()}
+          <div className="mt-3">
+            <ReceitaVencimentoGrupoDrillTable
+              variant="inad"
+              vencimentos={inadVencimentos}
+              grupos={inadGrupos}
+              agruparPor={inadAgruparPor}
+              vencExpandido={null}
+              onToggleVenc={() => {}}
+              expandAllVencimentos
+            />
+          </div>
+          {inadTotalRodape}
+        </div>,
+        document.body,
+      )}
 
       <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50/40">
         <button
