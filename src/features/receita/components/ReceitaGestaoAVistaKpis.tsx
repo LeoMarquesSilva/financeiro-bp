@@ -287,7 +287,7 @@ export function ReceitaGestaoAVistaKpis({
       />
       <KPIItem
         icon={Wallet}
-        label={`Recebido · previsto · ${resumo.periodoMetaAnualLabel}${areaLabel ? ` (${areaLabel})` : ''}`}
+        label={`Recebido · previsto · ${resumo.periodoMetaLabel}${areaLabel ? ` (${areaLabel})` : ''}`}
         value={formatCurrency(resumo.recebidoAcumulado)}
         valueTitle={`${formatCurrency(resumo.recebidoAcumulado)} recebido · previsto ${formatCurrency(resumo.previstoAcumulado)} (${resumo.periodoMetaLabel})`}
         secondaryLine={previstoSecondaryLine}

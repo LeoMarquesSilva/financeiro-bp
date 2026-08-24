@@ -3,16 +3,26 @@ import { useQuery } from '@tanstack/react-query'
 import { mesMaxDisponivelInadimplencia } from '../constants'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
 import { receitaService } from '../services/receitaService'
-import type { GestaoVistaMesRow, GestaoVistaResumo, ReceitaMesRow } from '../types/receita.types'
+import type {
+  GestaoVistaMesRow,
+  GestaoVistaResumo,
+  ReceitaMesRow,
+  ReceitaPrevistoFechamentoItemRow,
+} from '../types/receita.types'
 import type {
   ReceitaInadimplenciaDepartamentoMes,
   ReceitaInadimplenciaEvolucaoMes,
 } from '../types/receitaInadimplencia.types'
 import { findMetaAreaSlice, type ReceitaMetaAreaSlice } from '../utils/departamentoAreaCores'
-import { inadimplenciaAreaPeriodo } from '../utils/receitaInadimplenciaAreaFilter'
+import { isMesAtual } from '../utils/receitaMes'
+import {
+  departamentoMatchesAreaKey,
+  inadimplenciaAreaPeriodo,
+} from '../utils/receitaInadimplenciaAreaFilter'
 import {
   calcularInadVencidoNaoPagoMes,
   filtrarPrevistoMesItensPorCiItens,
+  somarPrevistoVencidoAteCorte,
 } from '../utils/receitaPrevistoFechamento'
 import {
   buildGestaoVistaArea,
@@ -111,6 +121,29 @@ export function useReceitaGestaoVista(
     enabled: areaKey != null && mesMax > 0,
   })
 
+  const mesAtualCalendario = new Date().getMonth() + 1
+  const {
+    data: previstoMesAtualItens,
+    isLoading: previstoCorteLoading,
+    error: previstoCorteError,
+  } = useQuery({
+    queryKey: ['receita', 'gestao-vista', 'previsto-itens-mes-atual', ano, mesAtualCalendario],
+    queryFn: () => receitaService.fetchPrevistoMesItens(ano, mesAtualCalendario),
+    enabled: meses.length > 0 && isMesAtual(ano, mesAtualCalendario),
+  })
+
+  const previstoCortePorMes = useMemo(() => {
+    if (!previstoMesAtualItens || !isMesAtual(ano, mesAtualCalendario)) return undefined
+    const itens = areaKey
+      ? previstoMesAtualItens.filter(
+          (i: ReceitaPrevistoFechamentoItemRow) =>
+            i.departamento != null && departamentoMatchesAreaKey(i.departamento, areaKey),
+        )
+      : previstoMesAtualItens
+    const vencido = somarPrevistoVencidoAteCorte(itens, ano, mesAtualCalendario)
+    return new Map<number, number>([[mesAtualCalendario, vencido]])
+  }, [previstoMesAtualItens, ano, mesAtualCalendario, areaKey])
+
   const {
     data: inadVencidoAno,
     isLoading: inadVencidoLoading,
@@ -177,6 +210,8 @@ export function useReceitaGestaoVista(
         areaSelecionada.pct,
         inadPeriodo,
         ano,
+        new Date(),
+        previstoCortePorMes,
       )
       return built
     }
@@ -187,6 +222,8 @@ export function useReceitaGestaoVista(
       evolucao,
       inadDashboard.valor_total_periodo,
       ano,
+      new Date(),
+      previstoCortePorMes,
     )
     return built
   }, [
@@ -201,6 +238,7 @@ export function useReceitaGestaoVista(
     gruposDeptPeriodo,
     rows,
     ano,
+    previstoCortePorMes,
   ])
 
   const resumo = useMemo(() => {
@@ -209,7 +247,7 @@ export function useReceitaGestaoVista(
     return enrichGestaoVistaResumoInadVencidoAno(
       resumoBase,
       inadVencidoAno.valor,
-      inadVencidoAno.previsto,
+      resumoBase.previstoAcumulado,
     )
   }, [resumoBase, inadVencidoAno])
 
@@ -221,12 +259,14 @@ export function useReceitaGestaoVista(
       resumo.mesesMetaNoPeriodo,
       resumo.metaAcumulada,
       resumo.recebidoAtingimento,
+      previstoCortePorMes,
     )
-  }, [mesesGestao, resumo])
+  }, [mesesGestao, resumo, previstoCortePorMes])
 
   const isLoading =
     recebidoLoading ||
     previstoLoading ||
+    previstoCorteLoading ||
     inadDashLoading ||
     inadDeptLoading ||
     inadVencidoLoading ||
@@ -235,6 +275,7 @@ export function useReceitaGestaoVista(
   const error =
     recebidoError ??
     previstoError ??
+    previstoCorteError ??
     inadDashError ??
     inadDeptError ??
     inadVencidoError ??

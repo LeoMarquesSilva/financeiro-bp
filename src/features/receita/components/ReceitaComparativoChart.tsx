@@ -1291,14 +1291,14 @@ export function ReceitaComparativoChart({
     [metaAreaSlices, areaLinhaSelecionada],
   )
 
-  /** Resumo acumulado da área no gráfico de linha (período = ano, igual à série mensal). */
+  /** Resumo da área no gráfico de linha — mesmo recorte de meses do quadro (Acumulado ou multi-seleção). */
   const areaLinhaResumoGap = useMemo(() => {
     if (!areaLinhaSelecionada || !deptRows?.length) return null
     const data = buildAreaGapData(
       rowsGrafico,
       rowsComDados,
       deptRows,
-      null,
+      areaMesesSelecionados,
       metaAreaSlices,
       ano,
       graficoOpts,
@@ -1309,6 +1309,7 @@ export function ReceitaComparativoChart({
     deptRows,
     rowsGrafico,
     rowsComDados,
+    areaMesesSelecionados,
     metaAreaSlices,
     ano,
     graficoOpts,
@@ -1630,7 +1631,7 @@ export function ReceitaComparativoChart({
           })}
         </div>
 
-        {porAreaAtivo && areaLinhaSelecionada == null && (
+        {(porAreaAtivo || areaLinhaSelecionada != null) && (
           <div
             className="mb-3 flex flex-wrap items-center justify-center gap-2"
             data-chart-export-ignore={apresentacaoMode || undefined}

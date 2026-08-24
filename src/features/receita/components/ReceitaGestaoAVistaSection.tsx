@@ -178,7 +178,8 @@ export function ReceitaGestaoAVistaSection({
                 <strong className="font-medium text-slate-600">Recebido</strong> para abrir a visão
                 do mês
                 {areaKey ? ` (${areaSelecionada?.label})` : ''}. Acima do tracejado (jan–mai) é
-                informativo — o Total soma só a partir de jun.
+                informativo — o Total soma só a partir de jun. No mês corrente, o previsto do
+                Total usa só títulos já vencidos.
               </p>
             </div>
           </div>

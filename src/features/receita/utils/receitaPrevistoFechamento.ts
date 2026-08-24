@@ -110,6 +110,20 @@ export function itemVencimentoVencidoAteCorte(
   return data_vencimento.trim().slice(0, 10) <= corteIso
 }
 
+/** Soma o previsto já exigível (vencimento ≤ corte). Títulos a vencer no mês ficam de fora. */
+export function somarPrevistoVencidoAteCorte(
+  itens: ReadonlyArray<{ valor_item: number; data_vencimento?: string | null }>,
+  ano: number,
+  mes: number,
+  ref = new Date(),
+): number {
+  const corte = refDateCorteInadMes(ano, mes, ref)
+  return itens.reduce((s, i) => {
+    if (!itemVencimentoVencidoAteCorte(i.data_vencimento, corte)) return s
+    return s + (Number(i.valor_item) || 0)
+  }, 0)
+}
+
 /**
  * Vencimento no mês, já vencido até a data de corte, ainda não quitado no mês.
  * Sem compensação entre grupos; vencimentos futuros no mês não entram.
