@@ -3,7 +3,10 @@ import {
   invalidateOnboardingExclusoesCache,
   onboardingExclusoesService,
 } from '../services/onboardingExclusoesService'
-import type { OnboardingExclusaoInsert } from '../types/onboardingExclusoes.types'
+import type {
+  OnboardingExclusao,
+  OnboardingExclusaoInsert,
+} from '../types/onboardingExclusoes.types'
 
 export const ONBOARDING_EXCLUSOES_QUERY_KEY = ['eficiencia', 'onboarding-exclusoes'] as const
 
@@ -12,7 +15,7 @@ export function useOnboardingExclusoes(enabled = true) {
 
   const query = useQuery({
     queryKey: ONBOARDING_EXCLUSOES_QUERY_KEY,
-    queryFn: () => onboardingExclusoesService.list(),
+    queryFn: (): Promise<OnboardingExclusao[]> => onboardingExclusoesService.list(),
     staleTime: 30_000,
     enabled,
   })
@@ -33,7 +36,7 @@ export function useOnboardingExclusoes(enabled = true) {
   })
 
   return {
-    exclusoes: query.data ?? [],
+    exclusoes: (query.data ?? []) as OnboardingExclusao[],
     loading: query.isLoading,
     error: query.error,
     create,

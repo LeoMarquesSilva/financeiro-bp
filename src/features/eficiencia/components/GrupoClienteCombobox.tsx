@@ -7,6 +7,7 @@ import {
   fetchGruposResumo,
   GRUPO_SEM_NOME,
   normalizarNomeGrupo,
+  type GrupoResumoRow,
 } from '@/features/escritorio/services/escritorioService'
 
 const MAX_GRUPOS_DROPDOWN = 50
@@ -30,16 +31,16 @@ export function GrupoClienteCombobox({
 
   const { data: gruposResumo = [], isLoading } = useQuery({
     queryKey: ['escritorio-grupos-resumo'],
-    queryFn: fetchGruposResumo,
+    queryFn: (): Promise<GrupoResumoRow[]> => fetchGruposResumo(),
     staleTime: 60_000,
   })
 
   const grupos = useMemo(
     () =>
       gruposResumo
-        .map((r) => r.grupo_cliente.trim())
-        .filter((nome) => nome && nome !== GRUPO_SEM_NOME)
-        .sort((a, b) => a.localeCompare(b, 'pt-BR')),
+        .map((r: GrupoResumoRow) => r.grupo_cliente.trim())
+        .filter((nome: string) => nome && nome !== GRUPO_SEM_NOME)
+        .sort((a: string, b: string) => a.localeCompare(b, 'pt-BR')),
     [gruposResumo],
   )
 
@@ -48,7 +49,7 @@ export function GrupoClienteCombobox({
     const qNorm = normalizarNomeGrupo(value)
     const lista = q
       ? grupos.filter(
-          (nome) =>
+          (nome: string) =>
             nome.toLowerCase().includes(q) ||
             normalizarNomeGrupo(nome).includes(qNorm) ||
             qNorm.includes(normalizarNomeGrupo(nome)),
@@ -96,7 +97,7 @@ export function GrupoClienteCombobox({
           ) : (
             <>
               <ul className="list-none py-1">
-                {filtrados.itens.map((nome) => (
+                {filtrados.itens.map((nome: string) => (
                   <li key={nome}>
                     <button
                       type="button"

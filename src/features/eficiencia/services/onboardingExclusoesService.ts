@@ -34,7 +34,7 @@ export const onboardingExclusoesService = {
         vigencia_fim: input.vigencia_fim,
         motivo: input.motivo?.trim() || 'Onboarding / transição de carteira',
         created_by: input.created_by ?? null,
-      })
+      } as never)
       .select('id, grupo_cliente, vigencia_inicio, vigencia_fim, motivo, created_at, updated_at, created_by')
       .single()
     if (error) throw error
@@ -66,7 +66,7 @@ async function anexarChavesMatch(rows: OnboardingExclusao[]): Promise<Onboarding
   return rows.map((r) => {
     const chaveGrupo = onboardingGrupoChave(r.grupo_cliente)
     const chaves = new Set<string>([chaveGrupo])
-    for (const p of data ?? []) {
+    for (const p of (data ?? []) as Array<{ nome: string; grupo_cliente: string | null }>) {
       if (onboardingGrupoChave(p.grupo_cliente) === chaveGrupo) {
         const nome = onboardingGrupoChave(p.nome)
         if (nome) chaves.add(nome)
