@@ -7,9 +7,15 @@ import type {
   InstagramPost,
   InstagramSolicitante,
   InstagramStory,
+  MarketingTaskRow,
 } from './types'
 
-type MarketingPerson = InstagramSolicitante & { email: string | null; area: string; isActive: boolean }
+type MarketingPerson = InstagramSolicitante & {
+  email: string | null
+  area: string
+  isActive: boolean
+  avatarUrl: string | null
+}
 
 async function fetchAll<T>(table: string, orderColumn: string, ascending = false): Promise<T[]> {
   const output: T[] = []
@@ -66,7 +72,7 @@ export const instagramService = {
   async listPeople(): Promise<MarketingPerson[]> {
     const { data, error } = await supabase
       .from('colaboradores' as never)
-      .select('id, full_name, email, area, is_active')
+      .select('id, full_name, email, area, is_active, avatar_url')
       .order('full_name')
     if (error) throw error
     return ((data ?? []) as unknown as Array<{
@@ -75,13 +81,33 @@ export const instagramService = {
       email: string | null
       area: string
       is_active: boolean
+      avatar_url: string | null
     }>).map((person) => ({
       id: person.id,
       name: person.full_name,
       email: person.email,
       area: person.area,
       isActive: person.is_active,
+      avatarUrl: person.avatar_url,
     }))
+  },
+
+  async listMarketingTasks(): Promise<MarketingTaskRow[]> {
+    const output: MarketingTaskRow[] = []
+    const size = 1000
+    const marketingTask = 'MATERIAL MARKETING - REELS/POST/ARTIGO'
+    for (let from = 0; ; from += size) {
+      const { data, error } = await supabase
+        .from('sp_tarefas_historico' as never)
+        .select('ci, ci_processo, grupo_cliente, cliente, tarefa, tarefa_pai, status, responsavel, usuario_conclusao, data_conclusao, data_para_conclusao, area_conclusao')
+        .or(`tarefa.eq.${marketingTask},tarefa_pai.eq.${marketingTask}`)
+        .order('ci', { ascending: true })
+        .range(from, from + size - 1)
+      if (error) throw error
+      const rows = (data ?? []) as unknown as MarketingTaskRow[]
+      output.push(...rows)
+      if (rows.length < size) return output
+    }
   },
 
   async sync(since = '2025-01-01T00:00:00.000Z') {

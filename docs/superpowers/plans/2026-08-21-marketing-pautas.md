@@ -110,4 +110,3 @@
 - [ ] Executar `git diff --check` e revisar somente o diff autorizado.
 - [ ] Verificar o localhost em desktop e mobile, incluindo período mensal e aba Pautas.
 - [ ] Confirmar que canceladas não entram na meta e que responsáveis ausentes não são inferidos.
-

@@ -9,6 +9,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -27,6 +28,50 @@ const monthLabel = (value: string) => {
   const [year, month] = value.split('-').map(Number)
   return new Intl.DateTimeFormat('pt-BR', { month: 'short', year: '2-digit' }).format(
     new Date(Date.UTC(year, month - 1, 1)),
+  )
+}
+
+export function MarketingPerformanceTrendChart({
+  data,
+  reachGoal,
+}: {
+  data: Array<{ label: string; reach: number; engagementRate: number; posts: number }>
+  reachGoal?: number
+}) {
+  return (
+    <div className="h-72 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+          <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748b' }} minTickGap={24} />
+          <YAxis yAxisId="reach" tickFormatter={compact} tick={{ fontSize: 11, fill: '#64748b' }} />
+          <YAxis
+            yAxisId="rate"
+            orientation="right"
+            tickFormatter={(value) => `${Number(value).toFixed(1)}%`}
+            tick={{ fontSize: 11, fill: '#64748b' }}
+          />
+          <Tooltip
+            formatter={(value, name) => {
+              const numeric = Number(value ?? 0)
+              return [String(name).includes('Engajamento') ? `${numeric.toFixed(2)}%` : numeric.toLocaleString('pt-BR'), String(name)]
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          {reachGoal != null && (
+            <ReferenceLine
+              yAxisId="reach"
+              y={reachGoal}
+              stroke="#d97706"
+              strokeDasharray="5 4"
+              label={{ value: 'Meta', position: 'insideTopRight', fill: '#b45309', fontSize: 10 }}
+            />
+          )}
+          <Bar yAxisId="reach" dataKey="reach" name="Alcance" fill="#0f766e" radius={[5, 5, 0, 0]} maxBarSize={42} />
+          <Line yAxisId="rate" type="monotone" dataKey="engagementRate" name="Engajamento" stroke="#0f172a" strokeWidth={2.2} dot={{ r: 2.5 }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 

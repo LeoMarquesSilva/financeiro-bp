@@ -105,6 +105,10 @@ export interface InstagramPeriodRange {
 
 export type InstagramPeriodFilter =
   | { kind: 'all' }
+  | {
+      kind: 'preset'
+      preset: 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year'
+    }
   | { kind: 'year'; year: number }
   | { kind: 'month'; year: number; month: number }
   | { kind: 'custom'; from: string; to: string }
@@ -125,6 +129,11 @@ export interface InstagramAreaRank extends InstagramSummary {
   area: string
 }
 
+export interface InstagramPersonRank extends InstagramSummary {
+  id: string
+  name: string
+}
+
 export interface InstagramDashboardData {
   posts: InstagramPost[]
   accountStats: InstagramAccountStats | null
@@ -133,4 +142,52 @@ export interface InstagramDashboardData {
   demographics: InstagramDemographic[]
   stories: InstagramStory[]
   monthlyGoal: number
+}
+
+export interface MarketingTaskRow {
+  ci: number
+  ci_processo: number | null
+  grupo_cliente: string | null
+  cliente: string | null
+  tarefa: string
+  tarefa_pai: string | null
+  status: string
+  responsavel: string | null
+  usuario_conclusao: string | null
+  data_conclusao: string | null
+  data_para_conclusao: string | null
+  area_conclusao: string | null
+}
+
+export type MarketingPautaStage =
+  | 'aguardando_envio'
+  | 'em_revisao'
+  | 'em_protocolo'
+  | 'finalizada'
+  | 'cancelada'
+
+export interface MarketingPauta {
+  id: number
+  processId: number | null
+  responsavel: string | null
+  area: string
+  stage: MarketingPautaStage
+  dueDate: string | null
+  completedAt: string | null
+  currentDueDate: string | null
+  isLate: boolean
+  main: MarketingTaskRow
+  review: MarketingTaskRow | null
+  protocol: MarketingTaskRow | null
+}
+
+export interface MarketingPautaSummary {
+  delivered: number
+  target: number
+  progressPct: number
+  cancelled: number
+  overdue: number
+  dueSoon: number
+  missingAssignee: number
+  stages: Record<MarketingPautaStage, number>
 }

@@ -67,4 +67,3 @@ O seletor global de período controla também essa aba.
 - O sync testa a resolução do campo de responsável com aliases conhecidos.
 - Build TypeScript/Vite deve passar.
 - A página deve ser verificada no localhost em largura desktop e mobile.
-

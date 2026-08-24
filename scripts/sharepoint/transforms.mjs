@@ -43,6 +43,34 @@ export function computeExcludente(justificativaFatal) {
   return key && JUSTIFICATIVAS_EXCLUDENTES_UPPER.has(key) ? 'Excludente' : 'Não'
 }
 
+/**
+ * Nome de quem recebeu a tarefa na agenda. As exportações do VIOS/SharePoint
+ * já circularam com cabeçalhos diferentes; aceitamos apenas campos explícitos
+ * de atribuição e nunca usamos "Usuário que concluiu" como substituto.
+ */
+export function resolveTaskAssignee(row, existingAssignee = null) {
+  const aliases = [
+    'Responsável',
+    'Responsavel',
+    'Responsável pela tarefa',
+    'Responsavel pela tarefa',
+    'Usuário responsável',
+    'Usuario responsavel',
+    'Usuário da tarefa',
+    'Usuario da tarefa',
+    'Atribuído a',
+    'Atribuido a',
+    'Executor',
+  ]
+  for (const alias of aliases) {
+    const value = row?.[alias]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return typeof existingAssignee === 'string' && existingAssignee.trim()
+    ? existingAssignee.trim()
+    : null
+}
+
 /** Colunas "Fatal apos 18" / "Fatal sem 18" (tabela Nova): Fatal|Fatal Quebra -> FATAL; Pendente mantém; senão D-1. */
 export function mapFatalHistorico(adesao) {
   const a = (adesao ?? '').trim()

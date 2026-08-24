@@ -1,175 +1,330 @@
 import {
-  Bookmark,
+  ArrowDownRight,
+  ArrowUpRight,
+  Building2,
+  ClipboardCheck,
   Eye,
-  Heart,
   Images,
-  MousePointerClick,
-  Send,
-  TrendingUp,
-  UserPlus,
-  Users,
+  Minus,
+  Sparkles,
+  Trophy,
+  UsersRound,
 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Avatar } from '@/shared/components/Avatar'
 import {
+  compareInstagramPeriods,
+  computeMarketingGoals,
   computePostEngagementRate,
+  groupPostsByDay,
   groupPostsByFormat,
   groupPostsByMonth,
-  summarizeInstagram,
+  rankAreasByPostVolume,
+  rankPeopleByPostVolume,
 } from './instagramAnalytics'
-import { MarketingFormatChart, MarketingTrendChart } from './MarketingCharts'
-import type { InstagramAccountStats, InstagramPost, InstagramStory } from './types'
+import { compareMarketingPautaPeriods, computeMarketingPautaGoal } from './marketingPautas'
+import {
+  MarketingFormatChart,
+  MarketingPerformanceTrendChart,
+} from './MarketingCharts'
+import type { MarketingPerson } from './instagramService'
+import type {
+  InstagramAccountStats,
+  InstagramPeriodRange,
+  InstagramPost,
+  InstagramStory,
+  MarketingPauta,
+} from './types'
 
-const number = (value: number) => new Intl.NumberFormat('pt-BR').format(value)
+const number = (value: number) => new Intl.NumberFormat('pt-BR').format(Math.round(value))
 const compact = (value: number) =>
   new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
 
-function Kpi({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  tone = 'teal',
-}: {
-  label: string
-  value: string
-  detail: string
-  icon: typeof Eye
-  tone?: 'teal' | 'blue' | 'amber' | 'rose'
-}) {
-  const tones = {
-    teal: 'bg-teal-50 text-teal-700 ring-teal-100',
-    blue: 'bg-blue-50 text-blue-700 ring-blue-100',
-    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
-    rose: 'bg-rose-50 text-rose-700 ring-rose-100',
+function periodDays(range: InstagramPeriodRange) {
+  if (!range.from || !range.to) return Number.POSITIVE_INFINITY
+  return Math.max(1, Math.round((new Date(range.to).getTime() - new Date(range.from).getTime() + 1) / 86_400_000))
+}
+
+function Delta({ value }: { value: number | null }) {
+  if (value == null) return <span className="text-slate-400">Sem base anterior</span>
+  if (Math.abs(value) < 0.01) {
+    return <span className="inline-flex items-center gap-1 text-slate-500"><Minus className="h-3 w-3" /> Estável</span>
   }
+  const positive = value > 0
+  const Icon = positive ? ArrowUpRight : ArrowDownRight
   return (
-    <Card className="border-slate-200/80 shadow-sm">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">{label}</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
-            <p className="mt-1 truncate text-xs text-slate-500" title={detail}>{detail}</p>
-          </div>
-          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 ${tones[tone]}`}>
-            <Icon className="h-4 w-4" />
-          </span>
-        </div>
-      </CardContent>
-    </Card>
+    <span className={positive ? 'inline-flex items-center gap-1 text-emerald-700' : 'inline-flex items-center gap-1 text-rose-700'}>
+      <Icon className="h-3.5 w-3.5" />
+      {Math.abs(value).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+    </span>
   )
 }
+
+function GoalMetric({
+  label,
+  value,
+  target,
+  cadence,
+  delta,
+  icon: Icon,
+  format,
+}: {
+  label: string
+  value: number
+  target: number
+  cadence: string
+  delta: number | null
+  icon: typeof Eye
+  format: (value: number) => string
+}) {
+  const progress = target > 0 ? Math.min(100, (value / target) * 100) : 0
+  return (
+    <article className="relative min-w-0 px-5 py-5 sm:px-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-slate-500">{label}</p>
+          <p className="mt-2 text-3xl font-black tracking-tight text-slate-950 tabular-nums">{format(value)}</p>
+        </div>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-800 ring-1 ring-teal-100">
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-teal-700 transition-all duration-500" style={{ width: `${progress}%` }} />
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+        <span className="text-slate-500">Meta {cadence}: {format(target)}</span>
+        <Delta value={delta} />
+      </div>
+    </article>
+  )
+}
+
+function RankingBar({ value, max }: { value: number; max: number }) {
+  return (
+    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-full rounded-full bg-teal-600" style={{ width: `${max ? (value / max) * 100 : 0}%` }} />
+    </div>
+  )
+}
+
 export function MarketingOverview({
   posts,
+  previousPosts,
   account,
   stories,
-  monthlyGoal,
+  people,
+  range,
+  comparisonLabel,
+  pautas,
+  previousRange,
 }: {
   posts: InstagramPost[]
+  previousPosts: InstagramPost[]
   account: InstagramAccountStats | null
   stories: InstagramStory[]
-  monthlyGoal: number
+  people: MarketingPerson[]
+  range: InstagramPeriodRange
+  comparisonLabel: string
+  pautas: MarketingPauta[]
+  previousRange: InstagramPeriodRange
 }) {
-  const summary = summarizeInstagram(posts)
-  const monthly = groupPostsByMonth(posts)
+  const comparison = compareInstagramPeriods(posts, previousPosts)
+  const pautaComparison = compareMarketingPautaPeriods(pautas, range, previousRange)
+  const pautaTarget = computeMarketingPautaGoal(range)
+  const datedPosts = posts.filter((post) => post.published_at).map((post) => post.published_at as string).sort()
+  const goalRange = range.from || !datedPosts.length
+    ? range
+    : {
+        from: `${datedPosts[0].slice(0, 10)}T00:00:00.000Z`,
+        to: `${datedPosts[datedPosts.length - 1].slice(0, 10)}T23:59:59.999Z`,
+      }
+  const goals = computeMarketingGoals(goalRange)
+  const peopleRanking = rankPeopleByPostVolume(posts).slice(0, 6)
+  const areaRanking = rankAreasByPostVolume(posts).slice(0, 6)
   const formats = groupPostsByFormat(posts)
-  const topPosts = [...posts]
-    .sort((a, b) => computePostEngagementRate(b) - computePostEngagementRate(a))
-    .slice(0, 5)
-  const currentMonth = new Date().toISOString().slice(0, 7)
-  const monthPosts = posts.filter((post) => post.published_at?.startsWith(currentMonth)).length
-  const goalPct = Math.min(100, (monthPosts / Math.max(monthlyGoal, 1)) * 100)
-  const storySummary = stories.reduce(
-    (acc, story) => ({
-      reach: acc.reach + story.reach,
-      views: acc.views + story.views,
-      interactions: acc.interactions + story.total_interactions,
-    }),
-    { reach: 0, views: 0, interactions: 0 },
-  )
+  const topFormat = formats[0]
+  const topPost = [...posts].sort((a, b) => computePostEngagementRate(b) - computePostEngagementRate(a))[0]
+  const byPerson = new Map(people.map((person) => [person.id, person]))
+  const maxPeoplePosts = peopleRanking[0]?.posts ?? 0
+  const maxAreaPosts = areaRanking[0]?.posts ?? 0
+  const days = periodDays(range)
+  const trend = days <= 100
+    ? groupPostsByDay(posts).map((row) => ({
+        ...row,
+        label: new Date(`${row.date}T12:00:00Z`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
+      }))
+    : groupPostsByMonth(posts).map((row) => ({
+        ...row,
+        label: new Date(`${row.month}-01T12:00:00Z`).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
+      }))
+  const reachGoalPerPoint = days <= 100 ? 15_000 / (365.2425 / 12) : 15_000
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Seguidores" value={compact(account?.followers_count ?? 0)} detail={`@${account?.username ?? 'bismarchipires'}`} icon={Users} />
-        <Kpi label="Alcance" value={compact(summary.reach)} detail={`${number(summary.posts)} publicações no período`} icon={Eye} tone="blue" />
-        <Kpi label="Visualizações" value={compact(summary.views)} detail="Feed, Reels e vídeos" icon={TrendingUp} tone="blue" />
-        <Kpi label="Interações" value={compact(summary.interactions)} detail={`${summary.engagementRate.toFixed(2).replace('.', ',')}% de engajamento`} icon={Heart} tone="rose" />
-        <Kpi label="Salvamentos" value={number(summary.saves)} detail="Intenção e valor percebido" icon={Bookmark} tone="amber" />
-        <Kpi label="Compartilhamentos" value={number(summary.shares)} detail="Distribuição orgânica" icon={Send} tone="amber" />
-        <Kpi label="Seguidores ganhos" value={number(summary.follows)} detail="Atribuídos às publicações" icon={UserPlus} />
-        <Kpi label="Visitas ao perfil" value={number(summary.profileVisits)} detail="Geradas pelas publicações" icon={MousePointerClick} />
-      </div>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Indicadores do período</p>
+            <p className="text-xs text-slate-500">Comparação com {comparisonLabel}</p>
+          </div>
+          <Badge variant="outline" className="border-slate-200 bg-white font-medium text-slate-600">
+            {posts.length} publicações analisadas
+          </Badge>
+        </div>
+        <div className="grid divide-y divide-slate-100 sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-y-0">
+          <GoalMetric
+            label="Alcance"
+            value={comparison.reach.current}
+            target={goals.reach.target}
+            cadence="15 mil/mês"
+            delta={comparison.reach.changePct}
+            icon={Eye}
+            format={compact}
+          />
+          <GoalMetric
+            label="Engajamento"
+            value={comparison.engagement.current}
+            target={goals.engagement.target}
+            cadence="anual"
+            delta={comparison.engagement.changePct}
+            icon={Trophy}
+            format={(value) => `${value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%`}
+          />
+          <GoalMetric
+            label="Postagens"
+            value={comparison.posts.current}
+            target={goals.posts.target}
+            cadence="12/mês"
+            delta={comparison.posts.changePct}
+            icon={Images}
+            format={number}
+          />
+          <GoalMetric
+            label="Pautas"
+            value={pautaComparison.current}
+            target={pautaTarget}
+            cadence="10/mês"
+            delta={pautaComparison.changePct}
+            icon={ClipboardCheck}
+            format={(value) => value.toLocaleString('pt-BR', {
+              maximumFractionDigits: Number.isInteger(value) ? 0 : 1,
+            })}
+          />
+        </div>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-[1.55fr_1fr]">
-        <Card className="border-slate-200/80 shadow-sm">
+        <Card className="border-slate-200 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Evolução mensal</CardTitle>
-            <p className="text-xs text-slate-500">Alcance, visualizações e interações das publicações</p>
+            <CardTitle className="text-base">Tendência de performance</CardTitle>
+            <p className="text-xs text-slate-500">Alcance e taxa de engajamento ao longo do período selecionado</p>
           </CardHeader>
           <CardContent>
-            <MarketingTrendChart data={monthly} />
+            {trend.length ? (
+              <MarketingPerformanceTrendChart data={trend} reachGoal={reachGoalPerPoint} />
+            ) : (
+              <div className="grid h-72 place-items-center text-sm text-slate-500">Sem publicações neste período.</div>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200/80 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Ritmo de publicação</CardTitle>
-            <p className="text-xs text-slate-500">Meta mensal configurada no Marketing</p>
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4 text-teal-700" /> Leituras rápidas</CardTitle>
+            <p className="text-xs text-slate-500">Destaques calculados a partir dos vínculos e métricas</p>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="text-4xl font-black tabular-nums text-slate-900">{monthPosts}</p>
-                <p className="text-xs text-slate-500">de {monthlyGoal} publicações</p>
-              </div>
-              <Badge className="bg-teal-700 hover:bg-teal-700">{goalPct.toFixed(0)}%</Badge>
+          <CardContent className="space-y-3">
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Formato mais usado</p>
+              <p className="mt-1 text-base font-bold text-slate-900">{topFormat?.format ?? 'Sem dados'}</p>
+              <p className="text-xs text-slate-500">{topFormat ? `${topFormat.posts} posts · ${topFormat.engagementRate.toFixed(2)}% de engajamento` : 'Nenhuma publicação no recorte'}</p>
             </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full rounded-full bg-gradient-to-r from-teal-600 to-emerald-400 transition-all" style={{ width: `${goalPct}%` }} />
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Conta</p>
+              <p className="mt-1 text-base font-bold text-slate-900">{compact(account?.followers_count ?? 0)} seguidores</p>
+              <p className="text-xs text-slate-500">{stories.length} stories preservados no período</p>
             </div>
-            <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
-              <div><p className="text-lg font-bold text-slate-900">{stories.length}</p><p className="text-[11px] text-slate-500">Stories salvos</p></div>
-              <div><p className="text-lg font-bold text-slate-900">{compact(storySummary.reach)}</p><p className="text-[11px] text-slate-500">Alcance stories</p></div>
-              <div><p className="text-lg font-bold text-slate-900">{compact(storySummary.views)}</p><p className="text-[11px] text-slate-500">Views stories</p></div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Publicação destaque</p>
+              <p className="mt-1 line-clamp-1 text-sm font-bold text-slate-900">{topPost?.caption?.split('\n')[0] ?? 'Sem dados'}</p>
+              <p className="text-xs text-slate-500">{topPost ? `${computePostEngagementRate(topPost).toFixed(2)}% de engajamento · ${number(topPost.reach)} de alcance` : 'Nenhuma publicação no recorte'}</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <Card className="border-slate-200/80 shadow-sm">
+        <Card className="border-slate-200 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Performance por formato</CardTitle>
-            <p className="text-xs text-slate-500">Volume e taxa de engajamento por superfície</p>
+            <CardTitle className="flex items-center gap-2 text-base"><UsersRound className="h-4 w-4 text-teal-700" /> Quem mais faz posts no escritório</CardTitle>
+            <p className="text-xs text-slate-500">Pessoas vinculadas às publicações no Orquestrai</p>
           </CardHeader>
-          <CardContent>
-            <MarketingFormatChart data={formats} />
+          <CardContent className="space-y-1">
+            {peopleRanking.map((row, index) => {
+              const person = byPerson.get(row.id)
+              return (
+                <div key={row.id || row.name} className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-slate-50">
+                  <span className="w-5 text-center text-xs font-bold text-slate-400">{index + 1}</span>
+                  <Avatar src={null} email={person?.email} fullName={row.name} size="lg" className="ring-2 ring-white" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate text-sm font-semibold text-slate-800">{row.name}</p>
+                      <span className="shrink-0 text-xs font-bold tabular-nums text-slate-900">{row.posts} posts</span>
+                    </div>
+                    <RankingBar value={row.posts} max={maxPeoplePosts} />
+                  </div>
+                </div>
+              )
+            })}
+            {!peopleRanking.length && <p className="py-12 text-center text-sm text-slate-500">Nenhuma pessoa vinculada neste período.</p>}
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200/80 shadow-sm">
+        <Card className="border-slate-200 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base"><Images className="h-4 w-4 text-teal-700" /> Melhores publicações</CardTitle>
-            <p className="text-xs text-slate-500">Ordenadas pela taxa de engajamento por alcance</p>
+            <CardTitle className="flex items-center gap-2 text-base"><Building2 className="h-4 w-4 text-teal-700" /> Áreas com mais publicações</CardTitle>
+            <p className="text-xs text-slate-500">Posts colaborativos contam em todas as áreas vinculadas</p>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {topPosts.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">Nenhuma publicação no período.</p>
-            ) : topPosts.map((post, index) => (
-              <a key={post.id} href={post.permalink ?? undefined} target="_blank" rel="noreferrer" className="group flex items-center gap-3 rounded-xl border border-slate-100 p-2.5 transition hover:border-teal-200 hover:bg-teal-50/30">
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-slate-900 text-xs font-bold text-white">{index + 1}</span>
-                {post.thumbnail_url || post.media_url ? (
-                  <img src={post.thumbnail_url ?? post.media_url ?? ''} alt="" className="h-11 w-11 rounded-lg object-cover" loading="lazy" />
-                ) : <div className="h-11 w-11 rounded-lg bg-slate-100" />}
+          <CardContent className="space-y-1">
+            {areaRanking.map((row, index) => (
+              <div key={row.area} className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-slate-50">
+                <span className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">{index + 1}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800">{post.caption?.split('\n')[0] || 'Sem legenda'}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{number(post.reach)} alcance · {number(post.total_interactions)} interações</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-sm font-semibold text-slate-800">{row.area}</p>
+                    <span className="shrink-0 text-xs font-bold tabular-nums text-slate-900">{row.posts} posts</span>
+                  </div>
+                  <RankingBar value={row.posts} max={maxAreaPosts} />
                 </div>
-                <span className="text-sm font-bold tabular-nums text-teal-700">{computePostEngagementRate(post).toFixed(2)}%</span>
+              </div>
+            ))}
+            {!areaRanking.length && <p className="py-12 text-center text-sm text-slate-500">Nenhuma área vinculada neste período.</p>}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_1.2fr]">
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-base">Volume e engajamento por formato</CardTitle></CardHeader>
+          <CardContent><MarketingFormatChart data={formats} /></CardContent>
+        </Card>
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-base">Melhores publicações</CardTitle><p className="text-xs text-slate-500">Ordenadas pela taxa de engajamento sobre alcance</p></CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            {[...posts].sort((a, b) => computePostEngagementRate(b) - computePostEngagementRate(a)).slice(0, 3).map((post) => (
+              <a key={post.id} href={post.permalink ?? undefined} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-slate-200 transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
+                {post.thumbnail_url || post.media_url ? (
+                  <img src={post.thumbnail_url ?? post.media_url ?? ''} alt={post.caption?.split('\n')[0] || 'Publicação do Instagram'} className="aspect-[4/3] w-full object-cover" loading="lazy" />
+                ) : <div className="grid aspect-[4/3] place-items-center bg-slate-100"><Images className="h-6 w-6 text-slate-300" /></div>}
+                <div className="p-3">
+                  <p className="line-clamp-2 text-xs font-medium leading-relaxed text-slate-700">{post.caption || 'Sem legenda'}</p>
+                  <p className="mt-2 text-sm font-bold text-teal-700">{computePostEngagementRate(post).toFixed(2)}%</p>
+                </div>
               </a>
             ))}
+            {!posts.length && <p className="col-span-full py-12 text-center text-sm text-slate-500">Nenhuma publicação neste período.</p>}
           </CardContent>
         </Card>
       </div>

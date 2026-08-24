@@ -1,13 +1,22 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  compareInstagramPeriods,
+  computeMarketingGoals,
   computePostEngagementRate,
   filterPostsByPeriod,
+  groupPostsByDay,
   groupPostsByMonth,
   rankAreas,
+  rankAreasByPostVolume,
+  rankPeopleByPostVolume,
   summarizeInstagram,
 } from '../src/features/operacoes-legais/marketing/instagramAnalytics.ts'
-import { resolveInstagramPeriod } from '../src/features/operacoes-legais/marketing/instagramPeriod.ts'
+import {
+  getPreviousInstagramPeriod,
+  resolveInstagramPeriod,
+  shiftInstagramPeriod,
+} from '../src/features/operacoes-legais/marketing/instagramPeriod.ts'
 
 const posts = [
   {
@@ -61,6 +70,45 @@ test('resolve intervalo customizado inclusive atravessando dezembro', () => {
   )
 })
 
+test('resolve esta semana e semana anterior de segunda a domingo', () => {
+  const now = new Date('2026-08-19T15:00:00.000Z')
+  assert.deepEqual(resolveInstagramPeriod({ kind: 'preset', preset: 'this_week' }, now), {
+    from: '2026-08-17T00:00:00.000Z',
+    to: '2026-08-23T23:59:59.999Z',
+  })
+  assert.deepEqual(resolveInstagramPeriod({ kind: 'preset', preset: 'last_week' }, now), {
+    from: '2026-08-10T00:00:00.000Z',
+    to: '2026-08-16T23:59:59.999Z',
+  })
+})
+
+test('navega meses e calcula o período anterior com a mesma duração', () => {
+  assert.deepEqual(shiftInstagramPeriod({ kind: 'month', year: 2026, month: 1 }, -1), {
+    kind: 'month', year: 2025, month: 12,
+  })
+  assert.deepEqual(shiftInstagramPeriod({ kind: 'month', year: 2026, month: 12 }, 1), {
+    kind: 'month', year: 2027, month: 1,
+  })
+  assert.deepEqual(
+    shiftInstagramPeriod(
+      { kind: 'preset', preset: 'this_month' },
+      -1,
+      new Date('2026-08-19T15:00:00.000Z'),
+    ),
+    { kind: 'month', year: 2026, month: 7 },
+  )
+  assert.deepEqual(
+    getPreviousInstagramPeriod({
+      from: '2026-08-10T00:00:00.000Z',
+      to: '2026-08-16T23:59:59.999Z',
+    }),
+    {
+      from: '2026-08-03T00:00:00.000Z',
+      to: '2026-08-09T23:59:59.999Z',
+    },
+  )
+})
+
 test('agrupa volume mensal sem criar posts artificiais', () => {
   const augustPosts = [
     posts[0],
@@ -80,18 +128,68 @@ test('atribui posts colaborativos a todas as áreas e ordena por engajamento', (
   assert.equal(ranking.find((row) => row.area === 'Contratos')?.posts, 1)
 })
 
-test('indicadores: posts vs meta anual 144 e pautas vs 10/mês no ano', () => {
-  const yearPosts = filterPostsByPeriod(
-    posts,
-    resolveInstagramPeriod({ kind: 'year', year: 2026 }),
+test('agrupa a tendência diária preservando alcance, engajamento e volume', () => {
+  const grouped = groupPostsByDay([
+    posts[0],
+    { ...posts[0], id: '3', ig_media_id: 'ig-3', reach: 500, total_interactions: 25 },
+  ])
+  assert.deepEqual(grouped, [
+    {
+      date: '2026-08-05',
+      posts: 2,
+      reach: 1500,
+      views: 2800,
+      interactions: 125,
+      engagementRate: 125 / 1500 * 100,
+      follows: 6,
+      profileVisits: 30,
+      saves: 10,
+      shares: 10,
+    },
+  ])
+})
+
+test('mantém somente alcance, engajamento e postagens com as metas definidas', () => {
+  const goals = computeMarketingGoals({
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-31T23:59:59.999Z',
+  })
+  assert.deepEqual(Object.keys(goals), ['reach', 'engagement', 'posts'])
+  assert.equal(goals.reach.target, 15_000)
+  assert.equal(goals.engagement.target, 3.5)
+  assert.equal(goals.posts.target, 12)
+})
+
+test('compara alcance, engajamento e posts com o período anterior', () => {
+  const comparison = compareInstagramPeriods([posts[0]], [posts[1]])
+  assert.deepEqual(comparison.reach, { current: 1000, previous: 500, changePct: 100 })
+  assert.deepEqual(comparison.posts, { current: 1, previous: 1, changePct: 0 })
+  assert.deepEqual(comparison.engagement, { current: 10, previous: 8, changePct: 25 })
+})
+
+test('ranqueia pessoas e áreas por quantidade de posts sem duplicar vínculos', () => {
+  const linkedPosts = [
+    {
+      ...posts[0],
+      solicitantes: [{ id: 'p1', name: 'Ana' }, { id: 'p1', name: 'Ana' }],
+    },
+    {
+      ...posts[1],
+      solicitantes: [{ id: 'p1', name: 'Ana' }, { id: 'p2', name: 'Bruno' }],
+    },
+  ]
+  assert.deepEqual(
+    rankPeopleByPostVolume(linkedPosts).map(({ id, name, posts: count }) => ({ id, name, posts: count })),
+    [
+      { id: 'p1', name: 'Ana', posts: 2 },
+      { id: 'p2', name: 'Bruno', posts: 1 },
+    ],
   )
-  assert.equal(yearPosts.length, 2)
-  // Meta posts anual fixa: 2/144 ≈ 1,39%
-  assert.equal(Number(((yearPosts.length / 144) * 100).toFixed(2)), 1.39)
-  // Meta pautas dinâmica: 12 meses × 10 = 120
-  assert.equal(yearPosts.length / (12 * 10), 2 / 120)
-  const monthly = groupPostsByMonth(yearPosts)
-  assert.equal(monthly.length, 2)
-  const avgReach = monthly.reduce((s, m) => s + m.reach, 0) / monthly.length
-  assert.equal(avgReach, 750)
+  assert.deepEqual(
+    rankAreasByPostVolume(linkedPosts).map(({ area, posts: count }) => ({ area, posts: count })),
+    [
+      { area: 'Marketing', posts: 2 },
+      { area: 'Contratos', posts: 1 },
+    ],
+  )
 })

@@ -46,6 +46,7 @@ import {
   areaNaConclusao,
   turnoverRowDedupeKey,
   resolveNomeCanonico,
+  resolveTaskAssignee,
   parseNumeroProcessoLista,
   toIsoDate,
   toIsoDateBrt,
@@ -241,6 +242,24 @@ async function upsertChunks(table, rows, onConflict) {
     upserted += chunk.length
   }
   return upserted
+}
+
+async function loadExistingTaskAssignees(table) {
+  const assignees = new Map()
+  const pageSize = 1000
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('ci, responsavel')
+      .not('responsavel', 'is', null)
+      .range(from, from + pageSize - 1)
+    if (error) throw new Error(`ler responsáveis existentes de ${table}: ${error.message}`)
+    for (const row of data ?? []) {
+      if (row.ci != null && row.responsavel?.trim()) assignees.set(Number(row.ci), row.responsavel.trim())
+    }
+    if ((data?.length ?? 0) < pageSize) break
+  }
+  return assignees
 }
 
 /**
@@ -1149,6 +1168,7 @@ const FONTES = {
       const turnover = await loadTurnover()
       const feriados = await loadFeriadosSet()
       const numeroMap = await loadProcessosNumeroMap()
+      const existingAssignees = await loadExistingTaskAssignees('sp_tarefas')
       const rows = raw
         .filter((r) => r['Status'] === 'Concluída')
         .map((r) => {
@@ -1158,8 +1178,9 @@ const FONTES = {
           const adesaoSem18 = computeAdesaoSem18(r['Status'], dataPrazo, dataConclusao, feriados)
           const adesaoApos18 = computeAdesaoApos18(r['Status'], dataPrazo, conclusaoCompleta)
           const ciProcesso = numOrNull(r['CI do Processo'])
+          const ci = numOrNull(r['CI'])
           return {
-            ci: numOrNull(r['CI']),
+            ci,
             ci_processo: ciProcesso,
             nro_cnj: coalesceNroCnj(r['Nro CNJ'], ciProcesso, numeroMap),
             area_processo: strOrNull(r['Área do Processo']),
@@ -1169,6 +1190,7 @@ const FONTES = {
             tarefa_pai: strOrNull(r['Tarefa Pai']),
             etiquetas_tarefa: strOrNull(r['Etiquetas da Tarefa']),
             status: strOrNull(r['Status']),
+            responsavel: resolveTaskAssignee(r, existingAssignees.get(ci)),
             usuario_conclusao: strOrNull(r['Usuário que concluiu a tarefa']),
             data_conclusao: toIsoDateBrt(dataConclusao),
             data_para_conclusao: toIsoDateBrt(dataPrazo),
@@ -1197,6 +1219,7 @@ const FONTES = {
       const turnover = await loadTurnover()
       const tipoDePrazo = await loadTipoDePrazoMap(ctx.siteControladoria)
       const numeroMap = await loadProcessosNumeroMap()
+      const existingAssignees = await loadExistingTaskAssignees('sp_tarefas_historico')
       let upserted = 0
       for (const arq of csvs) {
         const buffer = await fetchDriveFile(ctx.siteControladoria, arq.path)
@@ -1211,8 +1234,9 @@ const FONTES = {
             const adesaoApos18 = computeAdesaoApos18(r['Status'], dataPrazo, conclusaoCompleta)
             const tarefaNome = (r['Tarefa'] ?? '').trim().toUpperCase()
             const ciProcesso = numOrNull(r['CI do Processo'])
+            const ci = numOrNull(r['CI'])
             return {
-              ci: numOrNull(r['CI']),
+              ci,
               ci_processo: ciProcesso,
               nro_cnj: coalesceNroCnj(r['Nro CNJ'], ciProcesso, numeroMap),
               grupo_cliente: strOrNull(r['Grupo Cliente']),
@@ -1221,6 +1245,7 @@ const FONTES = {
               tarefa_pai: strOrNull(r['Tarefa Pai']),
               etiqueta_tarefa: tipoDePrazo.get(tarefaNome) ?? 'Etiqueta não encontrada',
               status: strOrNull(r['Status']),
+              responsavel: resolveTaskAssignee(r, existingAssignees.get(ci)),
               usuario_conclusao: strOrNull(r['Usuário que concluiu a tarefa']),
               conclusao_completa: toIsoDateTime(conclusaoCompleta),
               data_conclusao: toIsoDateBrt(conclusaoCompleta),
