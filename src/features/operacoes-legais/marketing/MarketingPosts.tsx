@@ -26,7 +26,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { computePostEngagementRate } from './instagramAnalytics'
+import { Avatar } from '@/shared/components/Avatar'
+import { computePostEngagementRate, getInstagramFormat } from './instagramAnalytics'
+import { MarketingAreaIcon } from './MarketingAreaIcon'
 import { useUpdateInstagramPostLinks } from './useInstagramMarketing'
 import type { MarketingPerson } from './instagramService'
 import type { InstagramPost, InstagramSolicitante } from './types'
@@ -37,6 +39,13 @@ type Sort = 'date' | 'engagement' | 'reach' | 'views'
 const number = (value: number) => new Intl.NumberFormat('pt-BR').format(value)
 const linked = (post: InstagramPost) =>
   (post.areas?.length ?? 0) > 0 && (post.skip_participants || (post.solicitantes?.length ?? 0) > 0)
+
+function formatBadgeClass(format: string) {
+  if (format === 'Reels') return 'border-transparent bg-slate-950 text-white hover:bg-slate-950'
+  if (format === 'Carrossel') return 'border-transparent bg-teal-700 text-white hover:bg-teal-700'
+  if (format === 'Imagem única') return 'border-white/70 bg-white/95 text-slate-950 hover:bg-white/95'
+  return 'border-transparent bg-slate-700 text-white hover:bg-slate-700'
+}
 
 function PostLinksDialog({
   post,
@@ -97,7 +106,7 @@ function PostLinksDialog({
             <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Áreas</p>
             <div className="max-h-72 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
               {areas.map((area) => (
-                <label key={area} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-slate-50"><Checkbox checked={selectedAreas.includes(area)} onCheckedChange={() => toggleArea(area)} /><span>{area}</span></label>
+                <label key={area} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-slate-50"><Checkbox checked={selectedAreas.includes(area)} onCheckedChange={() => toggleArea(area)} /><MarketingAreaIcon area={area} className="h-7 w-7 rounded-lg" /><span>{area}</span></label>
               ))}
             </div>
           </section>
@@ -105,7 +114,7 @@ function PostLinksDialog({
             <div className="mb-3 flex items-center justify-between gap-3"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Participantes</p><label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600"><Checkbox checked={skipParticipants} onCheckedChange={setSkipParticipants} />Institucional</label></div>
             <div className={`max-h-72 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2 ${skipParticipants ? 'pointer-events-none opacity-40' : ''}`}>
               {people.map((person) => (
-                <label key={person.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-slate-50"><Checkbox checked={selectedPeople.some((item) => item.id === person.id)} onCheckedChange={() => togglePerson(person)} /><span className="min-w-0 flex-1 truncate">{person.name}</span><span className="max-w-28 truncate text-[10px] text-slate-400">{person.area}</span></label>
+                <label key={person.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-slate-50"><Checkbox checked={selectedPeople.some((item) => item.id === person.id)} onCheckedChange={() => togglePerson(person)} /><Avatar src={person.avatarUrl} email={person.email} fullName={person.name} size="md" /><span className="min-w-0 flex-1 truncate">{person.name}</span><span className="max-w-28 truncate text-[10px] text-slate-400">{person.area}</span></label>
               ))}
             </div>
           </section>
@@ -133,14 +142,15 @@ export function MarketingPosts({ posts, people, canManage }: { posts: InstagramP
     ...posts.flatMap((post) => post.areas?.length ? post.areas : post.area ? [post.area] : []),
     ...people.map((person) => person.area),
   ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [people, posts])
-  const formats = useMemo(() => [...new Set(posts.map((post) => post.media_product_type || post.media_type || 'OUTRO'))].sort(), [posts])
+  const formats = useMemo(() => [...new Set(posts.map(getInstagramFormat))].sort(), [posts])
+  const peopleById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people])
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase('pt-BR')
     const rows = posts.filter((post) => {
       if (needle && !`${post.caption ?? ''} ${post.solicitante ?? ''}`.toLocaleLowerCase('pt-BR').includes(needle)) return false
       if (area !== 'all' && !(post.areas?.length ? post.areas : post.area ? [post.area] : []).includes(area)) return false
-      if (format !== 'all' && (post.media_product_type || post.media_type || 'OUTRO') !== format) return false
+      if (format !== 'all' && getInstagramFormat(post) !== format) return false
       if (linkFilter === 'linked' && !linked(post)) return false
       if (linkFilter === 'pending' && linked(post)) return false
       return true
@@ -171,19 +181,33 @@ export function MarketingPosts({ posts, people, canManage }: { posts: InstagramP
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-        {visible.map((post) => (
+        {visible.map((post) => {
+          const postFormat = getInstagramFormat(post)
+          return (
           <article key={post.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-teal-200 hover:shadow-md">
             <div className="grid grid-cols-[132px_1fr]">
-              <div className="relative min-h-48 bg-slate-100">{post.thumbnail_url || post.media_url ? <img src={post.thumbnail_url ?? post.media_url ?? ''} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" /> : <div className="grid h-full place-items-center text-slate-300"><Eye className="h-8 w-8" /></div>}<Badge className="absolute left-2 top-2 bg-black/65 text-[9px] hover:bg-black/65">{post.media_product_type || post.media_type || 'POST'}</Badge></div>
+              <div className="relative min-h-48 bg-slate-100">{post.thumbnail_url || post.media_url ? <img src={post.thumbnail_url ?? post.media_url ?? ''} alt={post.caption?.split('\n')[0] || `Publicação em formato ${postFormat}`} className="absolute inset-0 h-full w-full object-cover" loading="lazy" /> : <div className="grid h-full place-items-center text-slate-300"><Eye className="h-8 w-8" /></div>}<Badge variant="outline" className={`absolute left-2 top-2 text-[10px] font-bold shadow-sm ${formatBadgeClass(postFormat)}`}>{postFormat}</Badge></div>
               <div className="flex min-w-0 flex-col p-3.5">
-                <div className="flex flex-wrap gap-1">{linked(post) ? <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Vinculado</Badge> : <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Pendente</Badge>}{(post.areas ?? []).slice(0, 2).map((item) => <Badge key={item} variant="outline" className="max-w-28 truncate text-[9px]">{item}</Badge>)}</div>
+                <div className="flex flex-wrap items-center gap-1">{linked(post) ? <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Vinculado</Badge> : <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Pendente</Badge>}{(post.areas ?? []).slice(0, 2).map((item) => <span key={item} className="inline-flex max-w-32 items-center gap-1 rounded-md border border-slate-200 bg-white py-0.5 pl-0.5 pr-1.5 text-[9px] font-semibold text-slate-600"><MarketingAreaIcon area={item} className="h-4 w-4 rounded" /><span className="truncate">{item}</span></span>)}</div>
                 <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-slate-700">{post.caption || 'Sem legenda'}</p>
+                {!post.skip_participants && post.solicitantes.length > 0 && (
+                  <div className="mt-2 flex items-center gap-1.5" aria-label="Colaboradores vinculados">
+                    <div className="flex -space-x-1.5">
+                      {post.solicitantes.slice(0, 3).map((participant) => {
+                        const person = peopleById.get(participant.id)
+                        return <Avatar key={participant.id || participant.name} src={person?.avatarUrl} email={person?.email} fullName={participant.name} size="sm" className="ring-2 ring-white" />
+                      })}
+                    </div>
+                    <span className="min-w-0 truncate text-[10px] text-slate-500">{post.solicitantes.map((participant) => participant.name).join(', ')}</span>
+                  </div>
+                )}
                 <div className="mt-3 grid grid-cols-3 gap-x-2 gap-y-1.5"><Metric icon={Eye} value={post.reach} title="Alcance" /><Metric icon={Heart} value={post.likes} title="Curtidas" /><Metric icon={MessageCircle} value={post.comments} title="Comentários" /><Metric icon={Bookmark} value={post.saves} title="Salvamentos" /><Metric icon={Send} value={post.shares} title="Compartilhamentos" /><Metric icon={Users} value={post.follows} title="Seguidores ganhos" /></div>
                 <div className="mt-auto flex items-end justify-between gap-2 border-t border-slate-100 pt-3"><div><p className="text-lg font-bold tabular-nums text-teal-700">{computePostEngagementRate(post).toFixed(2)}%</p><p className="text-[9px] uppercase tracking-wide text-slate-400">engajamento</p></div><div className="flex gap-1">{post.permalink && <Button asChild variant="ghost" size="icon" title="Abrir no Instagram"><a href={post.permalink} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a></Button>}{canManage && <Button variant="outline" size="icon" title="Editar vínculos" onClick={() => setEditing(post)}><Edit3 className="h-4 w-4" /></Button>}</div></div>
               </div>
             </div>
           </article>
-        ))}
+          )
+        })}
       </div>
 
       {visible.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-20 text-center"><p className="text-sm font-medium text-slate-700">Nenhuma publicação encontrada.</p><p className="mt-1 text-xs text-slate-500">Ajuste os filtros ou sincronize novamente.</p></div>}

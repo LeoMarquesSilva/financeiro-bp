@@ -24,6 +24,7 @@ import {
   rankPeopleByPostVolume,
 } from './instagramAnalytics'
 import { compareMarketingPautaPeriods, computeMarketingPautaGoal } from './marketingPautas'
+import { MarketingAreaIcon } from './MarketingAreaIcon'
 import {
   MarketingFormatChart,
   MarketingPerformanceTrendChart,
@@ -40,6 +41,12 @@ import type {
 const number = (value: number) => new Intl.NumberFormat('pt-BR').format(Math.round(value))
 const compact = (value: number) =>
   new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
+const postCountLabel = (value: number) => `${value} ${value === 1 ? 'post' : 'posts'}`
+
+function compactPersonName(name: string) {
+  const parts = name.trim().split(/\s+/)
+  return parts.length > 2 ? `${parts[0]} ${parts[parts.length - 1]}` : name
+}
 
 function periodDays(range: InstagramPeriodRange) {
   if (!range.from || !range.to) return Number.POSITIVE_INFINITY
@@ -112,8 +119,6 @@ function RankingBar({ value, max }: { value: number; max: number }) {
 export function MarketingOverview({
   posts,
   previousPosts,
-  account,
-  stories,
   people,
   range,
   comparisonLabel,
@@ -145,8 +150,11 @@ export function MarketingOverview({
   const areaRanking = rankAreasByPostVolume(posts).slice(0, 6)
   const formats = groupPostsByFormat(posts)
   const topFormat = formats[0]
-  const topPost = [...posts].sort((a, b) => computePostEngagementRate(b) - computePostEngagementRate(a))[0]
   const byPerson = new Map(people.map((person) => [person.id, person]))
+  const topPerson = peopleRanking[0]
+  const topPersonProfile = topPerson ? byPerson.get(topPerson.id) : undefined
+  const topArea = areaRanking[0]
+  const remainingPosts = Math.max(0, Math.ceil(goals.posts.target - comparison.posts.current))
   const maxPeoplePosts = peopleRanking[0]?.posts ?? 0
   const maxAreaPosts = areaRanking[0]?.posts ?? 0
   const days = periodDays(range)
@@ -230,27 +238,56 @@ export function MarketingOverview({
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4 text-teal-700" /> Leituras rápidas</CardTitle>
-            <p className="text-xs text-slate-500">Destaques calculados a partir dos vínculos e métricas</p>
+        <Card className="overflow-hidden border-slate-200 shadow-sm">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/70 pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4 text-teal-700" /> Leitura rápida do período</CardTitle>
+                <p className="mt-1 text-xs text-slate-500">O que merece atenção agora</p>
+              </div>
+              <Badge className="bg-slate-900 text-white hover:bg-slate-900">{postCountLabel(posts.length)}</Badge>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded-xl bg-slate-50 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Formato mais usado</p>
-              <p className="mt-1 text-base font-bold text-slate-900">{topFormat?.format ?? 'Sem dados'}</p>
-              <p className="text-xs text-slate-500">{topFormat ? `${topFormat.posts} posts · ${topFormat.engagementRate.toFixed(2)}% de engajamento` : 'Nenhuma publicação no recorte'}</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Conta</p>
-              <p className="mt-1 text-base font-bold text-slate-900">{compact(account?.followers_count ?? 0)} seguidores</p>
-              <p className="text-xs text-slate-500">{stories.length} stories preservados no período</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">Publicação destaque</p>
-              <p className="mt-1 line-clamp-1 text-sm font-bold text-slate-900">{topPost?.caption?.split('\n')[0] ?? 'Sem dados'}</p>
-              <p className="text-xs text-slate-500">{topPost ? `${computePostEngagementRate(topPost).toFixed(2)}% de engajamento · ${number(topPost.reach)} de alcance` : 'Nenhuma publicação no recorte'}</p>
-            </div>
+          <CardContent className="divide-y divide-slate-100 p-0">
+            <article className="px-5 py-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Ritmo de postagem</p>
+              <p className="mt-1 text-base font-bold text-slate-950">
+                {remainingPosts > 0 ? `Faltam ${remainingPosts} para a meta` : 'Meta de postagens atingida'}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">{number(comparison.posts.current)} de {number(goals.posts.target)} publicações previstas no recorte</p>
+            </article>
+
+            <article className="grid grid-cols-[1fr_auto] items-center gap-3 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Formato mais usado</p>
+                <p className="mt-1 truncate text-base font-bold text-slate-950">{topFormat?.format ?? 'Sem dados'}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{topFormat ? `${topFormat.posts} ${topFormat.posts === 1 ? 'publicação' : 'publicações'} · ${topFormat.engagementRate.toFixed(2)}% de engajamento` : 'Nenhuma publicação no período'}</p>
+              </div>
+              <Images className="h-5 w-5 text-teal-700" aria-hidden />
+            </article>
+
+            <article className="grid grid-cols-2 divide-x divide-slate-100 px-5 py-4">
+              <div className="flex min-w-0 items-center gap-3 pr-4">
+                {topPerson ? (
+                  <Avatar src={topPersonProfile?.avatarUrl} email={topPersonProfile?.email} fullName={topPerson.name} size="lg" className="ring-2 ring-white" />
+                ) : (
+                  <span className="h-9 w-9 rounded-full bg-slate-100" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Maior participação</p>
+                  <p className="truncate text-sm font-bold text-slate-900" title={topPerson?.name}>{topPerson ? compactPersonName(topPerson.name) : 'Sem vínculo'}</p>
+                  <p className="text-[11px] text-slate-500">{topPerson ? postCountLabel(topPerson.posts) : 'Sem dados'}</p>
+                </div>
+              </div>
+              <div className="flex min-w-0 items-center gap-3 pl-4">
+                {topArea ? <MarketingAreaIcon area={topArea.area} /> : <span className="h-9 w-9 rounded-xl bg-slate-100" />}
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Área em evidência</p>
+                  <p className="truncate text-sm font-bold text-slate-900">{topArea?.area ?? 'Sem vínculo'}</p>
+                  <p className="text-[11px] text-slate-500">{topArea ? postCountLabel(topArea.posts) : 'Sem dados'}</p>
+                </div>
+              </div>
+            </article>
           </CardContent>
         </Card>
       </div>
@@ -267,11 +304,11 @@ export function MarketingOverview({
               return (
                 <div key={row.id || row.name} className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-slate-50">
                   <span className="w-5 text-center text-xs font-bold text-slate-400">{index + 1}</span>
-                  <Avatar src={null} email={person?.email} fullName={row.name} size="lg" className="ring-2 ring-white" />
+                  <Avatar src={person?.avatarUrl} email={person?.email} fullName={row.name} size="lg" className="ring-2 ring-white" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
                       <p className="truncate text-sm font-semibold text-slate-800">{row.name}</p>
-                      <span className="shrink-0 text-xs font-bold tabular-nums text-slate-900">{row.posts} posts</span>
+                      <span className="shrink-0 text-xs font-bold tabular-nums text-slate-900">{postCountLabel(row.posts)}</span>
                     </div>
                     <RankingBar value={row.posts} max={maxPeoplePosts} />
                   </div>
@@ -290,11 +327,11 @@ export function MarketingOverview({
           <CardContent className="space-y-1">
             {areaRanking.map((row, index) => (
               <div key={row.area} className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-slate-50">
-                <span className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">{index + 1}</span>
+                <MarketingAreaIcon area={row.area} className="h-8 w-8 rounded-lg" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-semibold text-slate-800">{row.area}</p>
-                    <span className="shrink-0 text-xs font-bold tabular-nums text-slate-900">{row.posts} posts</span>
+                    <p className="truncate text-sm font-semibold text-slate-800"><span className="mr-1 text-[10px] text-slate-400">#{index + 1}</span>{row.area}</p>
+                    <span className="shrink-0 text-xs font-bold tabular-nums text-slate-900">{postCountLabel(row.posts)}</span>
                   </div>
                   <RankingBar value={row.posts} max={maxAreaPosts} />
                 </div>

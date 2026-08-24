@@ -51,13 +51,16 @@ export function MarketingPeriodPicker({
     value.kind === 'month' ? value.year : availableYears[0] ?? currentYear,
   )
   const resolved = useMemo(() => resolveInstagramPeriod(value), [value])
+  const [calendarMonth, setCalendarMonth] = useState(toDate(resolved.from) ?? new Date())
   const [selectedRange, setSelectedRange] = useState<DateRange | undefined>({
     from: toDate(resolved.from),
     to: toDate(resolved.to),
   })
 
   useEffect(() => {
-    setSelectedRange({ from: toDate(resolved.from), to: toDate(resolved.to) })
+    const from = toDate(resolved.from)
+    setSelectedRange({ from, to: toDate(resolved.to) })
+    if (from) setCalendarMonth(from)
   }, [resolved.from, resolved.to])
 
   const apply = (next: InstagramPeriodFilter) => {
@@ -205,7 +208,8 @@ export function MarketingPeriodPicker({
                         apply({ kind: 'custom', from: toDateKey(range.from), to: toDateKey(range.to) })
                       }
                     }}
-                    defaultMonth={selectedRange?.from}
+                    month={calendarMonth}
+                    onMonthChange={setCalendarMonth}
                     className="mx-auto border-0 p-0"
                   />
                 </section>

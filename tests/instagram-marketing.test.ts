@@ -5,7 +5,9 @@ import {
   computeMarketingGoals,
   computePostEngagementRate,
   filterPostsByPeriod,
+  getInstagramFormat,
   groupPostsByDay,
+  groupPostsByFormat,
   groupPostsByMonth,
   rankAreas,
   rankAreasByPostVolume,
@@ -14,6 +16,7 @@ import {
 } from '../src/features/operacoes-legais/marketing/instagramAnalytics.ts'
 import {
   getPreviousInstagramPeriod,
+  formatInstagramPeriod,
   resolveInstagramPeriod,
   shiftInstagramPeriod,
 } from '../src/features/operacoes-legais/marketing/instagramPeriod.ts'
@@ -61,6 +64,13 @@ test('filtra intervalo inclusivo e resolve o mês em UTC', () => {
     to: '2026-08-31T23:59:59.999Z',
   })
   assert.deepEqual(filterPostsByPeriod(posts, august).map((post) => post.id), ['1'])
+})
+
+test('formata o mês selecionado sem recuar no fuso de São Paulo', () => {
+  assert.equal(
+    formatInstagramPeriod({ kind: 'month', year: 2026, month: 8 }),
+    'Agosto de 2026',
+  )
 })
 
 test('resolve intervalo customizado inclusive atravessando dezembro', () => {
@@ -119,6 +129,17 @@ test('agrupa volume mensal sem criar posts artificiais', () => {
   assert.equal(grouped[0].month, '2026-08')
   assert.equal(grouped[0].posts, 3)
   assert.equal(grouped[0].reach, 3000)
+})
+
+test('distingue reels, carrossel e imagem única usando o tipo real da mídia', () => {
+  const carousel = { ...posts[0], id: '3', media_type: 'CAROUSEL_ALBUM' }
+  assert.equal(getInstagramFormat(posts[0]), 'Imagem única')
+  assert.equal(getInstagramFormat(posts[1]), 'Reels')
+  assert.equal(getInstagramFormat(carousel), 'Carrossel')
+  assert.deepEqual(
+    groupPostsByFormat([posts[0], posts[1], carousel]).map((row) => row.format),
+    ['Imagem única', 'Reels', 'Carrossel'],
+  )
 })
 
 test('atribui posts colaborativos a todas as áreas e ordena por engajamento', () => {

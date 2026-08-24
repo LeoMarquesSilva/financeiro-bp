@@ -171,10 +171,24 @@ export function groupPostsByDay(posts: InstagramPost[]) {
     .map(([date, dayPosts]) => ({ date, ...summarizeInstagram(dayPosts) }))
 }
 
+export function getInstagramFormat(
+  post: Pick<InstagramPost, 'media_product_type' | 'media_type'>,
+): string {
+  const productType = post.media_product_type?.trim().toUpperCase() ?? ''
+  const mediaType = post.media_type?.trim().toUpperCase() ?? ''
+
+  if (productType === 'REELS' || mediaType === 'REELS') return 'Reels'
+  if (mediaType === 'CAROUSEL_ALBUM') return 'Carrossel'
+  if (mediaType === 'IMAGE') return 'Imagem única'
+  if (mediaType === 'VIDEO') return 'Vídeo'
+  if (productType === 'FEED') return 'Publicação do feed'
+  return 'Outro'
+}
+
 export function groupPostsByFormat(posts: InstagramPost[]) {
   const grouped = new Map<string, InstagramPost[]>()
   for (const post of posts) {
-    const key = post.media_product_type || post.media_type || 'OUTRO'
+    const key = getInstagramFormat(post)
     grouped.set(key, [...(grouped.get(key) ?? []), post])
   }
   return [...grouped.entries()]

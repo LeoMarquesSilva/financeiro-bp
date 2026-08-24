@@ -136,7 +136,11 @@ export function formatInstagramPeriod(filter: InstagramPeriodFilter): string {
     )
     return `${format(filter.from)} a ${format(filter.to)}`
   }
-  const label = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(
+  const label = new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(
     new Date(Date.UTC(filter.year, filter.month - 1, 1)),
   )
   return label.charAt(0).toUpperCase() + label.slice(1)

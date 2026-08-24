@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Building2, Eye, Heart, Images, Trophy } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { computePostEngagementRate, rankAreas, summarizeInstagram } from './instagramAnalytics'
+import { MarketingAreaIcon } from './MarketingAreaIcon'
 import type { InstagramPost } from './types'
 
 const number = (value: number) => new Intl.NumberFormat('pt-BR').format(value)
@@ -46,8 +46,9 @@ export function MarketingAreas({ posts }: { posts: InstagramPost[] }) {
           <CardContent className="p-0">
             <div className="max-h-[520px] overflow-y-auto">
               {ranking.map((row, index) => (
-                <button key={row.area} type="button" onClick={() => setSelected(row.area)} className={`grid w-full grid-cols-[34px_1fr_auto] items-center gap-3 border-t border-slate-100 px-5 py-3 text-left transition hover:bg-slate-50 ${selected === row.area ? 'bg-teal-50/70' : ''}`}>
+                <button key={row.area} type="button" onClick={() => setSelected(row.area)} className={`grid w-full grid-cols-[34px_34px_1fr_auto] items-center gap-3 border-t border-slate-100 px-5 py-3 text-left transition hover:bg-slate-50 ${selected === row.area ? 'bg-teal-50/70' : ''}`}>
                   <span className={`grid h-7 w-7 place-items-center rounded-lg text-xs font-bold ${index < 3 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{index + 1}</span>
+                  <MarketingAreaIcon area={row.area} className="h-8 w-8 rounded-lg" />
                   <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{row.area}</p><p className="text-[11px] text-slate-500">{row.posts} posts · {number(row.reach)} alcance</p></div>
                   <span className="font-bold tabular-nums text-teal-700">{row.engagementRate.toFixed(2)}%</span>
                 </button>
@@ -58,13 +59,13 @@ export function MarketingAreas({ posts }: { posts: InstagramPost[] }) {
         </Card>
 
         <Card className="border-slate-200/80 shadow-sm">
-          <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Building2 className="h-4 w-4 text-teal-700" /> {selected === 'all' ? 'Destaques do escritório' : selected}</CardTitle><p className="text-xs text-slate-500">Publicações com melhor taxa de engajamento</p></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base">{selected === 'all' ? <Building2 className="h-4 w-4 text-teal-700" /> : <MarketingAreaIcon area={selected} className="h-7 w-7 rounded-lg" />} {selected === 'all' ? 'Destaques do escritório' : selected}</CardTitle><p className="text-xs text-slate-500">Publicações com melhor taxa de engajamento</p></CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
             {topPosts.map((post) => (
               <a key={post.id} href={post.permalink ?? undefined} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-slate-200 transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
                 <div className="flex gap-3 p-3">
                   {post.thumbnail_url || post.media_url ? <img src={post.thumbnail_url ?? post.media_url ?? ''} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" loading="lazy" /> : <div className="h-20 w-20 shrink-0 rounded-lg bg-slate-100" />}
-                  <div className="min-w-0"><div className="mb-1 flex flex-wrap gap-1">{(post.areas?.length ? post.areas : post.area ? [post.area] : []).slice(0, 2).map((area) => <Badge key={area} variant="outline" className="h-5 max-w-28 truncate text-[9px]">{area}</Badge>)}</div><p className="line-clamp-2 text-xs font-medium leading-relaxed text-slate-700">{post.caption || 'Sem legenda'}</p><p className="mt-2 text-xs font-bold text-teal-700">{computePostEngagementRate(post).toFixed(2)}% engajamento</p></div>
+                  <div className="min-w-0"><div className="mb-1 flex flex-wrap gap-1">{(post.areas?.length ? post.areas : post.area ? [post.area] : []).slice(0, 2).map((area) => <span key={area} className="inline-flex h-5 max-w-32 items-center gap-1 rounded border border-slate-200 bg-white pl-0.5 pr-1.5 text-[9px] font-semibold text-slate-600"><MarketingAreaIcon area={area} className="h-4 w-4 rounded" /><span className="truncate">{area}</span></span>)}</div><p className="line-clamp-2 text-xs font-medium leading-relaxed text-slate-700">{post.caption || 'Sem legenda'}</p><p className="mt-2 text-xs font-bold text-teal-700">{computePostEngagementRate(post).toFixed(2)}% engajamento</p></div>
                 </div>
               </a>
             ))}
