@@ -54,6 +54,7 @@ export function countVistagemD1(linhas: Array<Record<string, unknown>>): {
   let sim = 0
   let nao = 0
   for (const row of linhas) {
+    if (row.excludente === 'Excludente') continue
     if (isVistadoD1Sim(row.vistado_d1)) sim += 1
     else nao += 1
   }
@@ -72,6 +73,7 @@ export function isRacionalLinhaForaMeta(
     case 'sla_protocolo':
       return row.excludente === 'Excludente'
     case 'eficiencia_protocolo':
+      if (row.excludente === 'Excludente') return true
       return String(row.status_inconsistencia ?? '').toUpperCase().includes('INCONSIST')
     case 'ops_legais_sla_protocolo':
       return String(row.eficiencia_sla ?? '').trim() === 'PROTOCOLADO NO FATAL'
@@ -95,6 +97,7 @@ export function isRacionalLinhaForaMeta(
       return String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')
     case 'sla_vistagem_risco':
     case 'sla_vistagem_normal':
+      if (row.excludente === 'Excludente') return true
       return !isVistadoD1Sim(row.vistado_d1)
     default:
       return false
@@ -194,8 +197,19 @@ export function formatRacionalResumoLabel(resumo: {
   }
 
   if (resumo.qtd_vistado_sim != null && resumo.qtd_vistado_nao != null) {
-    const total = resumo.qtd_total ?? resumo.qtd_vistado_sim + resumo.qtd_vistado_nao
-    return `Total: ${resumo.qtd_vistado_sim} Sim · ${resumo.qtd_vistado_nao} Não · ${total} publicação${total === 1 ? '' : 'ões'}`
+    const partes = [
+      `${resumo.qtd_vistado_sim} Sim`,
+      `${resumo.qtd_vistado_nao} Não`,
+    ]
+    if (resumo.qtd_excludente) {
+      partes.push(
+        `${resumo.qtd_excludente} excludente${resumo.qtd_excludente === 1 ? '' : 's'} (fora da %)`,
+      )
+    }
+    const total =
+      resumo.qtd_total ??
+      resumo.qtd_vistado_sim + resumo.qtd_vistado_nao + (resumo.qtd_excludente ?? 0)
+    return `Total: ${partes.join(' · ')} · ${total} ${total === 1 ? 'publicação' : 'publicações'}`
   }
 
   return null

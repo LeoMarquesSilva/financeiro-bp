@@ -4,7 +4,10 @@ import type { OnboardingExclusao } from '../types/onboardingExclusoes.types'
 /** Indicadores que desconsideram o grupo no período de onboarding. */
 export const INDICADORES_ONBOARDING = [
   'sla_protocolo',
+  'eficiencia_protocolo',
   'sla_ciencia_agendamentos',
+  'sla_vistagem_risco',
+  'sla_vistagem_normal',
 ] as const satisfies readonly RacionalIndicador[]
 
 export type IndicadorOnboarding = (typeof INDICADORES_ONBOARDING)[number]
@@ -14,7 +17,10 @@ const GRUPO_DATA_POR_INDICADOR: Record<
   { grupoKey: string; dataKey: string }
 > = {
   sla_protocolo: { grupoKey: 'grupo_cliente', dataKey: 'conclusao_completa' },
+  eficiencia_protocolo: { grupoKey: 'cliente', dataKey: 'data_criada' },
   sla_ciencia_agendamentos: { grupoKey: 'grupo_cliente', dataKey: 'data_conclusao' },
+  sla_vistagem_risco: { grupoKey: 'grupo', dataKey: 'disponibilizado_vistagem' },
+  sla_vistagem_normal: { grupoKey: 'grupo', dataKey: 'disponibilizado_vistagem' },
 }
 
 /** Chave de grupo para match de onboarding (sem prefixo "Grupo ", sem acento). */
@@ -60,12 +66,24 @@ export function linhaExcluidaPorOnboarding(
   if (!chave) return false
   const iso = isoDateFromValue(row[keys.dataKey])
   if (!iso) return false
-  return exclusoes.some(
-    (e) =>
-      onboardingGrupoChave(e.grupo_cliente) === chave &&
-      iso >= e.vigencia_inicio &&
-      iso <= e.vigencia_fim,
-  )
+  return exclusoes.some((e) => {
+    if (iso < e.vigencia_inicio || iso > e.vigencia_fim) return false
+    return onboardingValorBateExclusao(chave, e)
+  })
+}
+
+/** Grupo exato, razão social do grupo ou prefixo ("pague menos comércio…"). */
+export function onboardingValorBateExclusao(
+  chaveLinha: string,
+  exclusao: OnboardingExclusao,
+): boolean {
+  const chaves = exclusao.chaves_match?.length
+    ? exclusao.chaves_match
+    : [onboardingGrupoChave(exclusao.grupo_cliente)]
+  return chaves.some((c) => {
+    if (!c) return false
+    return chaveLinha === c || chaveLinha.startsWith(`${c} `) || c.startsWith(`${chaveLinha} `)
+  })
 }
 
 export const JUSTIFICATIVA_ONBOARDING = 'ONBOARDING / TRANSIÇÃO DE CARTEIRA'

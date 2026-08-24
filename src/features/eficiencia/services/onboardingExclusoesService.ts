@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 import type { OnboardingExclusao, OnboardingExclusaoInsert } from '../types/onboardingExclusoes.types'
+import { onboardingGrupoChave } from '../utils/onboardingExclusoes'
 
 const TABLE = 'eficiencia_onboarding_exclusoes'
 
@@ -19,7 +20,7 @@ export const onboardingExclusoesService = {
       .order('vigencia_inicio', { ascending: false })
       .order('grupo_cliente', { ascending: true })
     if (error) throw error
-    const rows = (data ?? []) as OnboardingExclusao[]
+    const rows = await anexarChavesMatch((data ?? []) as OnboardingExclusao[])
     listCache = { at: Date.now(), rows }
     return rows
   },
@@ -38,7 +39,8 @@ export const onboardingExclusoesService = {
       .single()
     if (error) throw error
     invalidateOnboardingExclusoesCache()
-    return data as OnboardingExclusao
+    const [comChaves] = await anexarChavesMatch([data as OnboardingExclusao])
+    return comChaves
   },
 
   async remove(id: string): Promise<void> {
@@ -46,4 +48,30 @@ export const onboardingExclusoesService = {
     if (error) throw error
     invalidateOnboardingExclusoesCache()
   },
+}
+
+async function anexarChavesMatch(rows: OnboardingExclusao[]): Promise<OnboardingExclusao[]> {
+  if (rows.length === 0) return rows
+  const grupos = [...new Set(rows.map((r) => r.grupo_cliente).filter(Boolean))]
+  const { data, error } = await supabase
+    .from('pessoas')
+    .select('nome, grupo_cliente')
+    .in('grupo_cliente', grupos)
+  if (error) {
+    return rows.map((r) => ({
+      ...r,
+      chaves_match: [onboardingGrupoChave(r.grupo_cliente)],
+    }))
+  }
+  return rows.map((r) => {
+    const chaveGrupo = onboardingGrupoChave(r.grupo_cliente)
+    const chaves = new Set<string>([chaveGrupo])
+    for (const p of data ?? []) {
+      if (onboardingGrupoChave(p.grupo_cliente) === chaveGrupo) {
+        const nome = onboardingGrupoChave(p.nome)
+        if (nome) chaves.add(nome)
+      }
+    }
+    return { ...r, chaves_match: [...chaves] }
+  })
 }

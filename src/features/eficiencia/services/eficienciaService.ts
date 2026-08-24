@@ -207,6 +207,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'status_inconsistencia', label: 'Status' },
       { key: 'inconsistencia_juridico', label: 'Inconsistência - Jurídico' },
       { key: 'inconsistencia_juridico_motivo', label: 'Motivo Inconsistência' },
+      { key: 'excludente', label: 'Excludente', virtual: true },
     ],
   },
   /**
@@ -379,12 +380,14 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'sp_id', label: 'ID' },
       { key: 'numero_processo', label: 'Nº do Processo' },
       { key: 'area', label: 'Área' },
+      { key: 'grupo', label: 'Grupo Cliente' },
       { key: 'cliente_principal', label: 'Cliente' },
       { key: 'tipo_agendamento', label: 'Tipo de Agendamento' },
       { key: 'vistado_por', label: 'Vistado por' },
       { key: 'disponibilizado_vistagem', label: 'Disponibilizado para Vistagem' },
       { key: 'vistado_em', label: 'Vistado em' },
       { key: 'vistado_d1', label: 'Vistado D+1' },
+      { key: 'excludente', label: 'Excludente', virtual: true },
     ],
   },
   sla_vistagem_normal: {
@@ -411,6 +414,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'disponibilizado_vistagem', label: 'Disponibilizado para Vistagem' },
       { key: 'vistado_em', label: 'Vistado em' },
       { key: 'vistado_d1', label: 'Vistado D+1' },
+      { key: 'excludente', label: 'Excludente', virtual: true },
     ],
   },
   desenvolvimento_equipe: {

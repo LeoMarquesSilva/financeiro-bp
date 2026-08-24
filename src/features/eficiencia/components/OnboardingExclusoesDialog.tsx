@@ -108,10 +108,11 @@ export function OnboardingExclusoesDialog({ open, onOpenChange, ano, canEdit }: 
             Exclusões por onboarding
           </DialogTitle>
           <DialogDescription>
-            No período informado, o grupo sai da % de <strong>SLA Protocolo</strong> e{' '}
-            <strong>SLA Ciência Agendamentos</strong>. No racional, as linhas aparecem como{' '}
-            <strong>Excludente</strong>. Eficiência Protocolo e as vistagens (risco e normal)
-            não entram nesse recorte.
+            No período informado, o grupo sai da % de <strong>SLA Protocolo</strong>,{' '}
+            <strong>Eficiência Protocolo</strong>, <strong>SLA Ciência Agendamentos</strong> e{' '}
+            <strong>SLA Vistagem</strong> (risco e normal). No racional, as linhas aparecem como{' '}
+            <strong>Excludente</strong>. Em Eficiência Protocolo a razão social é resolvida para o
+            grupo no cadastro de clientes.
           </DialogDescription>
         </DialogHeader>
 

@@ -56,7 +56,7 @@ export function totaisEficienciaProtocoloFromResumo(
 ): EficienciaProtocoloPeriodoTotais {
   const semInconsistencia = resumo.qtd_eficiencia ?? 0
   const inconsistentes = resumo.qtd_inconsistencia ?? 0
-  const total = resumo.qtd_total ?? semInconsistencia + inconsistentes
+  const total = semInconsistencia + inconsistentes
   return {
     semInconsistencia,
     total,
@@ -79,7 +79,7 @@ export function totaisAgendamentoFromResumo(resumo: Resumo): AgendamentoPeriodoT
 
 export function totaisVistagemFromResumo(resumo: Resumo): VistagemPeriodoTotais {
   const vistadoD1 = resumo.qtd_vistado_sim ?? 0
-  const total = resumo.qtd_total ?? vistadoD1 + (resumo.qtd_vistado_nao ?? 0)
+  const total = vistadoD1 + (resumo.qtd_vistado_nao ?? 0)
   return {
     vistadoD1,
     total,

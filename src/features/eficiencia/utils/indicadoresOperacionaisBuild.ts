@@ -154,7 +154,9 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresResultadoMes):
     rows.push({
       indicador: 'Eficiência Protocolo',
       resultado: pctLabel(e.qtd_eficiencia, den),
-      detalhe: `${e.qtd_eficiencia} eficiência · ${e.qtd_inconsistencia} inconsistência`,
+      detalhe: `${e.qtd_eficiencia} eficiência · ${e.qtd_inconsistencia} inconsistência${
+        e.qtd_excludente ? ` · ${e.qtd_excludente} excludentes` : ''
+      }`,
       bgColor: den > 0 && e.qtd_eficiencia / den >= 0.95 ? GREEN_SOFT : RED_SOFT,
     })
   }
@@ -185,13 +187,21 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresResultadoMes):
   rows.push({
     indicador: 'SLA Vistagem Risco',
     resultado: denVr ? pctLabel(vr.sim, denVr) : '—',
-    detalhe: `${vr.sim} Sim · ${vr.nao} Não`,
+    detalhe: `${vr.sim} Sim · ${vr.nao} Não${
+      data.vistagemRisco.resumo?.qtd_excludente
+        ? ` · ${data.vistagemRisco.resumo.qtd_excludente} excludentes`
+        : ''
+    }`,
     bgColor: denVr && vr.sim / denVr >= 0.98 ? GREEN_SOFT : RED_SOFT,
   })
   rows.push({
     indicador: 'SLA Vistagem Normal',
     resultado: denVn ? pctLabel(vn.sim, denVn) : '—',
-    detalhe: `${vn.sim} Sim · ${vn.nao} Não`,
+    detalhe: `${vn.sim} Sim · ${vn.nao} Não${
+      data.vistagemNormal.resumo?.qtd_excludente
+        ? ` · ${data.vistagemNormal.resumo.qtd_excludente} excludentes`
+        : ''
+    }`,
     bgColor: denVn && vn.sim / denVn >= 0.98 ? GREEN_SOFT : RED_SOFT,
   })
   rows.push(buildDesenvolvimentoEquipeRow(data.desenvolvimentoAnual))

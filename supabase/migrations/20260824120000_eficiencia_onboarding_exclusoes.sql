@@ -1,6 +1,6 @@
 -- Exclusões de grupo por onboarding / transição de carteira.
--- Recorte: SLA Protocolo e Ciência Agendamentos.
--- Fora do recorte: Eficiência Protocolo e vistagens (risco e normal).
+-- Recorte inicial: SLA Protocolo e Ciência Agendamentos.
+-- Vistagem (risco e normal) entra em 20260824160000_eficiencia_onboarding_com_vistagem.sql.
 
 CREATE TABLE public.eficiencia_onboarding_exclusoes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

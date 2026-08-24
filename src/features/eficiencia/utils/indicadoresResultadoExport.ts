@@ -366,6 +366,7 @@ function vistagemCounts(
 function buildVistagemPivot(linhas: Array<Record<string, unknown>>) {
   const byArea = new Map<string, { sim: number; nao: number }>()
   for (const row of linhas) {
+    if (row.excludente === 'Excludente') continue
     const area = String(row.area ?? '—')
     const acc = byArea.get(area) ?? { sim: 0, nao: 0 }
     if (isVistadoD1Sim(row.vistado_d1)) acc.sim += 1
@@ -646,12 +647,20 @@ export async function exportIndicadoresResultadoExcel(
   )
 
   const efPivot = buildPctPivot(
-    data.eficienciaProtocolo.linhas,
+    data.eficienciaProtocolo.linhas.filter((row) => row.excludente !== 'Excludente'),
     'area',
     (row) =>
       String(row.status_inconsistencia ?? '').toUpperCase().includes('INCONSIST') ? 'b' : 'a',
     ['ÁREA', 'EFICIÊNCIA', 'INCONSISTÊNCIA'],
   )
+  const efDetail = linhasTabela(data.eficienciaProtocolo)
+  const efExclCol = efDetail.headers.indexOf('Excludente')
+  if (efExclCol >= 0) {
+    for (const row of efDetail.rows) {
+      row[efExclCol] = row[efExclCol] === 'Excludente' ? 'SIM' : ''
+    }
+  }
+  const efStatusCol = efDetail.headers.indexOf('Status') + 1
   appendPivotAndDetail(
     wb,
     'EFICIENCIA PROTOCOLO',
@@ -659,13 +668,13 @@ export async function exportIndicadoresResultadoExcel(
     efPivot.headers,
     efPivot.rows,
     { pctCols: [2, 3] },
-    linhasTabela(data.eficienciaProtocolo),
+    efDetail,
     {
       statusCol: {
-        // Colunas: ID, Nº Processo, Área, Criado por, Cliente, Tipo, Protocolado em, Status, Motivo
-        col: 8,
+        col: efStatusCol > 0 ? efStatusCol : 9,
         map: { INCONSISTÊNCIA: RED_SOFT, INCONSISTENCIA: RED_SOFT, EFICIÊNCIA: GREEN_SOFT, EFICIENCIA: GREEN_SOFT },
       },
+      highlightCol: efExclCol >= 0 ? { col: efExclCol + 1, match: 'SIM', fill: AMBER_SOFT } : undefined,
     },
     undefined,
     { metaLabel: METAS_INDICADORES.eficienciaProtocolo, resultadoLabel: efResultado },
@@ -718,6 +727,14 @@ export async function exportIndicadoresResultadoExcel(
     ['SLA VISTAGEM NORMAL', data.vistagemNormal, 'SLA Vistagem Normal', vnResultado],
   ] as const) {
     const vp = buildVistagemPivot(source.linhas)
+    const vistDetail = linhasTabela(source)
+    const vistExclCol = vistDetail.headers.indexOf('Excludente')
+    if (vistExclCol >= 0) {
+      for (const row of vistDetail.rows) {
+        row[vistExclCol] = row[vistExclCol] === 'Excludente' ? 'SIM' : ''
+      }
+    }
+    const vistadoCol = vistDetail.headers.indexOf('Vistado D+1') + 1
     appendPivotAndDetail(
       wb,
       name,
@@ -725,12 +742,13 @@ export async function exportIndicadoresResultadoExcel(
       ['AREA', 'Sim', 'Não'],
       vp.pctRows,
       { pctCols: [2, 3] },
-      linhasTabela(source),
+      vistDetail,
       {
         statusCol: {
-          col: 9,
+          col: vistadoCol > 0 ? vistadoCol : 10,
           map: { Sim: GREEN_SOFT, Não: RED_SOFT, NAO: RED_SOFT },
         },
+        highlightCol: vistExclCol >= 0 ? { col: vistExclCol + 1, match: 'SIM', fill: AMBER_SOFT } : undefined,
       },
       {
         headers: ['AREA', 'Sim', 'Não'],

@@ -7,6 +7,8 @@ export type OnboardingExclusao = {
   created_at: string
   updated_at: string
   created_by: string | null
+  /** Chaves extras (razões sociais do grupo) — só no client, para match no racional. */
+  chaves_match?: string[]
 }
 
 export type OnboardingExclusaoInsert = {

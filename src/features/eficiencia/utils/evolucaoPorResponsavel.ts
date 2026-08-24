@@ -183,6 +183,7 @@ export function agregarEvolucaoPorResponsavel(
         break
       }
       case 'eficiencia_protocolo': {
+        if (row.excludente === 'Excludente') continue
         b.total += 1
         if (String(row.status_inconsistencia ?? '').toUpperCase() === 'EFICIÊNCIA') {
           b.ok += 1
@@ -199,6 +200,7 @@ export function agregarEvolucaoPorResponsavel(
       }
       case 'sla_vistagem_risco':
       case 'sla_vistagem_normal': {
+        if (row.excludente === 'Excludente') continue
         b.total += 1
         if (isVistadoD1Sim(row.vistado_d1)) b.ok += 1
         break
@@ -264,6 +266,7 @@ export function agregarEvolucaoDiariaPorResponsavel(
         break
       }
       case 'eficiencia_protocolo': {
+        if (row.excludente === 'Excludente') continue
         b.total += 1
         if (String(row.status_inconsistencia ?? '').toUpperCase() === 'EFICIÊNCIA') {
           b.ok += 1
@@ -280,6 +283,7 @@ export function agregarEvolucaoDiariaPorResponsavel(
       }
       case 'sla_vistagem_risco':
       case 'sla_vistagem_normal': {
+        if (row.excludente === 'Excludente') continue
         if (!String(row.vistado_por ?? '').trim()) continue
         b.total += 1
         if (isVistadoD1Sim(row.vistado_d1)) b.ok += 1
@@ -325,6 +329,7 @@ export function acumularEvolucaoPorResponsavel(
         break
       }
       case 'eficiencia_protocolo': {
+        if (row.excludente === 'Excludente') continue
         total += 1
         if (String(row.status_inconsistencia ?? '').toUpperCase() === 'EFICIÊNCIA') ok += 1
         break
@@ -337,6 +342,7 @@ export function acumularEvolucaoPorResponsavel(
       }
       case 'sla_vistagem_risco':
       case 'sla_vistagem_normal': {
+        if (row.excludente === 'Excludente') continue
         total += 1
         if (isVistadoD1Sim(row.vistado_d1)) ok += 1
         break

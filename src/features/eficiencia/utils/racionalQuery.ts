@@ -837,7 +837,9 @@ export async function fetchEficienciaProtocoloRacionalResumo(
 ): Promise<RacionalResultado['resumo']> {
   let qtd_eficiencia = 0
   let qtd_inconsistencia = 0
+  let qtd_excludente = 0
   let offset = 0
+  const exclusoes = await onboardingExclusoesService.list()
 
   while (true) {
     const query = buildRacionalBaseQuery(
@@ -846,7 +848,7 @@ export async function fetchEficienciaProtocoloRacionalResumo(
       ano,
       area,
       mes,
-      'status_inconsistencia',
+      'status_inconsistencia,cliente,data_criada',
       'default',
       responsavel,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
@@ -854,8 +856,12 @@ export async function fetchEficienciaProtocoloRacionalResumo(
     const { data, error } = await query
     if (error) throw error
 
-    const rows = (data ?? []) as Array<{ status_inconsistencia: string | null }>
+    const rows = (data ?? []) as Array<Record<string, unknown>>
     for (const row of rows) {
+      if (linhaExcluidaPorOnboarding(row, 'eficiencia_protocolo', exclusoes)) {
+        qtd_excludente += 1
+        continue
+      }
       if (row.status_inconsistencia === 'EFICIÊNCIA') qtd_eficiencia += 1
       else if (row.status_inconsistencia === 'INCONSISTÊNCIA') qtd_inconsistencia += 1
     }
@@ -867,7 +873,8 @@ export async function fetchEficienciaProtocoloRacionalResumo(
   return {
     qtd_eficiencia,
     qtd_inconsistencia,
-    qtd_total: qtd_eficiencia + qtd_inconsistencia,
+    qtd_excludente,
+    qtd_total: qtd_eficiencia + qtd_inconsistencia + qtd_excludente,
   }
 }
 
@@ -1106,7 +1113,9 @@ export async function fetchSlaVistagemRacionalResumo(
 ): Promise<RacionalResultado['resumo']> {
   let qtd_vistado_sim = 0
   let qtd_vistado_nao = 0
+  let qtd_excludente = 0
   let offset = 0
+  const exclusoes = await onboardingExclusoesService.list()
 
   while (true) {
     const query = buildRacionalBaseQuery(
@@ -1115,7 +1124,7 @@ export async function fetchSlaVistagemRacionalResumo(
       ano,
       area,
       mes,
-      'vistado_d1',
+      'vistado_d1,grupo,disponibilizado_vistagem',
       'default',
       responsavel,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
@@ -1123,8 +1132,12 @@ export async function fetchSlaVistagemRacionalResumo(
     const { data, error } = await query
     if (error) throw error
 
-    const rows = (data ?? []) as Array<{ vistado_d1: string | null }>
+    const rows = (data ?? []) as Array<Record<string, unknown>>
     for (const row of rows) {
+      if (linhaExcluidaPorOnboarding(row, indicador, exclusoes)) {
+        qtd_excludente += 1
+        continue
+      }
       if (isVistadoD1Sim(row.vistado_d1)) qtd_vistado_sim += 1
       else qtd_vistado_nao += 1
     }
@@ -1136,7 +1149,8 @@ export async function fetchSlaVistagemRacionalResumo(
   return {
     qtd_vistado_sim,
     qtd_vistado_nao,
-    qtd_total: qtd_vistado_sim + qtd_vistado_nao,
+    qtd_excludente,
+    qtd_total: qtd_vistado_sim + qtd_vistado_nao + qtd_excludente,
   }
 }
 
