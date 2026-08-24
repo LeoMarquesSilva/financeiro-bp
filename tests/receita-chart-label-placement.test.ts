@@ -52,6 +52,16 @@ test('jul sem meta: recebido 50,57% acima e previsto 35,12% abaixo', () => {
   assert.equal(clusterLabelSidesAreInverted(cluster), false)
 })
 
+test('área: par previsto × recebido — maior acima, menor abaixo (sem meta no cluster)', () => {
+  const cluster = [
+    { key: 'previsto', value: 176_246.63 },
+    { key: 'recebido', value: 151_429.16 },
+  ]
+  assert.equal(side(cluster, 'previsto'), 'above')
+  assert.equal(side(cluster, 'recebido'), 'below')
+  assert.equal(clusterLabelSidesAreInverted(cluster), false)
+})
+
 test('jul com meta: 100% acima; recebido e previsto abaixo, recebido mais perto do ponto', () => {
   const cluster = [
     { key: 'meta', value: 100 },

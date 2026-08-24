@@ -418,12 +418,15 @@ function AreaLinhaChangeLabel({
     const anchor = edgeAwareAnchor(index, data.length)
     const clustered = clusterKey
       ? resolveClusteredLabelPlacement(
-          [
-            { key: 'meta', value: data[index].meta },
-            { key: 'previsto', value: data[index].previsto },
-            { key: 'recebido', value: data[index].recebido },
-            { key: 'inadimplencia', value: data[index].inadimplencia },
-          ],
+          clusterKey === 'previsto' || clusterKey === 'recebido'
+            ? [
+                { key: 'previsto', value: data[index].previsto },
+                { key: 'recebido', value: data[index].recebido },
+              ]
+            : [
+                { key: 'meta', value: data[index].meta },
+                { key: 'inadimplencia', value: data[index].inadimplencia },
+              ],
           clusterKey,
           offset,
         )
@@ -434,7 +437,7 @@ function AreaLinhaChangeLabel({
       : offset + (index % 2 === 0 ? 0 : stagger)
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
-    if (position === 'right') {
+    if (position === 'right' && !clustered) {
       const rightAnchor = anchor === 'end' ? 'end' : 'start'
       return (
         <ChartLabelWithBackdrop
@@ -1819,8 +1822,8 @@ export function ReceitaComparativoChart({
                       content={AreaLinhaChangeLabel({
                         color: seriesColor,
                         data: areaLinhaData,
-                        position: s.key === 'recebido' ? 'right' : 'above',
-                        offset: s.key === 'previsto' ? 16 : 10,
+                        position: s.key === 'recebido' ? 'below' : 'above',
+                        offset: s.key === 'previsto' ? 16 : 14,
                         stagger: 18,
                         clusterKey: s.key,
                       })}
