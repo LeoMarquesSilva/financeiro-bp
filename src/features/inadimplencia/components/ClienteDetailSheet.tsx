@@ -38,6 +38,7 @@ import {
   type ProcessosPorAreaItem,
 } from '@/features/escritorio/services/escritorioService'
 import { fetchParcelasPorCliente, type ParcelaRow } from '../services/parcelasService'
+import { calcularValorMensalParcelas } from '../utils/valorMensal'
 import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
@@ -581,6 +582,12 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
     [parcelasData?.pagas],
   )
 
+  const valorMensal = useMemo(() => {
+    const abertas = [...(parcelasData?.emAtraso ?? []), ...(parcelasData?.aVencer ?? [])]
+    return calcularValorMensalParcelas(abertas)
+      ?? (client?.valor_mensal != null ? Number(client.valor_mensal) : null)
+  }, [parcelasData?.emAtraso, parcelasData?.aVencer, client?.valor_mensal])
+
   const closeAndRefresh = () => { setModalEditar(false); setModalHistorico(false); setModalProvidencia(false); setModalFollowUp(false); onRefresh?.() }
 
   if (!client) return null
@@ -630,7 +637,7 @@ export function ClienteDetailSheet({ open, onClose, client, onMarcarResolvido, o
               <section className="grid grid-cols-2 gap-3">
                 <MetricCard icon={DollarSign} label="Valor em aberto" value={formatCurrency(Number(client.valor_em_aberto))} iconClass="bg-red-50 text-red-500" />
                 <MetricCard icon={CalendarDays} label="Dias em atraso" value={String(client.dias_em_aberto)} iconClass="bg-amber-50 text-amber-500" />
-                <MetricCard icon={DollarSign} label="Valor mensal" value={client.valor_mensal != null ? formatCurrency(Number(client.valor_mensal)) : '–'} iconClass="bg-slate-100 text-slate-500" />
+                <MetricCard icon={DollarSign} label="Valor mensal" value={valorMensal != null ? formatCurrency(valorMensal) : '–'} iconClass="bg-slate-100 text-slate-500" />
                 <div className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white p-3.5">
                   <div className="flex -space-x-1.5">
                     {gestorMembers.length > 0 ? gestorMembers.slice(0, 3).map((gm) => {
