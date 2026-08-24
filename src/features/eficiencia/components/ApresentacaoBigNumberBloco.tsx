@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import {
   Banknote,
   Clock3,
+  Eye,
+  EyeOff,
   FileText,
   FolderOpen,
   ListChecks,
@@ -8,7 +11,8 @@ import {
   Users,
 } from 'lucide-react'
 import { MESES_ABREV, MESES_NOME } from '@/features/receita/constants'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
+import type { ApresentacaoTopContrato } from '../utils/apresentacaoTopContratos'
 import {
   deltaPct,
   formatCount,
@@ -34,15 +38,15 @@ type Props = {
   mesFim: number
   onMesInicioChange: (mes: number) => void
   onMesFimChange: (mes: number) => void
-  /** Top 5 contratos do escritório (só nomes). */
-  topContratos?: string[]
+  /** Top 5 contratos do escritório (previsto do mês). */
+  topContratos?: ApresentacaoTopContrato[]
 }
 
 type KpiDef = {
   key: keyof ApresentacaoBigNumberData['kpis']
   label: string
   icon: typeof Clock3
-  /** `pct_yoy` = só variação % ano vs ano (sem R$). */
+  /** `pct_yoy` = variação % YoY; com toggle mostra também R$ (receita bruta). */
   kind: 'horas' | 'count' | 'moeda' | 'pct_yoy'
   accentAtual?: string
 }
@@ -112,11 +116,13 @@ function KpiCard({
   par,
   ano,
   anoAnterior,
+  mostrarValores = false,
 }: {
   def: KpiDef
   par: BigNumberPar
   ano: number
   anoAnterior: number
+  mostrarValores?: boolean
 }) {
   const Icon = def.icon
   const pct = deltaPct(par.atual, par.anterior)
@@ -183,6 +189,59 @@ function KpiCard({
   }
 
   if (kind === 'pct_yoy') {
+    if (mostrarValores) {
+      return (
+        <div
+          data-overview-copy-card
+          data-chart-export-preserve-bg
+          style={cardStyle}
+        >
+          {header}
+          <div
+            data-bn-receita-valor
+            style={{
+              fontSize: 16,
+              fontWeight: 800,
+              color: def.accentAtual ?? '#16A34A',
+              fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1.15,
+            }}
+          >
+            {formatCurrencyCompact(par.atual)}
+          </div>
+          <div
+            data-bn-receita-anterior
+            style={{
+              marginTop: 2,
+              fontSize: 10,
+              color: '#64748B',
+              fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1.15,
+            }}
+          >
+            {anoAnterior}: {formatCurrencyCompact(par.anterior)}
+          </div>
+          <div
+            data-bn-receita-delta
+            style={{
+              marginTop: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              color: trendColor,
+              fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1.15,
+            }}
+          >
+            {up ? '↑ ' : down ? '↓ ' : ''}
+            {deltaLabel}
+          </div>
+          <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2 }}>
+            {ano} vs {anoAnterior}
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div
         data-overview-copy-card
@@ -492,6 +551,8 @@ export function ApresentacaoBigNumberBloco({
   onMesFimChange,
   topContratos = [],
 }: Props) {
+  const [mostrarValores, setMostrarValores] = useState(false)
+
   const periodoPreview = labelPeriodoBigNumber(
     [
       ...Array.from(
@@ -503,10 +564,10 @@ export function ApresentacaoBigNumberBloco({
     ano - 1,
   )
 
-  const nomesContratos =
+  const contratosExibir: ApresentacaoTopContrato[] =
     topContratos.length > 0
       ? topContratos.slice(0, 5)
-      : Array.from({ length: 5 }, () => '—')
+      : Array.from({ length: 5 }, () => ({ nome: '—', valor: 0 }))
 
   return (
     <div
@@ -542,6 +603,32 @@ export function ApresentacaoBigNumberBloco({
         <span style={{ fontSize: 12, fontWeight: 700, color: GOLD_DARK }}>
           {periodoPreview}
         </span>
+        <button
+          type="button"
+          onClick={() => setMostrarValores((v) => !v)}
+          style={{
+            marginLeft: 'auto',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            height: 28,
+            borderRadius: 6,
+            border: '1px solid #CBD5E1',
+            background: mostrarValores ? '#F8FAFC' : '#FFFFFF',
+            padding: '0 10px',
+            fontSize: 11,
+            fontWeight: 600,
+            color: '#334155',
+            cursor: 'pointer',
+          }}
+        >
+          {mostrarValores ? (
+            <EyeOff size={14} aria-hidden />
+          ) : (
+            <Eye size={14} aria-hidden />
+          )}
+          {mostrarValores ? 'Ocultar valores' : 'Mostrar valores'}
+        </button>
       </div>
 
       <div
@@ -615,6 +702,7 @@ export function ApresentacaoBigNumberBloco({
                 par={data.kpis[def.key]}
                 ano={data.ano}
                 anoAnterior={data.anoAnterior}
+                mostrarValores={mostrarValores}
               />
             ))}
           </div>
@@ -676,40 +764,72 @@ export function ApresentacaoBigNumberBloco({
                 width: '100%',
               }}
             >
-              {nomesContratos.map((nome, i) => (
+              {contratosExibir.map((contrato, i) => (
                 <div
-                  key={`${nome}-${i}`}
+                  key={`${contrato.nome}-${i}`}
                   data-top-contrato-cell
                   style={{
                     flex: 1,
                     minWidth: 0,
-                    minHeight: 48,
+                    minHeight: mostrarValores ? 72 : 48,
                     background: '#F8FAFC',
                     border: '1px solid #E2E8F0',
                     borderRadius: 8,
-                    padding: '10px 12px',
+                    padding: mostrarValores ? '12px 10px' : '10px 12px',
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    textAlign: 'center',
                     boxSizing: 'border-box',
                   }}
                 >
-                  <span
-                    data-top-contrato-nome
+                  <div
+                    data-top-contrato-content
                     style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: '#1F2937',
-                      lineHeight: 1.3,
-                      wordBreak: 'break-word',
-                      overflowWrap: 'anywhere',
-                      whiteSpace: 'normal',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: mostrarValores ? 6 : 0,
                       width: '100%',
+                      textAlign: 'center',
                     }}
                   >
-                    {nome}
-                  </span>
+                    <span
+                      data-top-contrato-nome
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: '#1F2937',
+                        lineHeight: 1.3,
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere',
+                        whiteSpace: 'normal',
+                        width: '100%',
+                        textAlign: 'center',
+                        display: 'block',
+                      }}
+                    >
+                      {contrato.nome}
+                    </span>
+                    {mostrarValores && contrato.valor > 0 ? (
+                      <span
+                        data-top-contrato-valor
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: '#64748B',
+                          fontVariantNumeric: 'tabular-nums',
+                          lineHeight: 1.25,
+                          width: '100%',
+                          textAlign: 'center',
+                          display: 'block',
+                        }}
+                      >
+                        {formatCurrency(contrato.valor)}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>

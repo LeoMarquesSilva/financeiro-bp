@@ -177,6 +177,8 @@ export type ApresentacaoCell = {
   value: number | null
   /** true = verde, false = vermelho, null = neutro/traço */
   atingiu: boolean | null
+  /** Rótulo R$ — exibido com toggle "Mostrar valores" no Bloco Financeiro. */
+  valorDetalhe?: string | null
 }
 
 export type ApresentacaoKpiDef = {

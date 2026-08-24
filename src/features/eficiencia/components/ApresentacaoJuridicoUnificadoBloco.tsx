@@ -7,6 +7,7 @@ import {
 } from '../constants'
 import type { EficienciaOverview } from '../types/eficiencia.types'
 import type { ApresentacaoFinanceiroBundle } from '../utils/apresentacaoFinanceiro'
+import { valorExibicaoEvolucao } from '@/features/receita/utils/receitaInadimplenciaCalc'
 import {
   anosNoPeriodo,
   compareMesAno,
@@ -192,10 +193,11 @@ export function ApresentacaoJuridicoUnificadoBloco({
     const inadCells = slots.map((slot) => {
       if (slot.mes < MES_INICIO_RESULTADO) return VAZIA
       const fin = financeiroByAno.get(slot.ano)
-      const gestao = fin?.mesesPorArea.get(null) ?? []
-      const row = gestao.find((m) => m.mes === slot.mes)
-      if (!row || row.inadimplenciaPct == null) return VAZIA
-      return pctCell(row.inadimplenciaPct)
+      const row = fin?.inadDashboard.evolucao.find((m) => m.mes === slot.mes)
+      if (!row) return VAZIA
+      const { pct } = valorExibicaoEvolucao(row)
+      if (pct <= 0 && row.valor <= 0) return VAZIA
+      return pctCell(pct)
     })
 
     const npsCells = slots.map(() => VAZIA)
@@ -289,18 +291,28 @@ export function ApresentacaoJuridicoUnificadoBloco({
     })()
 
     const acumuladoInad: HeatCell = (() => {
-      let inad = 0
-      let previsto = 0
-      for (const slot of slots) {
-        if (slot.mes < MES_INICIO_RESULTADO) continue
-        const gestao = financeiroByAno.get(slot.ano)?.mesesPorArea.get(null) ?? []
-        const row = gestao.find((m) => m.mes === slot.mes)
-        if (!row || row.inadimplencia == null || row.inadimplencia <= 0) continue
-        inad += row.inadimplencia
-        previsto += row.previsto
-      }
-      if (previsto <= 0) return VAZIA
-      return pctCell((inad / previsto) * 100)
+      const candidatos = slots
+        .filter((s) => s.mes >= MES_INICIO_RESULTADO)
+        .map((slot) => {
+          const row = financeiroByAno
+            .get(slot.ano)
+            ?.inadDashboard.evolucao.find((m) => m.mes === slot.mes)
+          if (!row) return null
+          const exib = valorExibicaoEvolucao(row)
+          if (exib.pct <= 0 && exib.valor <= 0) return null
+          return { slot, exib, congelado: row.congelado }
+        })
+        .filter((x): x is NonNullable<typeof x> => x != null)
+      if (candidatos.length === 0) return VAZIA
+      const congelados = candidatos.filter((c) => c.congelado)
+      const pool = congelados.length > 0 ? congelados : candidatos
+      const last = pool.reduce((best, c) =>
+        c.slot.ano > best.slot.ano ||
+        (c.slot.ano === best.slot.ano && c.slot.mes > best.slot.mes)
+          ? c
+          : best,
+      )
+      return pctCell(last.exib.pct)
     })()
 
     const fimNorm = compareMesAno(inicio, fim) <= 0 ? fim : inicio

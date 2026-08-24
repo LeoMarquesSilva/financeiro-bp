@@ -118,6 +118,82 @@ export function buildOverviewInadimplencia(
   }
 }
 
+/** Valores R$ acumulados — recebido e meta (mesma base do % de receita bruta). */
+export function receitaBrutaMonetarioAcumulado(
+  gestaoMeses: GestaoVistaMesRow[],
+  rows: ReceitaMesRow[],
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  ref = new Date(),
+): { recebido: number; meta: number } | null {
+  if (isMesesFiltro(mesFiltro) && mesFiltro.length === 1) {
+    const row = gestaoMeses.find((m) => m.mes === mesFiltro[0])
+    if (!row || row.pctMeta == null) return null
+    const meta = row.meta ?? 0
+    const recebido = row.recebido ?? 0
+    if (meta <= 0 && recebido <= 0) return null
+    return { recebido, meta }
+  }
+
+  if (
+    (isMesesFiltro(mesFiltro) && mesFiltro.length > 1) ||
+    mesFiltro === 'resultado'
+  ) {
+    const filtrados = filterGestaoMeses(gestaoMeses, mesFiltro, ano)
+    const recebido = filtrados.reduce((s, m) => s + (m.recebido ?? 0), 0)
+    const meta = filtrados.reduce((s, m) => s + (m.meta ?? 0), 0)
+    if (meta <= 0 && recebido <= 0) return null
+    return { recebido, meta }
+  }
+
+  const mesesMetaJun = new Set(
+    rows.filter((r) => r.metaBase > 0 && r.mes >= MES_INICIO_RESULTADO).map((r) => r.mes),
+  )
+  const atingimento = calcularAtingimentoMetaKpi(ano, rows, ref, mesesMetaJun)
+  if (atingimento.metaAnual <= 0 && atingimento.recebidoAcumulado <= 0) return null
+  return {
+    recebido: atingimento.recebidoAcumulado,
+    meta: atingimento.metaAnual,
+  }
+}
+
+/** Valor R$ da evolução (snapshot do mês) — mesma base do gráfico Evolução da Inadimplência. */
+export function inadimplenciaValorEvolucaoExibicao(
+  gestaoMeses: GestaoVistaMesRow[],
+  mesFiltro: MesFiltroEficiencia,
+  ano?: number,
+): number | null {
+  if (isMesesFiltro(mesFiltro) && mesFiltro.length === 1) {
+    const row = gestaoMeses.find((m) => m.mes === mesFiltro[0])
+    if (!row || row.inadimplenciaPct == null) return null
+    return row.inadimplencia ?? 0
+  }
+
+  const noEscopo = filterGestaoMeses(gestaoMeses, mesFiltro, ano)
+  const comSnapshot = noEscopo.filter(
+    (m) => m.congelado && m.inadimplencia != null && m.inadimplenciaPct != null,
+  )
+  const candidatos =
+    comSnapshot.length > 0
+      ? comSnapshot
+      : noEscopo.filter((m) => m.inadimplencia != null && m.inadimplenciaPct != null)
+  if (candidatos.length === 0) return null
+
+  const last = candidatos.reduce((best, m) => (m.mes > best.mes ? m : best))
+  return last.inadimplencia ?? 0
+}
+
+/** @deprecated Use inadimplenciaValorEvolucaoExibicao — evita somar snapshots mensais. */
+export function inadimplenciaMonetarioAcumulado(
+  gestaoMeses: GestaoVistaMesRow[],
+  mesFiltro: MesFiltroEficiencia,
+  ano?: number,
+): { inadimplencia: number; previsto: number } | null {
+  const valor = inadimplenciaValorEvolucaoExibicao(gestaoMeses, mesFiltro, ano)
+  if (valor == null) return null
+  return { inadimplencia: valor, previsto: 0 }
+}
+
 export function buildGestaoConsolidadoFromInadDashboard(
   rows: ReceitaMesRow[],
   inadDashboard: ReceitaInadimplenciaDashboard,

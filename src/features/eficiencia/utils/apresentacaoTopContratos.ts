@@ -23,6 +23,11 @@ export function mesReferenciaTopContratos(
   return fim >= 1 ? fim : 1
 }
 
+export type ApresentacaoTopContrato = {
+  nome: string
+  valor: number
+}
+
 /** "Grupo Metalcasty" → "Metalcasty" (rótulo limpo no PPT). */
 export function labelContratoApresentacao(nome: string): string {
   const t = nome.trim()
@@ -43,13 +48,13 @@ function chaveContrato(
 
 /**
  * Top N grupos/clientes por valor previsto (honorários) no mês — proxy do
- * tamanho do contrato no escritório. Retorna só os nomes (ordenados desc).
+ * tamanho do contrato no escritório.
  */
 export async function fetchApresentacaoTopContratos(
   ano: number,
   mes: number,
   limit = 5,
-): Promise<string[]> {
+): Promise<ApresentacaoTopContrato[]> {
   const [itens, empresas] = await Promise.all([
     receitaService.fetchPrevistoMesItens(ano, mes),
     receitaService.fetchEmpresasNomeGrupo(),
@@ -68,5 +73,8 @@ export async function fetchApresentacaoTopContratos(
   return [...byGrupo.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
-    .map(([nome]) => labelContratoApresentacao(nome))
+    .map(([nome, valor]) => ({
+      nome: labelContratoApresentacao(nome),
+      valor,
+    }))
 }

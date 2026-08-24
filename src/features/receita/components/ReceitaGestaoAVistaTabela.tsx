@@ -97,8 +97,6 @@ const COLS = [
   'Inad. %',
 ] as const
 
-const COLS_CENTRO = new Set<string>(['Gap', 'Inad.', 'Inad. %'])
-
 export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading }: Props) {
   if (loading) return <TabelaSkeleton />
 

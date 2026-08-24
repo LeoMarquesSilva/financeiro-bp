@@ -2610,6 +2610,23 @@ function applyApresentacaoFillSlideLayout(
         card.style.setProperty('background', '#FFFFFF', 'important')
         card.style.setProperty('background-color', '#FFFFFF', 'important')
       })
+      kpis.querySelectorAll<HTMLElement>('[data-bn-receita-valor]').forEach((valor) => {
+        valor.style.setProperty('font-size', '13px', 'important')
+        valor.style.setProperty('line-height', '1.15', 'important')
+        valor.style.setProperty('white-space', 'nowrap', 'important')
+      })
+      kpis.querySelectorAll<HTMLElement>('[data-bn-receita-anterior]').forEach((anterior) => {
+        anterior.style.setProperty('font-size', '9px', 'important')
+        anterior.style.setProperty('line-height', '1.15', 'important')
+        anterior.style.setProperty('margin-top', '2px', 'important')
+        anterior.style.setProperty('white-space', 'nowrap', 'important')
+      })
+      kpis.querySelectorAll<HTMLElement>('[data-bn-receita-delta]').forEach((delta) => {
+        delta.style.setProperty('font-size', '10px', 'important')
+        delta.style.setProperty('line-height', '1.15', 'important')
+        delta.style.setProperty('margin-top', '4px', 'important')
+        delta.style.setProperty('white-space', 'nowrap', 'important')
+      })
     }
 
     const tops = root.querySelector<HTMLElement>('[data-bn-tops]')
@@ -2842,20 +2859,31 @@ function applyApresentacaoFillSlideLayout(
         row
           .querySelectorAll<HTMLElement>('[data-top-contrato-cell]')
           .forEach((cell) => {
+            const hasValor = cell.querySelector('[data-top-contrato-valor]') != null
             cell.style.setProperty('flex', '1 1 0', 'important')
             cell.style.setProperty('min-width', '0', 'important')
             cell.style.setProperty('width', 'auto', 'important')
             cell.style.setProperty('max-width', 'none', 'important')
-            cell.style.setProperty('min-height', '52px', 'important')
+            cell.style.setProperty('min-height', hasValor ? '68px' : '52px', 'important')
             cell.style.setProperty('height', 'auto', 'important')
-            cell.style.setProperty('padding', '10px 12px', 'important')
+            cell.style.setProperty('padding', hasValor ? '12px 10px' : '10px 12px', 'important')
             cell.style.setProperty('border-radius', '8px', 'important')
             cell.style.setProperty('box-sizing', 'border-box', 'important')
             cell.style.setProperty('display', 'flex', 'important')
+            cell.style.setProperty('flex-direction', 'column', 'important')
             cell.style.setProperty('align-items', 'center', 'important')
             cell.style.setProperty('justify-content', 'center', 'important')
             cell.style.setProperty('overflow', 'visible', 'important')
           })
+        row.querySelectorAll<HTMLElement>('[data-top-contrato-content]').forEach((wrap) => {
+          wrap.style.setProperty('display', 'flex', 'important')
+          wrap.style.setProperty('flex-direction', 'column', 'important')
+          wrap.style.setProperty('align-items', 'center', 'important')
+          wrap.style.setProperty('justify-content', 'center', 'important')
+          wrap.style.setProperty('width', '100%', 'important')
+          wrap.style.setProperty('text-align', 'center', 'important')
+          wrap.style.setProperty('gap', '6px', 'important')
+        })
       }
     }
 
@@ -2867,10 +2895,22 @@ function applyApresentacaoFillSlideLayout(
       el.style.setProperty('word-break', 'break-word', 'important')
       el.style.setProperty('overflow-wrap', 'anywhere', 'important')
       el.style.setProperty('width', '100%', 'important')
+      el.style.setProperty('text-align', 'center', 'important')
       el.style.setProperty('overflow', 'visible', 'important')
       el.style.setProperty('display', 'block', 'important')
       el.style.removeProperty('-webkit-line-clamp')
       el.style.removeProperty('-webkit-box-orient')
+    })
+    root.querySelectorAll<HTMLElement>('[data-top-contrato-valor]').forEach((el) => {
+      el.style.setProperty('font-size', '11px', 'important')
+      el.style.setProperty('font-weight', '700', 'important')
+      el.style.setProperty('color', '#64748B', 'important')
+      el.style.setProperty('font-variant-numeric', 'tabular-nums', 'important')
+      el.style.setProperty('width', '100%', 'important')
+      el.style.setProperty('text-align', 'center', 'important')
+      el.style.setProperty('line-height', '1.25', 'important')
+      el.style.setProperty('display', 'block', 'important')
+      el.style.removeProperty('margin-top')
     })
     return
   }

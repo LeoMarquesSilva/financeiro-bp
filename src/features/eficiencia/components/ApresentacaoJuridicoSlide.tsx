@@ -2,10 +2,12 @@ import {
   forwardRef,
   useLayoutEffect,
   useRef,
+  useState,
   type CSSProperties,
   type ReactNode,
   type Ref,
 } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import {
   APRESENTACAO_BLOCOS,
   APRESENTACAO_COLUNAS,
@@ -23,6 +25,7 @@ import type { ApresentacaoMarketingData } from '../utils/apresentacaoMarketing'
 import type { ApresentacaoFinanceiroOpsData } from '../utils/apresentacaoFinanceiroOps'
 import type { ApresentacaoLiderancaData } from '../utils/apresentacaoLideranca'
 import type { ApresentacaoBonusData } from '../utils/apresentacaoBonus'
+import type { ApresentacaoTopContrato } from '../utils/apresentacaoTopContratos'
 import type { ApresentacaoFinanceiroBundle } from '../utils/apresentacaoFinanceiro'
 import type { MesAno } from '../utils/apresentacaoMesAno'
 import type { EficienciaOverview } from '../types/eficiencia.types'
@@ -98,8 +101,8 @@ type Props = {
   onUnificadoFimChange?: (v: MesAno) => void
   composicao?: ApresentacaoComposicaoData | null
   receitaRows?: ReceitaMesRow[] | null
-  /** Top 5 contratos (nomes) — Bloco 1 Operacional. */
-  topContratos?: string[]
+  /** Top 5 contratos — Bloco Big Numbers. */
+  topContratos?: ApresentacaoTopContrato[]
   bigNumber?: ApresentacaoBigNumberData | null
   controladoria?: ApresentacaoControladoriaData | null
   lideranca?: ApresentacaoLiderancaData | null
@@ -198,6 +201,106 @@ function metaTexto(metaLabel: string | null | undefined): string {
   if (!t) return 'Meta —'
   if (/^meta\b/i.test(t)) return t
   return `Meta ${t}`
+}
+
+function renderKpiCellContent(cell: ApresentacaoCell, mostrarValores: boolean): ReactNode {
+  if (cell.value == null) return '-'
+  if (mostrarValores && cell.valorDetalhe) {
+    return (
+      <span
+        data-heat-cell-stacked="1"
+        style={{
+          display: 'block',
+          width: '100%',
+          lineHeight: 1.2,
+          textAlign: 'center',
+        }}
+      >
+        <span
+          data-heat-cell-stacked-primary="1"
+          style={{ display: 'block', lineHeight: 1.25 }}
+        >
+          {cell.label}
+        </span>
+        <span
+          data-heat-cell-stacked-secondary="1"
+          style={{
+            display: 'block',
+            marginTop: 5,
+            fontSize: '0.78em',
+            fontWeight: 700,
+            lineHeight: 1.25,
+            color: '#64748B',
+            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'pre-line',
+            textAlign: 'center',
+          }}
+        >
+          {cell.valorDetalhe}
+        </span>
+      </span>
+    )
+  }
+  return cell.label
+}
+
+function kpiDataCellStyle(
+  cell: ApresentacaoCell,
+  bold: boolean,
+  mostrarValores: boolean,
+): CSSProperties {
+  const stacked = mostrarValores && Boolean(cell.valorDetalhe)
+  return {
+    padding: stacked ? '7px 4px' : '3px 2px',
+    textAlign: 'center',
+    fontSize: 10,
+    whiteSpace: stacked ? 'normal' : 'nowrap',
+    verticalAlign: 'middle',
+    minHeight: stacked ? 44 : undefined,
+    ...cellDivider,
+    ...cellStyle(cell, bold),
+  }
+}
+
+function FinanceiroValoresToolbar({
+  mostrarValores,
+  onToggle,
+}: {
+  mostrarValores: boolean
+  onToggle: () => void
+}) {
+  return (
+    <div
+      data-chart-export-ignore
+      style={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        padding: '0 2px 4px',
+      }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          height: 28,
+          borderRadius: 6,
+          border: '1px solid #CBD5E1',
+          background: mostrarValores ? '#F8FAFC' : '#FFFFFF',
+          padding: '0 10px',
+          fontSize: 11,
+          fontWeight: 600,
+          color: '#334155',
+          cursor: 'pointer',
+        }}
+      >
+        {mostrarValores ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
+        {mostrarValores ? 'Ocultar valores' : 'Mostrar valores'}
+      </button>
+    </div>
+  )
 }
 
 /** Badge dourado só atrás do texto do título (largura = conteúdo medido). */
@@ -418,11 +521,13 @@ function ApresentacaoKpiHeatCard({
   metaLabel,
   colunas,
   cells,
+  mostrarValores = false,
 }: {
   title: string
   metaLabel: string
   colunas: typeof APRESENTACAO_COLUNAS
   cells: ApresentacaoCell[]
+  mostrarValores?: boolean
 }) {
   const areaCols = colunas.filter((c) => !('consolidado' in c && c.consolidado))
   const consCol = colunas.find((c) => 'consolidado' in c && c.consolidado)
@@ -490,31 +595,26 @@ function ApresentacaoKpiHeatCard({
               return (
                 <td
                   key={col.key}
-                  style={{
-                    padding: '3px 2px',
-                    textAlign: 'center',
-                    fontSize: 10,
-                    whiteSpace: 'nowrap',
-                    ...cellDivider,
-                    ...cellStyle(cell, false),
-                  }}
+                  {...(mostrarValores && cell.valorDetalhe
+                    ? { 'data-heat-cell-stacked': '1' as const }
+                    : {})}
+                  style={kpiDataCellStyle(cell, false, mostrarValores)}
                 >
-                  {cell.value == null ? '-' : cell.label}
+                  {renderKpiCellContent(cell, mostrarValores)}
                 </td>
               )
             })}
             {consCol && consCell ? (
               <td
+                {...(mostrarValores && consCell.valorDetalhe
+                  ? { 'data-heat-cell-stacked': '1' as const }
+                  : {})}
                 style={{
-                  padding: '3px 2px',
-                  textAlign: 'center',
-                  fontSize: 10,
-                  whiteSpace: 'nowrap',
+                  ...kpiDataCellStyle(consCell, true, mostrarValores),
                   borderLeft: '2px solid #94A3B8',
-                  ...cellStyle(consCell, true),
                 }}
               >
-                {consCell.value == null ? '-' : consCell.label}
+                {renderKpiCellContent(consCell, mostrarValores)}
               </td>
             ) : null}
           </tr>
@@ -528,10 +628,12 @@ function BlocoExport({
   blocoId,
   colunas,
   rows,
+  mostrarValores = false,
 }: {
   blocoId: ApresentacaoBlocoId
   colunas: typeof APRESENTACAO_COLUNAS
   rows: ApresentacaoMatrixRow[]
+  mostrarValores?: boolean
 }) {
   const bloco = APRESENTACAO_BLOCOS.find((b) => b.id === blocoId)
   if (!bloco || bloco.semGradeAreas) return null
@@ -568,6 +670,7 @@ function BlocoExport({
                   metaLabel={row.metaLabel}
                   colunas={colunas}
                   cells={row.cells}
+                  mostrarValores={mostrarValores}
                 />
               ))}
             </div>
@@ -631,6 +734,8 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
   }: Props,
   ref: Ref<HTMLDivElement>,
 ) {
+  const [mostrarValoresFinanceiro, setMostrarValoresFinanceiro] = useState(false)
+
   return (
     <div
       ref={ref}
@@ -742,6 +847,34 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
               onMesInicioChange={onBonusMesInicioChange ?? (() => {})}
               onMesFimChange={onBonusMesFimChange ?? (() => {})}
             />
+          )
+        } else if (bloco.id === 'financeiro') {
+          content = loading ? (
+            <div style={{ display: 'grid', gap: 4, padding: 4 }}>
+              {Array.from({ length: 2 }, (_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    height: 28,
+                    borderRadius: 6,
+                    background: 'rgba(0,0,0,0.06)',
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <>
+              <FinanceiroValoresToolbar
+                mostrarValores={mostrarValoresFinanceiro}
+                onToggle={() => setMostrarValoresFinanceiro((v) => !v)}
+              />
+              <BlocoExport
+                blocoId={bloco.id}
+                colunas={colunas}
+                rows={rows}
+                mostrarValores={mostrarValoresFinanceiro}
+              />
+            </>
           )
         } else if (loading) {
           content = (
