@@ -320,6 +320,8 @@ function buildPainelPorTarefa(
   inicio: string,
   fim: string,
   inclusive: boolean,
+  /** baixados = só tarefa pai concluída; atividade = inclui pai quando subtarefa concluiu no período. */
+  modo: 'baixados' | 'atividade' = 'baixados',
 ): ProjetoOut[] {
   const inRange = (iso: string | null) =>
     inclusive ? inInclusive(iso, inicio, fim) : inPeriod(iso, inicio, fim)
@@ -335,7 +337,7 @@ function buildPainelPorTarefa(
     }
     const p = parentId(t)
     if (p) {
-      // Subtarefa concluída no período: não lista o pai — só entra se o pai foi baixado.
+      if (modo === 'atividade') tarefaIds.add(p)
       continue
     }
     tarefaIds.add(t.id)
@@ -366,7 +368,7 @@ function buildPainelPorTarefa(
     const projeto = buildProjeto(tarefa, todasSubsConcluidas)
     if (!projeto.tipo && tipo) projeto.tipo = tipo
     if (!projeto.extensao && extensao) projeto.extensao = extensao
-    if (!projeto.concluido) continue
+    if (modo === 'baixados' && !projeto.concluido) continue
     out.push(projeto)
   }
 
@@ -454,6 +456,7 @@ Deno.serve(async (req: Request) => {
       inicio,
       fim,
       false,
+      'baixados',
     ).filter((p) => p.tipo === 'Projetos' || p.tipo === 'Melhorias')
 
     const semanaAgrupada = buildPainelPorTarefa(
@@ -463,6 +466,7 @@ Deno.serve(async (req: Request) => {
       semana.inicio,
       semana.fim,
       true,
+      'atividade',
     )
 
     // Compat: lista plana da semana (opcional) — UI usa agrupado em `concluidos`-like

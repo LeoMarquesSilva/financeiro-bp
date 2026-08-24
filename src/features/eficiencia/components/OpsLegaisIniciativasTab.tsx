@@ -260,9 +260,6 @@ function buildConcluidosPainelFromItens(
   })
 }
 
-function filterProjetosBaixados(rows: OpsLegaisIniciativasProjeto[]): OpsLegaisIniciativasProjeto[] {
-  return rows.filter(projetoConcluido)
-}
 
 function countSubsConcluidas(rows: OpsLegaisIniciativasProjeto[]): number {
   return rows.reduce(
@@ -276,6 +273,16 @@ function summarizeConcluidos(rows: OpsLegaisIniciativasProjeto[]) {
     total: rows.length,
     projetos: rows.filter((r) => r.tipo === 'Projetos').length,
     melhorias: rows.filter((r) => r.tipo === 'Melhorias').length,
+    subs: countSubsConcluidas(rows),
+  }
+}
+
+function summarizeSemana(rows: OpsLegaisIniciativasProjeto[]) {
+  const baixados = rows.filter((r) => projetoConcluido(r)).length
+  return {
+    total: rows.length,
+    baixados,
+    parcial: rows.length - baixados,
     subs: countSubsConcluidas(rows),
   }
 }
@@ -323,16 +330,26 @@ function PainelResumoLinha({
 
   if (view === 'semana') {
     if (semanaRows.length > 0) {
-      const qtd = semanaRows.length
-      const subs = countSubsConcluidas(semanaRows)
+      const { total, baixados, parcial, subs } = summarizeSemana(semanaRows)
       const inicio = painel?.semana_inicio ? formatDataBr(painel.semana_inicio) : ''
       const fim = painel?.semana_fim ? formatDataBr(painel.semana_fim) : ''
       const intervalo = inicio && fim ? ` (${inicio} – ${fim})` : ''
       return (
         <>
-          <b className="text-slate-700">{qtd}</b> concluída{qtd === 1 ? '' : 's'} na semana
-          passada
+          <b className="text-slate-700">{total}</b> com realização na semana passada
           {intervalo}
+          {baixados > 0 ? (
+            <>
+              {' '}
+              · <b className="text-slate-700">{baixados}</b> baixado{baixados === 1 ? '' : 's'}
+            </>
+          ) : null}
+          {parcial > 0 ? (
+            <>
+              {' '}
+              · <b className="text-slate-700">{parcial}</b> parcial{parcial === 1 ? '' : 'is'}
+            </>
+          ) : null}
           {subs > 0 ? (
             <>
               {' '}
@@ -396,10 +413,9 @@ function ProjetosRealizadosPanel({
   const qtdConcluidos = concluidosResumo.total
   const qtdAndamento = painel?.andamento.length ?? painel?.projetos_em_andamento ?? 0
   const semanaRows = painel?.semana_por_tarefa?.length ? painel.semana_por_tarefa : []
-  const semanaBaixados = useMemo(() => filterProjetosBaixados(semanaRows), [semanaRows])
 
   const qtdSemana =
-    semanaRows.length > 0 ? semanaBaixados.length : (painel?.semana.length ?? 0)
+    semanaRows.length > 0 ? semanaRows.length : (painel?.semana.length ?? 0)
 
   const tabs: { id: PainelView; label: string; icon: typeof CheckCircle2 }[] = [
     {
@@ -477,8 +493,9 @@ function ProjetosRealizadosPanel({
         ) : view === 'semana' ? (
           semanaRows.length > 0 ? (
             <TabelaConcluidos
-              rows={filterProjetosBaixados(semanaRows)}
-              emptyLabel="Nenhuma tarefa concluída na semana passada."
+              rows={semanaRows}
+              resumoParcial={summarizeSemana(semanaRows).parcial}
+              emptyLabel="Nenhuma realização na semana passada."
             />
           ) : (
             <TabelaSemana rows={painel?.semana ?? []} />
@@ -500,9 +517,11 @@ function conclusaoProjetoLabel(r: OpsLegaisIniciativasProjeto): string {
 
 function TabelaConcluidos({
   rows,
+  resumoParcial = 0,
   emptyLabel = 'Nenhum projeto ou melhoria baixado no período.',
 }: {
   rows: OpsLegaisIniciativasProjeto[]
+  resumoParcial?: number
   emptyLabel?: string
 }) {
   const [abertoId, setAbertoId] = useState<string | null>(null)
@@ -525,7 +544,14 @@ function TabelaConcluidos({
     )
   }
   return (
-    <table className="w-full table-fixed border-collapse text-[11px]">
+    <div className="space-y-0">
+      {resumoParcial > 0 ? (
+        <p className="border-b border-amber-100 bg-amber-50/80 px-3 py-2 text-[10px] leading-relaxed text-amber-900">
+          <strong>Pendente</strong> = projeto ainda aberto; a linha entrou porque houve subtarefa
+          concluída na semana. Expanda para ver as datas.
+        </p>
+      ) : null}
+      <table className="w-full table-fixed border-collapse text-[11px]">
       <colgroup>
         <col className="w-[32%]" />
         <col className="w-[14%]" />
@@ -614,6 +640,7 @@ function TabelaConcluidos({
         })}
       </tbody>
     </table>
+    </div>
   )
 }
 
