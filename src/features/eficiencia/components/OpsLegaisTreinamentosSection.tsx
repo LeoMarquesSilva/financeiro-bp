@@ -14,6 +14,7 @@ import {
 import { metaTreinamentoMinutosProporcional } from '../utils/treinamentoMetaProporcional'
 import { toPriMaiuscula } from '../utils/textFormat'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
+import { TreinamentosPessoasPanel } from './TreinamentosPessoasPanel'
 import { TreinamentosCursoCards } from './TreinamentosCursoCards'
 import { TreinamentosFuturosCards } from './TreinamentosFuturosCards'
 import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
@@ -118,7 +119,11 @@ export function OpsLegaisTreinamentosSection({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <TreinamentosVisaoToggle value={visao} onChange={setVisao} />
+        <TreinamentosVisaoToggle
+          value={visao}
+          onChange={setVisao}
+          showPessoasVisao
+        />
         {onRacionalClick ? (
           <OverviewRacionalButton
             onClick={() => onRacionalClick?.()}
@@ -134,15 +139,20 @@ export function OpsLegaisTreinamentosSection({
             const ativo = categoriaAtiva === r.categoria
             const pct = r.pctAtingimento
             const pctProj = r.pctProjetado
+            const pctPessoas = r.pctPessoasMeta
+            const visaoPessoas = visao === 'pessoas'
+            const pctCard =
+              visaoPessoas && r.categoria !== 'Gerente' ? pctPessoas : pct
             const mostraProjecao =
+              !visaoPessoas &&
               r.categoria !== 'Gerente' &&
               sessoesFuturas.length > 0 &&
               pctProj != null &&
               pct != null &&
               pctProj > pct
-            const ok = pct != null && pct >= 100
+            const ok = pctCard != null && pctCard >= 100
             const okProj = pctProj != null && pctProj >= 100
-            const barPct = pct == null ? 100 : Math.min(100, pct)
+            const barPct = pctCard == null ? 100 : Math.min(100, pctCard)
             return (
               <button
                 key={r.categoria}
@@ -157,7 +167,9 @@ export function OpsLegaisTreinamentosSection({
                 <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
                   {r.categoria === 'Gerente'
                     ? toPriMaiuscula('Total de horas realizadas')
-                    : toPriMaiuscula('Meta proporcional à admissão')}
+                    : visaoPessoas
+                      ? toPriMaiuscula('% concluíram a meta individual')
+                      : toPriMaiuscula('Meta proporcional à admissão')}
                 </p>
                 <p className="mt-1 text-sm font-extrabold text-slate-900">
                   {r.categoria === 'Gerente'
@@ -178,14 +190,16 @@ export function OpsLegaisTreinamentosSection({
                 >
                   {r.categoria === 'Gerente'
                     ? r.horasLabel
-                    : pct != null
-                      ? formatPercent(pct)
+                    : pctCard != null
+                      ? formatPercent(pctCard)
                       : '—'}
                 </p>
                 <p className="mt-1 text-xs font-semibold text-slate-600">
                   {r.categoria === 'Gerente'
                     ? `${Math.round(r.minutos)} minutos no total`
-                    : `${r.horasLabel} realizadas`}
+                    : visaoPessoas
+                      ? `${r.qtdMetaAtingida} de ${r.qtdPessoas} ${r.qtdPessoas === 1 ? 'pessoa' : 'pessoas'} · ${r.horasLabel} realizadas`
+                      : `${r.horasLabel} realizadas`}
                 </p>
                 {mostraProjecao ? (
                   <p
@@ -207,10 +221,24 @@ export function OpsLegaisTreinamentosSection({
                       />
                     </div>
                     <p className="mt-1.5 text-[10px] text-slate-400">
-                      Meta:{' '}
-                      {r.metaMinutos != null
-                        ? `${Math.round(r.metaMinutos / 60)}h total (${r.qtdPessoas} pessoas · proporcional)`
-                        : '—'}
+                      {visaoPessoas ? (
+                        <>
+                          Horas ÷ meta total:{' '}
+                          {pct != null ? formatPercent(pct) : '—'}
+                          {' · '}
+                          Meta:{' '}
+                          {r.metaMinutos != null
+                            ? `${Math.round(r.metaMinutos / 60)}h (${r.qtdPessoas} pessoas · proporcional)`
+                            : '—'}
+                        </>
+                      ) : (
+                        <>
+                          Meta:{' '}
+                          {r.metaMinutos != null
+                            ? `${Math.round(r.metaMinutos / 60)}h total (${r.qtdPessoas} pessoas · proporcional)`
+                            : '—'}
+                        </>
+                      )}
                     </p>
                   </>
                 ) : (
@@ -227,16 +255,32 @@ export function OpsLegaisTreinamentosSection({
           <GraduationCap className="h-3.5 w-3.5" aria-hidden />
           {visao === 'futuros'
             ? toPriMaiuscula(`Treinamentos previstos — ${ano}`)
-            : visao === 'treinamentos'
-              ? toPriMaiuscula(`Treinamentos — ${categoriaAtiva}`)
-              : categoriaAtiva === 'Gerente'
-                ? toPriMaiuscula('Treinamentos — Gerente')
-                : toPriMaiuscula(
-                    `Colaboradores — ${categoriaAtiva} (${resumoAtivo?.qtdPessoas ?? 0} pessoas)`,
-                  )}
+            : visao === 'pessoas'
+              ? toPriMaiuscula(`Meta por pessoa — ${categoriaAtiva}`)
+              : visao === 'treinamentos'
+                ? toPriMaiuscula(`Treinamentos — ${categoriaAtiva}`)
+                : categoriaAtiva === 'Gerente'
+                  ? toPriMaiuscula('Treinamentos — Gerente')
+                  : toPriMaiuscula(
+                      `Colaboradores — ${categoriaAtiva} (${resumoAtivo?.qtdPessoas ?? 0} pessoas)`,
+                    )}
         </div>
         {visao === 'futuros' ? (
           <TreinamentosFuturosCards sessoes={sessoesFuturas} />
+        ) : visao === 'pessoas' ? (
+          categoriaAtiva === 'Gerente' ? (
+            <p className="py-6 text-center text-sm text-slate-400">
+              Categoria Gerente não possui meta individual de 14h — use Visão Equipe para ver
+              horas totais.
+            </p>
+          ) : (
+            <TreinamentosPessoasPanel
+              porPessoa={pessoasLista}
+              ano={ano}
+              pctHorasTotal={resumoAtivo?.pctAtingimento ?? null}
+              accentClass={categoriaAtiva === 'Liderança' ? 'violet' : 'default'}
+            />
+          )
         ) : visao === 'equipe' ? (
           <TreinamentosPessoaCards
             porPessoa={pessoasLista}
@@ -257,6 +301,7 @@ export function OpsLegaisTreinamentosSection({
       </section>
 
       {visao !== 'futuros' &&
+      visao !== 'pessoas' &&
       categoriaAtiva === 'Liderança' &&
       equipeEmLiderancaCards.length > 0 ? (
         <section className="rounded-xl border border-indigo-100 bg-white p-4 shadow-sm sm:p-5">

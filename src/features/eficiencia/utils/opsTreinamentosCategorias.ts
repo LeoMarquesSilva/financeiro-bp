@@ -5,6 +5,7 @@ import {
 } from '../constants'
 import type { TreinamentoItemRow, TreinamentoSessaoFuturaRow } from '../types/eficiencia.types'
 import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
+import { buildTreinamentoPessoasResumo } from './treinamentoPessoaStats'
 import { dedupeTreinamentoItens } from './treinamentosDedupe'
 
 export type OpsTurnoverAtivo = {
@@ -30,6 +31,10 @@ export type OpsTreinamentoCategoriaResumo = {
   pctAtingimento: number | null
   /** % se todos da categoria participarem dos treinamentos já agendados. */
   pctProjetado: number | null
+  /** Pessoas com minutos ≥ meta proporcional individual. */
+  qtdMetaAtingida: number
+  /** % do headcount que concluiu a meta individual (ex.: 3/10 = 30%). */
+  pctPessoasMeta: number | null
   horasLabel: string
 }
 
@@ -126,6 +131,16 @@ export function buildOpsTreinamentosCategorias(
       temMeta && metaMinutos && metaMinutos > 0
         ? Math.round(((minutos + minutosFuturos) / metaMinutos) * 10000) / 100
         : null
+    const resumoPessoas = temMeta
+      ? buildTreinamentoPessoasResumo(
+          grupo.map((p) => ({
+            colaborador: p.colaborador,
+            minutos: p.minutos,
+            admissao: p.admissao,
+          })),
+          ano,
+        )
+      : null
     return {
       categoria,
       qtdPessoas,
@@ -133,6 +148,8 @@ export function buildOpsTreinamentosCategorias(
       metaMinutos,
       pctAtingimento,
       pctProjetado,
+      qtdMetaAtingida: resumoPessoas?.qtdAtingiu ?? 0,
+      pctPessoasMeta: resumoPessoas?.pctPessoasMeta ?? null,
       horasLabel: formatHorasMinutos(minutos),
     }
   })

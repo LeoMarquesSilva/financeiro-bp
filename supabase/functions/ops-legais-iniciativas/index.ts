@@ -61,7 +61,10 @@ type ProjetoOut = {
   tipo: string
   extensao: string
   responsavel: string
+  /** Data de conclusão da tarefa pai — só quando o pai está concluído. */
   data: string | null
+  /** Tarefa pai baixada no ClickUp (não apenas subtarefas). */
+  concluido: boolean
   subtarefas: SubtarefaOut[]
   total_sub: number
   sub_concluidas: number
@@ -282,6 +285,7 @@ function mapSubtarefa(t: ClickUpTask): SubtarefaOut {
 
 function buildProjeto(t: ClickUpTask, children: ClickUpTask[]): ProjetoOut {
   const { tipo, extensao } = classifyTags(tagNames(t))
+  const paiConcluido = isConcluidoStatus(t)
   const subs = dedupeById(children)
     .map(mapSubtarefa)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
@@ -289,7 +293,6 @@ function buildProjeto(t: ClickUpTask, children: ClickUpTask[]): ProjetoOut {
   if (!responsavel) {
     responsavel = [...new Set(subs.map((s) => s.responsavel).filter(Boolean))].join(', ')
   }
-  const dataSubs = subs.reduce<string | null>((acc, s) => maxIso(acc, s.data), null)
   return {
     id: t.id,
     nome: t.name ?? '',
@@ -297,7 +300,8 @@ function buildProjeto(t: ClickUpTask, children: ClickUpTask[]): ProjetoOut {
     tipo,
     extensao,
     responsavel,
-    data: maxIso(taskDate(t), dataSubs),
+    data: paiConcluido ? taskDate(t) : null,
+    concluido: paiConcluido,
     subtarefas: subs,
     total_sub: subs.length,
     sub_concluidas: subs.filter((s) => s.status === 'concluido').length,
@@ -331,10 +335,10 @@ function buildPainelPorTarefa(
     }
     const p = parentId(t)
     if (p) {
-      tarefaIds.add(p)
-    } else {
-      tarefaIds.add(t.id)
+      // Subtarefa concluída no período: não lista o pai — só entra se o pai foi baixado.
+      continue
     }
+    tarefaIds.add(t.id)
   }
 
   const out: ProjetoOut[] = []
@@ -343,7 +347,7 @@ function buildPainelPorTarefa(
     if (!tarefa) continue
 
     const todasSubsConcluidas = dedupeById(childrenOf.get(tarefaId) ?? []).filter(
-      isConcluidoStatus,
+      (s) => isConcluidoStatus(s) && inRange(taskDate(s)),
     )
 
     let tagsSource = tarefa
@@ -362,6 +366,7 @@ function buildPainelPorTarefa(
     const projeto = buildProjeto(tarefa, todasSubsConcluidas)
     if (!projeto.tipo && tipo) projeto.tipo = tipo
     if (!projeto.extensao && extensao) projeto.extensao = extensao
+    if (!projeto.concluido) continue
     out.push(projeto)
   }
 

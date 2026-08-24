@@ -218,6 +218,8 @@ export interface OpsLegaisIniciativasProjeto {
   extensao: string
   responsavel: string
   data: string | null
+  /** Tarefa pai concluída no ClickUp (payload edge `ops-legais-iniciativas`). */
+  concluido?: boolean
   subtarefas: OpsLegaisIniciativasSubtarefa[]
   total_sub: number
   sub_concluidas: number

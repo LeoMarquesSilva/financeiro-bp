@@ -23,7 +23,9 @@ import {
 import { eficienciaService } from '../services/eficienciaService'
 import type {
   OpsLegaisIniciativasDashboard,
+  OpsLegaisIniciativasItem,
   OpsLegaisIniciativasItemSemana,
+  OpsLegaisIniciativasPainel,
   OpsLegaisIniciativasProjeto,
   OpsLegaisIniciativasSubtarefa,
 } from '../types/eficiencia.types'
@@ -202,13 +204,181 @@ function KpiShell({
   )
 }
 
-function projetoTemAtividadeNoFiltro(
-  p: OpsLegaisIniciativasProjeto,
-  mesFiltro: MesFiltroEficiencia,
-  ano: number,
-): boolean {
-  if (projetoNoFiltro(p.data, mesFiltro, ano)) return true
-  return p.subtarefas.some((s) => projetoNoFiltro(s.data, mesFiltro, ano))
+function projetoConcluido(r: OpsLegaisIniciativasProjeto): boolean {
+  if (r.concluido != null) return r.concluido
+  return Boolean(r.data)
+}
+
+function tipoExtensaoFromTags(tags: string[]): { tipo: string; extensao: string } {
+  let tipo = ''
+  const extensao: string[] = []
+  for (const raw of tags) {
+    if (hasTagItem([raw], 'Projetos')) {
+      if (!tipo) tipo = 'Projetos'
+    } else if (hasTagItem([raw], 'Melhorias')) {
+      if (!tipo) tipo = 'Melhorias'
+    } else if (raw.trim()) {
+      extensao.push(raw)
+    }
+  }
+  return { tipo, extensao: extensao.join(', ') }
+}
+
+/** Lista Concluídos = mesma base dos KPIs (tarefa top-level baixada com tag meta). */
+function buildConcluidosPainelFromItens(
+  itens: OpsLegaisIniciativasItem[],
+  painelDetalhe: OpsLegaisIniciativasProjeto[],
+): OpsLegaisIniciativasProjeto[] {
+  const byId = new Map(painelDetalhe.map((p) => [p.id, p]))
+  return itens.map((item) => {
+    const detalhe = byId.get(item.id)
+    const { tipo, extensao } = tipoExtensaoFromTags(item.tags)
+    if (detalhe) {
+      return {
+        ...detalhe,
+        nome: item.nome,
+        url: item.url ?? detalhe.url,
+        tipo: detalhe.tipo || tipo,
+        extensao: detalhe.extensao || extensao,
+        data: item.data ?? detalhe.data,
+        concluido: true,
+      }
+    }
+    return {
+      id: item.id,
+      nome: item.nome,
+      url: item.url,
+      tipo,
+      extensao,
+      responsavel: '',
+      data: item.data,
+      concluido: true,
+      subtarefas: [],
+      total_sub: 0,
+      sub_concluidas: 0,
+    }
+  })
+}
+
+function filterProjetosBaixados(rows: OpsLegaisIniciativasProjeto[]): OpsLegaisIniciativasProjeto[] {
+  return rows.filter(projetoConcluido)
+}
+
+function countSubsConcluidas(rows: OpsLegaisIniciativasProjeto[]): number {
+  return rows.reduce(
+    (s, p) => s + p.subtarefas.filter((t) => t.status === 'concluido').length,
+    0,
+  )
+}
+
+function summarizeConcluidos(rows: OpsLegaisIniciativasProjeto[]) {
+  return {
+    total: rows.length,
+    projetos: rows.filter((r) => r.tipo === 'Projetos').length,
+    melhorias: rows.filter((r) => r.tipo === 'Melhorias').length,
+    subs: countSubsConcluidas(rows),
+  }
+}
+
+function PainelResumoLinha({
+  loading,
+  view,
+  painel,
+  mesFiltroAtivo,
+  semanaRows,
+}: {
+  loading: boolean
+  view: PainelView
+  mesFiltroAtivo: boolean
+  semanaRows: OpsLegaisIniciativasProjeto[]
+  painel: OpsLegaisIniciativasPainel | undefined
+}) {
+  if (loading) {
+    return <span>Carregando…</span>
+  }
+
+  if (view === 'concluidos') {
+    const { total, projetos, melhorias, subs } = summarizeConcluidos(painel?.concluidos ?? [])
+    const periodo = mesFiltroAtivo ? 'no período' : 'no ano'
+    return (
+      <>
+        <b className="text-slate-700">{total}</b> concluído{total === 1 ? '' : 's'} {periodo}
+        {projetos > 0 || melhorias > 0 ? (
+          <>
+            {' '}
+            · <b className="text-slate-700">{projetos}</b> projeto{projetos === 1 ? '' : 's'}
+            {' '}
+            · <b className="text-slate-700">{melhorias}</b> melhoria{melhorias === 1 ? '' : 's'}
+          </>
+        ) : null}
+        {subs > 0 ? (
+          <>
+            {' '}
+            · ↳ <b className="text-slate-700">{subs}</b> subtarefa{subs === 1 ? '' : 's'}
+          </>
+        ) : null}
+      </>
+    )
+  }
+
+  if (view === 'semana') {
+    if (semanaRows.length > 0) {
+      const qtd = semanaRows.length
+      const subs = countSubsConcluidas(semanaRows)
+      const inicio = painel?.semana_inicio ? formatDataBr(painel.semana_inicio) : ''
+      const fim = painel?.semana_fim ? formatDataBr(painel.semana_fim) : ''
+      const intervalo = inicio && fim ? ` (${inicio} – ${fim})` : ''
+      return (
+        <>
+          <b className="text-slate-700">{qtd}</b> concluída{qtd === 1 ? '' : 's'} na semana
+          passada
+          {intervalo}
+          {subs > 0 ? (
+            <>
+              {' '}
+              · ↳ <b className="text-slate-700">{subs}</b> subtarefa{subs === 1 ? '' : 's'}
+            </>
+          ) : null}
+        </>
+      )
+    }
+
+    const rows = painel?.semana ?? []
+    const qtd = rows.length
+    const subs = rows.filter((r) => r.tipo === 'Subtarefa').length
+    const inicio = painel?.semana_inicio ? formatDataBr(painel.semana_inicio) : ''
+    const fim = painel?.semana_fim ? formatDataBr(painel.semana_fim) : ''
+    const intervalo = inicio && fim ? ` (${inicio} – ${fim})` : ''
+    return (
+      <>
+        <b className="text-slate-700">{qtd}</b> {qtd === 1 ? 'item' : 'itens'} na semana passada
+        {intervalo}
+        {subs > 0 ? (
+          <>
+            {' '}
+            · ↳ <b className="text-slate-700">{subs}</b> subtarefa{subs === 1 ? '' : 's'}
+          </>
+        ) : null}
+      </>
+    )
+  }
+
+  const qtd = painel?.andamento.length ?? 0
+  const subs =
+    painel?.tarefas_sob_em_andamento ??
+    (painel?.andamento ?? []).reduce((s, p) => s + p.subtarefas.length, 0)
+
+  return (
+    <>
+      🔄 <b className="text-slate-700">{qtd}</b> em andamento
+      {subs > 0 ? (
+        <>
+          {' '}
+          · ↳ <b className="text-slate-700">{subs}</b> subtarefa{subs === 1 ? '' : 's'}
+        </>
+      ) : null}
+    </>
+  )
 }
 
 function ProjetosRealizadosPanel({
@@ -218,32 +388,18 @@ function ProjetosRealizadosPanel({
 }: {
   loading: boolean
   mesFiltroAtivo: boolean
-  painel:
-    | {
-        projetos_em_andamento: number
-        tarefas_sob_em_andamento: number
-        subtarefas_concluidas_periodo: number
-        concluidos: OpsLegaisIniciativasProjeto[]
-        semana: OpsLegaisIniciativasItemSemana[]
-        semana_por_tarefa?: OpsLegaisIniciativasProjeto[]
-        andamento: OpsLegaisIniciativasProjeto[]
-      }
-    | undefined
+  painel: OpsLegaisIniciativasPainel | undefined
 }) {
   const [view, setView] = useState<PainelView>('concluidos')
-  const qtdAndamento = painel?.projetos_em_andamento ?? 0
-  const qtdConcluidos = painel?.concluidos.length ?? 0
-  const qtdSubConcluidasFiltro = useMemo(
-    () =>
-      (painel?.concluidos ?? []).reduce(
-        (s, p) => s + p.subtarefas.filter((t) => t.status === 'concluido').length,
-        0,
-      ),
-    [painel?.concluidos],
-  )
-  const semanaRows = painel?.semana_por_tarefa?.length
-    ? painel.semana_por_tarefa
-    : []
+  const concluidosLista = painel?.concluidos ?? []
+  const concluidosResumo = useMemo(() => summarizeConcluidos(concluidosLista), [concluidosLista])
+  const qtdConcluidos = concluidosResumo.total
+  const qtdAndamento = painel?.andamento.length ?? painel?.projetos_em_andamento ?? 0
+  const semanaRows = painel?.semana_por_tarefa?.length ? painel.semana_por_tarefa : []
+  const semanaBaixados = useMemo(() => filterProjetosBaixados(semanaRows), [semanaRows])
+
+  const qtdSemana =
+    semanaRows.length > 0 ? semanaBaixados.length : (painel?.semana.length ?? 0)
 
   const tabs: { id: PainelView; label: string; icon: typeof CheckCircle2 }[] = [
     {
@@ -251,10 +407,14 @@ function ProjetosRealizadosPanel({
       label: `Concluídos (${loading ? '…' : qtdConcluidos})`,
       icon: CheckCircle2,
     },
-    { id: 'semana', label: 'Semana passada', icon: CalendarDays },
+    {
+      id: 'semana',
+      label: `Semana passada (${loading ? '…' : qtdSemana})`,
+      icon: CalendarDays,
+    },
     {
       id: 'andamento',
-      label: `Em andamento (${qtdAndamento})`,
+      label: `Em andamento (${loading ? '…' : qtdAndamento})`,
       icon: RefreshCw,
     },
   ]
@@ -270,11 +430,13 @@ function ProjetosRealizadosPanel({
             <h3 className="text-xs font-semibold text-slate-700">Projetos Realizados</h3>
           </div>
           <p className="text-[10px] text-slate-400">
-            <b className="text-slate-700">{loading ? '…' : qtdConcluidos}</b> concluída
-            {qtdConcluidos === 1 ? '' : 's'}
-            {mesFiltroAtivo ? ' no período' : ' no ano'} · ↳{' '}
-            <b className="text-slate-700">{loading ? '…' : qtdSubConcluidasFiltro}</b> subtarefas · 🔄{' '}
-            <b className="text-slate-700">{loading ? '…' : qtdAndamento}</b> em andamento
+            <PainelResumoLinha
+              loading={loading}
+              view={view}
+              painel={painel}
+              mesFiltroAtivo={mesFiltroAtivo}
+              semanaRows={semanaRows}
+            />
           </p>
         </div>
 
@@ -308,11 +470,14 @@ function ProjetosRealizadosPanel({
             <div className="h-8 animate-pulse rounded bg-slate-100" />
           </div>
         ) : view === 'concluidos' ? (
-          <TabelaConcluidos rows={painel?.concluidos ?? []} emptyLabel="Nenhuma tarefa concluída no período." />
+          <TabelaConcluidos
+            rows={concluidosLista}
+            emptyLabel="Nenhum projeto ou melhoria baixado no período."
+          />
         ) : view === 'semana' ? (
           semanaRows.length > 0 ? (
             <TabelaConcluidos
-              rows={semanaRows}
+              rows={filterProjetosBaixados(semanaRows)}
               emptyLabel="Nenhuma tarefa concluída na semana passada."
             />
           ) : (
@@ -326,14 +491,31 @@ function ProjetosRealizadosPanel({
   )
 }
 
+function conclusaoProjetoLabel(r: OpsLegaisIniciativasProjeto): string {
+  if (!projetoConcluido(r)) {
+    return r.subtarefas.some((s) => s.status === 'concluido') ? 'pendente' : '—'
+  }
+  return r.data ? formatDataBr(r.data) : '—'
+}
+
 function TabelaConcluidos({
   rows,
-  emptyLabel = 'Nenhuma tarefa concluída no período.',
+  emptyLabel = 'Nenhum projeto ou melhoria baixado no período.',
 }: {
   rows: OpsLegaisIniciativasProjeto[]
   emptyLabel?: string
 }) {
   const [abertoId, setAbertoId] = useState<string | null>(null)
+
+  const rowsOrdenadas = useMemo(
+    () =>
+      [...rows].sort(
+        (a, b) =>
+          Number(projetoConcluido(b)) - Number(projetoConcluido(a)) ||
+          a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }),
+      ),
+    [rows],
+  )
 
   if (!rows.length) {
     return (
@@ -367,10 +549,11 @@ function TabelaConcluidos({
         </tr>
       </thead>
       <tbody>
-        {rows.map((r) => {
+        {rowsOrdenadas.map((r) => {
           const subsConcluidas = r.subtarefas.filter((s) => s.status === 'concluido')
           const aberto = abertoId === r.id
           const temSubs = subsConcluidas.length > 0
+          const paiConcluido = projetoConcluido(r)
           return (
             <Fragment key={r.id}>
               <tr
@@ -397,7 +580,9 @@ function TabelaConcluidos({
                       {temSubs ? (
                         <p className="mt-0.5 text-[9px] text-slate-400">
                           {subsConcluidas.length} subtarefa
+                          {subsConcluidas.length === 1 ? '' : 's'} concluída
                           {subsConcluidas.length === 1 ? '' : 's'}
+                          {!paiConcluido ? ' · projeto pendente' : null}
                         </p>
                       ) : null}
                     </div>
@@ -412,8 +597,13 @@ function TabelaConcluidos({
                 <td className="px-2 py-2 text-center align-top text-slate-900">
                   <span className="line-clamp-2 break-words">{respLabel(r.responsavel)}</span>
                 </td>
-                <td className="px-2 py-2 text-center align-top whitespace-nowrap text-slate-500">
-                  {r.data ? formatDataBr(r.data) : 'em andamento'}
+                <td
+                  className={cn(
+                    'px-2 py-2 text-center align-top whitespace-nowrap',
+                    paiConcluido ? 'text-slate-500' : 'font-medium text-amber-600',
+                  )}
+                >
+                  {conclusaoProjetoLabel(r)}
                 </td>
               </tr>
               {aberto && temSubs ? (
@@ -659,13 +849,10 @@ function deriveIniciativasFiltrado(
       ? { inicio: base.inicio, fimExclusivo: base.fim }
       : rangePeriodoFiltro(ano, mesFiltro)
 
-  const concluidos =
-    base.painel?.concluidos.filter((p) => {
-      const tipoOk = p.tipo === 'Projetos' || p.tipo === 'Melhorias'
-      if (!tipoOk) return false
-      if (mesFiltro == null) return true
-      return projetoTemAtividadeNoFiltro(p, mesFiltro, ano)
-    }) ?? []
+  const concluidos = buildConcluidosPainelFromItens(
+    itens,
+    base.painel?.concluidos ?? [],
+  )
 
   return {
     ...base,
