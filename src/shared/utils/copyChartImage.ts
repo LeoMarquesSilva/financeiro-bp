@@ -884,6 +884,28 @@ function wrapLooseTextNodes(el: HTMLElement): void {
   })
 }
 
+/** SVG (lucide) não é HTMLElement — sem wrap vira célula anônima e o título foge para a direita. */
+function wrapSvgChildren(el: HTMLElement): void {
+  Array.from(el.children).forEach((child) => {
+    if (!(child instanceof SVGElement) || child instanceof HTMLElement) return
+    const wrap = document.createElement('span')
+    wrap.setAttribute('data-chart-export-icon-wrap', '')
+    wrap.className = 'shrink-0'
+    child.replaceWith(wrap)
+    wrap.appendChild(child)
+  })
+}
+
+function isPackedFlexJustify(justify: string): boolean {
+  return (
+    justify === 'flex-start' ||
+    justify === 'start' ||
+    justify === 'normal' ||
+    justify === 'left' ||
+    justify === ''
+  )
+}
+
 function applyFlexColumnToBlock(cloneEl: HTMLElement): void {
   cloneEl.style.setProperty('display', 'block', 'important')
   cloneEl.style.setProperty('height', 'auto', 'important')
@@ -901,13 +923,15 @@ function applyFlexColumnToBlock(cloneEl: HTMLElement): void {
 
 function applyFlexRowToTable(cloneEl: HTMLElement, sourceStyle: CSSStyleDeclaration): void {
   wrapLooseTextNodes(cloneEl)
+  wrapSvgChildren(cloneEl)
 
   const gap = parseFloat(sourceStyle.columnGap || sourceStyle.gap) || 0
   const justify = sourceStyle.justifyContent
   const align = sourceStyle.alignItems
+  const packed = isPackedFlexJustify(justify)
 
-  cloneEl.style.setProperty('display', 'table', 'important')
-  cloneEl.style.setProperty('width', '100%', 'important')
+  cloneEl.style.setProperty('display', packed ? 'inline-table' : 'table', 'important')
+  cloneEl.style.setProperty('width', packed ? 'auto' : '100%', 'important')
   cloneEl.style.setProperty('max-width', '100%', 'important')
   cloneEl.style.setProperty('height', 'auto', 'important')
   cloneEl.style.setProperty('table-layout', 'auto', 'important')
@@ -942,6 +966,9 @@ function applyFlexRowToTable(cloneEl: HTMLElement, sourceStyle: CSSStyleDeclarat
       child.style.setProperty('text-align', 'center', 'important')
     } else if (justify === 'flex-end' || justify === 'end') {
       child.style.setProperty('text-align', 'right', 'important')
+    } else {
+      child.style.setProperty('text-align', 'left', 'important')
+      child.style.setProperty('width', 'auto', 'important')
     }
 
     if (child.classList.contains('shrink-0') || child.classList.contains('tabular-nums')) {
@@ -969,7 +996,9 @@ function applyNestedFlexExportFix(
       } else if (isFlexRow(style)) {
         applyFlexRowToTable(cloneEl, style)
         const sourceRowChildren = exportChildElements(sourceEl, true)
-        const cloneRowChildren = exportChildElements(cloneEl, false)
+        const cloneRowChildren = exportChildElements(cloneEl, false).filter(
+          (el) => !el.hasAttribute('data-chart-export-icon-wrap'),
+        )
         const rowOffset = Math.max(
           0,
           cloneRowChildren.length - sourceRowChildren.length,
@@ -984,7 +1013,9 @@ function applyNestedFlexExportFix(
     }
 
     const sourceChildren = exportChildElements(sourceEl, true)
-    const cloneChildren = exportChildElements(cloneEl, false)
+    const cloneChildren = exportChildElements(cloneEl, false).filter(
+      (el) => !el.hasAttribute('data-chart-export-icon-wrap'),
+    )
     const offset = Math.max(0, cloneChildren.length - sourceChildren.length)
     const count = Math.min(sourceChildren.length, cloneChildren.length)
     for (let i = 0; i < count; i++) {

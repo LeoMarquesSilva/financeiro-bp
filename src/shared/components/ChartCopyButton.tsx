@@ -14,9 +14,14 @@ import { copyChartImageToClipboard } from '@/shared/utils/copyChartImage'
 type Props = {
   containerRef: RefObject<HTMLElement | null>
   className?: string
+  label?: string
 }
 
-export function ChartCopyButton({ containerRef, className }: Props) {
+export function ChartCopyButton({
+  containerRef,
+  className,
+  label = 'Copiar gráfico',
+}: Props) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle')
 
   const handleCopy = async () => {
@@ -60,7 +65,7 @@ export function ChartCopyButton({ containerRef, className }: Props) {
               className={cn('h-3.5 w-3.5', status === 'loading' && 'animate-spin')}
               aria-hidden
             />
-            Copiar gráfico
+            {label}
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">

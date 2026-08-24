@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, LayoutDashboard, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import { RECEITA_DEPARTAMENTO_CORES } from '../constants'
 import type { ReceitaDepartamentoCoresConfig, ReceitaMesRow } from '../types/receita.types'
 import { buildReceitaMetaAreaSlices } from '../utils/departamentoAreaCores'
@@ -30,6 +31,7 @@ export function ReceitaGestaoAVistaSection({
   const [areaKey, setAreaKey] = useState<string | null>(null)
   const [expandido, setExpandido] = useState(true)
   const [detalheMes, setDetalheMes] = useState<GestaoVistaMesRow | null>(null)
+  const exportRef = useRef<HTMLDivElement>(null)
 
   const metaAreaSlices = useMemo(
     () => buildReceitaMetaAreaSlices(departamentoCores),
@@ -97,47 +99,55 @@ export function ReceitaGestaoAVistaSection({
         </button>
 
         {expandido && (
-          <div className="flex w-full flex-wrap items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => setAreaKey(null)}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
-                areaKey == null
-                  ? 'border-slate-800 bg-slate-800 text-white shadow-sm'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
-              )}
-            >
-              Todas
-            </button>
-            {metaAreaSlices.map((area) => {
-              const ativo = areaKey === area.key
-              return (
-                <button
-                  key={area.key}
-                  type="button"
-                  onClick={() => setAreaKey((prev) => (prev === area.key ? null : area.key))}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
-                    ativo
-                      ? 'border-transparent text-white shadow-sm'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
-                  )}
-                  style={
-                    ativo
-                      ? { backgroundColor: area.color, borderColor: area.color }
-                      : undefined
-                  }
-                >
-                  <span
-                    className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: area.color }}
-                    aria-hidden
-                  />
-                  {area.label}
-                </button>
-              )
-            })}
+          <div className="flex w-full items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAreaKey(null)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+                  areaKey == null
+                    ? 'border-slate-800 bg-slate-800 text-white shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                )}
+              >
+                Todas
+              </button>
+              {metaAreaSlices.map((area) => {
+                const ativo = areaKey === area.key
+                return (
+                  <button
+                    key={area.key}
+                    type="button"
+                    onClick={() => setAreaKey((prev) => (prev === area.key ? null : area.key))}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+                      ativo
+                        ? 'border-transparent text-white shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                    )}
+                    style={
+                      ativo
+                        ? { backgroundColor: area.color, borderColor: area.color }
+                        : undefined
+                    }
+                  >
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: area.color }}
+                      aria-hidden
+                    />
+                    {area.label}
+                  </button>
+                )
+              })}
+            </div>
+            <ElementCopyButton
+              containerRef={exportRef}
+              label="Copiar"
+              preserveBackground
+              className="shrink-0"
+            />
           </div>
         )}
       </header>
@@ -157,7 +167,7 @@ export function ReceitaGestaoAVistaSection({
 
       {expandido && (
         <>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+          <div ref={exportRef} className="grid grid-cols-1 gap-4 xl:grid-cols-5">
             <div className="xl:col-span-2">
               <ReceitaGestaoAVistaKpis
                 resumo={resumo}
@@ -173,7 +183,7 @@ export function ReceitaGestaoAVistaSection({
                 onMesClick={handleMesClick}
                 loading={loading}
               />
-              <p className="mt-2 text-[11px] text-slate-500">
+              <p className="mt-2 text-[11px] text-slate-500" data-chart-export-ignore>
                 Clique em <strong className="font-medium text-slate-600">Previsto</strong> ou{' '}
                 <strong className="font-medium text-slate-600">Recebido</strong> para abrir a visão
                 do mês

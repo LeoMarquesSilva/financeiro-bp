@@ -418,23 +418,25 @@ function AreaLinhaChangeLabel({
     const anchor = edgeAwareAnchor(index, data.length)
     const clustered = clusterKey
       ? resolveClusteredLabelPlacement(
-          clusterKey === 'previsto' || clusterKey === 'recebido'
-            ? [
-                { key: 'previsto', value: data[index].previsto },
-                { key: 'recebido', value: data[index].recebido },
-              ]
-            : [
-                { key: 'meta', value: data[index].meta },
-                { key: 'inadimplencia', value: data[index].inadimplencia },
-              ],
+          [
+            { key: 'meta', value: data[index].meta },
+            { key: 'previsto', value: data[index].previsto },
+            { key: 'recebido', value: data[index].recebido },
+            { key: 'inadimplencia', value: data[index].inadimplencia },
+          ],
           clusterKey,
           offset,
+          { sameSideStep: 34, pinBelow: ['inadimplencia'] },
         )
       : null
     const preferred = clustered?.position ?? (position === 'below' ? 'below' : 'above')
-    const adjustedOffset = clustered
+    const lockedOffset = clustered
       ? lockClusterLabelOffset(cy, clustered.offset, secondaryText, clustered.position)
       : offset + (index % 2 === 0 ? 0 : stagger)
+    const adjustedOffset =
+      clustered && clustered.position === 'below' && clusterKey === 'inadimplencia'
+        ? Math.max(lockedOffset, clustered.offset)
+        : lockedOffset
     const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
 
     if (position === 'right' && !clustered) {

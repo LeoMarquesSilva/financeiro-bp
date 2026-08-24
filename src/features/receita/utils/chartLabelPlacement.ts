@@ -133,6 +133,13 @@ export function clusterLabelSidesAreInverted(cluster: ClusterLabelEntry[]): bool
   return false
 }
 
+export type ClusteredLabelPlacementOptions = {
+  /** Distância extra entre rótulos no mesmo lado (padrão 14). Use ~32 com rótulo de 2 linhas. */
+  sameSideStep?: number
+  /** Séries que devem ficar abaixo do ponto quando há mais de uma no mês. */
+  pinBelow?: readonly string[]
+}
+
 /**
  * Lado e afastamento do rótulo conforme a ordem dos valores no mesmo mês.
  * Valor maior fica acima do ponto; valor menor, abaixo — nunca invertido.
@@ -141,18 +148,25 @@ export function resolveClusteredLabelPlacement(
   cluster: ClusterLabelEntry[],
   seriesKey: string,
   baseOffset = 12,
+  options?: ClusteredLabelPlacementOptions,
 ): { position: ClusterLabelSide; offset: number } | null {
   const ranked = rankClusterEntries(cluster)
   const idx = ranked.findIndex((e) => e.key === seriesKey)
   if (idx < 0) return null
 
   const sides = resolveClusterLabelSides(cluster)
+  if (ranked.length > 1) {
+    for (const key of options?.pinBelow ?? []) {
+      if (sides.has(key)) sides.set(key, 'below')
+    }
+  }
   const position = sides.get(seriesKey) ?? 'above'
   const sameSide = ranked.filter((e) => sides.get(e.key) === position)
   const rankOnSide = sameSide.findIndex((e) => e.key === seriesKey)
+  const step = options?.sameSideStep ?? 14
   const stagger =
     sameSide.length > 1 && rankOnSide >= 0
-      ? (position === 'above' ? sameSide.length - 1 - rankOnSide : rankOnSide) * 14
+      ? (position === 'above' ? sameSide.length - 1 - rankOnSide : rankOnSide) * step
       : 0
 
   return { position, offset: baseOffset + stagger }

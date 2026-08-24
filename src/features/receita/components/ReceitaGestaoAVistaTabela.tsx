@@ -40,6 +40,40 @@ function MoedaCelula({ valor }: { valor: number | null }) {
   return <span className="tabular-nums">{formatCurrency(valor)}</span>
 }
 
+/** Gap = recebido − meta. Sem meta ou sem recebido → — */
+function GapCelula({
+  recebido,
+  meta,
+  muted,
+}: {
+  recebido: number | null
+  meta: number | null
+  muted?: boolean
+}) {
+  if (recebido == null || meta == null || meta <= 0) {
+    return <span className="text-slate-400">—</span>
+  }
+  const gap = recebido - meta
+  const sign = gap > 0 ? '+' : gap < 0 ? '−' : ''
+  return (
+    <span
+      className={cn(
+        'tabular-nums font-medium',
+        muted
+          ? 'text-slate-400'
+          : gap > 0.01
+            ? 'text-emerald-700'
+            : gap < -0.01
+              ? 'text-red-600'
+              : 'text-slate-700',
+      )}
+    >
+      {sign}
+      {formatCurrency(Math.abs(gap))}
+    </span>
+  )
+}
+
 function TabelaSkeleton() {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-sm">
@@ -56,11 +90,14 @@ const COLS = [
   'Meta',
   'Previsto',
   'Recebido',
+  'Gap',
   '% Meta',
   '% Previsto',
   'Inad.',
   'Inad. %',
 ] as const
+
+const COLS_CENTRO = new Set<string>(['Gap', 'Inad.', 'Inad. %'])
 
 export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading }: Props) {
   if (loading) return <TabelaSkeleton />
@@ -78,7 +115,7 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                   key={col}
                   className={cn(
                     'whitespace-nowrap px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:text-[11px]',
-                    col !== 'Mês' && 'text-right',
+                    COLS_CENTRO.has(col) ? 'text-center' : col !== 'Mês' && 'text-right',
                   )}
                 >
                   {col}
@@ -181,6 +218,19 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                   >
                     <MoedaCelula valor={row.recebido} />
                   </td>
+                  <td
+                    className={cn(
+                      'px-3 py-2 text-center tabular-nums sm:px-4',
+                      recorteMetaClass,
+                    )}
+                    title="Recebido − meta"
+                  >
+                    <GapCelula
+                      recebido={row.recebido}
+                      meta={row.meta}
+                      muted={informativo}
+                    />
+                  </td>
                   <td className={cn('px-3 py-2 text-right sm:px-4', recorteMetaClass)}>
                     <SemaforoCelula pct={row.pctMeta} />
                   </td>
@@ -189,7 +239,7 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                   </td>
                   <td
                     className={cn(
-                      'px-3 py-2 text-right tabular-nums sm:px-4',
+                      'px-3 py-2 text-center tabular-nums sm:px-4',
                       recorteMetaClass,
                       informativo && 'text-slate-400',
                     )}
@@ -210,7 +260,7 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                       </Tooltip>
                     )}
                   </td>
-                  <td className={cn('px-3 py-2 text-right sm:px-4', recorteMetaClass)}>
+                  <td className={cn('px-3 py-2 text-center sm:px-4', recorteMetaClass)}>
                     {row.inadimplenciaPct != null ? (
                       formatPercent(row.inadimplenciaPct)
                     ) : (
@@ -232,16 +282,19 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                 <td className="px-3 py-2.5 text-right tabular-nums sm:px-4">
                   <MoedaCelula valor={totalYtd.recebido} />
                 </td>
+                <td className="px-3 py-2.5 text-center tabular-nums sm:px-4" title="Recebido − meta">
+                  <GapCelula recebido={totalYtd.recebido} meta={totalYtd.meta} />
+                </td>
                 <td className="px-3 py-2.5 text-right sm:px-4">
                   <SemaforoCelula pct={totalYtd.pctMeta} />
                 </td>
                 <td className="px-3 py-2.5 text-right sm:px-4">
                   <SemaforoCelula pct={totalYtd.pctPrevisto} />
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums sm:px-4">
+                <td className="px-3 py-2.5 text-center tabular-nums sm:px-4">
                   <MoedaCelula valor={totalYtd.inadimplencia} />
                 </td>
-                <td className="px-3 py-2.5 text-right sm:px-4">
+                <td className="px-3 py-2.5 text-center sm:px-4">
                   {totalYtd.inadimplenciaPct != null ? (
                     formatPercent(totalYtd.inadimplenciaPct)
                   ) : (

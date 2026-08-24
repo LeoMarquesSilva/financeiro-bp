@@ -62,6 +62,30 @@ test('área: par previsto × recebido — maior acima, menor abaixo (sem meta no
   assert.equal(clusterLabelSidesAreInverted(cluster), false)
 })
 
+test('mai sem meta: previsto acima; recebido e inadimplência abaixo, inad mais longe', () => {
+  const cluster = [
+    { key: 'previsto', value: 67_550.37 },
+    { key: 'recebido', value: 48_332.92 },
+    { key: 'inadimplencia', value: 20_850.04 },
+  ]
+  const recebido = resolveClusteredLabelPlacement(cluster, 'recebido', 14, {
+    sameSideStep: 34,
+    pinBelow: ['inadimplencia'],
+  })
+  const previsto = resolveClusteredLabelPlacement(cluster, 'previsto', 16, {
+    sameSideStep: 34,
+    pinBelow: ['inadimplencia'],
+  })
+  const inad = resolveClusteredLabelPlacement(cluster, 'inadimplencia', 22, {
+    sameSideStep: 34,
+    pinBelow: ['inadimplencia'],
+  })
+  assert.equal(previsto?.position, 'above')
+  assert.equal(recebido?.position, 'below')
+  assert.equal(inad?.position, 'below')
+  assert.ok((inad?.offset ?? 0) >= (recebido?.offset ?? 0) + 34)
+})
+
 test('jul com meta: 100% acima; recebido e previsto abaixo, recebido mais perto do ponto', () => {
   const cluster = [
     { key: 'meta', value: 100 },
