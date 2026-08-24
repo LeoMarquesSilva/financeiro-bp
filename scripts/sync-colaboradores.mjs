@@ -21,10 +21,13 @@
  * Uso:
  *   node scripts/sync-colaboradores.mjs
  *
- * Requer no .env:
+ * Agendamento: .github/workflows/sync-colaboradores.yml (todo dia 07:00, Brasília).
+ *
+ * Requer no .env / GitHub Actions secrets:
  *   VITE_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY           (destino: SIOE — financeiro-bp)
  *   ORQESTRAI_SUPABASE_URL / ORQESTRAI_SERVICE_ROLE_KEY     (origem: colaboradores)
- *   RESPONSUM_SUPABASE_URL / RESPONSUM_SERVICE_ROLE_KEY     (comparação: contas de chamados)
+ *     ou SUPABASE_ACCESS_TOKEN (Management API no projeto ORQESTRAI)
+ *   RESPONSUM_SUPABASE_URL / RESPONSUM_SERVICE_ROLE_KEY     (opcional — só diagnóstico)
  */
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -44,18 +47,55 @@ function requireEnv(name) {
   return value
 }
 
+const ORQESTRAI_REF = 'qwihfvagemzlyypeohpc'
+
 const sioe = createClient(
   requireEnv('VITE_SUPABASE_URL'),
   requireEnv('SUPABASE_SERVICE_ROLE_KEY')
 )
-const orqestrai = createClient(
-  requireEnv('ORQESTRAI_SUPABASE_URL'),
-  requireEnv('ORQESTRAI_SERVICE_ROLE_KEY')
-)
-const responsum = createClient(
-  requireEnv('RESPONSUM_SUPABASE_URL'),
-  requireEnv('RESPONSUM_SERVICE_ROLE_KEY')
-)
+
+const orqestraiUrl = process.env.ORQESTRAI_SUPABASE_URL
+const orqestraiKey = process.env.ORQESTRAI_SERVICE_ROLE_KEY
+const orqestrai =
+  orqestraiUrl && orqestraiKey ? createClient(orqestraiUrl, orqestraiKey) : null
+
+const responsumUrl = process.env.RESPONSUM_SUPABASE_URL
+const responsumKey = process.env.RESPONSUM_SERVICE_ROLE_KEY
+const responsum =
+  responsumUrl && responsumKey ? createClient(responsumUrl, responsumKey) : null
+
+async function managementQuery(sql) {
+  const token = process.env.SUPABASE_ACCESS_TOKEN
+  if (!token) {
+    throw new Error(
+      'Informe ORQESTRAI_SUPABASE_URL + ORQESTRAI_SERVICE_ROLE_KEY ou SUPABASE_ACCESS_TOKEN'
+    )
+  }
+  const res = await fetch(`https://api.supabase.com/v1/projects/${ORQESTRAI_REF}/database/query`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query: sql }),
+  })
+  const text = await res.text()
+  if (!res.ok) throw new Error(`ORQESTRAI query failed: ${res.status} ${text.slice(0, 400)}`)
+  const data = JSON.parse(text)
+  return Array.isArray(data) ? data : (data?.value ?? [])
+}
+
+async function fetchAll(client, table, columns) {
+  const { data, error } = await client.from(table).select(columns)
+  if (error) throw new Error(`Erro ao ler ${table}: ${error.message}`)
+  return data ?? []
+}
+
+async function fetchOrqestraiTable(table, columns) {
+  if (orqestrai) return fetchAll(orqestrai, table, columns)
+  console.log(`  (ORQESTRAI via Management API: ${table})`)
+  return managementQuery(`SELECT ${columns} FROM ${table}`)
+}
 
 /**
  * ORQESTRAI (hr_employees.department) -> nome canônico usado no módulo Eficiência.
@@ -147,16 +187,9 @@ function emailMatchKey(email) {
   return normalized.split('@')[0]
 }
 
-async function fetchAll(client, table, columns) {
-  const { data, error } = await client.from(table).select(columns)
-  if (error) throw new Error(`Erro ao ler ${table}: ${error.message}`)
-  return data ?? []
-}
-
 async function main() {
   console.log('Lendo hr_employees do ORQESTRAI...')
-  const hrEmployees = await fetchAll(
-    orqestrai,
+  const hrEmployees = await fetchOrqestraiTable(
     'hr_employees',
     'id, full_name, email, department, position, is_active, admission_date, termination_date, vios_ci'
   )
@@ -164,12 +197,11 @@ async function main() {
 
   console.log('Lendo fotos do ORQESTRAI (users + perfis NFC)...')
   const [orqUsers, orqProfiles] = await Promise.all([
-    fetchAll(
-      orqestrai,
+    fetchOrqestraiTable(
       'users',
       'id, email, avatar_url, photo_onedrive_url, is_active',
     ),
-    fetchAll(orqestrai, 'professional_profiles', 'user_id, photo_url'),
+    fetchOrqestraiTable('professional_profiles', 'user_id, photo_url'),
   ])
   const photoByUserId = new Map()
   for (const p of orqProfiles) {
@@ -190,13 +222,20 @@ async function main() {
   }
   console.log(`  ${orqPhotoByKey.size} e-mails com foto resolvida no ORQESTRAI.`)
 
-  console.log('Lendo app_c009c0e4f1_users da RESPONSUM (só para comparação)...')
-  const responsumUsers = await fetchAll(
-    responsum,
-    'app_c009c0e4f1_users',
-    'id, name, email, department, is_active, avatar_url'
-  )
-  console.log(`  ${responsumUsers.length} usuários encontrados.`)
+  let responsumUsers = []
+  if (responsum) {
+    console.log('Lendo app_c009c0e4f1_users da RESPONSUM (só para comparação)...')
+    responsumUsers = await fetchAll(
+      responsum,
+      'app_c009c0e4f1_users',
+      'id, name, email, department, is_active, avatar_url'
+    )
+    console.log(`  ${responsumUsers.length} usuários encontrados.`)
+  } else {
+    console.warn(
+      'RESPONSUM_SUPABASE_URL / RESPONSUM_SERVICE_ROLE_KEY ausentes — sync segue sem diagnóstico de divergências.'
+    )
+  }
 
   const responsumByKey = new Map()
   for (const u of responsumUsers) {
@@ -240,6 +279,8 @@ async function main() {
         null,
       synced_at: new Date().toISOString(),
     })
+
+    if (!responsum) continue
 
     if (!responsumMatch) {
       // Só vale reportar "falta conta" para quem está ativo hoje — ex-funcionário sem
@@ -285,16 +326,18 @@ async function main() {
     }
   }
 
-  for (const u of responsumUsers) {
-    if (u.is_active === false || !isInternalEmail(u.email)) continue
-    const key = emailMatchKey(u.email)
-    if (!key || orqestraiKeys.has(key)) continue
-    divergencias.push({
-      tipo: 'sem_registro_orqestrai',
-      full_name: u.name,
-      email: u.email,
-      detalhe: `Conta ativa na RESPONSUM (${u.department ?? 'sem área'}) sem colaborador ativo correspondente no ORQESTRAI.`,
-    })
+  if (responsum) {
+    for (const u of responsumUsers) {
+      if (u.is_active === false || !isInternalEmail(u.email)) continue
+      const key = emailMatchKey(u.email)
+      if (!key || orqestraiKeys.has(key)) continue
+      divergencias.push({
+        tipo: 'sem_registro_orqestrai',
+        full_name: u.name,
+        email: u.email,
+        detalhe: `Conta ativa na RESPONSUM (${u.department ?? 'sem área'}) sem colaborador ativo correspondente no ORQESTRAI.`,
+      })
+    }
   }
 
   console.log(`Gravando ${rows.length} colaboradores no financeiro-bp...`)
@@ -309,16 +352,18 @@ async function main() {
     console.warn(`Aviso ao desativar login de ex-colaboradores: ${loginError.message}`)
   }
 
-  console.log('Atualizando diagnóstico de divergências (colaboradores_divergencias)...')
-  const { error: deleteError } = await sioe
-    .from('colaboradores_divergencias')
-    .delete()
-    .eq('resolvido', false)
-  if (deleteError) throw new Error(`Erro ao limpar divergências antigas: ${deleteError.message}`)
+  if (responsum) {
+    console.log('Atualizando diagnóstico de divergências (colaboradores_divergencias)...')
+    const { error: deleteError } = await sioe
+      .from('colaboradores_divergencias')
+      .delete()
+      .eq('resolvido', false)
+    if (deleteError) throw new Error(`Erro ao limpar divergências antigas: ${deleteError.message}`)
 
-  if (divergencias.length > 0) {
-    const { error: insertError } = await sioe.from('colaboradores_divergencias').insert(divergencias)
-    if (insertError) throw new Error(`Erro ao gravar divergências: ${insertError.message}`)
+    if (divergencias.length > 0) {
+      const { error: insertError } = await sioe.from('colaboradores_divergencias').insert(divergencias)
+      if (insertError) throw new Error(`Erro ao gravar divergências: ${insertError.message}`)
+    }
   }
 
   const porTipo = divergencias.reduce((acc, d) => {
