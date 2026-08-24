@@ -64,13 +64,27 @@ const responsumKey = process.env.RESPONSUM_SERVICE_ROLE_KEY
 const responsum =
   responsumUrl && responsumKey ? createClient(responsumUrl, responsumKey) : null
 
-async function managementQuery(sql) {
-  const token = process.env.SUPABASE_ACCESS_TOKEN
-  if (!token) {
+function managementApiToken() {
+  const raw = process.env.SUPABASE_ACCESS_TOKEN
+  if (!raw) {
     throw new Error(
       'Informe ORQESTRAI_SUPABASE_URL + ORQESTRAI_SERVICE_ROLE_KEY ou SUPABASE_ACCESS_TOKEN'
     )
   }
+  const token = raw.trim()
+  if (!token) {
+    throw new Error('SUPABASE_ACCESS_TOKEN está vazio após trim')
+  }
+  if (/[^\x20-\x7E]/.test(token)) {
+    throw new Error(
+      'SUPABASE_ACCESS_TOKEN tem caractere inválido (não ASCII). Regrave o secret sem output extra do dotenv.'
+    )
+  }
+  return token
+}
+
+async function managementQuery(sql) {
+  const token = managementApiToken()
   const res = await fetch(`https://api.supabase.com/v1/projects/${ORQESTRAI_REF}/database/query`, {
     method: 'POST',
     headers: {
