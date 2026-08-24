@@ -114,8 +114,7 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                 <th
                   key={col}
                   className={cn(
-                    'whitespace-nowrap px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:text-[11px]',
-                    COLS_CENTRO.has(col) ? 'text-center' : col !== 'Mês' && 'text-right',
+                    'whitespace-nowrap px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:text-[11px]',
                   )}
                 >
                   {col}
