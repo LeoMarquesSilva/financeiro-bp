@@ -82,8 +82,9 @@ export function marcarLinhasOnboardingExcludente<T extends Record<string, unknow
     if (!linhaExcluidaPorOnboarding(row, indicador, exclusoes)) return row
     const next: T = { ...row, excludente: 'Excludente' }
     if (indicador === 'sla_protocolo') {
-      const justificativa = String(row.justificativa_fatal ?? '').trim()
-      next.justificativa_fatal = justificativa || JUSTIFICATIVA_ONBOARDING
+      // Sempre o tipo onboarding — senão o Excel de resultado espalha
+      // as linhas em outras justificativas (ex.: ALTO FLUXO) e não soma todas.
+      next.justificativa_fatal = JUSTIFICATIVA_ONBOARDING
     }
     return next
   })
