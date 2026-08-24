@@ -77,6 +77,7 @@ import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
 import { agregarGestaoPdiMensal, avaliarGestaoPdi } from '../utils/gestaoPdiCalc'
 import { nomesResponsavelMatch, RACIONAL_COLUNA_RESPONSAVEL } from '../utils/responsavelMatch'
 import { marcarTreinamentosDuplicados } from '../utils/treinamentosDedupe'
+import { formatTreinamentoNome } from '../utils/textFormat'
 import { filtrarPainelEfetividade } from '../utils/opsEfetividadeCobranca'
 
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
@@ -1164,7 +1165,8 @@ export const eficienciaService = {
     return marcarTreinamentosDuplicados(
       ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
         colaborador: String(r.colaborador ?? ''),
-        treinamento: r.treinamento == null ? null : String(r.treinamento),
+        treinamento:
+          r.treinamento == null ? null : formatTreinamentoNome(String(r.treinamento)),
         data: r.data == null ? null : String(r.data),
         duracao_minutos: Number(r.duracao_minutos ?? 0),
         ministrado_por:
@@ -1189,7 +1191,7 @@ export const eficienciaService = {
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
       sp_id: Number(r.sp_id),
-      nome: String(r.nome ?? ''),
+      nome: formatTreinamentoNome(String(r.nome ?? '')),
       data: String(r.data ?? ''),
       duracao_minutos:
         r.duracao_minutos == null || r.duracao_minutos === ''

@@ -8,6 +8,7 @@ import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
+import { formatTreinamentoNome } from '../utils/textFormat'
 import type { TreinamentoItemRow, TreinamentosPorPessoaRow } from '../types/eficiencia.types'
 import { EFICIENCIA_META_TREINAMENTO_MINUTOS } from '../constants'
 
@@ -231,7 +232,7 @@ function TreinamentoPessoaCardItem({
                             item.duplicado && 'font-semibold text-red-700',
                           )}
                         >
-                          {item.treinamento || 'Treinamento'}
+                          {formatTreinamentoNome(item.treinamento) || 'Treinamento'}
                         </span>
                         {item.duplicado ? (
                           <Badge

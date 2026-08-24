@@ -527,24 +527,22 @@ export function OperacoesLegaisRgTab({
           </p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="space-y-3">
-              <EficienciaKpiCard
-                title="Eficiência Cadastro"
-                value={cadTotais.pct != null ? formatPercent(cadTotais.pct) : '—'}
-                hint="Cadastrar processos sem erros de inconsistência no sistema"
-                meta={formatPercent(EFICIENCIA_META_OPS_CADASTRO)}
-                atingiuMeta={
-                  cadTotais.pct != null ? cadTotais.pct >= EFICIENCIA_META_OPS_CADASTRO : null
-                }
-                icon={FolderKanban}
-                accentClass="bg-emerald-100 text-emerald-700"
-                loading={loading}
-              />
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Eficiência no Cadastro
+                </h3>
+                <OverviewRacionalButton
+                  onClick={() => setRacionalAberto('ops_legais_cadastro')}
+                  className="w-auto"
+                />
+              </div>
               <EficienciaEficDesvioCard
+                title="Eficiência Cadastro"
                 okLabel="Em conformidade"
                 nokLabel="Inconsistências"
                 qtdOk={cadTotais.dentro}
                 qtdNok={cadTotais.fora}
-                loading={loading}
+                loading={loading || (periodoCurtoAtivo && loadingSemana)}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_cadastro"
@@ -557,10 +555,20 @@ export function OperacoesLegaisRgTab({
             <EficienciaEvolucaoChart
               title="Eficiência Cadastro"
               subtitle="BI · DePara · controladoria · Abertura/Serviço"
-              data={cadFiltrado.map((m) => ({
-                mes: m.mes,
-                valor: Number(m.pct_dentro_prazo),
-              }))}
+              data={
+                periodoCurtoAtivo
+                  ? [
+                      {
+                        mes: 1,
+                        valor: cadTotais.pct ?? 0,
+                        label: periodoCurtoLabel ?? 'Período',
+                      },
+                    ]
+                  : cadFiltrado.map((m) => ({
+                      mes: m.mes,
+                      valor: Number(m.pct_dentro_prazo),
+                    }))
+              }
               color="#059669"
               metaFixa={EFICIENCIA_META_OPS_CADASTRO}
               onRacionalClick={() => setRacionalAberto('ops_legais_cadastro')}

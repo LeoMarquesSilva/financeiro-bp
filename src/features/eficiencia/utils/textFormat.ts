@@ -83,6 +83,13 @@ export function toPriMaiuscula(value: string | null | undefined): string {
     .join('')
 }
 
+/** Nome de treinamento para UI/export — PriMaiuscula mesmo se cadastro em CAPS. */
+export function formatTreinamentoNome(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return trimmed
+  return toPriMaiuscula(trimmed)
+}
+
 /** Chave canônica de tipo publicação — unifica ordens diferentes (ex.: "Providências, Prazo" = "Prazo, Providências"). */
 export function canonicalTipoPublicacao(value: string | null | undefined): string {
   const cleaned = stripJsonArrayDecorators(value).trim()

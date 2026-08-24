@@ -33,6 +33,7 @@ import {
   marcarTreinamentoLinhasRacional,
 } from './treinamentosDedupe'
 import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
+import { formatTreinamentoNome } from './textFormat'
 import { onboardingExclusoesService } from '../services/onboardingExclusoesService'
 import {
   linhaExcluidaPorOnboarding,
@@ -292,7 +293,14 @@ export async function fetchDesenvolvimentoRacional(
     )
     .map((row): Record<string, unknown> => {
       const tv = porNome.get(normalizeNomeChave(String(row.colaborador ?? '')))
-      return { ...row, area: tv?.area ?? null }
+      const rawTreinamento =
+        row.treinamento == null ? null : String(row.treinamento).trim() || null
+      return {
+        ...row,
+        area: tv?.area ?? null,
+        treinamento:
+          rawTreinamento == null ? null : formatTreinamentoNome(rawTreinamento),
+      }
     })
 
   const limiteEfetivo = limite ?? Number.POSITIVE_INFINITY

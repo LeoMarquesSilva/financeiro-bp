@@ -8,6 +8,7 @@ import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
+import { formatTreinamentoNome } from '../utils/textFormat'
 import type { TreinamentoItemRow, TreinamentosPorPessoaRow } from '../types/eficiencia.types'
 
 type ParticipanteCurso = {
@@ -81,8 +82,9 @@ export function buildTreinamentosPorCurso(
     const colaboradorKey = normalizeKey(item.colaborador)
     if (!colaboradorKey || !elegiveis.has(colaboradorKey)) continue
 
-    const treinamento = item.treinamento?.trim() || 'Treinamento não informado'
-    const treinamentoKey = normalizeKey(treinamento)
+    const raw = item.treinamento?.trim() || 'Treinamento não informado'
+    const treinamentoKey = normalizeKey(raw)
+    const treinamento = formatTreinamentoNome(raw) || 'Treinamento não informado'
     const minutos = Math.max(0, Number(item.duracao_minutos) || 0)
     const curso = cursos.get(treinamentoKey) ?? {
       treinamento,

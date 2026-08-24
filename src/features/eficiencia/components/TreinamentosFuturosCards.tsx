@@ -1,5 +1,6 @@
 import { CalendarDays, Clock3, GraduationCap } from 'lucide-react'
 import { formatDate } from '@/shared/utils/format'
+import { formatTreinamentoNome } from '../utils/textFormat'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
@@ -56,7 +57,9 @@ export function TreinamentosFuturosCards({ sessoes, loading }: Props) {
                 <GraduationCap className="h-5 w-5" aria-hidden />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">{sessao.nome}</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  {formatTreinamentoNome(sessao.nome)}
+                </p>
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
                   <span className="inline-flex items-center gap-1 font-medium text-sky-700">
                     <CalendarDays className="h-3.5 w-3.5" aria-hidden />
