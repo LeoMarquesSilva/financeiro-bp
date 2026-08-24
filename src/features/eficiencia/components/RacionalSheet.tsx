@@ -234,7 +234,9 @@ export function RacionalSheet({
                       indicador != null &&
                       isRacionalLinhaForaMeta(indicador, row)
                     const foraMetaTitle =
-                      indicador != null ? racionalLinhaForaMetaTitle(indicador) : undefined
+                      indicador != null
+                        ? racionalLinhaForaMetaTitle(indicador, row)
+                        : undefined
                     return (
                       <tr
                         key={i}

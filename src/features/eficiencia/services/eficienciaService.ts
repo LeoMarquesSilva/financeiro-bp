@@ -86,6 +86,7 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
 }
 
 import {
+  aplicarOnboardingNoRacional,
   buildRacionalBaseQuery,
   buildRacionalSelect,
   fetchDesenvolvimentoRacional,
@@ -362,6 +363,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'data_para_conclusao', label: 'Data para conclusão' },
       { key: 'data_conclusao', label: 'Data da Conclusão' },
       { key: 'fatal_sem18_d1', label: 'Adesão' },
+      { key: 'excludente', label: 'Excludente', virtual: true },
     ],
   },
   sla_vistagem_risco: {
@@ -402,6 +404,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'sp_id', label: 'ID' },
       { key: 'numero_processo', label: 'Nº do Processo' },
       { key: 'area', label: 'Área' },
+      { key: 'grupo', label: 'Grupo Cliente' },
       { key: 'cliente_principal', label: 'Cliente' },
       { key: 'tipo_agendamento', label: 'Tipo de Agendamento' },
       { key: 'vistado_por', label: 'Vistado por' },
@@ -1594,6 +1597,8 @@ export const eficienciaService = {
     if (indicador === 'retencao_talentos') {
       linhas = sortRetencaoRacionalLinhas(filterRetencaoRacionalLinhasPorAno(linhas, ano))
     }
+
+    linhas = await aplicarOnboardingNoRacional(linhas, indicador, escopo)
 
     const resumo = opts?.somenteDesvios
       ? undefined

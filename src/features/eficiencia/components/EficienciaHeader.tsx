@@ -1,13 +1,18 @@
-import { Gauge, RefreshCcw } from 'lucide-react'
+import { useState } from 'react'
+import { Gauge, RefreshCcw, Settings2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/shared/utils/format'
 import type { UltimaAtualizacaoRow } from '../types/eficiencia.types'
+import { useOnboardingExclusoes } from '../hooks/useOnboardingExclusoes'
+import { exclusaoCobreAno } from '../utils/onboardingExclusoes'
+import { OnboardingExclusoesDialog } from './OnboardingExclusoesDialog'
 
 type Props = {
   ano: number
   anos: number[]
   onAnoChange: (ano: number) => void
   ultimaAtualizacao?: UltimaAtualizacaoRow[]
+  canEditOnboarding?: boolean
 }
 
 const BTN =
@@ -15,7 +20,16 @@ const BTN =
 const BTN_ON = 'border-slate-800 bg-slate-800 text-white shadow-sm'
 const BTN_OFF = 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
 
-export function EficienciaHeader({ ano, anos, onAnoChange, ultimaAtualizacao }: Props) {
+export function EficienciaHeader({
+  ano,
+  anos,
+  onAnoChange,
+  ultimaAtualizacao,
+  canEditOnboarding = false,
+}: Props) {
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
+  const { exclusoes } = useOnboardingExclusoes(canEditOnboarding)
+  const onboardingNoAno = exclusoes.filter((e) => exclusaoCobreAno(e, ano)).length
   const maisRecente = ultimaAtualizacao?.length
     ? ultimaAtualizacao.reduce((a, b) => (a.executado_em > b.executado_em ? a : b))
     : null
@@ -56,8 +70,32 @@ export function EficienciaHeader({ ano, anos, onAnoChange, ultimaAtualizacao }: 
               {a}
             </button>
           ))}
+          {canEditOnboarding ? (
+            <button
+              type="button"
+              onClick={() => setOnboardingOpen(true)}
+              className={cn(BTN, BTN_OFF, 'relative min-w-8 px-2')}
+              title="Exclusões por onboarding"
+              aria-label="Exclusões por onboarding"
+            >
+              <Settings2 className="h-4 w-4" />
+              {onboardingNoAno > 0 ? (
+                <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
+                  {onboardingNoAno}
+                </span>
+              ) : null}
+            </button>
+          ) : null}
         </div>
       </div>
+      {canEditOnboarding ? (
+        <OnboardingExclusoesDialog
+          open={onboardingOpen}
+          onOpenChange={setOnboardingOpen}
+          ano={ano}
+          canEdit
+        />
+      ) : null}
     </header>
   )
 }

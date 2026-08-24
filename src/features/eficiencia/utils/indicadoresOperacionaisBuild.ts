@@ -161,7 +161,12 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresResultadoMes):
 
   let dentro = 0
   let fora = 0
+  let exclAg = 0
   for (const row of data.agendamento.linhas) {
+    if (row.excludente === 'Excludente') {
+      exclAg += 1
+      continue
+    }
     if (String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')) fora += 1
     else dentro += 1
   }
@@ -169,7 +174,7 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresResultadoMes):
   rows.push({
     indicador: 'SLA Ciência Agendamentos',
     resultado: denAg ? pctLabel(dentro, denAg) : '—',
-    detalhe: `${dentro} dentro · ${fora} fora`,
+    detalhe: `${dentro} dentro · ${fora} fora${exclAg ? ` · ${exclAg} excludentes` : ''}`,
     bgColor: denAg && dentro / denAg >= 0.95 ? GREEN_SOFT : RED_SOFT,
   })
 

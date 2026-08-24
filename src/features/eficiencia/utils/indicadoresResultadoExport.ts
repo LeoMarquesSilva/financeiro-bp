@@ -590,6 +590,7 @@ export async function exportIndicadoresResultadoExcel(
   let agDentro = 0
   let agFora = 0
   for (const row of data.agendamento.linhas) {
+    if (row.excludente === 'Excludente') continue
     if (String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')) agFora += 1
     else agDentro += 1
   }
@@ -671,12 +672,28 @@ export async function exportIndicadoresResultadoExcel(
   )
 
   const agPivot = buildPctPivot(
-    data.agendamento.linhas,
+    data.agendamento.linhas.filter((row) => row.excludente !== 'Excludente'),
     'area_conclusao',
     (row) =>
       String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora') ? 'b' : 'a',
     ['ÁREA', 'Dentro do prazo', 'Fora do Prazo'],
   )
+  const agDetail = linhasTabela(data.agendamento, [
+    { key: 'ci', label: 'CI' },
+    { key: 'nro_cnj', label: 'Nro CNJ' },
+    { key: 'usuario_conclusao', label: 'Usuário que concluiu a tarefa' },
+    { key: 'area_conclusao', label: 'Área (na conclusão)' },
+    { key: 'data_para_conclusao', label: 'Data para conclusão' },
+    { key: 'data_conclusao', label: 'Data da Conclusão' },
+    { key: 'fatal_sem18_d1', label: 'SLA Ciencia de Agendamento' },
+    { key: 'excludente', label: 'Excludente' },
+  ])
+  const agExcludenteCol = agDetail.headers.indexOf('Excludente')
+  if (agExcludenteCol >= 0) {
+    for (const row of agDetail.rows) {
+      row[agExcludenteCol] = row[agExcludenteCol] === 'Excludente' ? 'SIM' : ''
+    }
+  }
   appendPivotAndDetail(
     wb,
     'SLA CIENCIA DOS AGENDAMENTOS',
@@ -684,20 +701,13 @@ export async function exportIndicadoresResultadoExcel(
     agPivot.headers,
     agPivot.rows,
     { pctCols: [2, 3] },
-    linhasTabela(data.agendamento, [
-      { key: 'ci', label: 'CI' },
-      { key: 'nro_cnj', label: 'Nro CNJ' },
-      { key: 'usuario_conclusao', label: 'Usuário que concluiu a tarefa' },
-      { key: 'area_conclusao', label: 'Área (na conclusão)' },
-      { key: 'data_para_conclusao', label: 'Data para conclusão' },
-      { key: 'data_conclusao', label: 'Data da Conclusão' },
-      { key: 'fatal_sem18_d1', label: 'SLA Ciencia de Agendamento' },
-    ]),
+    agDetail,
     {
       statusCol: {
         col: 7,
         map: { 'Fora do Prazo': RED_SOFT, 'Dentro do prazo': GREEN_SOFT },
       },
+      highlightCol: { col: 8, match: 'SIM', fill: AMBER_SOFT },
     },
     undefined,
     { metaLabel: METAS_INDICADORES.agendamento, resultadoLabel: agResultado },

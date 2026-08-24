@@ -510,6 +510,8 @@ export interface RacionalColuna {
   key: string
   label: string
   format?: 'percentual' | 'duracao_minutos'
+  /** Preenchida no client (não existe na tabela). */
+  virtual?: boolean
 }
 
 export interface RacionalResumo {

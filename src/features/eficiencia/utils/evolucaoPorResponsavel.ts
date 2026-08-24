@@ -190,6 +190,7 @@ export function agregarEvolucaoPorResponsavel(
         break
       }
       case 'sla_ciencia_agendamentos': {
+        if (row.excludente === 'Excludente') continue
         b.total += 1
         if (!String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')) {
           b.ok += 1
@@ -270,6 +271,7 @@ export function agregarEvolucaoDiariaPorResponsavel(
         break
       }
       case 'sla_ciencia_agendamentos': {
+        if (row.excludente === 'Excludente') continue
         b.total += 1
         if (!String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')) {
           b.ok += 1
@@ -328,6 +330,7 @@ export function acumularEvolucaoPorResponsavel(
         break
       }
       case 'sla_ciencia_agendamentos': {
+        if (row.excludente === 'Excludente') continue
         total += 1
         if (!String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')) ok += 1
         break

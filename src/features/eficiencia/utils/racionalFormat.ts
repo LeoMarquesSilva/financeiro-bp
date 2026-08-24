@@ -91,6 +91,7 @@ export function isRacionalLinhaForaMeta(
     case 'ops_legais_efetividade_cobranca':
       return row.status_cobranca === 'Fora / sem cobrança'
     case 'sla_ciencia_agendamentos':
+      if (row.excludente === 'Excludente') return true
       return String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')
     case 'sla_vistagem_risco':
     case 'sla_vistagem_normal':
@@ -100,7 +101,13 @@ export function isRacionalLinhaForaMeta(
   }
 }
 
-export function racionalLinhaForaMetaTitle(indicador: string): string | undefined {
+export function racionalLinhaForaMetaTitle(
+  indicador: string,
+  row?: Record<string, unknown>,
+): string | undefined {
+  if (row?.excludente === 'Excludente') {
+    return 'Excludente — não entra na % do KPI'
+  }
   switch (indicador) {
     case 'sla_protocolo':
       return 'Excludente — não entra na % do KPI'
@@ -171,8 +178,19 @@ export function formatRacionalResumoLabel(resumo: {
   }
 
   if (resumo.qtd_inconsistencia != null && resumo.qtd_eficiencia != null) {
-    const total = resumo.qtd_total ?? resumo.qtd_inconsistencia + resumo.qtd_eficiencia
-    return `Total: ${resumo.qtd_eficiencia} eficiência · ${resumo.qtd_inconsistencia} fora da meta · ${total} registro${total === 1 ? '' : 's'}`
+    const partes = [
+      `${resumo.qtd_eficiencia} eficiência`,
+      `${resumo.qtd_inconsistencia} fora da meta`,
+    ]
+    if (resumo.qtd_excludente) {
+      partes.push(
+        `${resumo.qtd_excludente} excludente${resumo.qtd_excludente === 1 ? '' : 's'} (fora da %)`,
+      )
+    }
+    const total =
+      resumo.qtd_total ??
+      resumo.qtd_inconsistencia + resumo.qtd_eficiencia + (resumo.qtd_excludente ?? 0)
+    return `Total: ${partes.join(' · ')} · ${total} registro${total === 1 ? '' : 's'}`
   }
 
   if (resumo.qtd_vistado_sim != null && resumo.qtd_vistado_nao != null) {

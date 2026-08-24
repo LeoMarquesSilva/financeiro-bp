@@ -33,6 +33,11 @@ import {
   marcarTreinamentoLinhasRacional,
 } from './treinamentosDedupe'
 import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
+import { onboardingExclusoesService } from '../services/onboardingExclusoesService'
+import {
+  linhaExcluidaPorOnboarding,
+  marcarLinhasOnboardingExcludente,
+} from './onboardingExclusoes'
 
 const RACIONAL_LIMITE = 500
 
@@ -75,7 +80,7 @@ type AnyQuery = SupabaseQuery
  * e o gráfico de linha pode manter o estado anterior do Recharts.
  */
 export function buildRacionalSelect(cfg: RacionalConfig): string {
-  const keys = cfg.colunas.map((c) => c.key)
+  const keys = cfg.colunas.filter((c) => !c.virtual).map((c) => c.key)
   if (cfg.dataColuna && !keys.includes(cfg.dataColuna)) {
     keys.push(cfg.dataColuna)
   }
@@ -727,8 +732,23 @@ export async function fetchRacionalLinhasCompletas(
     offset += RACIONAL_FETCH_PAGE
   }
 
-  if (indicador !== 'retencao_talentos') return linhas
-  return sortRetencaoRacionalLinhas(filterRetencaoRacionalLinhasPorAno(linhas, ano))
+  const marcadas = await aplicarOnboardingNoRacional(linhas, indicador, escopo)
+  if (indicador !== 'retencao_talentos') return marcadas
+  return sortRetencaoRacionalLinhas(filterRetencaoRacionalLinhasPorAno(marcadas, ano))
+}
+
+/** Lista no racional como Excludente; no escopo FATAL não-excludente, some da métrica. */
+export async function aplicarOnboardingNoRacional(
+  linhas: Array<Record<string, unknown>>,
+  indicador: RacionalIndicador,
+  escopo: RacionalEscopo = 'default',
+): Promise<Array<Record<string, unknown>>> {
+  const exclusoes = await onboardingExclusoesService.list()
+  const marcadas = marcarLinhasOnboardingExcludente(linhas, indicador, exclusoes)
+  if (escopo === 'sla_protocolo_fatal') {
+    return marcadas.filter((r) => r.excludente !== 'Excludente')
+  }
+  return marcadas
 }
 
 /**
@@ -749,6 +769,7 @@ export async function fetchSlaProtocoloRacionalResumo(
   let offset = 0
   /** Contagem de linhas (não DISTINCT) — alinha com os gráficos de Justificativa/Qtd. */
   let fatalRows = 0
+  const exclusoes = await onboardingExclusoesService.list()
 
   while (true) {
     const query = buildRacionalBaseQuery(
@@ -757,7 +778,7 @@ export async function fetchSlaProtocoloRacionalResumo(
       ano,
       area,
       mes,
-      'ci,fatal_apos18,excludente',
+      'ci,fatal_apos18,excludente,grupo_cliente,conclusao_completa',
       escopo,
       responsavel,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
@@ -765,7 +786,11 @@ export async function fetchSlaProtocoloRacionalResumo(
     const { data, error } = await query
     if (error) throw error
 
-    const rows = (data ?? []) as Array<{
+    const rows = marcarLinhasOnboardingExcludente(
+      (data ?? []) as Array<Record<string, unknown>>,
+      'sla_protocolo',
+      exclusoes,
+    ) as Array<{
       ci: string | null
       fatal_apos18: string | null
       excludente: string | null
@@ -774,7 +799,7 @@ export async function fetchSlaProtocoloRacionalResumo(
       const ci = String(row.ci ?? '').trim()
       if (!ci) continue
       if (escopo === 'sla_protocolo_fatal') {
-        // Escopo já restringe a FATAL não-excludente.
+        if (row.excludente === 'Excludente') continue
         fatalCis.add(ci)
         fatalRows += 1
         continue
@@ -1026,7 +1051,9 @@ export async function fetchSlaCienciaAgendamentosRacionalResumo(
 ): Promise<RacionalResultado['resumo']> {
   let qtd_eficiencia = 0
   let qtd_inconsistencia = 0
+  let qtd_excludente = 0
   let offset = 0
+  const exclusoes = await onboardingExclusoesService.list()
 
   while (true) {
     const query = buildRacionalBaseQuery(
@@ -1035,7 +1062,7 @@ export async function fetchSlaCienciaAgendamentosRacionalResumo(
       ano,
       area,
       mes,
-      'fatal_sem18_d1',
+      'fatal_sem18_d1,grupo_cliente,data_conclusao',
       'default',
       responsavel,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
@@ -1043,8 +1070,12 @@ export async function fetchSlaCienciaAgendamentosRacionalResumo(
     const { data, error } = await query
     if (error) throw error
 
-    const rows = (data ?? []) as Array<{ fatal_sem18_d1: string | null }>
+    const rows = (data ?? []) as Array<Record<string, unknown>>
     for (const row of rows) {
+      if (linhaExcluidaPorOnboarding(row, 'sla_ciencia_agendamentos', exclusoes)) {
+        qtd_excludente += 1
+        continue
+      }
       if (String(row.fatal_sem18_d1 ?? '').toLowerCase().includes('fora')) {
         qtd_inconsistencia += 1
       } else {
@@ -1059,7 +1090,8 @@ export async function fetchSlaCienciaAgendamentosRacionalResumo(
   return {
     qtd_eficiencia,
     qtd_inconsistencia,
-    qtd_total: qtd_eficiencia + qtd_inconsistencia,
+    qtd_excludente,
+    qtd_total: qtd_eficiencia + qtd_inconsistencia + qtd_excludente,
   }
 }
 

@@ -209,6 +209,7 @@ export function EficienciaPage() {
         anos={[...ANOS_COMPARATIVO]}
         onAnoChange={setAno}
         ultimaAtualizacao={overview?.ultimaAtualizacao}
+        canEditOnboarding={access.canUseIndicadoresAdmin}
       />
 
       {access.canUseIndicadoresAdmin ? <IndicadoresResultadoActions ano={ano} /> : null}

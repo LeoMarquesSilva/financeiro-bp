@@ -68,7 +68,7 @@ export function totaisEficienciaProtocoloFromResumo(
 export function totaisAgendamentoFromResumo(resumo: Resumo): AgendamentoPeriodoTotais {
   const dentroPrazo = resumo.qtd_eficiencia ?? 0
   const foraPrazo = resumo.qtd_inconsistencia ?? 0
-  const total = resumo.qtd_total ?? dentroPrazo + foraPrazo
+  const total = dentroPrazo + foraPrazo
   return {
     dentroPrazo,
     foraPrazo,

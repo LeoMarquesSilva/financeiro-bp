@@ -897,6 +897,36 @@ export interface Database {
           data_follow_up?: string | null
         }
       }
+      eficiencia_onboarding_exclusoes: {
+        Row: {
+          id: string
+          grupo_cliente: string
+          vigencia_inicio: string
+          vigencia_fim: string
+          motivo: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          grupo_cliente: string
+          vigencia_inicio: string
+          vigencia_fim: string
+          motivo?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          grupo_cliente?: string
+          vigencia_inicio?: string
+          vigencia_fim?: string
+          motivo?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+      }
     }
   }
 }
