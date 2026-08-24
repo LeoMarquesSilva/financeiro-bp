@@ -7,7 +7,7 @@ import {
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import type { GestaoVistaMesRow } from '../types/receita.types'
-import { semaforoPctNivel } from '../utils/receitaGestaoVista'
+import { mesInicioMetaNaSerie, semaforoPctNivel } from '../utils/receitaGestaoVista'
 
 export type GestaoVistaMesClickColuna = 'recebido' | 'previsto'
 
@@ -65,6 +65,8 @@ const COLS = [
 export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading }: Props) {
   if (loading) return <TabelaSkeleton />
 
+  const mesInicioMeta = mesInicioMetaNaSerie(meses)
+
   return (
     <TooltipProvider delayDuration={200}>
       <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-sm">
@@ -86,6 +88,11 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
           </thead>
           <tbody>
             {meses.map((row) => {
+              const informativo = mesInicioMeta != null && row.mes < mesInicioMeta
+              const inicioMeta = mesInicioMeta != null && row.mes === mesInicioMeta
+              const recorteMetaClass = inicioMeta
+                ? 'border-t-2 border-dashed border-slate-500'
+                : undefined
               const clicavelRecebido =
                 onMesClick != null && row.recebido != null && row.recebido > 0
               const clicavelPrevisto = onMesClick != null && row.previsto > 0
@@ -101,16 +108,36 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
               }
 
               return (
-                <tr key={row.mes} className="border-b border-slate-100 transition-colors">
-                  <td className="whitespace-nowrap px-3 py-2 font-medium capitalize text-slate-800 sm:px-4">
+                <tr
+                  key={row.mes}
+                  className={cn(
+                    'border-b border-slate-100 transition-colors',
+                    informativo && 'bg-slate-50/40',
+                  )}
+                >
+                  <td
+                    className={cn(
+                      'whitespace-nowrap px-3 py-2 font-medium capitalize sm:px-4',
+                      recorteMetaClass,
+                      informativo ? 'text-slate-400' : 'text-slate-800',
+                    )}
+                  >
                     {row.mesLabel}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-700 sm:px-4">
+                  <td
+                    className={cn(
+                      'px-3 py-2 text-right tabular-nums sm:px-4',
+                      recorteMetaClass,
+                      informativo ? 'text-slate-400' : 'text-slate-700',
+                    )}
+                  >
                     <MoedaCelula valor={row.meta} />
                   </td>
                   <td
                     className={cn(
-                      'px-3 py-2 text-right tabular-nums text-slate-700 sm:px-4',
+                      'px-3 py-2 text-right tabular-nums sm:px-4',
+                      recorteMetaClass,
+                      informativo ? 'text-slate-400' : 'text-slate-700',
                       clicavelPrevisto && cellClicavelClass,
                     )}
                     onClick={clicavelPrevisto ? () => handleCellClick('previsto') : undefined}
@@ -132,7 +159,9 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                   </td>
                   <td
                     className={cn(
-                      'px-3 py-2 text-right tabular-nums text-slate-800 sm:px-4',
+                      'px-3 py-2 text-right tabular-nums sm:px-4',
+                      recorteMetaClass,
+                      informativo ? 'text-slate-400' : 'text-slate-800',
                       clicavelRecebido && cellClicavelClass,
                     )}
                     onClick={clicavelRecebido ? () => handleCellClick('recebido') : undefined}
@@ -152,13 +181,19 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                   >
                     <MoedaCelula valor={row.recebido} />
                   </td>
-                  <td className="px-3 py-2 text-right sm:px-4">
+                  <td className={cn('px-3 py-2 text-right sm:px-4', recorteMetaClass)}>
                     <SemaforoCelula pct={row.pctMeta} />
                   </td>
-                  <td className="px-3 py-2 text-right sm:px-4">
+                  <td className={cn('px-3 py-2 text-right sm:px-4', recorteMetaClass)}>
                     <SemaforoCelula pct={row.pctPrevisto} />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums sm:px-4">
+                  <td
+                    className={cn(
+                      'px-3 py-2 text-right tabular-nums sm:px-4',
+                      recorteMetaClass,
+                      informativo && 'text-slate-400',
+                    )}
+                  >
                     {row.inadimplencia != null ? (
                       formatCurrency(row.inadimplencia)
                     ) : row.congelado ? (
@@ -175,7 +210,7 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                       </Tooltip>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right sm:px-4">
+                  <td className={cn('px-3 py-2 text-right sm:px-4', recorteMetaClass)}>
                     {row.inadimplenciaPct != null ? (
                       formatPercent(row.inadimplenciaPct)
                     ) : (

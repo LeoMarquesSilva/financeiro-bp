@@ -177,7 +177,8 @@ export function ReceitaGestaoAVistaSection({
                 Clique em <strong className="font-medium text-slate-600">Previsto</strong> ou{' '}
                 <strong className="font-medium text-slate-600">Recebido</strong> para abrir a visão
                 do mês
-                {areaKey ? ` (${areaSelecionada?.label})` : ''}.
+                {areaKey ? ` (${areaSelecionada?.label})` : ''}. Acima do tracejado (jan–mai) é
+                informativo — o Total soma só a partir de jun.
               </p>
             </div>
           </div>

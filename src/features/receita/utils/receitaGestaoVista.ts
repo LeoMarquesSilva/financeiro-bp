@@ -348,7 +348,13 @@ export function buildGestaoVistaArea(
   return { meses, resumo }
 }
 
-/** Total YTD da tabela (soma linhas no período Jan–mês atual). */
+/** Primeiro mês com meta na série (ex.: jun). Linhas anteriores são só informativas. */
+export function mesInicioMetaNaSerie(meses: GestaoVistaMesRow[]): number | null {
+  const row = meses.find((m) => m.meta != null && m.meta > 0)
+  return row?.mes ?? null
+}
+
+/** Total da tabela: previsto/recebido/inad. só nos meses com meta (Jun+); meta = teto anual. */
 export function buildGestaoVistaTotalYtd(
   meses: GestaoVistaMesRow[],
   mesesPeriodo: number[],
@@ -356,26 +362,24 @@ export function buildGestaoVistaTotalYtd(
   metaAnualKpi?: number,
   recebidoAtingimentoKpi?: number,
 ): GestaoVistaMesRow {
-  const set = new Set(mesesPeriodo)
   const metaSet = new Set(mesesMetaPeriodo)
-  const noPeriodo = meses.filter((m) => set.has(m.mes))
+  const somaSet = metaSet.size > 0 ? metaSet : new Set(mesesPeriodo)
+  const noPeriodo = meses.filter((m) => somaSet.has(m.mes))
 
-  const meta = noPeriodo.reduce((s, m) => s + (m.meta ?? 0), 0)
+  const metaYtd = noPeriodo.reduce((s, m) => s + (m.meta ?? 0), 0)
+  const meta =
+    metaAnualKpi != null && metaAnualKpi > 0 ? metaAnualKpi : metaYtd
   const previsto = noPeriodo.reduce((s, m) => s + m.previsto, 0)
   const recebidoVals = noPeriodo.map((m) => m.recebido).filter((v): v is number => v != null)
   const recebido = recebidoVals.length > 0 ? recebidoVals.reduce((s, v) => s + v, 0) : null
 
-  const recebidoMetaVals = noPeriodo
-    .filter((m) => metaSet.has(m.mes))
-    .map((m) => m.recebido)
-    .filter((v): v is number => v != null)
   const recebidoMeta =
-    recebidoMetaVals.length > 0 ? recebidoMetaVals.reduce((s, v) => s + v, 0) : null
+    recebidoVals.length > 0 ? recebidoVals.reduce((s, v) => s + v, 0) : null
 
-  const inadVals = noPeriodo
-    .map((m) => m.inadimplencia)
-    .filter((v): v is number => v != null && v > 0)
+  const mesesComInad = noPeriodo.filter((m) => m.inadimplencia != null && m.inadimplencia > 0)
+  const inadVals = mesesComInad.map((m) => m.inadimplencia as number)
   const inad = inadVals.length > 0 ? inadVals.reduce((s, v) => s + v, 0) : null
+  const previstoInad = mesesComInad.reduce((s, m) => s + m.previsto, 0)
 
   return {
     mes: 0,
@@ -385,11 +389,12 @@ export function buildGestaoVistaTotalYtd(
     recebido,
     pctMeta: calcPctBatimento(
       recebidoAtingimentoKpi ?? recebidoMeta ?? recebido,
-      metaAnualKpi ?? meta,
+      meta,
     ),
     pctPrevisto: calcPctBatimento(recebido, previsto),
     inadimplencia: inad,
-    inadimplenciaPct: inad != null && previsto > 0 ? calcularPctInadimplencia(inad, previsto) : null,
+    inadimplenciaPct:
+      inad != null && previstoInad > 0 ? calcularPctInadimplencia(inad, previstoInad) : null,
     congelado: false,
   }
 }
