@@ -132,10 +132,31 @@ export function buildDigestEmail(
 
   const titulo = digestTitle(periodo, areaKeys)
 
-  return `<!DOCTYPE html><html><body style="margin:0;padding:16px;background:#F1F5F9;">
-<div style="max-width:920px;margin:0 auto;background:#fff;padding:20px;border-radius:8px;">
-<h1 style="font-size:22px;color:#156082;margin:0 0 8px;">${escapeHtml(titulo)}</h1>
-<p style="color:#64748B;font-size:13px;margin:0 0 20px;">${escapeHtml(periodo.periodoLabel)} · <a href="${SIOE_URL}">Abrir no SIOE</a></p>
-${sections}
-</div></body></html>`
+  return `<!DOCTYPE html>
+<html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light">
+  <title>${escapeHtml(titulo)}</title>
+</head>
+<body bgcolor="#F1F5F9" style="margin:0;padding:16px;background-color:#F1F5F9;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F1F5F9" style="background-color:#F1F5F9;">
+  <tr>
+    <td align="center" style="padding:0;">
+      <table role="presentation" width="920" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="max-width:920px;width:100%;background-color:#ffffff;border-radius:8px;">
+        <tr>
+          <td style="padding:20px;font-family:Calibri,Arial,sans-serif;">
+            <h1 style="font-size:22px;color:#156082;margin:0 0 8px;">${escapeHtml(titulo)}</h1>
+            <p style="color:#64748B;font-size:13px;margin:0 0 20px;">${escapeHtml(periodo.periodoLabel)} · <a href="${SIOE_URL}" style="color:#156082;">Abrir no SIOE</a></p>
+            ${sections}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`
 }

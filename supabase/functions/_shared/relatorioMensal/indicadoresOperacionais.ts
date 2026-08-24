@@ -272,16 +272,20 @@ export function renderIndicadoresOperacionaisHtml(
 
   return `
 <section style="margin:24px 0;font-family:Calibri,Arial,sans-serif;">
-  <h2 style="margin:0 0 12px;padding:12px 16px;background:${BRAND};color:#fff;font-size:18px;border-radius:4px 4px 0 0;">
-    Indicadores operacionais — ${mesLabel}/${ano}${tituloArea}
-  </h2>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${BRAND}" style="margin:0 0 12px;background-color:${BRAND};border-collapse:collapse;">
+    <tr>
+      <td style="padding:12px 16px;font-family:Calibri,Arial,sans-serif;font-size:18px;font-weight:700;color:#ffffff;">
+        Indicadores operacionais — ${mesLabel}/${ano}${tituloArea}
+      </td>
+    </tr>
+  </table>
   ${periodoHtml}
   <table style="width:100%;border-collapse:collapse;font-size:14px;">
     <thead>
       <tr>
-        <th style="padding:10px 12px;border:1px solid ${BORDER};background:${BRAND};color:#fff;text-align:left;">Indicador</th>
-        <th style="padding:10px 12px;border:1px solid ${BORDER};background:${BRAND};color:#fff;text-align:center;">Valor</th>
-        <th style="padding:10px 12px;border:1px solid ${BORDER};background:${BRAND};color:#fff;text-align:left;">Detalhe</th>
+        <th bgcolor="${BRAND}" style="padding:10px 12px;border:1px solid ${BORDER};background-color:${BRAND};color:#ffffff;text-align:left;">Indicador</th>
+        <th bgcolor="${BRAND}" style="padding:10px 12px;border:1px solid ${BORDER};background-color:${BRAND};color:#ffffff;text-align:center;">Valor</th>
+        <th bgcolor="${BRAND}" style="padding:10px 12px;border:1px solid ${BORDER};background-color:${BRAND};color:#ffffff;text-align:left;">Detalhe</th>
       </tr>
     </thead>
     <tbody>${bodyRows}</tbody>

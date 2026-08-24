@@ -39,9 +39,13 @@ export function formatDateBr(iso: string | null | undefined): string {
 export function section(title: string, innerHtml: string): string {
   return `
 <section style="margin:24px 0;font-family:Calibri,Arial,sans-serif;">
-  <h2 style="margin:0 0 12px;padding:10px 14px;background:${BRAND};color:#fff;font-size:16px;border-radius:4px;">
-    ${escapeHtml(title)}
-  </h2>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${BRAND}" style="margin:0 0 12px;background-color:${BRAND};border-collapse:collapse;">
+    <tr>
+      <td style="padding:10px 14px;font-family:Calibri,Arial,sans-serif;font-size:16px;font-weight:700;color:#ffffff;">
+        ${escapeHtml(title)}
+      </td>
+    </tr>
+  </table>
   ${innerHtml}
 </section>`
 }
@@ -50,7 +54,7 @@ export function simpleTable(headers: string[], rows: string[][]): string {
   const th = headers
     .map(
       (h) =>
-        `<th style="padding:8px 10px;border:1px solid ${BORDER};background:${BRAND};color:#fff;text-align:left;font-size:13px;">${escapeHtml(h)}</th>`,
+        `<th bgcolor="${BRAND}" style="padding:8px 10px;border:1px solid ${BORDER};background-color:${BRAND};color:#ffffff;text-align:left;font-size:13px;">${escapeHtml(h)}</th>`,
     )
     .join('')
   const tr = rows
