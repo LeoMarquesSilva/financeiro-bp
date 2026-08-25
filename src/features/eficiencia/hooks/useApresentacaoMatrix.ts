@@ -158,6 +158,14 @@ export function useApresentacaoMatrix(
     retry: 1,
   })
 
+  const fechamentoQuery = useQuery({
+    queryKey: ['eficiencia', 'ops-fechamento-mensal', ano] as const,
+    queryFn: () => eficienciaService.fetchOpsLegaisFechamentoMensal(ano),
+    enabled,
+    staleTime: 60_000,
+    retry: 1,
+  })
+
   const cobrancaKpiQuery = useQuery({
     queryKey: ['cobranca', 'kpi-rows'] as const,
     queryFn: () => cobrancaService.listPainelKpi(),
@@ -200,6 +208,8 @@ export function useApresentacaoMatrix(
     enabled &&
     (antecipacaoQuery.isLoading ||
       antecipacaoQuery.isPending ||
+      fechamentoQuery.isLoading ||
+      fechamentoQuery.isPending ||
       cobrancaKpiQuery.isLoading ||
       cobrancaKpiQuery.isPending)
 
@@ -252,11 +262,17 @@ export function useApresentacaoMatrix(
   const financeiroOpsError =
     antecipacaoQuery.error instanceof Error
       ? antecipacaoQuery.error
-      : cobrancaKpiQuery.error instanceof Error
-        ? cobrancaKpiQuery.error
-        : antecipacaoQuery.error || cobrancaKpiQuery.error
-          ? new Error(String(antecipacaoQuery.error || cobrancaKpiQuery.error))
-          : null
+      : fechamentoQuery.error instanceof Error
+        ? fechamentoQuery.error
+        : cobrancaKpiQuery.error instanceof Error
+          ? cobrancaKpiQuery.error
+          : antecipacaoQuery.error || fechamentoQuery.error || cobrancaKpiQuery.error
+            ? new Error(
+                String(
+                  antecipacaoQuery.error || fechamentoQuery.error || cobrancaKpiQuery.error,
+                ),
+              )
+            : null
 
   const iniciativas = iniciativasAnoQuery.data
     ? buildApresentacaoIniciativas(
@@ -275,9 +291,12 @@ export function useApresentacaoMatrix(
     : null
 
   const financeiroOps =
-    antecipacaoQuery.data != null && cobrancaKpiQuery.data != null
+    antecipacaoQuery.data != null &&
+    fechamentoQuery.data != null &&
+    cobrancaKpiQuery.data != null
       ? buildApresentacaoFinanceiroOps(
           antecipacaoQuery.data,
+          fechamentoQuery.data,
           cobrancaKpiQuery.data,
           ano,
           financeiroOpsMesFiltro,

@@ -11,6 +11,7 @@ import {
   MES_INICIO_RESULTADO,
   OPS_LEGAIS_CADASTRO_CONTROLADORIA,
   OPS_LEGAIS_CADASTRO_TIPOS_ABERTURA,
+  OPS_LEGAIS_FECHAMENTO_TAREFAS,
   areaFiltroParaIndicador,
   isAgendamentoVistagemIndisponivelPorArea,
   mesNoFiltro,
@@ -30,6 +31,7 @@ import type {
   OpsLegaisProtocoloMesRow,
   OpsLegaisProtocoloRankingRow,
   OpsLegaisAntecipacaoMesRow,
+  OpsLegaisFechamentoMesRow,
   OpsLegaisPublicacoesEficMesRow,
   OpsLegaisPublicacoesMesRow,
   OpsLegaisPublicacoesTipoRow,
@@ -77,6 +79,15 @@ import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
 import { agregarGestaoPdiMensal, avaliarGestaoPdi } from '../utils/gestaoPdiCalc'
 import { nomesResponsavelMatch, RACIONAL_COLUNA_RESPONSAVEL } from '../utils/responsavelMatch'
 import { antecipacaoHonorariosStatusLabel } from '../utils/opsAntecipacaoHonorarios'
+import {
+  fechamentoCompetenciaAno,
+  fechamentoCompetenciaMes,
+  fechamentoEtapaOrdem,
+  fechamentoStatusCicloLabel,
+  fechamentoStatusLabel,
+  fechamentoTarefaEhKpi,
+  mergeOpsFechamentoMensal,
+} from '../utils/opsFechamentoFinanceiro'
 import { marcarTreinamentosDuplicados } from '../utils/treinamentosDedupe'
 import { formatTreinamentoNome } from '../utils/textFormat'
 import { filtrarPainelEfetividade } from '../utils/opsEfetividadeCobranca'
@@ -529,6 +540,27 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'ultima_cobranca_canal', label: 'Canal' },
     ],
   },
+  ops_legais_fechamento: {
+    tabela: 'sp_tarefas_fechamento',
+    dataColuna: 'data_limite',
+    areaColuna: null,
+    filtros: [
+      { tipo: 'orEq', coluna: 'tarefa', valores: [...OPS_LEGAIS_FECHAMENTO_TAREFAS] },
+      { tipo: 'notNull', coluna: 'data_limite' },
+    ],
+    colunas: [
+      { key: 'etapa', label: 'Etapa', virtual: true },
+      { key: 'tarefa', label: 'Tarefa' },
+      { key: 'e_tarefa_kpi', label: 'KPI', virtual: true },
+      { key: 'competencia', label: 'Competência', virtual: true },
+      { key: 'usuario_conclusao', label: 'Concluído por' },
+      { key: 'data_para_conclusao', label: 'Data para conclusão' },
+      { key: 'data_limite', label: 'Data limite' },
+      { key: 'data_conclusao', label: 'Data conclusão' },
+      { key: 'status_prazo', label: 'Resultado etapa', virtual: true },
+      { key: 'status_fechamento', label: 'Resultado fechamento', virtual: true },
+    ],
+  },
   ops_legais_iniciativas: {
     tabela: 'ops_legais_iniciativas',
     dataColuna: 'data',
@@ -568,6 +600,29 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
 type OpsFinanceiroRacionalIndicador =
   | 'ops_legais_antecipacao_faturamento'
   | 'ops_legais_efetividade_cobranca'
+  | 'ops_legais_fechamento'
+
+const MESES_COMPETENCIA = [
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
+] as const
+
+function formatFechamentoCompetencia(dataLimite: unknown): string {
+  const mes = fechamentoCompetenciaMes(dataLimite)
+  const ano = fechamentoCompetenciaAno(dataLimite)
+  if (!mes || !ano) return '—'
+  return `${MESES_COMPETENCIA[mes - 1] ?? mes}/${String(ano).slice(-2)}`
+}
 
 function mesDeDataIso(value: unknown): number {
   const mes = Number(String(value ?? '').slice(5, 7))
@@ -585,7 +640,7 @@ async function fetchOpsLegaisFinanceiroRacional(
 
   if (indicador === 'ops_legais_antecipacao_faturamento') {
     const select = cfg.colunas
-      .filter((coluna) => coluna.key !== 'status_prazo')
+      .filter((coluna) => !coluna.virtual)
       .map((coluna) => coluna.key)
       .join(',')
     const baseAno = await fetchRacionalLinhasCompletas(
@@ -614,6 +669,53 @@ async function fetchOpsLegaisFinanceiroRacional(
           String(b['data_conclusao']).localeCompare(String(a['data_conclusao']))
         )
       })
+  } else if (indicador === 'ops_legais_fechamento') {
+    const select = cfg.colunas
+      .filter((coluna) => !coluna.virtual)
+      .map((coluna) => coluna.key)
+      .join(',')
+    const baseAno = await fetchRacionalLinhasCompletas(
+      cfg,
+      indicador,
+      ano,
+      null,
+      null,
+      select,
+    )
+    const filtradas = baseAno.filter((row) => {
+      const compMes = fechamentoCompetenciaMes(row.data_limite)
+      const compAno = fechamentoCompetenciaAno(row.data_limite)
+      return compMes != null && compAno === ano && mesNoFiltro(compMes, mes, ano)
+    })
+    const statusPorCiclo = new Map<string, string>()
+    for (const row of filtradas) {
+      const ciclo = String(row.data_limite ?? '').slice(0, 7)
+      if (!ciclo || statusPorCiclo.has(ciclo)) continue
+      const linhasCiclo = filtradas.filter(
+        (item) => String(item.data_limite ?? '').slice(0, 7) === ciclo,
+      )
+      statusPorCiclo.set(ciclo, fechamentoStatusCicloLabel(linhasCiclo))
+    }
+    linhas = filtradas
+      .map((row): Record<string, unknown> => {
+        const ciclo = String(row.data_limite ?? '').slice(0, 7)
+        return {
+          ...row,
+          etapa: fechamentoEtapaOrdem(row.tarefa),
+          e_tarefa_kpi: fechamentoTarefaEhKpi(row.tarefa) ? 'Sim' : 'Não',
+          competencia: formatFechamentoCompetencia(row.data_limite),
+          status_prazo: fechamentoStatusLabel(row.data_conclusao, row.data_limite),
+          status_fechamento: statusPorCiclo.get(ciclo) ?? '—',
+        }
+      })
+      .sort((a, b) => {
+        const ordemEtapa =
+          Number(a.etapa ?? 99) - Number(b.etapa ?? 99)
+        if (ordemEtapa !== 0) return ordemEtapa
+        const aFora = a.status_prazo === 'Fora do prazo' ? 0 : 1
+        const bFora = b.status_prazo === 'Fora do prazo' ? 0 : 1
+        return aFora - bFora
+      })
   } else {
     const base = await cobrancaService.listPainelKpi()
     linhas = filtrarPainelEfetividade(base, ano, mes)
@@ -637,11 +739,18 @@ async function fetchOpsLegaisFinanceiroRacional(
   }
 
   const statusKey =
-    indicador === 'ops_legais_antecipacao_faturamento' ? 'status_prazo' : 'status_cobranca'
+    indicador === 'ops_legais_antecipacao_faturamento' || indicador === 'ops_legais_fechamento'
+      ? 'status_prazo'
+      : 'status_cobranca'
   const statusOk =
-    indicador === 'ops_legais_antecipacao_faturamento' ? 'Dentro do prazo' : 'Cobrado no D+1'
+    indicador === 'ops_legais_antecipacao_faturamento' || indicador === 'ops_legais_fechamento'
+      ? 'Dentro do prazo'
+      : 'Cobrado no D+1'
   const qtdOk = linhas.filter((row) => row[statusKey] === statusOk).length
-  const qtdFora = linhas.length - qtdOk
+  const qtdFora = linhas.filter((row) => {
+    const status = row[statusKey]
+    return status === 'Fora do prazo' || status === 'Pendente'
+  }).length
   const truncado = limite != null && linhas.length > limite
 
   return {
@@ -1012,6 +1121,14 @@ export const eficienciaService = {
 
   async fetchOpsLegaisAntecipacaoMensal(ano: number): Promise<OpsLegaisAntecipacaoMesRow[]> {
     return rpc('eficiencia_ops_legais_antecipacao_mensal', { p_ano: ano })
+  },
+
+  async fetchOpsLegaisFechamentoMensal(ano: number): Promise<OpsLegaisFechamentoMesRow[]> {
+    const rpcRows = await rpc<OpsLegaisFechamentoMesRow[]>(
+      'eficiencia_ops_legais_fechamento_mensal',
+      { p_ano: ano },
+    )
+    return mergeOpsFechamentoMensal(ano, rpcRows ?? [])
   },
 
   async fetchOpsLegaisPublicacoesMensal(ano: number): Promise<OpsLegaisPublicacoesMesRow[]> {
@@ -1566,7 +1683,8 @@ export const eficienciaService = {
 
     if (
       indicador === 'ops_legais_antecipacao_faturamento' ||
-      indicador === 'ops_legais_efetividade_cobranca'
+      indicador === 'ops_legais_efetividade_cobranca' ||
+      indicador === 'ops_legais_fechamento'
     ) {
       return fetchOpsLegaisFinanceiroRacional(indicador, ano, mes, RACIONAL_LIMITE)
     }
@@ -1677,7 +1795,8 @@ export const eficienciaService = {
 
     if (
       indicador === 'ops_legais_antecipacao_faturamento' ||
-      indicador === 'ops_legais_efetividade_cobranca'
+      indicador === 'ops_legais_efetividade_cobranca' ||
+      indicador === 'ops_legais_fechamento'
     ) {
       return fetchOpsLegaisFinanceiroRacional(indicador, ano, mes, null)
     }

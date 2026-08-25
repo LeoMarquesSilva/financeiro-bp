@@ -107,6 +107,39 @@ export const EFICIENCIA_META_OPS_CADASTRO = 95
 export const EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA = 100
 /** Meta Antecipação de Faturamento de Honorários (BI % Antecipação Honorários). */
 export const EFICIENCIA_META_OPS_ANTECIPACAO = 98
+/** Meta Fechamento financeiro mensal (7º dia útil do mês subsequente). */
+export const EFICIENCIA_META_OPS_FECHAMENTO = 100
+
+/** Tarefas VIOS do ciclo de fechamento financeiro (ordem do fluxo). */
+export const OPS_LEGAIS_FECHAMENTO_TAREFAS = [
+  'ATUALIZAÇÃO DA PLANILHA DE RATEIOS',
+  'VALIDAÇÃO DA PARTICIPAÇÃO DOS SÓCIOS PATRIMONIAIS NOS CONTRATOS NOVOS',
+  'VALIDAÇÃO DA MOVIMENTAÇÃO FINANCEIRA',
+  'ENVIO DO EXTRATO ADGM - RICARDO',
+  'LANÇAMENTO DO EXTRATO ADGM',
+  'ENVIO DA MOVIMENTAÇÃO FINANCEIRA',
+  'ENVIO TIMESHEET',
+  'ENVIO HEADCOUNT',
+  'ENVIO FECHAMENTO COMPLETO E DL APURADA',
+] as const
+
+/** Tarefa que define o KPI de Fechamento. */
+export const OPS_LEGAIS_FECHAMENTO_TAREFA_KPI =
+  'ENVIO FECHAMENTO COMPLETO E DL APURADA' as const
+
+/**
+ * Histórico validado antes da automação VIOS (competência por mês).
+ * Jun/26 = 0%, Jul e Ago/26 = 100%.
+ */
+export const OPS_FECHAMENTO_HISTORICO_MANUAL: Readonly<
+  Record<number, Readonly<Partial<Record<number, number>>>>
+> = {
+  2026: { 6: 0, 7: 100, 8: 100 },
+}
+
+/** A partir deste mês (inclusive) no ano de corte, KPI vem das tarefas VIOS. */
+export const OPS_FECHAMENTO_AUTOMACAO_ANO_CORTE = 2026
+export const OPS_FECHAMENTO_AUTOMACAO_MES_INICIO = 9
 /** Meta anual de iniciativas ClickUp (BI KPI_HTML_PROJETOS_PARTE1). */
 export const EFICIENCIA_META_OPS_INICIATIVAS = 24
 

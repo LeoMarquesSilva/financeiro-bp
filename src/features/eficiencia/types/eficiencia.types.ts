@@ -164,6 +164,15 @@ export interface OpsLegaisAntecipacaoMesRow {
   pct_antecipacao: number
 }
 
+/** Financeiro — Fechamento mensal (competência = mês anterior à data limite). */
+export interface OpsLegaisFechamentoMesRow {
+  mes: number
+  total_fechamentos: number
+  qtd_dentro_prazo: number
+  qtd_fora_prazo: number
+  pct_fechamento: number
+}
+
 export interface OpsLegaisPublicacoesTipoRow {
   tipo_agendamento: string
   qtd: number
@@ -486,6 +495,7 @@ export type RacionalIndicador =
   | 'ops_legais_marketing'
   | 'ops_legais_antecipacao_faturamento'
   | 'ops_legais_efetividade_cobranca'
+  | 'ops_legais_fechamento'
   | 'sla_ciencia_agendamentos'
   | 'sla_vistagem_risco'
   | 'sla_vistagem_normal'

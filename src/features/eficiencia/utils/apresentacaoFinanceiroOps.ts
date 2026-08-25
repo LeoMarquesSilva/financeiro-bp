@@ -5,25 +5,18 @@ import type { CobrancaPainelKpiRow } from '@/features/cobranca/services/cobranca
 import {
   EFICIENCIA_META_OPS_ANTECIPACAO,
   EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA,
+  EFICIENCIA_META_OPS_FECHAMENTO,
   mesesEfetivosFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
-import type { OpsLegaisAntecipacaoMesRow } from '../types/eficiencia.types'
+import type {
+  OpsLegaisAntecipacaoMesRow,
+  OpsLegaisFechamentoMesRow,
+} from '../types/eficiencia.types'
 import { serieMensalEfetividade } from './opsEfetividadeCobranca'
 
-/** Meta Fechamento (BI slide). */
-export const EFICIENCIA_META_OPS_FECHAMENTO = 100
-
-/** Valores validados manualmente enquanto o indicador não possui fonte integrada. */
-const OPS_FECHAMENTO_MANUAL: Readonly<
-  Record<number, Readonly<Partial<Record<number, number>>>>
-> = {
-  2026: {
-    6: 0,
-    7: 100,
-  },
-}
+export { EFICIENCIA_META_OPS_FECHAMENTO }
 
 export type FinanceiroOpsMesCell = {
   mes: number
@@ -84,12 +77,14 @@ function cellPct(mes: number, valor: number | null, meta: number): FinanceiroOps
 
 export function buildApresentacaoFinanceiroOps(
   antecipacao: OpsLegaisAntecipacaoMesRow[],
+  fechamento: OpsLegaisFechamentoMesRow[],
   cobrancaRows: CobrancaPainelKpiRow[],
   ano: number,
   mesFiltro: MesFiltroEficiencia,
 ): ApresentacaoFinanceiroOpsData {
   const meses = mesesAtivos(mesFiltro, ano)
   const antecipByMes = new Map(antecipacao.map((r) => [r.mes, r]))
+  const fechamentoByMes = new Map(fechamento.map((r) => [r.mes, r]))
   const efetivByMes = new Map(serieMensalEfetividade(cobrancaRows, ano).map((r) => [r.mes, r]))
 
   let antecipOk = 0
@@ -118,21 +113,18 @@ export function buildApresentacaoFinanceiroOps(
   })
   const efetAcum = efetTotal > 0 ? (efetOk / efetTotal) * 100 : null
 
-  const fechamentoAno = OPS_FECHAMENTO_MANUAL[ano] ?? {}
-  const fechCells = meses.map((mes) =>
-    cellPct(
-      mes,
-      fechamentoAno[mes] ?? null,
-      EFICIENCIA_META_OPS_FECHAMENTO,
-    ),
-  )
-  const fechValores = fechCells
-    .map((cell) => cell.valor)
-    .filter((valor): valor is number => valor != null)
-  const fechAcum =
-    fechValores.length > 0
-      ? fechValores.reduce((total, valor) => total + valor, 0) / fechValores.length
-      : null
+  let fechOk = 0
+  let fechTotal = 0
+  const fechCells = meses.map((mes) => {
+    const row = fechamentoByMes.get(mes)
+    const total =
+      Number(row?.qtd_dentro_prazo ?? 0) + Number(row?.qtd_fora_prazo ?? 0)
+    if (!row || total <= 0) return cellPct(mes, null, EFICIENCIA_META_OPS_FECHAMENTO)
+    fechOk += Number(row.qtd_dentro_prazo ?? 0)
+    fechTotal += total
+    return cellPct(mes, Number(row.pct_fechamento ?? 0), EFICIENCIA_META_OPS_FECHAMENTO)
+  })
+  const fechAcum = fechTotal > 0 ? (fechOk / fechTotal) * 100 : null
 
   const rows: FinanceiroOpsIndicadorRow[] = [
     {
@@ -179,9 +171,16 @@ export async function fetchApresentacaoFinanceiroOps(
   ano: number,
   mesFiltro: MesFiltroEficiencia,
 ): Promise<ApresentacaoFinanceiroOpsData> {
-  const [antecipacao, cobrancaRows] = await Promise.all([
+  const [antecipacao, fechamento, cobrancaRows] = await Promise.all([
     eficienciaService.fetchOpsLegaisAntecipacaoMensal(ano),
+    eficienciaService.fetchOpsLegaisFechamentoMensal(ano),
     cobrancaService.listPainelKpi(),
   ])
-  return buildApresentacaoFinanceiroOps(antecipacao, cobrancaRows, ano, mesFiltro)
+  return buildApresentacaoFinanceiroOps(
+    antecipacao,
+    fechamento,
+    cobrancaRows,
+    ano,
+    mesFiltro,
+  )
 }

@@ -82,6 +82,7 @@ const RACIONAL_TITULOS: Record<RacionalIndicador, string> = {
   ops_legais_marketing: 'Marketing Instagram',
   ops_legais_antecipacao_faturamento: 'Antecipação de Faturamento de Honorários',
   ops_legais_efetividade_cobranca: 'Efetividade na Cobrança',
+  ops_legais_fechamento: 'Fechamento',
 }
 
 const PCT0 = (v: number) => `${v.toFixed(2)}%`
@@ -423,6 +424,7 @@ export function OverviewTab({
     ops_legais_marketing: ACUMULADO_VAZIO,
     ops_legais_antecipacao_faturamento: ACUMULADO_VAZIO,
     ops_legais_efetividade_cobranca: ACUMULADO_VAZIO,
+    ops_legais_fechamento: ACUMULADO_VAZIO,
   }
 
   const slaProtocoloMetasFiltradas = (() => {
@@ -482,6 +484,7 @@ export function OverviewTab({
       ops_legais_marketing: { metaAcumulado: 100 },
       ops_legais_antecipacao_faturamento: { metaAcumulado: 100 },
       ops_legais_efetividade_cobranca: { metaAcumulado: 100 },
+      ops_legais_fechamento: { metaAcumulado: 100 },
     }
 
   const handleCopiarOverview = async () => {

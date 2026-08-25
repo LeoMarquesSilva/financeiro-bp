@@ -8,6 +8,7 @@
  * - runSyncRelatorioFinanceiro(filePathOuCsvString): relatório de parcelas (financeiro_parcelas, sync replace) — espera .xlsx, .csv ou string CSV
  * - runSyncRelatorioFinanceiroItens(filePathOuCsvString): relatório de itens (financeiro_parcelas_itens, sync replace) — espera .csv ou string CSV; requer ci_titulo em financeiro_parcelas
  * - runSyncPessoas(filePathOuCsvString): relatório de clientes/pessoas (pessoas) — espera .csv ou string CSV
+ * - runSyncTarefasFechamento(filePath): Tarefas.csv VIOS → sp_tarefas_fechamento (9 tarefas Fechamento, qualquer status)
  *
  * No vios-app:
  *   1. npm install dotenv xlsx @supabase/supabase-js
@@ -1803,4 +1804,205 @@ export async function runSyncPessoas(filePathOrCsvContent) {
 
   console.log('[Sync Supabase] pessoas | Upserted:', upserted, '| Erros:', errors);
   return { upserted, errors };
+}
+
+// ========== Tarefas Fechamento Ops Legais (Tarefas.csv → sp_tarefas_fechamento) ==========
+/** Nomes exatos VIOS — espelham OPS_LEGAIS_FECHAMENTO_TAREFAS no SIOE. */
+const FECHAMENTO_TAREFAS_VIOS = [
+  'ATUALIZAÇÃO DA PLANILHA DE RATEIOS',
+  'VALIDAÇÃO DA PARTICIPAÇÃO DOS SÓCIOS PATRIMONIAIS NOS CONTRATOS NOVOS',
+  'VALIDAÇÃO DA MOVIMENTAÇÃO FINANCEIRA',
+  'ENVIO DO EXTRATO ADGM - RICARDO',
+  'LANÇAMENTO DO EXTRATO ADGM',
+  'ENVIO DA MOVIMENTAÇÃO FINANCEIRA',
+  'ENVIO TIMESHEET',
+  'ENVIO HEADCOUNT',
+  'ENVIO FECHAMENTO COMPLETO E DL APURADA',
+];
+
+const FECHAMENTO_TAREFAS_SET = new Set(FECHAMENTO_TAREFAS_VIOS);
+
+/** Remove invólucro Excel `="891615"` em colunas numéricas/texto do VIOS. */
+function unwrapExcelText(v) {
+  if (typeof v !== 'string') return v;
+  const m = v.match(/^="(.*)"$/);
+  return m ? m[1] : v;
+}
+
+function parseCiTarefa(val) {
+  if (val == null || val === '') return null;
+  const unwrapped = unwrapExcelText(val);
+  const digits = String(unwrapped).replace(/\D/g, '');
+  if (!digits) return null;
+  const n = parseInt(digits, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function detectCsvDelimiter(firstLine) {
+  const semi = (firstLine.match(/;/g) || []).length;
+  const comma = (firstLine.match(/,/g) || []).length;
+  const tab = (firstLine.match(/\t/g) || []).length;
+  if (tab > semi && tab > comma) return '\t';
+  if (comma >= semi) return ',';
+  return ';';
+}
+
+/**
+ * Lê Tarefas.csv (VIOS) com encoding latin1 e delimitador auto-detectado.
+ * @param {string} filePath
+ * @returns {unknown[][]}
+ */
+function readTarefasCsvMatrix(filePath) {
+  const text = decodeViosCsvFile(filePath);
+  const firstLine = (text.split(/\r?\n/).find((l) => l.trim()) || '').replace(/^\uFEFF/, '');
+  const delim = detectCsvDelimiter(firstLine);
+  const workbook = XLSX.read(text, {
+    type: 'string',
+    FS: delim,
+    cellDates: true,
+    raw: true,
+  });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) throw new Error('Nenhuma aba encontrada no Tarefas.csv.');
+  const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+  if (!data || data.length < 2) {
+    throw new Error('Tarefas.csv sem dados (cabeçalho + pelo menos uma linha).');
+  }
+  console.log(
+    '[Sync Supabase] Tarefas.csv: delim=',
+    JSON.stringify(delim),
+    '| linhas=',
+    data.length - 1,
+  );
+  return data;
+}
+
+function buildTarefasFechamentoColumnIndexes(headerRow) {
+  const norm = headerRow.map(normalizarColuna);
+  const find = (predicates) => {
+    for (const pred of predicates) {
+      const idx = norm.findIndex(pred);
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+  return {
+    ci: find([(h) => h === 'ci']),
+    tarefa: find([(h) => h === 'tarefa']),
+    status: find([(h) => h === 'status']),
+    usuario_conclusao: find([
+      (h) => h.includes('usuario') && h.includes('concluiu'),
+      (h) => h.includes('usuário') && h.includes('concluiu'),
+    ]),
+    data_conclusao: find([
+      (h) => h.includes('data') && h.includes('conclus') && !h.includes('para'),
+    ]),
+    data_para_conclusao: find([
+      (h) => h.includes('data') && h.includes('para') && h.includes('conclus'),
+    ]),
+    data_limite: find([(h) => h.includes('data') && h.includes('limite')]),
+  };
+}
+
+/**
+ * Sincroniza as 9 tarefas de Fechamento financeiro Ops Legais (qualquer status)
+ * do Tarefas.csv VIOS para sp_tarefas_fechamento.
+ * @param {string} filePath - Caminho absoluto do Tarefas.csv
+ * @returns {Promise<{ upserted: number, deleted: number, total: number }>}
+ */
+export async function runSyncTarefasFechamento(filePath) {
+  const url = process.env.VITE_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error(
+      'Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (ou NEXT_PUBLIC_SUPABASE_*) no .env.',
+    );
+  }
+
+  console.log('[Sync Supabase] Tarefas Fechamento:', filePath);
+  const data = readTarefasCsvMatrix(filePath);
+  const headerRow = data[0].map((c) => (c != null ? String(c).trim() : ''));
+  const idx = buildTarefasFechamentoColumnIndexes(headerRow);
+
+  if (idx.ci < 0 || idx.tarefa < 0) {
+    throw new Error(
+      'Tarefas.csv: colunas CI e Tarefa não encontradas. Cabeçalho: ' +
+        headerRow.slice(0, 8).join('; '),
+    );
+  }
+
+  const rows = [];
+  let skippedNome = 0;
+  let skippedCi = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const tarefaRaw = idx.tarefa >= 0 ? normalizeViosText(String(row[idx.tarefa] ?? '')) : '';
+    if (!tarefaRaw || !FECHAMENTO_TAREFAS_SET.has(tarefaRaw)) {
+      skippedNome++;
+      continue;
+    }
+
+    const ci = parseCiTarefa(idx.ci >= 0 ? row[idx.ci] : null);
+    if (ci == null) {
+      skippedCi++;
+      continue;
+    }
+
+    const trimOpt = (colIdx) =>
+      colIdx >= 0 && row[colIdx] != null
+        ? normalizeViosText(String(row[colIdx])) || null
+        : null;
+
+    rows.push({
+      ci,
+      tarefa: tarefaRaw,
+      status: trimOpt(idx.status),
+      usuario_conclusao: trimOpt(idx.usuario_conclusao),
+      data_conclusao: idx.data_conclusao >= 0 ? parseDateBR(row[idx.data_conclusao]) : null,
+      data_para_conclusao:
+        idx.data_para_conclusao >= 0 ? parseDateBR(row[idx.data_para_conclusao]) : null,
+      data_limite: idx.data_limite >= 0 ? parseDateBR(row[idx.data_limite]) : null,
+    });
+  }
+
+  const byCi = new Map();
+  for (const r of rows) byCi.set(String(r.ci), r);
+  const rowsDedup = [...byCi.values()];
+
+  console.log(
+    '[Sync Supabase] Fechamento parse:',
+    '| filtradas (9 tarefas)=',
+    rowsDedup.length,
+    '| ignoradas (outras tarefas)=',
+    skippedNome,
+    '| sem CI=',
+    skippedCi,
+  );
+
+  const supabase = createClient(url, key);
+  const p_cis = rowsDedup.map((r) => r.ci);
+
+  const { data: result, error } = await supabase.rpc('sync_sp_tarefas_fechamento_replace', {
+    p_cis,
+    p_rows: rowsDedup,
+  });
+
+  if (error) {
+    console.error('[Sync Supabase] sync_sp_tarefas_fechamento_replace error:', error.message);
+    throw new Error('Erro ao sincronizar tarefas Fechamento: ' + error.message);
+  }
+
+  const deleted = result?.deleted ?? 0;
+  const upserted = result?.upserted ?? rowsDedup.length;
+  console.log(
+    '[Sync Supabase] sp_tarefas_fechamento | Deleted:',
+    deleted,
+    '| Upserted:',
+    upserted,
+    '| Total snapshot:',
+    rowsDedup.length,
+  );
+
+  return { upserted, deleted, total: rowsDedup.length };
 }

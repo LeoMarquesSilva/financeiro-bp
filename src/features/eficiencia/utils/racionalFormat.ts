@@ -90,6 +90,13 @@ export function isRacionalLinhaForaMeta(
       return !isOpsLegaisCadastroDeParaOk(row.adesao_indicador)
     case 'ops_legais_antecipacao_faturamento':
       return row.status_prazo === 'Fora do prazo'
+    case 'ops_legais_fechamento':
+      return (
+        row.status_prazo === 'Fora do prazo' ||
+        row.status_prazo === 'Pendente' ||
+        (typeof row.status_fechamento === 'string' &&
+          row.status_fechamento.startsWith('Fora'))
+      )
     case 'ops_legais_efetividade_cobranca':
       return row.status_cobranca === 'Fora / sem cobrança'
     case 'sla_ciencia_agendamentos':
@@ -127,6 +134,8 @@ export function racionalLinhaForaMetaTitle(
       return 'Inconsistência — fora da conformidade de cadastro'
     case 'ops_legais_antecipacao_faturamento':
       return 'Conclusão após a data limite — fora da meta'
+    case 'ops_legais_fechamento':
+      return 'Etapa pendente, atrasada ou fechamento fora do prazo — fora da meta'
     case 'ops_legais_efetividade_cobranca':
       return 'Título fora ou sem cobrança no D+1 — fora da meta'
     case 'sla_ciencia_agendamentos':

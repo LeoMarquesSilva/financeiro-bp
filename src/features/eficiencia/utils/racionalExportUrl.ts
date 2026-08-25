@@ -34,6 +34,7 @@ export const RACIONAL_EXPORT_TITULO: Record<RacionalIndicador, string> = {
   ops_legais_marketing: 'Ops Legais Marketing',
   ops_legais_antecipacao_faturamento: 'Antecipação de Faturamento de Honorários',
   ops_legais_efetividade_cobranca: 'Efetividade na Cobrança',
+  ops_legais_fechamento: 'Fechamento',
 }
 
 /** Chaves Receita (meta) → nomes canônicos das RPCs de Eficiência. */

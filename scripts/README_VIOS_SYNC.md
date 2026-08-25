@@ -168,6 +168,25 @@ await runSyncRelatorioFinanceiroItens(caminhoItens);
 
 RPC: `sync_relatorio_financeiro_itens_replace` — remove itens cujo `ci_item` não está no relatório e faz upsert. Migração: `supabase/migrations/20260602120000_financeiro_parcelas_itens.sql`.
 
+## Tarefas Fechamento Ops Legais (tabela `sp_tarefas_fechamento`)
+
+As **9 tarefas VIOS** do ciclo de Fechamento financeiro (qualquer status — Aberta ou Concluída) são sincronizadas a partir do **Tarefas.csv** exportado pelo Playwright (`flag_conclusao = Todas`).
+
+No script **Tarefas.js** do vios-app, após salvar o CSV:
+
+```js
+import { runSyncTarefasFechamento } from './sync-vios-to-supabase.js';
+
+await runSyncTarefasFechamento(config.downloadPath);
+```
+
+- Função: `runSyncTarefasFechamento` em `scripts/vios-app/sync-vios-to-supabase.js`
+- RPC: `sync_sp_tarefas_fechamento_replace` (snapshot: remove CIs que saíram do recorte VIOS)
+- **Isolado** de `sp_tarefas` (SharePoint sync continua só Concluída)
+- Migração: `supabase/migrations/20260825200000_sp_tarefas_fechamento_vios_sync.sql`
+
+Variáveis no `.env` do vios-app: `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (ou `NEXT_PUBLIC_SUPABASE_*`).
+
 ## Credenciais (nunca no código)
 
 - **No vios-app (servidor):** arquivo `.env` na raiz do vios-app (ou na pasta do script) com `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. VIOS (usuário/senha) só se a automação de download rodar lá.
