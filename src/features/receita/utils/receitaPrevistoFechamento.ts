@@ -28,9 +28,9 @@ export const FECHAMENTO_DRILL_LABELS: Record<FechamentoDrillKey, string> = {
 export const FECHAMENTO_DRILL_HINTS: Record<FechamentoDrillKey, string> = {
   ...FECHAMENTO_BUCKET_HINTS,
   inad_grupo:
-    'Vencido até hoje no mês, não pago — item a item, sem compensação entre razões sociais',
+    'Vencido até ontem (hoje ainda não é vencido), não pago — item a item, sem compensação entre razões sociais',
   previsto_grupo:
-    'Vencimentos do mês por data e grupo. Inad. = vencido até hoje, não quitado no mês (item a item).',
+    'Vencimentos do mês por data e grupo. Inad. = vencido até ontem, não quitado no mês (item a item).',
 }
 
 export type ReceitaGerencialRecebidoLinha = {

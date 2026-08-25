@@ -1,5 +1,9 @@
 import type { ReceitaPrevistoItemRow } from '../types/receita.types'
-import { inadimplenciaItemMesFaturadoNaoPago } from './receitaPrevistoFechamento'
+import {
+  inadimplenciaItemMesFaturadoNaoPago,
+  itemVencimentoVencidoAteCorte,
+  refDateCorteInadMes,
+} from './receitaPrevistoFechamento'
 import { resolverGrupoCliente } from './recebidoGrupos'
 
 export const PREVISTO_SEM_VENCIMENTO_KEY = '__sem_vencimento__'
@@ -590,6 +594,9 @@ export function agruparInadMesPorGrupoSemCompensacao(
     const grupo = resolverGrupoCliente(item.cliente, clienteGrupoMap)
     const data_vencimento = normalizePrevistoVencimentoKey(item.data_vencimento)
     if (data_vencimento === PREVISTO_SEM_VENCIMENTO_KEY) continue
+    if (!itemVencimentoVencidoAteCorte(item.data_vencimento, refDateCorteInadMes(ano, mes, ref))) {
+      continue
+    }
     const rowKey = `${grupo}::${data_vencimento}`
     const cur = byGrupoVenc.get(rowKey) ?? {
       grupo_cliente: grupo,
