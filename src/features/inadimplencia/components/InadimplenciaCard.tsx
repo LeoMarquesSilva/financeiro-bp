@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { formatCurrency, formatCnpj, formatDate } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/AuthContext'
-import type { ClientInadimplenciaRow, InadimplenciaClasse, ClienteEscritorioRow, ProvidenciaFollowUpRow } from '@/lib/database.types'
+import type { ClientInadimplenciaRow, InadimplenciaClasse, ClienteEscritorioRow } from '@/lib/database.types'
 import { resolveTeamMember } from '@/lib/teamMembersService'
 import { getTeamMember } from '@/lib/teamAvatars'
 import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
@@ -12,13 +12,12 @@ import type { PrioridadeTipo } from '../types/inadimplencia.types'
 import { ModalEditarCliente } from './ModalEditarCliente'
 import { ModalNovaProvidencia } from './ModalNovaProvidencia'
 import { ModalNovoFollowUp } from './ModalNovoFollowUp'
-import { providenciaService, PROVIDENCIA_FOLLOW_UP_TIPO_LABEL } from '../services/providenciaService'
 import { useTeamMembers } from '../hooks/useTeamMembers'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
-import { Pencil, Check, AlertTriangle, MessageSquare, FileText, Calendar, RotateCcw } from 'lucide-react'
+import { Pencil, Check, AlertTriangle, MessageSquare, FileText, RotateCcw } from 'lucide-react'
 import { fetchClientesEscritorio } from '@/features/escritorio/services/escritorioService'
 
 interface InadimplenciaCardProps {
@@ -75,31 +74,12 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onReabrir, onRefr
   const { data: clientesEscritorio = [] } = useQuery({
     queryKey: ['clientes-escritorio'],
     queryFn: fetchClientesEscritorio,
+    staleTime: 5 * 60 * 1000,
   })
   const linkedEscritorio = client.pessoa_id
     ? clientesEscritorio.find((ce: ClienteEscritorioRow) => ce.id === client.pessoa_id)
     : null
   const grupoCliente = linkedEscritorio?.grupo_cliente ?? null
-
-  const { data: providencias = [] } = useQuery({
-    queryKey: ['providencias', client.id],
-    queryFn: async () => {
-      const { data, error } = await providenciaService.listByCliente(client.id)
-      if (error) throw error
-      return data
-    },
-  })
-  const ultimaProvidencia = providencias[0] ?? null
-  const { data: followUpsUltima = [] } = useQuery({
-    queryKey: ['providencia-follow-ups', ultimaProvidencia?.id],
-    queryFn: async () => {
-      if (!ultimaProvidencia?.id) return []
-      const { data, error } = await providenciaService.listFollowUpsByProvidencia(ultimaProvidencia.id)
-      if (error) throw error
-      return data ?? []
-    },
-    enabled: !!ultimaProvidencia?.id,
-  })
 
   const prioridade: PrioridadeTipo = getPrioridade(client.dias_em_aberto, Number(client.valor_em_aberto))
   const followUpVencido = client.data_follow_up && new Date(client.data_follow_up) < new Date()
@@ -223,7 +203,7 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onReabrir, onRefr
             </div>
 
             {/* Status zone: latest providencia or follow-up */}
-            {(ultimaProvidencia || client.ultima_providencia || followUpVencido) && (
+            {(client.ultima_providencia || followUpVencido) && (
               <div className={cn(
                 'rounded-lg px-3 py-2 text-xs',
                 followUpVencido ? 'bg-red-50 border border-red-100' : 'bg-slate-50 border border-slate-100',
@@ -237,21 +217,12 @@ export function InadimplenciaCard({ client, onMarcarResolvido, onReabrir, onRefr
                     )}
                   </div>
                 )}
-                {(ultimaProvidencia || client.ultima_providencia) && (
+                {client.ultima_providencia && (
                   <div className="flex items-start gap-1.5">
                     <FileText className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
                     <p className="line-clamp-2 text-slate-600">
-                      {ultimaProvidencia ? ultimaProvidencia.texto : client.ultima_providencia}
+                      {client.ultima_providencia}
                     </p>
-                  </div>
-                )}
-                {followUpsUltima.length > 0 && (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-slate-500">
-                    <Calendar className="h-3 w-3 shrink-0" />
-                    <span className="truncate">
-                      {PROVIDENCIA_FOLLOW_UP_TIPO_LABEL[(followUpsUltima[0] as ProvidenciaFollowUpRow).tipo]}:{' '}
-                      {(followUpsUltima[0] as ProvidenciaFollowUpRow).texto || '–'}
-                    </span>
                   </div>
                 )}
               </div>
