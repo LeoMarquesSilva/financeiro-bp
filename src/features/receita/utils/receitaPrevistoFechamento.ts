@@ -94,11 +94,13 @@ function formatDateIsoLocal(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-/** Data de corte: hoje no mês corrente; último dia do mês em meses já encerrados. */
+/** Data de corte: ontem no mês corrente (hoje ainda não é vencido); último dia do mês se já encerrado. */
 export function refDateCorteInadMes(ano: number, mes: number, ref = new Date()): string {
   const mesFim = new Date(ano, mes, 0)
   const hoje = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate())
-  const corte = mesFim.getTime() < hoje.getTime() ? mesFim : hoje
+  const ontem = new Date(hoje)
+  ontem.setDate(ontem.getDate() - 1)
+  const corte = mesFim.getTime() < hoje.getTime() ? mesFim : ontem
   return formatDateIsoLocal(corte)
 }
 
@@ -110,7 +112,7 @@ export function itemVencimentoVencidoAteCorte(
   return data_vencimento.trim().slice(0, 10) <= corteIso
 }
 
-/** Soma o previsto já exigível (vencimento ≤ corte). Títulos a vencer no mês ficam de fora. */
+/** Soma o previsto já exigível (vencimento ≤ corte = ontem no mês corrente). Hoje ainda não é vencido. */
 export function somarPrevistoVencidoAteCorte(
   itens: ReadonlyArray<{ valor_item: number; data_vencimento?: string | null }>,
   ano: number,

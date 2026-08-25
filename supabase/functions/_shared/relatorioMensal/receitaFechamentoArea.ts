@@ -48,7 +48,9 @@ function refDateCorteInadMes(ano: number, mes: number, ref = new Date(), corteIs
   }
   const mesFim = new Date(ano, mes, 0)
   const hoje = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate())
-  const corte = mesFim.getTime() < hoje.getTime() ? mesFim : hoje
+  const ontem = new Date(hoje)
+  ontem.setDate(ontem.getDate() - 1)
+  const corte = mesFim.getTime() < hoje.getTime() ? mesFim : ontem
   return formatDateIsoLocal(corte)
 }
 

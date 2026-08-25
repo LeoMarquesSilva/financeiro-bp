@@ -40,6 +40,40 @@ function MoedaCelula({ valor }: { valor: number | null }) {
   return <span className="tabular-nums">{formatCurrency(valor)}</span>
 }
 
+function InadCelula({
+  valor,
+  pct,
+  congelado,
+}: {
+  valor: number | null
+  pct?: boolean
+  congelado: boolean
+}) {
+  const parcial = !congelado && valor != null
+  const label =
+    valor == null ? (
+      <span className="text-slate-400">—</span>
+    ) : pct ? (
+      formatPercent(valor)
+    ) : (
+      formatCurrency(valor)
+    )
+
+  if (valor == null || !parcial) return label
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help tabular-nums">{label}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs">
+        Valor parcial — mês ainda não congelado. O snapshot oficial entra no fechamento da aba
+        Inadimplência.
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 /** Gap = recebido − meta. Sem meta ou sem recebido → — */
 function GapCelula({
   recebido,
@@ -241,28 +275,17 @@ export function ReceitaGestaoAVistaTabela({ meses, totalYtd, onMesClick, loading
                       informativo && 'text-slate-400',
                     )}
                   >
-                    {row.inadimplencia != null ? (
-                      formatCurrency(row.inadimplencia)
-                    ) : row.congelado ? (
-                      formatCurrency(0)
-                    ) : (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="cursor-help text-slate-400">—</span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs text-xs">
-                          Mês ainda não congelado — snapshot disponível após fechamento na aba
-                          Inadimplência.
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
+                    <InadCelula
+                      valor={row.inadimplencia}
+                      congelado={row.congelado}
+                    />
                   </td>
                   <td className={cn('px-3 py-2 text-center sm:px-4', recorteMetaClass)}>
-                    {row.inadimplenciaPct != null ? (
-                      formatPercent(row.inadimplenciaPct)
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
+                    <InadCelula
+                      valor={row.inadimplenciaPct}
+                      pct
+                      congelado={row.congelado}
+                    />
                   </td>
                 </tr>
               )

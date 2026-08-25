@@ -27,7 +27,7 @@ import {
   type ReceitaGraficoMesOptions,
 } from './receitaMes'
 
-/** Série mensal de uma área (meta, previsto, recebido, inad. congelada). */
+/** Série mensal de uma área (meta, previsto, recebido, inad. congelada ou parcial). */
 export type AreaLinhaPoint = {
   mes: number
   mesLabel: string
@@ -116,8 +116,25 @@ export function mesesMetaNoPeriodoGestao(rows: ReceitaMesRow[], ano: number, ref
 }
 
 /**
- * Série mensal (ano todo) de uma única área: meta individual (meta do mês × % da área),
- * previsto e recebido por departamento, inadimplência nos meses congelados (VIOS).
+ * Fatia da área sobre a meta **base** do mês (teto anual). Sem catch-up.
+ */
+export function metaAreaSobreBase(metaBase: number, areaPct: number): number | null {
+  if (metaBase <= 0 || areaPct <= 0) return null
+  return (metaBase * areaPct) / 100
+}
+
+/**
+ * Meta do mês na visão por área = meta **já rebalanceada do escritório** × % da área.
+ * É a meta nova que se forma com o gap do escritório (não o catch-up isolado da área).
+ */
+export function metaAreaDoMes(metaEscritorio: number, areaPct: number): number | null {
+  if (metaEscritorio <= 0 || areaPct <= 0) return null
+  return (metaEscritorio * areaPct) / 100
+}
+
+/**
+ * Série mensal de uma área: meta = fatia da meta rebalanceada do escritório,
+ * previsto/recebido por departamento, inadimplência nos meses congelados (VIOS).
  */
 export function buildAreaLinhaData(
   rows: ReceitaMesRow[],
@@ -129,6 +146,7 @@ export function buildAreaLinhaData(
   areaPct: number,
   ano: number,
   graficoOpts?: ReceitaGraficoMesOptions,
+  ref = new Date(),
 ): AreaLinhaPoint[] {
   const pct = areaPct
 
@@ -146,23 +164,31 @@ export function buildAreaLinhaData(
 
   return rows.map((r) => {
     const previsto = previstoPorMes.get(r.mes) ?? 0
-    const inadimplenciaRaw =
-      mesesCongelados.has(r.mes) &&
-      !(graficoOpts?.omitMesAtual && isMesAtual(ano, r.mes))
-        ? inadimplenciaAreaMes(deptInadPorMes[r.mes] ?? [], areaKey)
-        : null
+    const omitAtual = Boolean(graficoOpts?.omitMesAtual && isMesAtual(ano, r.mes, ref))
+    const podeInad =
+      !isMesFuturo(ano, r.mes, ref) &&
+      !omitAtual &&
+      (mesesCongelados.has(r.mes) || Boolean(graficoOpts?.incluirInadParcial))
+    const inadimplenciaRaw = podeInad
+      ? inadimplenciaAreaMes(deptInadPorMes[r.mes] ?? [], areaKey)
+      : null
     const inadimplencia =
-      inadimplenciaRaw != null && inadimplenciaRaw > 0 ? inadimplenciaRaw : null
+      inadimplenciaRaw == null
+        ? null
+        : inadimplenciaRaw > 0 || graficoOpts?.incluirInadParcial
+          ? inadimplenciaRaw
+          : null
+    const metaEscritorio = r.meta > 0 ? r.meta : r.metaBase
     return {
       mes: r.mes,
       mesLabel: r.mesLabel,
-      meta: r.meta > 0 ? (r.meta * pct) / 100 : null,
+      meta: metaAreaDoMes(metaEscritorio, pct),
       previsto,
       recebido: valorRecebidoGrafico(
         recebidoPorMes.get(r.mes) ?? 0,
         ano,
         r.mes,
-        undefined,
+        ref,
         graficoOpts,
       ),
       inadimplencia,
@@ -241,16 +267,21 @@ export function buildGestaoVistaConsolidado(
 
   const inadPorMes = new Map<number, { valor: number; pct: number; congelado: boolean }>()
   for (const m of inadEvolucao) {
-    if (!m.congelado) continue
     const { valor, pct } = valorExibicaoEvolucao(m)
-    if (valor > 0) inadPorMes.set(m.mes, { valor, pct, congelado: true })
+    inadPorMes.set(m.mes, { valor, pct, congelado: m.congelado })
   }
 
   const meses: GestaoVistaMesRow[] = rows.map((r) => {
     const recebido = valorRecebidoGrafico(r.recebido, ano, r.mes, ref)
     const meta = r.meta > 0 ? r.meta : null
     const inad = inadPorMes.get(r.mes)
-    const inadValor = inadimplenciaGraficoComparativo(inad?.valor, ano, r.mes, ref)
+    const futuro = isMesFuturo(ano, r.mes, ref)
+    const inadValor = futuro
+      ? null
+      : inad != null
+        ? inad.valor
+        : inadimplenciaGraficoComparativo(undefined, ano, r.mes, ref)
+    const inadPct = futuro || inad == null ? null : inad.pct
     return {
       mes: r.mes,
       mesLabel: r.mesLabel,
@@ -260,8 +291,8 @@ export function buildGestaoVistaConsolidado(
       pctMeta: calcPctBatimento(recebido, meta ?? 0),
       pctPrevisto: calcPctBatimento(recebido, r.previsto),
       inadimplencia: inadValor,
-      inadimplenciaPct: inad?.pct ?? null,
-      congelado: inad != null,
+      inadimplenciaPct: inadPct,
+      congelado: inad?.congelado ?? false,
     }
   })
 
@@ -321,13 +352,15 @@ export function buildGestaoVistaArea(
     areaKey,
     areaPct,
     ano,
+    { incluirInadParcial: true },
+    ref,
   )
 
   const meses = areaLinha.map((p) => areaLinhaToGestaoRow(p, mesesCongelados))
 
   const metaAcumulada = rows
     .filter((r) => r.metaBase > 0)
-    .reduce((s, r) => s + (r.metaBase * areaPct) / 100, 0)
+    .reduce((s, r) => s + (metaAreaSobreBase(r.metaBase, areaPct) ?? 0), 0)
 
   const recebidoAcumulado = meses
     .filter((m) => mesesMetaSet.has(m.mes) && m.recebido != null)

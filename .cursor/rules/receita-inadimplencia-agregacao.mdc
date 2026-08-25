@@ -43,11 +43,15 @@ inadimplência = max(0, Σ faturado − Σ recebido)
 - Compensa pagamento de uma razão social contra faturamento de outra **no mesmo grupo**
   (troca de cadastro VIOS).
 - **Só títulos vencidos:** faturado usa `data_vencimento <= receita_inadimplencia_corte_vencimento`
-  (`min(último dia do mês fim, hoje)`). Título a vencer **não entra** no KPI nem no modal.
-- **Card ao vivo (`grupos_periodo`):** recebido = caixa do intervalo **+** pagamento
-  posterior do título daquele mês (`data_pagamento > corte`). Se pagou em jul um
-  vencimento de jun, o Resultado R$ de JUN dá baixa — a evolução congelada **não**.
-- **Evolução / `grupo_mes`:** snapshot do mês, **sem** baixa posterior.
+  (`min(último dia do mês fim, ontem)`). Vencimento **= hoje ainda não é vencido** — fica de fora
+  do KPI e do modal. Título a vencer também **não entra**.
+- **Card ao vivo (`grupos_periodo`):** recebido = caixa do intervalo **+** quitação
+  antecipada do título do período (`data_pagamento` antes do mês, `<= corte`) **+**
+  pagamento posterior (`data_pagamento > corte`). Se pagou em jul um vencimento de
+  jun, o Resultado R$ de JUN dá baixa — a evolução congelada **não**.
+- **Evolução / `grupo_mes`:** snapshot do mês, **sem** baixa posterior; **com**
+  antecipado (título do mês pago antes do mês, até o corte). Ex.: Extrutech CI 11995
+  (venc. 05/08, pago 30/07) **não** é inadimplente em ago.
 
 **Proibido:**
 
@@ -107,6 +111,7 @@ Frontend (`receitaInadimplenciaCalc.ts`):
 | `20260720180000_receita_inadimplencia_area_periodo_liquido.sql` | Área/grupo×dept = saldo líquido período |
 | `20260814170000_receita_inadimplencia_periodo_somente_vencidos.sql` | KPI/grupos_periodo: faturado só vencido (corte) |
 | `20260814180000_receita_inadimplencia_baixa_posterior_periodo.sql` | Card ao vivo: baixa título pago depois do mês |
+| `20260825140000_receita_inadimplencia_recebido_antecipado_periodo.sql` | Recebido: título do período pago adiantado (antes do mês) |
 
 Nova migração nesse domínio: **estender ou chamar** estas funções — não reimplementar.
 
@@ -122,8 +127,9 @@ Nova migração nesse domínio: **estender ou chamar** estas funções — não 
 | KPI vs evolução | Jan–Jun/26 | KPI ao vivo **<** soma evolução congelada (≈ **R$ 1.826.182**); card inclui baixa posterior — **devem diferir** |
 | Modal vs card | Qualquer | Mesmo total com mesma seleção de grupos |
 | Baptistella Trabalhista | Jun–Jul/26 | **R$ 0** no top5/KPI período (pagou em jul) |
-| AGO/26 em 14/ago | Só AGO | KPI **≠** faturado do mês inteiro; exclui vencimento > hoje (~R$ 790 mil a vencer fora) |
+| AGO/26 em 14/ago | Só AGO | KPI **≠** faturado do mês inteiro; exclui vencimento ≥ hoje |
 | JUN/26 card vs evolução | Só JUN | Evolução congelada **R$ 241.711,99**; card ao vivo **menor** (baixa jul/ago) |
+| Grupo Extrutech | Ago/26 | **R$ 0** (CI 11995 venc. 05/08, pago 30/07 — antecipado) |
 
 ---
 

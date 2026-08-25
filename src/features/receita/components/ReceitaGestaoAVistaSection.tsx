@@ -167,7 +167,7 @@ export function ReceitaGestaoAVistaSection({
 
       {expandido && (
         <>
-          <div ref={exportRef} className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
             <div className="xl:col-span-2">
               <ReceitaGestaoAVistaKpis
                 resumo={resumo}
@@ -177,19 +177,22 @@ export function ReceitaGestaoAVistaSection({
               />
             </div>
             <div className="min-w-0 xl:col-span-3">
-              <ReceitaGestaoAVistaTabela
-                meses={meses}
-                totalYtd={totalYtd}
-                onMesClick={handleMesClick}
-                loading={loading}
-              />
-              <p className="mt-2 text-[11px] text-slate-500" data-chart-export-ignore>
+              <div ref={exportRef}>
+                <ReceitaGestaoAVistaTabela
+                  meses={meses}
+                  totalYtd={totalYtd}
+                  onMesClick={handleMesClick}
+                  loading={loading}
+                />
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
                 Clique em <strong className="font-medium text-slate-600">Previsto</strong> ou{' '}
                 <strong className="font-medium text-slate-600">Recebido</strong> para abrir a visão
                 do mês
                 {areaKey ? ` (${areaSelecionada?.label})` : ''}. Acima do tracejado (jan–mai) é
                 informativo — o Total soma só a partir de jun. No mês corrente, o previsto do
-                Total usa só títulos já vencidos.
+                Total usa só títulos já vencidos; Inad. e Inad. % mostram o valor parcial ao
+                vivo até o congelamento.
               </p>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Loader2, Lock, Search, Snowflake } from 'lucide-react'
+import { Check, FileSpreadsheet, Loader2, Lock, Search, Snowflake } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -24,6 +24,7 @@ import {
   calcularPctInadimplencia,
   gruposInadimplentesPadrao,
 } from '../utils/receitaInadimplenciaCalc'
+import { exportGruposMesSelecionadosExcel } from '../utils/receitaInadimplenciaExport'
 
 type Props = {
   open: boolean
@@ -65,6 +66,8 @@ export function ReceitaInadimplenciaGrupoSheet({
   const [fechamento, setFechamento] = useState<ReceitaInadimplenciaFechamentoMes | null>(null)
   const [congelando, setCongelando] = useState(false)
   const [congelarErro, setCongelarErro] = useState<string | null>(null)
+  const [exportando, setExportando] = useState(false)
+  const [exportErro, setExportErro] = useState<string | null>(null)
   const buscaDebounced = useDebounce(busca, 250)
 
   const congelado = fechamento?.congelado ?? congeladoInicial
@@ -75,6 +78,7 @@ export function ReceitaInadimplenciaGrupoSheet({
       setBusca('')
       setFechamento(null)
       setCongelarErro(null)
+      setExportErro(null)
       return
     }
     let cancelled = false
@@ -156,6 +160,28 @@ export function ReceitaInadimplenciaGrupoSheet({
 
   const limparSelecao = () => setIncluidos(new Set())
 
+  const qtdSelecionados = useMemo(
+    () => grupos.filter((g) => incluidos.has(g.grupo_cliente) && g.inadimplencia > 0).length,
+    [grupos, incluidos],
+  )
+
+  const handleExportar = async () => {
+    setExportando(true)
+    setExportErro(null)
+    try {
+      await exportGruposMesSelecionadosExcel(grupos, incluidos, {
+        ano,
+        mes,
+        mesLabel,
+        previstoMes,
+      })
+    } catch (e) {
+      setExportErro(e instanceof Error ? e.message : 'Não foi possível exportar a planilha.')
+    } finally {
+      setExportando(false)
+    }
+  }
+
   const handleCongelar = async () => {
     const msg = congelado
       ? `Atualizar o congelamento de ${mesLabel}/${String(ano).slice(-2)} com ${formatCurrency(preview.valor)} (${formatPercent(preview.pct)})? A data será renovada.`
@@ -197,8 +223,9 @@ export function ReceitaInadimplenciaGrupoSheet({
             )}
           </div>
           <SheetDescription className="text-left">
-            Selecione os grupos que compõem a inadimplência do mês. Meses encerrados são congelados
-            automaticamente na virada do mês (seleção salva ou todos os inadimplentes).
+            Selecione os grupos que compõem a inadimplência do mês. Títulos que vencem hoje ainda
+            não entram. Meses encerrados são congelados automaticamente na virada do mês (seleção
+            salva ou todos os inadimplentes).
             {congelado && fechamento?.valor_total != null && (
               <span className="mt-1 block text-slate-600">
                 Valor congelado na evolução: {formatCurrency(fechamento.valor_total)}
@@ -242,6 +269,21 @@ export function ReceitaInadimplenciaGrupoSheet({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => void handleExportar()}
+                disabled={loading || exportando || qtdSelecionados === 0}
+              >
+                {exportando ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                )}
+                Excel ({qtdSelecionados})
+              </Button>
               {canCongelar && (
                 <Button
                   type="button"
@@ -267,8 +309,8 @@ export function ReceitaInadimplenciaGrupoSheet({
               </Button>
             </div>
           </div>
-          {congelarErro && (
-            <p className="mt-2 text-xs text-rose-600">{congelarErro}</p>
+          {(congelarErro || exportErro) && (
+            <p className="mt-2 text-xs text-rose-600">{congelarErro ?? exportErro}</p>
           )}
         </div>
 

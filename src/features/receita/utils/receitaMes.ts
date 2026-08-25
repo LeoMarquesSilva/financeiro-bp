@@ -26,6 +26,8 @@ export function isMesAtual(ano: number, mes: number, ref = new Date()): boolean 
 export type ReceitaGraficoMesOptions = {
   /** Oculta recebido/inadimplência do mês corrente (modo Resultado). */
   omitMesAtual?: boolean
+  /** Gestão à vista: inad. ao vivo no mês ainda não congelado (parcial). */
+  incluirInadParcial?: boolean
   /**
    * Oculta meses anteriores ao início da meta institucional no eixo do gráfico
    * (modo % da meta: jan–mai quando a meta começa em jun).
