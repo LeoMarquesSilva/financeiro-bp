@@ -76,6 +76,7 @@ import {
 import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
 import { agregarGestaoPdiMensal, avaliarGestaoPdi } from '../utils/gestaoPdiCalc'
 import { nomesResponsavelMatch, RACIONAL_COLUNA_RESPONSAVEL } from '../utils/responsavelMatch'
+import { antecipacaoHonorariosStatusLabel } from '../utils/opsAntecipacaoHonorarios'
 import { marcarTreinamentosDuplicados } from '../utils/treinamentosDedupe'
 import { formatTreinamentoNome } from '../utils/textFormat'
 import { filtrarPainelEfetividade } from '../utils/opsEfetividadeCobranca'
@@ -597,15 +598,14 @@ async function fetchOpsLegaisFinanceiroRacional(
     )
     linhas = baseAno
       .filter((row) => mesNoFiltro(mesDeDataIso(row.data_conclusao), mes, ano))
-      .map((row): Record<string, unknown> => {
-        const conclusao = String(row.data_conclusao ?? '')
-        const dataLimite = String(row.data_limite ?? '')
-        const dentroPrazo = Boolean(dataLimite) && conclusao <= dataLimite
-        return {
-          ...row,
-          status_prazo: dentroPrazo ? 'Dentro do prazo' : 'Fora do prazo',
-        }
-      })
+      .map((row): Record<string, unknown> => ({
+        ...row,
+        status_prazo: antecipacaoHonorariosStatusLabel(
+          row.data_conclusao,
+          row.data_limite,
+          row.data_para_conclusao,
+        ),
+      }))
       .sort((a, b) => {
         const aDentro = a['status_prazo'] === 'Dentro do prazo' ? 1 : 0
         const bDentro = b['status_prazo'] === 'Dentro do prazo' ? 1 : 0
@@ -1187,9 +1187,10 @@ export const eficienciaService = {
       .gte('data', `${ano}-01-01`)
       .lte('data', `${ano}-12-31`)
       .order('data', { ascending: true })
+      .order('nome', { ascending: true })
       .limit(500)
     if (error) throw error
-    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    const rows = ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
       sp_id: Number(r.sp_id),
       nome: formatTreinamentoNome(String(r.nome ?? '')),
       data: String(r.data ?? ''),
@@ -1202,6 +1203,11 @@ export const eficienciaService = {
           ? null
           : String(r.ministrado_por),
     }))
+    return rows.sort((a, b) => {
+      const byDate = a.data.localeCompare(b.data)
+      if (byDate !== 0) return byDate
+      return a.nome.localeCompare(b.nome, 'pt-BR')
+    })
   },
 
   async fetchGestaoPdiElegiveis(ano: number): Promise<GestaoPdiElegivelRow[]> {
