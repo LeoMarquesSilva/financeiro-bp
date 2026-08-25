@@ -203,6 +203,8 @@ export const RECEITA_CHART_LABEL = {
   barTop: 12,
   barInside: 11,
   linePoint: 12,
+  /** Rótulos empilhados no comparativo/área — menor para caber no espaço livre. */
+  linePointCluster: 10,
   minBarHeight: 14,
   minStackHeight: 20,
 } as const

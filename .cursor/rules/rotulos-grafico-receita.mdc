@@ -19,10 +19,12 @@ Ao criar ou alterar um gráfico com rótulos, **validar a ordem** com
    `RECEITA_CHART_LAYOUT.marginWithPointLabels` e
    `padding={{ top: RECEITA_CHART_LAYOUT.yAxisPaddingTopWithLabels }}` no `YAxis`.
 
-2. **Cluster no mesmo mês** — use `resolveClusteredLabelPlacement` + `lockClusterLabelOffset`.
-   Valores distantes: maior acima, menor abaixo. **Par próximo** (abr 100,37% / 100%):
-   previsto/meta **acima**; recebido **abaixo no espaço livre** — nunca um rótulo em cima
-   do outro. Se não couber no topo, reduza o offset; não empilhe os dois acima.
+2. **Cluster no mesmo mês** — gráficos de linha com 2+ séries (comparativo e área)
+   devem usar `ReceitaClusteredChartLabels` (escala real do Recharts +
+   `layoutClusterLabelPixels`). Ordem fixa das camadas, de cima para baixo:
+   **Meta → Previsto → Recebido → Inadimplência** (não ordenar por valor).
+   Colisão empurra a camada de cima para o espaço em branco do plot — não
+   amontoar no fundo do eixo. Zero não recebe rótulo.
 
 3. **Posicionamento solo** — série isolada: `resolveLabelVerticalPosition` +
    `labelYForPosition` (aí sim pode ir para baixo se não couber no topo).
@@ -68,8 +70,8 @@ import {
 ## O que evitar
 
 ```tsx
-// ❌ BAD — lado fixo por série (previsto sempre acima) — inverte quando o recebido é maior
-position={s.key === 'recebido' ? 'below' : 'above'}
+// ❌ BAD — LabelList por série com lado/offset próprio (encavala no fundo do eixo)
+<LabelList content={Label({ position: s.key === 'recebido' ? 'below' : 'above' })} />
 
 // ❌ BAD — inverter no topo um par já definido pelo cluster
 resolveLabelVerticalPosition(cy, offset, undefined, clustered.position)
@@ -77,7 +79,10 @@ resolveLabelVerticalPosition(cy, offset, undefined, clustered.position)
 // ❌ BAD — rótulo fixo acima sem checar espaço
 <text y={cy - 10}>...</text>
 
-// ✅ GOOD — cluster por valor + lock do lado
+// ✅ GOOD — um overlay com a escala real + packer de caixas
+<ReceitaClusteredChartLabels data={data} series={series} />
+
+// ✅ GOOD — colunas / série isolada: cluster por valor + lock do lado
 const clustered = resolveClusteredLabelPlacement(cluster, seriesKey, offset)
 const offsetFit = lockClusterLabelOffset(cy, clustered.offset, undefined, clustered.position)
 ```

@@ -58,14 +58,7 @@ import {
 } from '../utils/receitaMes'
 import { valorExibicaoEvolucao, aplicarSelecaoGrupos, type SelecaoGruposPorMes } from '../utils/receitaInadimplenciaCalc'
 import { buildAreaLinhaData, type AreaLinhaPoint } from '../utils/receitaGestaoVista'
-import {
-  edgeAwareAnchor,
-  labelYForPosition,
-  lockClusterLabelOffset,
-  resolveClusteredLabelPlacement,
-  resolveLabelVerticalPosition,
-  type ClusterLabelEntry,
-} from '../utils/chartLabelPlacement'
+import { ReceitaClusteredChartLabels } from './ReceitaClusteredChartLabels'
 import {
   departamentoNormKey,
   formatPercentLabel,
@@ -162,19 +155,6 @@ function formatYAxis(value: number): string {
 
 function formatYAxisPercent(value: number): string {
   return formatPercent(value)
-}
-
-function comparativoClusterAt(
-  data: ChartPoint[],
-  visible: Set<SeriesKey>,
-  index: number,
-): ClusterLabelEntry[] {
-  const p = data[index]
-  if (!p) return []
-  return SERIES.filter((s) => visible.has(s.key)).map((s) => ({
-    key: s.key,
-    value: p[s.key],
-  }))
 }
 
 function toComparativoPercentData(data: ChartPoint[]): ChartPoint[] {
@@ -357,122 +337,6 @@ const AREA_LINHA_SERIES = [
   },
 ] as const
 
-/** Rótulo do ponto da série de uma área. */
-function AreaLinhaChangeLabel({
-  color,
-  data,
-  position = 'above',
-  offset = 10,
-  stagger = 0,
-  pctOfKey,
-  secondaryPctKey,
-  dedupeFlat = false,
-  valueKey,
-  clusterKey,
-}: {
-  color: string
-  data: AreaLinhaPoint[]
-  position?: 'above' | 'below' | 'right'
-  offset?: number
-  /** Alterna a altura entre meses consecutivos para impedir colisão de rótulos completos. */
-  stagger?: number
-  /** Se informado, exibe na segunda linha o percentual do valor sobre este campo no mesmo mês. */
-  pctOfKey?: keyof AreaLinhaPoint
-  /** Percentual já calculado (ex.: inadimplência congelada ÷ previsto da área). */
-  secondaryPctKey?: keyof AreaLinhaPoint
-  dedupeFlat?: boolean
-  valueKey?: keyof AreaLinhaPoint
-  clusterKey?: 'meta' | 'previsto' | 'recebido' | 'inadimplencia'
-}) {
-  return function Label(props: LabelProps & { index?: number }) {
-    const { x, y, value, index } = props
-    if (value == null || x == null || y == null || index == null) return null
-    const num = typeof value === 'number' ? value : Number(value)
-    if (!Number.isFinite(num)) return null
-
-    if (dedupeFlat && valueKey && data.length > 1) {
-      const isFirst = index === 0
-      const isLast = index === data.length - 1
-      if (!isFirst && !isLast) {
-        const prevRaw = data[index - 1]?.[valueKey]
-        const prevNum = typeof prevRaw === 'number' ? prevRaw : null
-        if (prevNum != null && Math.abs(num - prevNum) < 0.01) return null
-      }
-    }
-
-    const text = formatCurrency(num)
-    let secondaryText: string | undefined
-    if (secondaryPctKey) {
-      const pctRaw = data[index]?.[secondaryPctKey]
-      const pctNum = typeof pctRaw === 'number' ? pctRaw : null
-      if (pctNum != null) secondaryText = formatPercent(pctNum)
-    } else if (pctOfKey) {
-      const denomRaw = data[index]?.[pctOfKey]
-      const denomNum = typeof denomRaw === 'number' ? denomRaw : null
-      if (denomNum != null && denomNum > 0) {
-        secondaryText = formatPercent((num / denomNum) * 100)
-      }
-    }
-    const cx = Number(x)
-    const cy = Number(y)
-    const anchor = edgeAwareAnchor(index, data.length)
-    const clustered = clusterKey
-      ? resolveClusteredLabelPlacement(
-          [
-            { key: 'meta', value: data[index].meta },
-            { key: 'previsto', value: data[index].previsto },
-            { key: 'recebido', value: data[index].recebido },
-            { key: 'inadimplencia', value: data[index].inadimplencia },
-          ],
-          clusterKey,
-          offset,
-          { sameSideStep: 34, pinBelow: ['inadimplencia'] },
-        )
-      : null
-    const preferred = clustered?.position ?? (position === 'below' ? 'below' : 'above')
-    const lockedOffset = clustered
-      ? lockClusterLabelOffset(cy, clustered.offset, secondaryText, clustered.position)
-      : offset + (index % 2 === 0 ? 0 : stagger)
-    const adjustedOffset =
-      clustered && clustered.position === 'below' && clusterKey === 'inadimplencia'
-        ? Math.max(lockedOffset, clustered.offset)
-        : lockedOffset
-    const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
-
-    if (position === 'right' && !clustered) {
-      const rightAnchor = anchor === 'end' ? 'end' : 'start'
-      return (
-        <ChartLabelWithBackdrop
-          text={text}
-          secondaryText={secondaryText}
-          x={rightAnchor === 'end' ? cx - 8 : cx + 8}
-          y={cy + (index % 2 === 0 ? -stagger / 2 : stagger / 2)}
-          color={color}
-          textAnchor={rightAnchor}
-          dominantBaseline="middle"
-        />
-      )
-    }
-
-    const vertical = clustered
-      ? clustered.position
-      : resolveLabelVerticalPosition(cy, adjustedOffset, secondaryText, preferred)
-    const labelY = labelYForPosition(cy, adjustedOffset, vertical)
-
-    return (
-      <ChartLabelWithBackdrop
-        text={text}
-        secondaryText={secondaryText}
-        x={labelX}
-        y={labelY}
-        color={color}
-        textAnchor={anchor}
-        dominantBaseline={vertical === 'above' ? 'auto' : 'hanging'}
-      />
-    )
-  }
-}
-
 function AreaLinhaTooltip({
   active,
   payload,
@@ -632,169 +496,6 @@ function AreaGapTooltip({
       )}
     </div>
   )
-}
-
-/**
- * Texto do rótulo com um fundo claro por trás — garante legibilidade mesmo se algo cruzar por baixo.
- */
-function ChartLabelWithBackdrop({
-  text,
-  secondaryText,
-  x,
-  y,
-  color,
-  textAnchor,
-  dominantBaseline,
-  fontSize = RECEITA_CHART_LABEL.linePoint,
-}: {
-  text: string
-  secondaryText?: string
-  x: number
-  y: number
-  color: string
-  textAnchor: 'start' | 'middle' | 'end'
-  dominantBaseline: 'auto' | 'hanging' | 'middle'
-  fontSize?: number
-}) {
-  const charWidth = fontSize * 0.54
-  const boxWidth = Math.max(text.length, secondaryText?.length ?? 0) * charWidth + 8
-  const boxHeight = secondaryText ? fontSize * 2 + 5 : fontSize + 3
-  const boxX =
-    textAnchor === 'start' ? x - 3 : textAnchor === 'end' ? x - boxWidth + 3 : x - boxWidth / 2
-  let boxY =
-    dominantBaseline === 'hanging'
-      ? y - 2
-      : dominantBaseline === 'middle'
-        ? y - boxHeight / 2
-        : y - 12
-  boxY = Math.max(RECEITA_CHART_LAYOUT.labelMinY, boxY)
-
-  return (
-    <g pointerEvents="none">
-      <rect
-        x={boxX}
-        y={boxY}
-        width={boxWidth}
-        height={boxHeight}
-        rx={3}
-        fill={color}
-        fillOpacity={0.12}
-        stroke={color}
-        strokeOpacity={0.32}
-        strokeWidth={0.75}
-        style={{ fill: color, stroke: color }}
-      />
-      <text
-        x={x}
-        y={y}
-        fill={color}
-        style={{ fill: color }}
-        textAnchor={textAnchor}
-        dominantBaseline={dominantBaseline}
-        fontSize={fontSize}
-        fontWeight={600}
-      >
-        <tspan x={x}>{text}</tspan>
-        {secondaryText && <tspan x={x} dy={fontSize}>{secondaryText}</tspan>}
-      </text>
-    </g>
-  )
-}
-
-function ComparativoDotLabel({
-  color,
-  percentMode,
-  position = 'right',
-  total,
-  offset = 10,
-  stagger = 0,
-  dedupeFlat = false,
-  getValueAt,
-  getSecondaryAt,
-  getClusterAt,
-  seriesKey,
-  fontSize,
-}: {
-  color: string
-  percentMode: boolean
-  position?: 'right' | 'above' | 'below'
-  total?: number
-  offset?: number
-  stagger?: number
-  /** Omite rótulos intermediários quando o valor é igual ao mês anterior (meta flat). */
-  dedupeFlat?: boolean
-  getValueAt?: (index: number) => number | null | undefined
-  /** Segunda linha do rótulo (ex.: % inadimplência congelada). */
-  getSecondaryAt?: (index: number) => string | undefined
-  getClusterAt?: (index: number) => ClusterLabelEntry[]
-  seriesKey?: string
-  fontSize?: number
-}) {
-  return function Label(props: LabelProps & { index?: number }) {
-    const { x, y, value, index } = props
-    if (value == null || x == null || y == null) return null
-    const num = typeof value === 'number' ? value : Number(value)
-    if (!Number.isFinite(num)) return null
-
-    if (dedupeFlat && index != null && total != null && total > 1) {
-      const isFirst = index === 0
-      const isLast = index === total - 1
-      if (!isFirst && !isLast) {
-        const prev = getValueAt?.(index - 1)
-        if (prev != null && Math.abs(num - prev) < 0.01) return null
-      }
-    }
-
-    const text = percentMode ? formatPercent(num) : formatCurrency(num)
-    if (!text) return null
-    const secondaryText = index != null ? getSecondaryAt?.(index) : undefined
-
-    const cx = Number(x)
-    const cy = Number(y)
-    const clustered =
-      index != null && seriesKey && getClusterAt
-        ? resolveClusteredLabelPlacement(getClusterAt(index), seriesKey, offset)
-        : null
-    const preferred = clustered?.position ?? (position === 'below' ? 'below' : 'above')
-    const adjustedOffset = clustered
-      ? lockClusterLabelOffset(cy, clustered.offset, secondaryText, clustered.position)
-      : offset + (index != null && index % 2 === 1 ? stagger : 0)
-    const anchor = edgeAwareAnchor(index, total)
-    const labelX = anchor === 'start' ? cx + 8 : anchor === 'end' ? cx - 8 : cx
-
-    if (position === 'above' || position === 'below' || clustered) {
-      const vertical = clustered
-        ? clustered.position
-        : resolveLabelVerticalPosition(cy, adjustedOffset, secondaryText, preferred)
-      const labelY = labelYForPosition(cy, adjustedOffset, vertical)
-      return (
-        <ChartLabelWithBackdrop
-          text={text}
-          secondaryText={secondaryText}
-          x={labelX}
-          y={labelY}
-          color={color}
-          textAnchor={anchor}
-          dominantBaseline={vertical === 'above' ? 'auto' : 'hanging'}
-          fontSize={fontSize}
-        />
-      )
-    }
-
-    const rightAnchor = anchor === 'end' ? 'end' : 'start'
-    return (
-      <ChartLabelWithBackdrop
-        text={text}
-        secondaryText={secondaryText}
-        x={rightAnchor === 'end' ? cx - 8 : cx + 8}
-        y={cy}
-        color={color}
-        textAnchor={rightAnchor}
-        dominantBaseline="middle"
-        fontSize={fontSize}
-      />
-    )
-  }
 }
 
 /** Ponto customizado: o `dot` objeto do Recharts some no último valor antes de `null`. */
@@ -1817,21 +1518,7 @@ export function ReceitaComparativoChart({
                       : { r: 5, fill: seriesColor, stroke: '#fff', strokeWidth: 2 }
                   }
                   connectNulls={false}
-                >
-                  {(s.key === 'previsto' || s.key === 'recebido') && (
-                    <LabelList
-                      dataKey={s.key}
-                      content={AreaLinhaChangeLabel({
-                        color: seriesColor,
-                        data: areaLinhaData,
-                        position: s.key === 'recebido' ? 'below' : 'above',
-                        offset: s.key === 'previsto' ? 16 : 14,
-                        stagger: 18,
-                        clusterKey: s.key,
-                      })}
-                    />
-                  )}
-                </Area>
+                />
                 )
               })}
 
@@ -1846,25 +1533,36 @@ export function ReceitaComparativoChart({
                   dot={lineSeriesDot(s.color, 3)}
                   activeDot={lineSeriesDot(s.color, 4)}
                   connectNulls={false}
-                >
-                  {(s.key === 'meta' || s.key === 'inadimplencia') && (
-                    <LabelList
-                      dataKey={s.key}
-                      content={AreaLinhaChangeLabel({
-                        color: s.color,
-                        data: areaLinhaData,
-                        position: 'above',
-                        offset: s.key === 'inadimplencia' ? 22 : 20,
-                        stagger: s.key === 'inadimplencia' ? 18 : 14,
-                        secondaryPctKey: s.key === 'inadimplencia' ? 'inadimplenciaPct' : undefined,
-                        dedupeFlat: s.key === 'meta',
-                        valueKey: s.key === 'meta' ? 'meta' : undefined,
-                        clusterKey: s.key === 'meta' ? 'meta' : 'inadimplencia',
-                      })}
-                    />
-                  )}
-                </Line>
+                />
               ))}
+              <ReceitaClusteredChartLabels
+                data={areaLinhaData}
+                series={[
+                  {
+                    key: 'meta',
+                    color: RECEITA_COLORS.meta.hex,
+                    getValue: (row) => row.meta,
+                    dedupeFlat: true,
+                  },
+                  {
+                    key: 'previsto',
+                    color: RECEITA_COLORS.previsto.hex,
+                    getValue: (row) => row.previsto,
+                  },
+                  {
+                    key: 'recebido',
+                    color: RECEITA_COLORS.recebido.hex,
+                    getValue: (row) => row.recebido,
+                  },
+                  {
+                    key: 'inadimplencia',
+                    color: RECEITA_COLORS.inadimplencia.hex,
+                    getValue: (row) => row.inadimplencia,
+                    getSecondary: (row) =>
+                      row.inadimplenciaPct != null ? formatPercent(row.inadimplenciaPct) : undefined,
+                  },
+                ]}
+              />
             </ComposedChart>
           </ResponsiveContainer>
           </div>
@@ -2214,21 +1912,7 @@ export function ReceitaComparativoChart({
                     )
                   }}
                   connectNulls={false}
-                >
-                  <LabelList
-                    dataKey={s.key}
-                    content={ComparativoDotLabel({
-                      color: s.color,
-                      percentMode,
-                      position: 'above',
-                      total: chartData.length,
-                      offset: s.key === 'previsto' ? 18 : 12,
-                      getClusterAt: (i) => comparativoClusterAt(chartData, visibleSeries, i),
-                      seriesKey: s.key,
-                      fontSize: apresentacaoMode ? 9 : RECEITA_CHART_LABEL.linePoint,
-                    })}
-                  />
-                </Area>
+                />
               ))}
 
               {SERIES.filter((s) => s.type === 'line' && visibleSeries.has(s.key)).map((s) => (
@@ -2324,36 +2008,26 @@ export function ReceitaComparativoChart({
                       : lineSeriesDot(s.color, 4)
                   }
                   connectNulls={s.key !== 'inadimplencia'}
-                >
-                  <LabelList
-                    dataKey={s.key}
-                    content={ComparativoDotLabel({
-                      color: s.color,
-                      percentMode,
-                      position: 'above',
-                      total: chartData.length,
-                      offset:
-                        s.key === 'meta'
-                          ? 28
-                          : s.key === 'inadimplencia'
-                            ? 26
-                            : 18,
-                      getClusterAt: (i) => comparativoClusterAt(chartData, visibleSeries, i),
-                      seriesKey: s.key,
-                      fontSize: apresentacaoMode ? 9 : RECEITA_CHART_LABEL.linePoint,
-                      getSecondaryAt:
-                        !percentMode && s.key === 'inadimplencia'
-                          ? (i) => {
-                              const mes = chartData[i]?.mes
-                              if (mes == null) return undefined
-                              const pct = inadimplenciaCongeladaPorMes.get(mes)?.pct
-                              return pct != null ? formatPercent(pct) : undefined
-                            }
-                          : undefined,
-                    })}
-                  />
-                </Line>
+                />
               ))}
+              <ReceitaClusteredChartLabels
+                data={chartData}
+                percentMode={percentMode}
+                fontSize={apresentacaoMode ? 9 : RECEITA_CHART_LABEL.linePointCluster}
+                series={SERIES.filter((s) => visibleSeries.has(s.key)).map((s) => ({
+                  key: s.key,
+                  color: s.color,
+                  getValue: (row: ChartPoint) => row[s.key],
+                  dedupeFlat: s.key === 'meta',
+                  getSecondary:
+                    !percentMode && s.key === 'inadimplencia'
+                      ? (row: ChartPoint) => {
+                          const pct = inadimplenciaCongeladaPorMes.get(row.mes)?.pct
+                          return pct != null ? formatPercent(pct) : undefined
+                        }
+                      : undefined,
+                }))}
+              />
             </ComposedChart>
           </ResponsiveContainer>
           </div>
