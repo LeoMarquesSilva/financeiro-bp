@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { TrendingUp, RefreshCw, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { formatDateTime } from '@/shared/utils/format'
 import { useReceitaMetas } from '../hooks/useReceitaMetas'
 import { useReceitaDepartamentoCores } from '../hooks/useReceitaDepartamentoCores'
 import { useReceitaDashboard } from '../hooks/useReceitaDashboard'
+import { useReceitaUltimaAtualizacao } from '../hooks/useReceitaUltimaAtualizacao'
 import { ReceitaConfiguracoesSheet } from '../components/ReceitaConfiguracoesSheet'
 import { ReceitaComparativoChart } from '../components/ReceitaComparativoChart'
 import { ReceitaComparativoColunasChart } from '../components/ReceitaComparativoColunasChart'
@@ -27,6 +29,7 @@ export function ReceitaPage() {
     isUpdating: coresUpdating,
   } = useReceitaDepartamentoCores()
   const { data, isLoading: dashLoading, error } = useReceitaDashboard(metas)
+  const { data: ultimaAtualizacao } = useReceitaUltimaAtualizacao()
 
   const coresParaGrafico = departamentoCores ?? RECEITA_DEPARTAMENTO_CORES
 
@@ -72,16 +75,27 @@ export function ReceitaPage() {
             Receita
           </h1>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 gap-2 self-start"
-          onClick={() => setConfigOpen(true)}
-        >
-          <Settings2 className="h-4 w-4" aria-hidden />
-          Configurações
-        </Button>
+        <div className="flex shrink-0 flex-wrap items-center gap-3 self-start">
+          {ultimaAtualizacao && (
+            <span
+              className="flex items-center gap-1.5 text-xs text-slate-400"
+              title="Última carga VIOS (parcelas e itens financeiros)"
+            >
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+              Atualizado em {formatDateTime(ultimaAtualizacao)}
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setConfigOpen(true)}
+          >
+            <Settings2 className="h-4 w-4" aria-hidden />
+            Configurações
+          </Button>
+        </div>
       </header>
 
       <ReceitaConfiguracoesSheet

@@ -49,6 +49,16 @@ function mapRecebidoItensRows(data: unknown): ReceitaRecebidoItemRow[] {
 }
 
 export const receitaService = {
+  async fetchUltimaAtualizacao(): Promise<string | null> {
+    const { data, error } = await supabase.rpc(
+      'receita_ultima_atualizacao' as never,
+      {} as never,
+    )
+    if (error) throw error
+    if (data == null) return null
+    return String(data)
+  },
+
   async fetchTotaisMensais(
     ano: number,
   ): Promise<Map<number, { recebido: number; previsto: number; encargos: number }>> {
