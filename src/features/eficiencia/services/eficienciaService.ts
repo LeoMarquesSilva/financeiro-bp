@@ -550,6 +550,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
     ],
     colunas: [
       { key: 'etapa', label: 'Etapa', virtual: true },
+      { key: 'ci', label: 'CI' },
       { key: 'tarefa', label: 'Tarefa' },
       { key: 'e_tarefa_kpi', label: 'KPI', virtual: true },
       { key: 'competencia', label: 'Competência', virtual: true },
