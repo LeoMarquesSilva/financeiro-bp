@@ -17,6 +17,15 @@ export type IndicadoresResultadoFinanceiroMes = {
   previsto: number | null
 }
 
+/** Uma participação em treinamento — aba Relatório de Treinamentos do Excel. */
+export type TreinamentoParticipacaoExport = {
+  area: string | null
+  treinamento: string | null
+  colaborador: string
+  data: string | null
+  duracao_minutos: number
+}
+
 export type IndicadoresResultadoMes = {
   ano: number
   mes: number
@@ -27,6 +36,8 @@ export type IndicadoresResultadoMes = {
   vistagemRisco: RacionalResultado
   vistagemNormal: RacionalResultado
   desenvolvimento: RacionalResultado
+  /** Presenças do ano (nome + horas). Fonte da aba de treinamentos, não o racional por pessoa. */
+  treinamentosParticipacoes: TreinamentoParticipacaoExport[]
   /** Acumulado anual (horas + meta) — mesmo KPI do Overview. */
   desenvolvimentoAnual: TreinamentosAnualRow | null
   gestaoPdiMensal: GestaoPdiMesRow | null

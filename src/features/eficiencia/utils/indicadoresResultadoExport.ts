@@ -47,11 +47,42 @@ function pct(num: number, den: number): number | null {
 }
 
 /** Minutos → `HH:MM` (ex.: 90 → `01:30`). */
-function formatMinutosComoHoras(minutos: number): string {
+export function formatMinutosComoHoras(minutos: number): string {
   const total = Math.max(0, Math.round(minutos))
   const h = Math.floor(total / 60)
   const m = total % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function mesNomeFromData(dataStr: string, mesFallback: number): string {
+  const mesNum = dataStr.length >= 7 ? Number(dataStr.slice(5, 7)) : mesFallback
+  return (MESES_EFICIENCIA[mesNum - 1] ?? '').toLowerCase()
+}
+
+/** Linhas da aba Relatório de Treinamentos (nome + horas por participação). */
+export function mapTreinamentosResultadoRows(
+  rows: ReadonlyArray<{
+    area?: unknown
+    treinamento?: unknown
+    treinamentos?: unknown
+    colaborador?: unknown
+    data?: unknown
+    duracao_minutos?: unknown
+    horas_realizadas?: unknown
+  }>,
+  mesFallback: number,
+): CellValue[][] {
+  return rows.map((row) => {
+    const treinamento = String(row.treinamento ?? row.treinamentos ?? '').trim()
+    const min = Number(row.duracao_minutos ?? row.horas_realizadas) || 0
+    return [
+      String(row.area ?? ''),
+      treinamento || 'Treinamento não informado',
+      String(row.colaborador ?? ''),
+      mesNomeFromData(String(row.data ?? ''), mesFallback),
+      formatMinutosComoHoras(min),
+    ]
+  })
 }
 
 /** Ajusta largura das colunas ao conteúdo (texto formatado da célula). */
@@ -765,18 +796,12 @@ export async function exportIndicadoresResultadoExcel(
     styleTitle(ws, 1, 5, `Relatório de Treinamentos — ${data.ano}`)
     const headers = ['Área', 'Treinamento', 'Participante', 'Mês', 'Horas']
     styleHeaderRow(ws, 3, headers)
-    data.desenvolvimento.linhas.forEach((row, i) => {
-      const min = Number(row.duracao_minutos) || 0
-      const dataStr = String(row.data ?? '')
-      const mesNum = dataStr.length >= 7 ? Number(dataStr.slice(5, 7)) : data.mes
-      const mesNome = (MESES_EFICIENCIA[mesNum - 1] ?? '').toLowerCase()
-      const values: CellValue[] = [
-        String(row.area ?? ''),
-        String(row.treinamento ?? ''),
-        String(row.colaborador ?? ''),
-        mesNome,
-        formatMinutosComoHoras(min),
-      ]
+    const fonte =
+      data.treinamentosParticipacoes.length > 0
+        ? data.treinamentosParticipacoes
+        : data.desenvolvimento.linhas
+    const exportRows = mapTreinamentosResultadoRows(fonte, data.mes)
+    exportRows.forEach((values, i) => {
       values.forEach((v, c) => {
         styleDataCell(ws.getCell(4 + i, c + 1), v, {
           zebra: i % 2 === 1,
@@ -786,7 +811,7 @@ export async function exportIndicadoresResultadoExcel(
     })
     ws.autoFilter = {
       from: { row: 3, column: 1 },
-      to: { row: 3 + data.desenvolvimento.linhas.length, column: 5 },
+      to: { row: 3 + exportRows.length, column: 5 },
     }
     ws.views = [{ state: 'frozen', ySplit: 3, showGridLines: false }]
     autoFitColumns(ws, 1, 5)

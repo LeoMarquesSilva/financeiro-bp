@@ -14,6 +14,7 @@ import {
   OPS_LEGAIS_FECHAMENTO_TAREFAS,
   areaFiltroParaIndicador,
   isAgendamentoVistagemIndisponivelPorArea,
+  isCargoExcluidoDesenvolvimento,
   mesNoFiltro,
   mesesEfetivosFiltro,
   rangePeriodoFiltro,
@@ -66,7 +67,10 @@ import type {
   ColaboradorFeriasRow,
   UltimaAtualizacaoRow,
 } from '../types/eficiencia.types'
-import type { IndicadoresResultadoMes } from '../types/indicadoresResultado.types'
+import type {
+  IndicadoresResultadoMes,
+  TreinamentoParticipacaoExport,
+} from '../types/indicadoresResultado.types'
 import {
   buildResumoAmostra,
   mapSlaRowToFatalExcludente,
@@ -103,6 +107,7 @@ import {
   buildRacionalBaseQuery,
   buildRacionalSelect,
   fetchDesenvolvimentoRacional,
+  normalizeNomeChave,
   fetchEficienciaProtocoloRacionalResumo,
   fetchOpsLegaisCadastroRacionalResumo,
   fetchOpsLegaisEficienciaProtocoloRacionalResumo,
@@ -1295,6 +1300,61 @@ export const eficienciaService = {
     )
   },
 
+  /**
+   * Presenças do ano com área do turnover — uma linha por participação.
+   * Usado no Excel Indicadores Resultado (não no racional agregado por pessoa).
+   */
+  async fetchTreinamentosParticipacoes(ano: number): Promise<TreinamentoParticipacaoExport[]> {
+    const itens = await this.fetchTreinamentosItens(ano)
+    const { data: turnoverRows, error } = await supabase
+      .from('sp_turnover')
+      .select('nome, area, cargo, admissao, desligamento')
+      .lte('admissao', `${ano}-12-31`)
+      .or(`desligamento.is.null,desligamento.gte.${ano + 1}-01-01`)
+    if (error) throw error
+
+    type TvRow = {
+      nome: string | null
+      area: string | null
+      cargo: string | null
+      admissao: string | null
+    }
+    const porNome = new Map<string, TvRow>()
+    for (const row of (turnoverRows ?? []) as TvRow[]) {
+      if (isCargoExcluidoDesenvolvimento(row.cargo)) continue
+      const key = normalizeNomeChave(String(row.nome ?? ''))
+      if (!key) continue
+      const prev = porNome.get(key)
+      if (!prev || String(row.admissao ?? '') > String(prev.admissao ?? '')) {
+        porNome.set(key, row)
+      }
+    }
+
+    const nomesElegiveis = new Set<string>()
+    for (const [key, row] of porNome) {
+      if (row.area == null || row.area !== 'Tributário') nomesElegiveis.add(key)
+    }
+
+    return itens
+      .filter((item) => nomesElegiveis.has(normalizeNomeChave(item.colaborador)))
+      .map((item) => ({
+        area: porNome.get(normalizeNomeChave(item.colaborador))?.area ?? null,
+        treinamento: item.treinamento,
+        colaborador: item.colaborador,
+        data: item.data,
+        duracao_minutos: Number(item.duracao_minutos) || 0,
+      }))
+      .sort(
+        (a, b) =>
+          String(a.area ?? '').localeCompare(String(b.area ?? ''), 'pt-BR') ||
+          a.colaborador.localeCompare(b.colaborador, 'pt-BR', { sensitivity: 'base' }) ||
+          String(a.data ?? '').localeCompare(String(b.data ?? '')) ||
+          String(a.treinamento ?? '').localeCompare(String(b.treinamento ?? ''), 'pt-BR', {
+            sensitivity: 'base',
+          }),
+      )
+  },
+
   /** Sessões com data futura (lista mestre SharePoint). */
   async fetchTreinamentosSessoesFuturas(ano: number): Promise<TreinamentoSessaoFuturaRow[]> {
     const hoje = new Date().toISOString().slice(0, 10)
@@ -1858,7 +1918,7 @@ export const eficienciaService = {
       agendamento,
       vistagemRisco,
       vistagemNormal,
-      desenvolvimento,
+      treinamentosParticipacoes,
       gestaoPdiMensalRows,
       gestaoPdiDetalhe,
       retencaoAnual,
@@ -1871,7 +1931,7 @@ export const eficienciaService = {
       this.fetchRacionalParaExport('sla_ciencia_agendamentos', ano, null, mesFiltro),
       this.fetchRacionalParaExport('sla_vistagem_risco', ano, null, mesFiltro),
       this.fetchRacionalParaExport('sla_vistagem_normal', ano, null, mesFiltro),
-      this.fetchRacionalParaExport('desenvolvimento_equipe', ano, null, null),
+      this.fetchTreinamentosParticipacoes(ano),
       this.fetchGestaoPdiMensal(ano, null),
       this.fetchGestaoPdiDetalhe(ano, mesFiltro, null),
       this.fetchTurnoverAnual(ano, null),
@@ -1923,7 +1983,18 @@ export const eficienciaService = {
       agendamento,
       vistagemRisco,
       vistagemNormal,
-      desenvolvimento,
+      desenvolvimento: {
+        colunas: [
+          { key: 'area', label: 'Área' },
+          { key: 'treinamento', label: 'Treinamento' },
+          { key: 'colaborador', label: 'Participante' },
+          { key: 'data', label: 'Data' },
+          { key: 'duracao_minutos', label: 'Duração (min)' },
+        ],
+        linhas: treinamentosParticipacoes,
+        truncado: false,
+      },
+      treinamentosParticipacoes,
       desenvolvimentoAnual,
       gestaoPdiMensal,
       gestaoPdiDetalhe,
