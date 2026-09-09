@@ -1,4 +1,5 @@
 import type { MesFiltroEficiencia } from '../constants'
+import type { ResponsavelOption } from '../hooks/useResponsaveisOptions'
 import { AreaFilterButtons } from './AreaFilterButtons'
 import { ResponsavelFilter } from './ResponsavelFilter'
 
@@ -15,6 +16,9 @@ type Props = {
   onResponsavelChange: (nome: string | null) => void
   responsavelEnabled?: boolean
   responsavelHintDisabled?: string
+  /** Lista fechada de responsáveis (ex.: elegíveis do PDI). */
+  responsavelOptions?: ResponsavelOption[]
+  responsavelOptionsLoading?: boolean
 }
 
 /**
@@ -33,6 +37,8 @@ export function EficienciaDetailFilters({
   onResponsavelChange,
   responsavelEnabled = true,
   responsavelHintDisabled,
+  responsavelOptions,
+  responsavelOptionsLoading,
 }: Props) {
   return (
     <div className="space-y-2">
@@ -53,6 +59,8 @@ export function EficienciaDetailFilters({
         onChange={onResponsavelChange}
         enabled={responsavelEnabled}
         hintDisabled={responsavelHintDisabled}
+        options={responsavelOptions}
+        optionsLoading={responsavelOptionsLoading}
       />
     </div>
   )

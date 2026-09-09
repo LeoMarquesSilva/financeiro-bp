@@ -23,7 +23,11 @@ type TurnoverRow = {
  * Fonte: sp_turnover ativos no ano + áreas do painel jurídico.
  * Com `area`, lista só quem está nessa área; `null` = todas.
  */
-export function useResponsaveisOptions(ano: number, area: string | null = null) {
+export function useResponsaveisOptions(
+  ano: number,
+  area: string | null = null,
+  enabled = true,
+) {
   const { usuarios: avatarCatalog, loading: loadingAvatars } = useBpUsuariosAvatar()
 
   const { data, isLoading, error } = useQuery({
@@ -64,6 +68,7 @@ export function useResponsaveisOptions(ano: number, area: string | null = null) 
         .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     },
     staleTime: 1000 * 60 * 10,
+    enabled,
   })
 
   const baseOptions: ResponsavelOption[] = data ?? []

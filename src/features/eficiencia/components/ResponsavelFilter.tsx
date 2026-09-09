@@ -21,6 +21,9 @@ type Props = {
   /** Quando false, o controle fica desabilitado (indicador sem pessoa). */
   enabled?: boolean
   hintDisabled?: string
+  /** Se informado, substitui a lista padrão (turnover jurídico). */
+  options?: ResponsavelOption[]
+  optionsLoading?: boolean
 }
 
 export function ResponsavelFilter({
@@ -30,12 +33,16 @@ export function ResponsavelFilter({
   onChange,
   enabled = true,
   hintDisabled,
+  options: optionsOverride,
+  optionsLoading = false,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [busca, setBusca] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const { options, loading } = useResponsaveisOptions(ano, area)
+  const hook = useResponsaveisOptions(ano, area, optionsOverride == null)
+  const options = optionsOverride ?? hook.options
+  const loading = optionsOverride != null ? optionsLoading : hook.loading
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
 

@@ -23,9 +23,10 @@ import {
   mesesColunasGestaoPdiPessoas,
 } from '../utils/gestaoPdiCalc'
 import { exportGestaoPdiDesviosExcel } from '../utils/gestaoPdiExport'
-import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
+import { formatPessoaNome, resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
-import { filtrarPorResponsavel } from '../utils/responsavelMatch'
+import { filtrarPorResponsavel, normalizeResponsavelChave } from '../utils/responsavelMatch'
+import type { ResponsavelOption } from '../hooks/useResponsaveisOptions'
 import { toPriMaiuscula } from '../utils/textFormat'
 import { GestaoPdiPessoasTable } from './GestaoPdiPessoasTable'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
@@ -78,6 +79,20 @@ export function GestaoPdiTab({
     if (mesFiltro == null) return undefined
     return new Set(mesesPessoas.filter((m) => mesNoFiltro(m, mesFiltro, ano)))
   }, [mesFiltro, mesesPessoas, ano])
+  const responsavelOptions = useMemo((): ResponsavelOption[] => {
+    const byKey = new Map<string, ResponsavelOption>()
+    for (const row of detalhe) {
+      const nome = String(row.colaborador ?? '').trim()
+      const chave = normalizeResponsavelChave(nome)
+      if (!chave || byKey.has(chave)) continue
+      byKey.set(chave, {
+        nome: formatPessoaNome(nome),
+        area: row.area,
+        nomeChave: chave,
+      })
+    }
+    return [...byKey.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  }, [detalhe])
   const {
     chartData: evolucaoResp,
     acumulado: acumResp,
@@ -141,6 +156,8 @@ export function GestaoPdiTab({
         onResponsavelChange={onResponsavelChange ?? (() => undefined)}
         responsavelEnabled={responsavelEnabled}
         responsavelHintDisabled={responsavelHintDisabled}
+        responsavelOptions={responsavelOptions}
+        responsavelOptionsLoading={loading}
       />
 
       <GestaoPdiPessoasTable
