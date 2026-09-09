@@ -30,6 +30,13 @@ export interface RankingGrupoClienteRow {
   [key: string]: string | number | undefined
 }
 
+export interface RankingTipoInconsistenciaRow {
+  tipo_inconsistencia: string
+  qtd_inconsistencia: number
+  pct_do_total: number
+  [key: string]: string | number | undefined
+}
+
 export interface JustificativaFatalRow {
   justificativa: string
   qtd: number

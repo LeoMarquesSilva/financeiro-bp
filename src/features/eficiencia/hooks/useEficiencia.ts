@@ -14,6 +14,7 @@ import type {
   OpsLegaisTarefasRankingRow,
   RankingUsuarioRow,
   RankingGrupoClienteRow,
+  RankingTipoInconsistenciaRow,
   SlaProtocoloMesRow,
   SlaProtocoloDiaRow,
   SlaVistagemMesRow,
@@ -214,6 +215,19 @@ export function useEficienciaProtocoloRankingGrupo(
     queryFn: () => eficienciaService.fetchEficienciaProtocoloRankingGrupo(ano, mesFiltro, area),
   })
   const rows: RankingGrupoClienteRow[] = data ?? []
+  return { data: rows, loading: isLoading, error }
+}
+
+export function useEficienciaProtocoloRankingTipo(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  area: string | null = null,
+) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['eficiencia', 'protocolo-ranking-tipo', ano, mesFiltro, area],
+    queryFn: () => eficienciaService.fetchEficienciaProtocoloRankingTipo(ano, mesFiltro, area),
+  })
+  const rows: RankingTipoInconsistenciaRow[] = data ?? []
   return { data: rows, loading: isLoading, error }
 }
 

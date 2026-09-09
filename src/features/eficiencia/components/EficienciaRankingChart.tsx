@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { BarChart3, Building2 } from 'lucide-react'
+import { BarChart3, Building2, Tags } from 'lucide-react'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import { getInitials } from '@/shared/components/Avatar'
 import { formatPercent } from '@/shared/utils/format'
@@ -60,6 +60,11 @@ type Props = {
   onRacionalClick?: () => void
   /** Alterna visão Responsável ↔ Grupo Cliente (botão ao lado do Racional). */
   grupoClienteToggle?: {
+    active: boolean
+    onToggle: () => void
+  }
+  /** Alterna visão Responsável ↔ Por Tipo (Inconsistência - Jurídico). */
+  porTipoToggle?: {
     active: boolean
     onToggle: () => void
   }
@@ -279,6 +284,7 @@ export function EficienciaRankingChart({
   compact: compactProp,
   onRacionalClick,
   grupoClienteToggle,
+  porTipoToggle,
   showAvatars = false,
   className,
 }: Props) {
@@ -454,6 +460,23 @@ export function EficienciaRankingChart({
             >
               <Building2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
               Grupo Cliente
+            </button>
+          )}
+          {porTipoToggle && (
+            <button
+              type="button"
+              onClick={porTipoToggle.onToggle}
+              aria-pressed={porTipoToggle.active}
+              className={cn(
+                'flex w-auto shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold shadow-sm transition-colors',
+                compact && 'h-7 gap-1 px-2 py-1 text-[11px]',
+                porTipoToggle.active
+                  ? 'border-violet-300 bg-violet-50 text-violet-800 hover:border-violet-400 hover:bg-violet-100'
+                  : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50',
+              )}
+            >
+              <Tags className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Por Tipo
             </button>
           )}
           <ChartCopyButton

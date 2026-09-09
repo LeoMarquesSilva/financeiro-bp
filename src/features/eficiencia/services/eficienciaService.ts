@@ -46,6 +46,7 @@ import type {
   JustificativaFatalRow,
   RankingUsuarioRow,
   RankingGrupoClienteRow,
+  RankingTipoInconsistenciaRow,
   SlaProtocoloMesRow,
   SlaProtocoloDiaRow,
   SlaVistagemDiaRow,
@@ -1000,6 +1001,20 @@ export const eficienciaService = {
     const meses = mesesEfetivosFiltro(mesFiltro, ano)
     if (meses && meses.length === 0) return []
     return rpc('eficiencia_protocolo_ranking_inconsistencia_grupo', {
+      p_ano: ano,
+      p_meses: meses,
+      p_area: area,
+    })
+  },
+
+  async fetchEficienciaProtocoloRankingTipo(
+    ano: number,
+    mesFiltro: MesFiltroEficiencia = null,
+    area: string | null = null,
+  ): Promise<RankingTipoInconsistenciaRow[]> {
+    const meses = mesesEfetivosFiltro(mesFiltro, ano)
+    if (meses && meses.length === 0) return []
+    return rpc('eficiencia_protocolo_ranking_inconsistencia_tipo', {
       p_ano: ano,
       p_meses: meses,
       p_area: area,
