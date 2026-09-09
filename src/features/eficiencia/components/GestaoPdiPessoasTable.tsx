@@ -44,17 +44,6 @@ export function GestaoPdiPessoasTable({
 
   return (
     <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
-      <div className="mb-3 text-center">
-        <h2 className="text-sm font-semibold text-slate-900">
-          {toPriMaiuscula('Por pessoa')}
-        </h2>
-        <p className="mt-0.5 text-xs text-slate-500">
-          {toPriMaiuscula(
-            '100% = apta no mês · 0% = desvio · — = sem dado. Junho é baseline (100%).',
-          )}
-        </p>
-      </div>
-
       {loading ? (
         <div className="h-40 animate-pulse rounded-lg bg-slate-100" />
       ) : linhas.length === 0 ? (
