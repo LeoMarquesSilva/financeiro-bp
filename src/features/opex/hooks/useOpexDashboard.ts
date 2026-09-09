@@ -8,9 +8,11 @@ export function useOpexDashboard(
   ano: number,
   meses?: number[] | null,
   planoFiltro?: OpexPlanoFiltroState,
+  options?: { enabled?: boolean },
 ) {
   return useQuery({
     queryKey: ['opex', 'dashboard', ano, mesesFiltroKey(meses ?? []), planoFiltroKey(planoFiltro ?? { gruposExcluidos: [], planosExcluidos: [] })],
     queryFn: () => opexService.fetchDashboard(ano, meses, planoFiltro),
+    enabled: options?.enabled ?? true,
   })
 }

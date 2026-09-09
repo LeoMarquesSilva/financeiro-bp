@@ -4,6 +4,7 @@ export const OPEX_COLORS = {
   realizado: { hex: '#059669', text: 'text-emerald-700', bg: 'bg-emerald-50' },
   projetado: { hex: '#f59e0b', text: 'text-amber-700', bg: 'bg-amber-50' },
   fixo: { hex: '#7c3aed', text: 'text-violet-700', bg: 'bg-violet-50' },
+  anoAnterior: { hex: '#64748b', text: 'text-slate-600', bg: 'bg-slate-100' },
 } as const
 
 export const MESES_CURTOS = [

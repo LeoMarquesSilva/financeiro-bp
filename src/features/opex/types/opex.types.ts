@@ -159,3 +159,11 @@ export type OpexDashboard = {
   evolucao: OpexMesRow[]
   grupos: OpexGrupoRow[]
 }
+
+export type OpexGrupoDePara = {
+  id: string
+  anoOrigem: number
+  nomeOrigem: string
+  anoDestino: number
+  nomeDestino: string
+}

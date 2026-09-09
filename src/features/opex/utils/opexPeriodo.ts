@@ -42,3 +42,16 @@ export function mesesYtd(mesAtual: number): number[] {
   if (mesAtual <= 0) return []
   return Array.from({ length: mesAtual }, (_, i) => i + 1)
 }
+
+/** Meses do KPI atual, para buscar o mesmo recorte no ano anterior (não o ano cheio). */
+export function mesesComparacaoYoY(mesesFiltro: number[], mesAtual: number): number[] {
+  if (mesesFiltro.length) return [...mesesFiltro].sort((a, b) => a - b)
+  return mesesYtd(mesAtual)
+}
+
+/** Variação % do realizado atual vs o mesmo período do ano anterior. Sem base → null. */
+export function yoyPct(atual: number, anterior: number): number | null {
+  if (!Number.isFinite(atual) || !Number.isFinite(anterior)) return null
+  if (anterior === 0) return atual === 0 ? 0 : null
+  return ((atual - anterior) / anterior) * 100
+}

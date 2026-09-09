@@ -5,14 +5,16 @@ import { cn } from '@/lib/utils'
 import { useOpexDashboard } from '../hooks/useOpexDashboard'
 import { OpexKpis } from '../components/OpexKpis'
 import { OpexPrevistoRealizadoChart } from '../components/OpexPrevistoRealizadoChart'
+import { OpexInsights } from '../components/OpexInsights'
 import { OpexProjecaoFixas } from '../components/OpexProjecaoFixas'
 import { OpexGruposTable } from '../components/OpexGruposTable'
 import { OpexDepartamentosChart } from '../components/OpexDepartamentosChart'
 import { OpexMetasEstrategicas } from '../components/OpexMetasEstrategicas'
 import { OpexOrcamentoSection } from '../components/OpexOrcamentoSection'
+import { OpexDeParaSection } from '../components/OpexDeParaSection'
 import { OpexPeriodoSelector } from '../components/OpexPeriodoSelector'
 import { OpexPlanoContasFiltro } from '../components/OpexPlanoContasFiltro'
-import { formatPeriodoOpex, temFiltroMeses } from '../utils/opexPeriodo'
+import { formatPeriodoOpex, mesesComparacaoYoY, temFiltroMeses } from '../utils/opexPeriodo'
 import { loadOpexPlanoFiltro, type OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 
 const ANOS = [2025, 2026, 2027]
@@ -22,24 +24,24 @@ export function OpexPage() {
   const [mesesFiltro, setMesesFiltro] = useState<number[]>([])
   const [soFixas, setSoFixas] = useState(false)
   const [planoFiltro, setPlanoFiltro] = useState<OpexPlanoFiltroState>(() => loadOpexPlanoFiltro(ano))
-  const [sortGruposVariacaoTrigger, setSortGruposVariacaoTrigger] = useState(0)
   const { data, isLoading, error, refetch, isFetching } = useOpexDashboard(ano, mesesFiltro, planoFiltro)
+  const mesAtual = data?.mes_atual ?? (new Date().getFullYear() === ano ? new Date().getMonth() + 1 : 12)
+  const mesesYoY = mesesComparacaoYoY(mesesFiltro, mesAtual)
+  const { data: dataAnoAnterior, isLoading: loadingAnoAnterior } = useOpexDashboard(
+    ano - 1,
+    mesesYoY,
+    planoFiltro,
+    { enabled: mesesYoY.length > 0 },
+  )
 
   useEffect(() => {
     setPlanoFiltro(loadOpexPlanoFiltro(ano))
   }, [ano])
 
-  const handleOrdenarGruposPorVariacao = () => {
-    setSortGruposVariacaoTrigger((n) => n + 1)
-    document.getElementById('opex-grupos-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
   const handleAnoChange = (y: number) => {
     setAno(y)
     setMesesFiltro([])
   }
-
-  const mesAtual = data?.mes_atual ?? (new Date().getFullYear() === ano ? new Date().getMonth() + 1 : 12)
 
   return (
     <div className="space-y-8">
@@ -100,6 +102,8 @@ export function OpexPage() {
 
       <OpexOrcamentoSection ano={ano} />
 
+      <OpexDeParaSection anoDestino={ano} />
+
       <OpexKpis
         kpis={data?.kpis ?? {
           realizado_ytd: 0,
@@ -116,6 +120,8 @@ export function OpexPage() {
         mesesFiltro={mesesFiltro}
         orcamentoImportado={data?.orcamento_importado}
         loading={isLoading}
+        realizadoAnoAnterior={dataAnoAnterior?.kpis.realizado_ytd}
+        loadingAnoAnterior={loadingAnoAnterior}
       />
 
       {data && (
@@ -126,8 +132,13 @@ export function OpexPage() {
             ano={data.ano}
             mesesFiltro={mesesFiltro}
             orcamentoImportado={data.orcamento_importado}
-            onOrdenarPorVariacao={handleOrdenarGruposPorVariacao}
             planoFiltro={planoFiltro}
+          />
+
+          <OpexInsights
+            grupos={data.grupos}
+            evolucao={data.evolucao}
+            orcamentoImportado={data.orcamento_importado}
           />
 
           {!temFiltroMeses(mesesFiltro) && (
@@ -141,7 +152,6 @@ export function OpexPage() {
             soFixas={soFixas}
             orcamentoImportado={data.orcamento_importado}
             onSoFixasChange={setSoFixas}
-            sortByVariacaoTrigger={sortGruposVariacaoTrigger}
             planoFiltro={planoFiltro}
             chartSlot={
               <OpexDepartamentosChart

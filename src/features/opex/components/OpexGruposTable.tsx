@@ -197,6 +197,7 @@ function PlanoRow({
             mesesFiltro={mesesFiltro}
             orcamentoImportado={orcamentoImportado}
             planoFiltro={planoFiltro}
+            orcamentoPlano={plano.previsto_ano}
           />
         </div>
       )}

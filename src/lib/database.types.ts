@@ -60,6 +60,33 @@ export interface Database {
         Insert: { key: string; value?: unknown; updated_at?: string }
         Update: { value?: unknown; updated_at?: string }
       }
+      opex_grupo_de_para: {
+        Row: {
+          id: string
+          ano_origem: number
+          nome_origem: string
+          ano_destino: number
+          nome_destino: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          ano_origem: number
+          nome_origem: string
+          ano_destino: number
+          nome_destino: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          ano_origem?: number
+          nome_origem?: string
+          ano_destino?: number
+          nome_destino?: string
+          updated_at?: string
+        }
+      }
       sioe_sync_estado: {
         Row: {
           id: number

@@ -12,7 +12,7 @@ type Props = {
 }
 
 export function OpexProjecaoFixas({ grupos, kpis, mesAtual }: Props) {
-  const [expandido, setExpandido] = useState(true)
+  const [expandido, setExpandido] = useState(false)
   const fixas = grupos.filter((g) => g.fixo).sort((a, b) => b.projetado_ano - a.projetado_ano)
   const mesesRestantes = Math.max(0, 12 - mesAtual)
   const totalProjetadoFixas = fixas.reduce((s, g) => s + g.projetado_ano, 0)

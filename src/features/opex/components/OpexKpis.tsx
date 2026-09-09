@@ -1,8 +1,8 @@
-import { ArrowDownRight, ArrowUpRight, CalendarRange, Target, TrendingDown, Wallet } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, CalendarRange, GitCompareArrows, Target, TrendingDown, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { OPEX_COLORS } from '../constants'
-import { formatPeriodoOpex, temFiltroMeses } from '../utils/opexPeriodo'
+import { formatPeriodoOpex, temFiltroMeses, yoyPct } from '../utils/opexPeriodo'
 import type { OpexKpis } from '../types/opex.types'
 
 type Props = {
@@ -12,6 +12,8 @@ type Props = {
   mesesFiltro: number[]
   orcamentoImportado?: boolean
   loading?: boolean
+  realizadoAnoAnterior?: number
+  loadingAnoAnterior?: boolean
 }
 
 function KpiCard({
@@ -43,11 +45,20 @@ function KpiCard({
   )
 }
 
-export function OpexKpis({ kpis, ano, mesAtual, mesesFiltro, orcamentoImportado, loading }: Props) {
+export function OpexKpis({
+  kpis,
+  ano,
+  mesAtual,
+  mesesFiltro,
+  orcamentoImportado,
+  loading,
+  realizadoAnoAnterior,
+  loadingAnoAnterior,
+}: Props) {
   if (loading) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="h-28 animate-pulse rounded-xl bg-slate-100" />
         ))}
       </div>
@@ -57,10 +68,14 @@ export function OpexKpis({ kpis, ano, mesAtual, mesesFiltro, orcamentoImportado,
   const filtroAtivo = temFiltroMeses(mesesFiltro)
   const varianciaPositiva = kpis.variancia_ytd_pct > 0
   const periodoLabel = formatPeriodoOpex(mesesFiltro, mesAtual, ano)
+  const periodoAnoAnterior = formatPeriodoOpex(mesesFiltro, mesAtual, ano - 1)
   const umMes = filtroAtivo && mesesFiltro.length === 1
+  const anterior = realizadoAnoAnterior ?? 0
+  const yoy = yoyPct(kpis.realizado_ytd, anterior)
+  const yoySubiu = (yoy ?? 0) > 0
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <KpiCard
         label={filtroAtivo ? (umMes ? 'Realizado no mês' : 'Realizado no período') : 'Realizado no período'}
         value={formatCurrency(kpis.realizado_ytd)}
@@ -117,6 +132,44 @@ export function OpexKpis({ kpis, ano, mesAtual, mesesFiltro, orcamentoImportado,
           </div>
           <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', 'bg-slate-100')}>
             <TrendingDown className="h-4 w-4 text-slate-600" aria-hidden />
+          </span>
+        </div>
+      </div>
+      <div className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Vs. ano anterior
+            </p>
+            {loadingAnoAnterior ? (
+              <p className="mt-1 text-xl font-bold text-slate-300 sm:text-2xl">…</p>
+            ) : yoy == null ? (
+              <p className="mt-1 text-xl font-bold tabular-nums text-slate-400 sm:text-2xl">—</p>
+            ) : (
+              <p
+                className={cn(
+                  'mt-1 flex items-center gap-1 text-xl font-bold tabular-nums sm:text-2xl',
+                  yoy === 0 ? 'text-slate-600' : yoySubiu ? 'text-rose-700' : 'text-emerald-700',
+                )}
+              >
+                {yoy === 0 ? null : yoySubiu ? (
+                  <ArrowUpRight className="h-5 w-5" aria-hidden />
+                ) : (
+                  <ArrowDownRight className="h-5 w-5" aria-hidden />
+                )}
+                {formatPercent(Math.abs(yoy))}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-slate-500">
+              {loadingAnoAnterior
+                ? `Carregando ${ano - 1}…`
+                : yoy == null
+                  ? `Sem realizado em ${periodoAnoAnterior}`
+                  : `Realizado ${ano - 1}: ${formatCurrency(anterior)} · ${periodoAnoAnterior}`}
+            </p>
+          </div>
+          <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', OPEX_COLORS.anoAnterior.bg)}>
+            <GitCompareArrows className={cn('h-4 w-4', OPEX_COLORS.anoAnterior.text)} aria-hidden />
           </span>
         </div>
       </div>
