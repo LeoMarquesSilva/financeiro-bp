@@ -1,8 +1,8 @@
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import {
   EFICIENCIA_META_INDICE_INADIMPLENCIA,
-  EFICIENCIA_META_PDI,
   EFICIENCIA_META_RECEITA_BRUTA,
+  EFICIENCIA_META_SLA_PROTOCOLO,
 } from '../constants'
 import type {
   GestaoPdiMesRow,
@@ -24,6 +24,7 @@ export type IndicadorOperacionalRow = {
 const GREEN_SOFT = '#E8F5E9'
 const RED_SOFT = '#FFEBEE'
 const BRAND_SOFT = '#D6EAF5'
+const WHITE = '#FFFFFF'
 
 function vistagemCounts(
   resumo: RacionalResumo | undefined,
@@ -102,7 +103,7 @@ function buildGestaoPdiRow(
       indicador: 'Gestão de PDI',
       resultado: 'Ciclo não fechado',
       detalhe: '',
-      bgColor: BRAND_SOFT,
+      bgColor: WHITE,
     }
   }
 
@@ -111,7 +112,7 @@ function buildGestaoPdiRow(
       indicador: 'Gestão de PDI',
       resultado: formatPercent(gp.pct_aptas),
       detalhe: `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`,
-      bgColor: gp.pct_aptas >= EFICIENCIA_META_PDI ? GREEN_SOFT : RED_SOFT,
+      bgColor: WHITE,
     }
   }
 
@@ -121,7 +122,7 @@ function buildGestaoPdiRow(
       indicador: 'Gestão de PDI',
       resultado: formatPercent(pct),
       detalhe: `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`,
-      bgColor: pct >= EFICIENCIA_META_PDI ? GREEN_SOFT : RED_SOFT,
+      bgColor: WHITE,
     }
   }
 
@@ -129,7 +130,7 @@ function buildGestaoPdiRow(
     indicador: 'Gestão de PDI',
     resultado: '—',
     detalhe: 'Baixar racional (Excel)',
-    bgColor: BRAND_SOFT,
+    bgColor: WHITE,
   }
 }
 
@@ -145,7 +146,7 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresResultadoMes):
       indicador: 'SLA Protocolo (D-1)',
       resultado: pctLabel(r.qtd_d1, den),
       detalhe: `${r.qtd_d1} D-1 · ${r.qtd_fatal} FATAL · ${r.qtd_excludente ?? 0} excludentes`,
-      bgColor: den > 0 && r.qtd_d1 / den >= 0.9 ? GREEN_SOFT : RED_SOFT,
+      bgColor: den > 0 && r.qtd_d1 / den >= EFICIENCIA_META_SLA_PROTOCOLO / 100 ? GREEN_SOFT : RED_SOFT,
     })
   }
 
