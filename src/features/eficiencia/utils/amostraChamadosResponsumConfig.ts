@@ -15,6 +15,7 @@ export type ResponsumTitularRef = {
   responsum_user_id: string
   full_name: string
   area: string
+  email?: string | null
 }
 
 export type AmostraChamadosResponsumConfig = Record<string, ResponsumTitularRef>
@@ -33,8 +34,9 @@ export function loadAmostraChamadosResponsumConfig(): AmostraChamadosResponsumCo
       const responsum_user_id = String(v.responsum_user_id ?? '').trim()
       const full_name = String(v.full_name ?? '').trim()
       const areaRef = String(v.area ?? area).trim()
-      if (responsum_user_id && full_name) {
-        out[area] = { responsum_user_id, full_name, area: areaRef }
+      const email = String(v.email ?? '').trim() || null
+      if (full_name && (responsum_user_id || email)) {
+        out[area] = { responsum_user_id, full_name, area: areaRef, email }
       }
     }
     return out
@@ -59,7 +61,7 @@ export function titularPadraoPorArea(
       (c) =>
         c.area === area &&
         c.is_active &&
-        c.responsum_user_id &&
+        (c.responsum_user_id || c.email) &&
         TITULARES.includes(c.nivel_hierarquico),
     )
     candidatos.sort(
@@ -79,18 +81,25 @@ export function resolveTitularResponsumPorArea(
   overrides: AmostraChamadosResponsumConfig,
 ): ResponsumTitularRef | null {
   const override = overrides[area]
-  if (override?.responsum_user_id) return override
+  if (override?.full_name && (override.responsum_user_id || override.email)) return override
   const padrao = titularPadraoPorArea(colaboradores, [area]).get(area)
-  if (!padrao?.responsum_user_id) return null
+  if (!padrao) return null
+  if (!padrao.responsum_user_id && !padrao.email) return null
   return {
-    responsum_user_id: padrao.responsum_user_id,
+    responsum_user_id: padrao.responsum_user_id ?? '',
     full_name: padrao.full_name,
     area: padrao.area,
+    email: padrao.email,
   }
 }
 
+export function colaboradoresCandidatosTitular(colaboradores: Colaborador[]): Colaborador[] {
+  return colaboradores.filter((c) => c.is_active && (c.responsum_user_id || c.email))
+}
+
+/** @deprecated Prefer colaboradoresCandidatosTitular — o ID RESPONSUM pode estar vazio. */
 export function colaboradoresComResponsum(colaboradores: Colaborador[]): Colaborador[] {
-  return colaboradores.filter((c) => c.is_active && c.responsum_user_id)
+  return colaboradoresCandidatosTitular(colaboradores)
 }
 
 export function areasParaConfiguracaoResponsum(

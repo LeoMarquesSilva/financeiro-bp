@@ -48,7 +48,7 @@ interface Payload {
   /** Override manual por área (configuração do modal Amostra de chamados). */
   titular_por_area?: Record<
     string,
-    { responsum_user_id: string; full_name: string; area: string }
+    { responsum_user_id: string; full_name: string; area: string; email?: string | null }
   >
 }
 
@@ -57,6 +57,7 @@ interface ColaboradorTitular {
   area: string
   nivel_hierarquico: string
   responsum_user_id: string | null
+  email: string | null
 }
 
 interface ResultadoItem {
@@ -124,7 +125,7 @@ Deno.serve(async (req: Request) => {
     const areas = [...new Set(itens.map((i) => i.area).filter(Boolean))]
     const { data: colaboradoresAreas, error: colaboradoresError } = await sioe
       .from('colaboradores')
-      .select('full_name, area, nivel_hierarquico, responsum_user_id')
+      .select('full_name, area, nivel_hierarquico, responsum_user_id, email')
       .in('area', areas)
       .eq('is_active', true)
       .in('nivel_hierarquico', ['coordenador', 'gerente', 'socio'])
@@ -143,26 +144,54 @@ Deno.serve(async (req: Request) => {
       if (!atual || prioridadeNova < prioridadeAtual) titularPorArea.set(c.area, c)
     }
 
-    // Fallback: usuário RESPONSUM correspondente a quem disparou a ação no financeiro-bp.
-    let fallbackUser: { id: string; name: string; department: string | null } | null = null
-    if (payload.created_by_email) {
-      const { data: fallback, error: fallbackError } = await responsum
+    const emailsParaResolver = new Set<string>()
+    const addEmail = (email: string | null | undefined) => {
+      const e = String(email ?? '').trim()
+      if (e) emailsParaResolver.add(e)
+    }
+    for (const c of (colaboradoresAreas ?? []) as ColaboradorTitular[]) {
+      if (!c.responsum_user_id) addEmail(c.email)
+    }
+    for (const o of Object.values(payload.titular_por_area ?? {})) {
+      if (!o.responsum_user_id) addEmail(o.email)
+    }
+    addEmail(payload.created_by_email)
+
+    const responsumPorEmail = new Map<string, { id: string; name: string; department: string | null }>()
+    for (const email of emailsParaResolver) {
+      const { data: userByEmail, error: emailError } = await responsum
         .from('app_c009c0e4f1_users')
-        .select('id, name, department')
-        .ilike('email', payload.created_by_email.trim())
+        .select('id, name, department, email')
+        .ilike('email', email)
         .limit(1)
         .maybeSingle()
-      if (fallbackError) {
+      if (emailError) {
         return jsonResponse(
           {
-            error: `Falha ao consultar RESPONSUM (users): ${fallbackError.message}`,
+            error: `Falha ao consultar RESPONSUM (users): ${emailError.message}`,
             responsum_host: hostOf(RESPONSUM_URL),
           },
           500,
         )
       }
-      if (fallback) fallbackUser = fallback
+      if (userByEmail?.id) {
+        responsumPorEmail.set(email.trim().toLowerCase(), {
+          id: userByEmail.id,
+          name: userByEmail.name,
+          department: userByEmail.department,
+        })
+      }
     }
+
+    const idPorEmail = (email: string | null | undefined) => {
+      const e = String(email ?? '').trim().toLowerCase()
+      return e ? responsumPorEmail.get(e)?.id ?? null : null
+    }
+
+    // Fallback: usuário RESPONSUM correspondente a quem disparou a ação no financeiro-bp.
+    const fallbackUser = payload.created_by_email
+      ? responsumPorEmail.get(payload.created_by_email.trim().toLowerCase()) ?? null
+      : null
 
     // Responsável padrão da subcategoria (hoje: Samuel Willian Silva) — resolvido dinamicamente
     // para não ficar preso a um id fixo caso troque na RESPONSUM.
@@ -190,13 +219,19 @@ Deno.serve(async (req: Request) => {
         ? {
             full_name: override.full_name,
             area: override.area,
-            responsum_user_id: override.responsum_user_id,
+            responsum_user_id: override.responsum_user_id || idPorEmail(override.email),
             nivel_hierarquico: 'override',
           }
-        : titularAuto
-      const createdById = titular?.responsum_user_id ?? fallbackUser?.id ?? null
-      const createdByName = titular?.full_name ?? fallbackUser?.name ?? null
-      const createdByDepartment = titular?.area ?? fallbackUser?.department ?? item.area ?? null
+        : {
+            full_name: titularAuto?.full_name ?? '',
+            area: titularAuto?.area ?? item.area,
+            responsum_user_id:
+              titularAuto?.responsum_user_id || idPorEmail(titularAuto?.email) || null,
+            nivel_hierarquico: titularAuto?.nivel_hierarquico ?? '',
+          }
+      const createdById = titular.responsum_user_id || fallbackUser?.id || null
+      const createdByName = titular.full_name || fallbackUser?.name || null
+      const createdByDepartment = titular.area || fallbackUser?.department || item.area || null
 
       if (!createdById || !createdByName) {
         resultados.push({

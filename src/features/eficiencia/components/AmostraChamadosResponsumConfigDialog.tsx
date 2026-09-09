@@ -14,7 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Colaborador } from '@/features/colaboradores/types'
 import {
   areasParaConfiguracaoResponsum,
-  colaboradoresComResponsum,
+  colaboradoresCandidatosTitular,
   loadAmostraChamadosResponsumConfig,
   saveAmostraChamadosResponsumConfig,
   titularPadraoPorArea,
@@ -32,10 +32,15 @@ type Props = {
 
 function colaboradorToTitular(c: Colaborador): ResponsumTitularRef {
   return {
-    responsum_user_id: c.responsum_user_id!,
+    responsum_user_id: c.responsum_user_id ?? '',
     full_name: c.full_name,
     area: c.area,
+    email: c.email,
   }
+}
+
+function titularSelectValue(c: Pick<Colaborador, 'id' | 'responsum_user_id' | 'email'>): string {
+  return c.responsum_user_id || c.email || c.id
 }
 
 export function AmostraChamadosResponsumConfigDialog({
@@ -61,7 +66,7 @@ export function AmostraChamadosResponsumConfigDialog({
     [colaboradores, areas],
   )
 
-  const comResponsum = useMemo(() => colaboradoresComResponsum(colaboradores), [colaboradores])
+  const candidatos = useMemo(() => colaboradoresCandidatosTitular(colaboradores), [colaboradores])
 
   const handleSave = () => {
     saveAmostraChamadosResponsumConfig(draft)
@@ -100,9 +105,11 @@ export function AmostraChamadosResponsumConfigDialog({
               {areas.map((area) => {
                 const padrao = padraoPorArea.get(area)
                 const override = draft[area]
-                const selectValue = override?.responsum_user_id ?? ''
-                const candidatosArea = comResponsum.filter((c) => c.area === area)
-                const candidatosOutros = comResponsum.filter((c) => c.area !== area)
+                const selectValue = override
+                  ? override.responsum_user_id || override.email || ''
+                  : ''
+                const candidatosArea = candidatos.filter((c) => c.area === area)
+                const candidatosOutros = candidatos.filter((c) => c.area !== area)
 
                 return (
                   <li key={area} className="space-y-1.5">
@@ -121,8 +128,8 @@ export function AmostraChamadosResponsumConfigDialog({
                             return next
                           }
                           const colab =
-                            comResponsum.find((c) => c.responsum_user_id === id) ??
-                            comResponsum.find((c) => c.id === id)
+                            candidatos.find((c) => titularSelectValue(c) === id) ??
+                            candidatos.find((c) => c.responsum_user_id === id)
                           if (colab) next[area] = colaboradorToTitular(colab)
                           else delete next[area]
                           return next
@@ -138,7 +145,7 @@ export function AmostraChamadosResponsumConfigDialog({
                       {candidatosArea.length > 0 && (
                         <optgroup label="Mesma área">
                           {candidatosArea.map((c) => (
-                            <option key={c.id} value={c.responsum_user_id!}>
+                            <option key={c.id} value={titularSelectValue(c)}>
                               {c.full_name} · {c.nivel_hierarquico}
                             </option>
                           ))}
@@ -147,14 +154,14 @@ export function AmostraChamadosResponsumConfigDialog({
                       {candidatosOutros.length > 0 && (
                         <optgroup label="Outras áreas">
                           {candidatosOutros.map((c) => (
-                            <option key={c.id} value={c.responsum_user_id!}>
+                            <option key={c.id} value={titularSelectValue(c)}>
                               {c.full_name} · {c.area}
                             </option>
                           ))}
                         </optgroup>
                       )}
                     </select>
-                    {override && padrao && override.responsum_user_id !== padrao.responsum_user_id && (
+                    {override && padrao && (override.responsum_user_id || override.email) !== (padrao.responsum_user_id || padrao.email) && (
                       <p className="text-[11px] text-sky-700">
                         Override ativo (padrão seria {padrao.full_name})
                       </p>

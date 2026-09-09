@@ -2026,7 +2026,7 @@ export const eficienciaService = {
     createdByEmail: string | null,
     titularPorArea: Record<
       string,
-      { responsum_user_id: string; full_name: string; area: string }
+      { responsum_user_id: string; full_name: string; area: string; email?: string | null }
     > = {},
   ): Promise<AbrirChamadosResultado> {
     const overrides =
