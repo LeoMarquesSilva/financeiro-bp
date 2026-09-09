@@ -1,5 +1,11 @@
 import type { OpexGrupoDePara, OpexPlanoRow } from '../types/opex.types'
 
+export const opexDeParaKeys = {
+  all: ['opex', 'grupo-de-para'] as const,
+  pair: (anoOrigem: number, anoDestino: number) =>
+    [...opexDeParaKeys.all, anoOrigem, anoDestino] as const,
+}
+
 export function mapaDePara(linhas: OpexGrupoDePara[]): Map<string, string> {
   return new Map(linhas.map((l) => [l.nomeOrigem, l.nomeDestino]))
 }

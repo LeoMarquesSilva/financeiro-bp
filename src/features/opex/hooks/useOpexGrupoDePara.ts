@@ -1,28 +1,56 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { opexDeParaService } from '../services/opexDeParaService'
+import { opexDeParaKeys } from '../utils/opexDePara'
+import type { OpexGrupoDePara } from '../types/opex.types'
+
+function sortDePara(linhas: OpexGrupoDePara[]): OpexGrupoDePara[] {
+  return [...linhas].sort((a, b) => a.nomeOrigem.localeCompare(b.nomeOrigem, 'pt-BR'))
+}
 
 export function useOpexGrupoDePara(anoOrigem: number, anoDestino: number) {
   const queryClient = useQueryClient()
   const enabled = anoOrigem > 2000 && anoDestino > anoOrigem
+  const pairKey = opexDeParaKeys.pair(anoOrigem, anoDestino)
 
   const query = useQuery({
-    queryKey: ['opex', 'grupo-de-para', anoOrigem, anoDestino],
+    queryKey: pairKey,
     queryFn: () => opexDeParaService.list(anoOrigem, anoDestino),
     enabled,
-    staleTime: 60_000,
+    staleTime: 0,
   })
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['opex', 'grupo-de-para'] })
+  const syncCache = (updater: (atual: OpexGrupoDePara[]) => OpexGrupoDePara[]) => {
+    queryClient.setQueryData<OpexGrupoDePara[]>(pairKey, (atual) => updater(atual ?? []))
+  }
+
+  const refetchRelacionados = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: opexDeParaKeys.all, refetchType: 'all' }),
+      queryClient.invalidateQueries({ queryKey: ['opex', 'planos-yoy'], refetchType: 'all' }),
+    ])
+  }
 
   const upsert = useMutation({
     mutationFn: opexDeParaService.upsert,
-    onSuccess: () => void invalidate(),
+    onSuccess: async (salvo) => {
+      syncCache((atual) => {
+        const sem = atual.filter(
+          (linha) =>
+            linha.id !== salvo.id &&
+            !(linha.nomeOrigem === salvo.nomeOrigem && linha.anoDestino === salvo.anoDestino),
+        )
+        return sortDePara([...sem, salvo])
+      })
+      await refetchRelacionados()
+    },
   })
 
   const remove = useMutation({
     mutationFn: opexDeParaService.remove,
-    onSuccess: () => void invalidate(),
+    onSuccess: async (_, id) => {
+      syncCache((atual) => atual.filter((linha) => linha.id !== id))
+      await refetchRelacionados()
+    },
   })
 
   return { ...query, upsert, remove }

@@ -465,7 +465,7 @@ export function OpexPrevistoRealizadoChart({
       drillSortVariacao,
       compararAnoAnterior,
     )
-  }, [gruposMes, gruposAnoAnterior, deParaLinhas, drillSortVariacao, compararAnoAnterior])
+  }, [gruposMes, gruposAnoAnterior, deParaLinhas, deParaKey, drillSortVariacao, compararAnoAnterior])
 
   const planoChartData = useMemo(() => {
     const atual = (planosGrupo ?? []).map((p: OpexPlanoRow) => ({
@@ -742,6 +742,7 @@ export function OpexPrevistoRealizadoChart({
 
           {!loadingDrill && chartBars.length > 0 && (
             <OpexHorizontalCompareChart
+              key={`${compararAnoAnterior ? 'yoy' : 'orc'}-${deParaKey}`}
               data={chartBars}
               compararAnoAnterior={compararAnoAnterior}
               ano={ano}
