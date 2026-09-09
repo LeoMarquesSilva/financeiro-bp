@@ -88,6 +88,21 @@ export function onboardingValorBateExclusao(
 
 export const JUSTIFICATIVA_ONBOARDING = 'ONBOARDING / TRANSIÇÃO DE CARTEIRA'
 
+function justificativaOnboardingChave(justificativa: string): string {
+  return justificativa
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleUpperCase('pt-BR')
+    .replace(/\s*\/\s*/g, ' / ')
+    .replace(/\s+/g, ' ')
+}
+
+/** Justificativa automática de onboarding — não entra na amostra de evidências FATAL. */
+export function isJustificativaOnboarding(justificativa: string): boolean {
+  return justificativaOnboardingChave(justificativa) === justificativaOnboardingChave(JUSTIFICATIVA_ONBOARDING)
+}
+
 /** Mantém a linha no racional e marca como Excludente (fora da % do KPI). */
 export function marcarLinhasOnboardingExcludente<T extends Record<string, unknown>>(
   linhas: T[],

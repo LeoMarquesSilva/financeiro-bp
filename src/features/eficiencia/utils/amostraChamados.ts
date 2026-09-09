@@ -3,6 +3,7 @@ import {
   EFICIENCIA_EVIDENCIA_POR_JUSTIFICATIVA,
   EFICIENCIA_TZ,
 } from '../constants'
+import { isJustificativaOnboarding } from './onboardingExclusoes'
 
 export type FatalExcludenteRow = {
   ci: string
@@ -144,11 +145,13 @@ function tamanhoAmostraEstrato(populacao: number): number {
 
 /**
  * Amostra estratificada Área × Justificativa (~30%, mín. 1), na ordem da lista.
- * Retorna todos os FATAL excludentes com `naAmostra` marcado.
+ * Onboarding / transição de carteira fica de fora (não pede evidência).
+ * Retorna os FATAL excludentes elegíveis com `naAmostra` marcado.
  */
 export function selecionarAmostraExcludentes(rows: FatalExcludenteRow[]): AmostraChamadoItem[] {
+  const elegiveis = rows.filter((row) => !isJustificativaOnboarding(row.justificativa))
   const grupos = new Map<string, FatalExcludenteRow[]>()
-  for (const row of rows) {
+  for (const row of elegiveis) {
     const key = `${row.area}\u0000${justificativaKey(row.justificativa)}`
     const list = grupos.get(key)
     if (list) list.push(row)
@@ -163,7 +166,7 @@ export function selecionarAmostraExcludentes(rows: FatalExcludenteRow[]): Amostr
     }
   }
 
-  return rows.map((row) => {
+  return elegiveis.map((row) => {
     const evidencia = evidenciaParaJustificativa(row.justificativa)
     return {
       ...row,

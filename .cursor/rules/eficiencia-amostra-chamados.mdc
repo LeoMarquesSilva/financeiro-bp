@@ -12,6 +12,7 @@ para pedir evidências no Responsum dos protocolos FATAL com justificativa **Exc
 - `fatal_apos18 = 'FATAL'`
 - `excludente = 'Excludente'` (lista canônica em `JUSTIFICATIVAS_EXCLUDENTES` / sync SharePoint)
 - Período = **mês único** selecionado no modal (não o multi-filtro do Overview)
+- **Fora da amostra:** justificativa `ONBOARDING / TRANSIÇÃO DE CARTEIRA` (`JUSTIFICATIVA_ONBOARDING`) — exclusão automática de carteira, sem pedido de evidência.
 
 ---
 
