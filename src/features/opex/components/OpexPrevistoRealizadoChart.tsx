@@ -55,13 +55,13 @@ type DrillBarRow = {
   previsto: number
   realizado: number
   projetado: number
+  realizadoTotal: number
   realizadoAnterior: number
   variacao: number
   variacaoYoY: number
 }
 
 const PROJETADO_BARRA = '#fdba74'
-const PROJETADO_ROTULO = '#c2410c'
 
 const Y_AXIS_WIDTH = 248
 const Y_AXIS_LINE_CHARS = 26
@@ -150,6 +150,7 @@ function mergeDrillYoY(
       previsto,
       realizado,
       projetado,
+      realizadoTotal: realizadoAno,
       realizadoAnterior,
       variacao: cur?.variacao ?? realizadoAno - previsto,
       variacaoYoY: realizadoAno - realizadoAnterior,
@@ -195,67 +196,22 @@ function OpexBarValueLabel({
   )
 }
 
-function OpexBarValueLabelHorizontal({
-  x,
-  y,
-  width,
-  height,
-  value,
-  color = '#334155',
-  inside = false,
-}: {
-  x?: number | string
-  y?: number | string
-  width?: number | string
-  height?: number | string
-  value?: number | string | null
-  color?: string
-  inside?: boolean
-}) {
-  const nx = Number(x)
-  const ny = Number(y)
-  const nw = Number(width)
-  const nh = Number(height)
+function opexCompactLabel(value: unknown): string {
   const n = Number(value)
-  if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nw) || !Number.isFinite(nh) || !n || n <= 0) {
-    return null
-  }
-  if (inside && nw < 44) return null
-  return (
-    <text
-      x={inside ? nx + nw / 2 : nx + nw + 6}
-      y={ny + nh / 2}
-      dy={4}
-      textAnchor={inside ? 'middle' : 'start'}
-      fill={color}
-      fontSize={10}
-      fontWeight={600}
-    >
-      {formatCurrencyCompact(n)}
-    </text>
-  )
+  return n > 0 ? formatCurrencyCompact(n) : ''
+}
+
+const OPEX_END_LABEL = {
+  position: 'right' as const,
+  offset: 6,
+  formatter: opexCompactLabel,
+  fontSize: 10,
+  fontWeight: 600,
 }
 
 function renderOpexBarLabel(color: string) {
   return (props: { x?: number | string; y?: number | string; width?: number | string; value?: unknown }) => (
     <OpexBarValueLabel {...props} value={props.value as number | string | null | undefined} color={color} />
-  )
-}
-
-function renderOpexBarLabelHorizontal(color: string, inside = false) {
-  return (props: {
-    x?: number | string
-    y?: number | string
-    width?: number | string
-    height?: number | string
-    value?: unknown
-  }) => (
-    <OpexBarValueLabelHorizontal
-      {...props}
-      value={props.value as number | string | null | undefined}
-      color={color}
-      inside={inside}
-    />
   )
 }
 
@@ -279,7 +235,7 @@ function OpexHorizontalCompareChart({
       <BarChart
         data={data}
         layout="vertical"
-        margin={{ left: 12, right: 80, top: 8, bottom: 4 }}
+        margin={{ left: 12, right: 88, top: 8, bottom: 4 }}
         barCategoryGap="22%"
         barGap={4}
       >
@@ -342,13 +298,14 @@ function OpexHorizontalCompareChart({
               fill={OPEX_COLORS.anoAnterior.hex}
               radius={[0, 4, 4, 0]}
               maxBarSize={14}
+              isAnimationActive={false}
               cursor="pointer"
               onClick={(data) => {
                 const row = clickPayload(data) as DrillBarRow | null
                 if (row?.key) onBarClick(row)
               }}
             >
-              <LabelList dataKey="realizadoAnterior" content={renderOpexBarLabelHorizontal('#475569')} />
+              <LabelList dataKey="realizadoAnterior" fill="#475569" {...OPEX_END_LABEL} />
             </Bar>
             <Bar
               dataKey="realizado"
@@ -357,16 +314,14 @@ function OpexHorizontalCompareChart({
               stackId={mostrarProjecao ? 'ano' : undefined}
               radius={mostrarProjecao ? [0, 0, 0, 0] : [0, 4, 4, 0]}
               maxBarSize={14}
+              isAnimationActive={false}
               cursor="pointer"
               onClick={(data) => {
                 const row = clickPayload(data) as DrillBarRow | null
                 if (row?.key) onBarClick(row)
               }}
             >
-              <LabelList
-                dataKey="realizado"
-                content={renderOpexBarLabelHorizontal(mostrarProjecao ? '#ecfdf5' : '#047857', mostrarProjecao)}
-              />
+              {!mostrarProjecao && <LabelList dataKey="realizado" fill="#047857" {...OPEX_END_LABEL} />}
             </Bar>
             {mostrarProjecao && (
               <Bar
@@ -376,13 +331,15 @@ function OpexHorizontalCompareChart({
                 stackId="ano"
                 radius={[0, 4, 4, 0]}
                 maxBarSize={14}
+                minPointSize={1}
+                isAnimationActive={false}
                 cursor="pointer"
                 onClick={(data) => {
                   const row = clickPayload(data) as DrillBarRow | null
                   if (row?.key) onBarClick(row)
                 }}
               >
-                <LabelList dataKey="projetado" content={renderOpexBarLabelHorizontal(PROJETADO_ROTULO, true)} />
+                <LabelList dataKey="realizadoTotal" fill="#047857" {...OPEX_END_LABEL} />
               </Bar>
             )}
           </>
@@ -394,13 +351,14 @@ function OpexHorizontalCompareChart({
               fill={OPEX_COLORS.previsto.hex}
               radius={[0, 4, 4, 0]}
               maxBarSize={14}
+              isAnimationActive={false}
               cursor="pointer"
               onClick={(data) => {
                 const row = clickPayload(data) as DrillBarRow | null
                 if (row?.key) onBarClick(row)
               }}
             >
-              <LabelList dataKey="previsto" content={renderOpexBarLabelHorizontal('#6b21a8')} />
+              <LabelList dataKey="previsto" fill="#6b21a8" {...OPEX_END_LABEL} />
             </Bar>
             <Bar
               dataKey="realizado"
@@ -409,16 +367,14 @@ function OpexHorizontalCompareChart({
               stackId={mostrarProjecao ? 'ano' : undefined}
               radius={mostrarProjecao ? [0, 0, 0, 0] : [0, 4, 4, 0]}
               maxBarSize={14}
+              isAnimationActive={false}
               cursor="pointer"
               onClick={(data) => {
                 const row = clickPayload(data) as DrillBarRow | null
                 if (row?.key) onBarClick(row)
               }}
             >
-              <LabelList
-                dataKey="realizado"
-                content={renderOpexBarLabelHorizontal(mostrarProjecao ? '#ecfdf5' : '#047857', mostrarProjecao)}
-              />
+              {!mostrarProjecao && <LabelList dataKey="realizado" fill="#047857" {...OPEX_END_LABEL} />}
             </Bar>
             {mostrarProjecao && (
               <Bar
@@ -428,13 +384,15 @@ function OpexHorizontalCompareChart({
                 stackId="ano"
                 radius={[0, 4, 4, 0]}
                 maxBarSize={14}
+                minPointSize={1}
+                isAnimationActive={false}
                 cursor="pointer"
                 onClick={(data) => {
                   const row = clickPayload(data) as DrillBarRow | null
                   if (row?.key) onBarClick(row)
                 }}
               >
-                <LabelList dataKey="projetado" content={renderOpexBarLabelHorizontal(PROJETADO_ROTULO, true)} />
+                <LabelList dataKey="realizadoTotal" fill="#047857" {...OPEX_END_LABEL} />
               </Bar>
             )}
           </>
