@@ -793,7 +793,12 @@ export async function exportIndicadoresResultadoExcel(
 
   {
     const ws = wb.addWorksheet('DESENVOLVIMENTO DE EQUIPE'.slice(0, 31))
-    styleTitle(ws, 1, 5, `Relatório de Treinamentos — ${data.ano}`)
+    styleTitle(
+      ws,
+      1,
+      5,
+      `Relatório de Treinamentos — ${MESES_EFICIENCIA[data.mes - 1]}/${data.ano}`,
+    )
     const headers = ['Área', 'Treinamento', 'Participante', 'Mês', 'Horas']
     styleHeaderRow(ws, 3, headers)
     const fonte =

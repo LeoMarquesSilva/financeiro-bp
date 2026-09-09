@@ -1301,10 +1301,13 @@ export const eficienciaService = {
   },
 
   /**
-   * Presenças do ano com área do turnover — uma linha por participação.
-   * Usado no Excel Indicadores Resultado (não no racional agregado por pessoa).
+   * Presenças com área do turnover — uma linha por participação.
+   * `mes` limita ao mês do Excel Indicadores Resultado.
    */
-  async fetchTreinamentosParticipacoes(ano: number): Promise<TreinamentoParticipacaoExport[]> {
+  async fetchTreinamentosParticipacoes(
+    ano: number,
+    mes?: number,
+  ): Promise<TreinamentoParticipacaoExport[]> {
     const itens = await this.fetchTreinamentosItens(ano)
     const { data: turnoverRows, error } = await supabase
       .from('sp_turnover')
@@ -1335,8 +1338,14 @@ export const eficienciaService = {
       if (row.area == null || row.area !== 'Tributário') nomesElegiveis.add(key)
     }
 
+    const mesPrefix =
+      mes != null && mes >= 1 && mes <= 12
+        ? `${ano}-${String(mes).padStart(2, '0')}`
+        : null
+
     return itens
       .filter((item) => nomesElegiveis.has(normalizeNomeChave(item.colaborador)))
+      .filter((item) => (mesPrefix ? String(item.data ?? '').startsWith(mesPrefix) : true))
       .map((item) => ({
         area: porNome.get(normalizeNomeChave(item.colaborador))?.area ?? null,
         treinamento: item.treinamento,
@@ -1931,7 +1940,7 @@ export const eficienciaService = {
       this.fetchRacionalParaExport('sla_ciencia_agendamentos', ano, null, mesFiltro),
       this.fetchRacionalParaExport('sla_vistagem_risco', ano, null, mesFiltro),
       this.fetchRacionalParaExport('sla_vistagem_normal', ano, null, mesFiltro),
-      this.fetchTreinamentosParticipacoes(ano),
+      this.fetchTreinamentosParticipacoes(ano, mes),
       this.fetchGestaoPdiMensal(ano, null),
       this.fetchGestaoPdiDetalhe(ano, mesFiltro, null),
       this.fetchTurnoverAnual(ano, null),
