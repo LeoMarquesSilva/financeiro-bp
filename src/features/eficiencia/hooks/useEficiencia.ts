@@ -350,13 +350,13 @@ export function useOpsLegaisTarefas(
   }
 }
 
-export function useGestaoPdi(ano: number, mesFiltro: MesFiltroEficiencia, area: string | null = null) {
+export function useGestaoPdi(ano: number, _mesFiltro: MesFiltroEficiencia, area: string | null = null) {
   const { data, error, isLoading } = useQuery({
-    queryKey: ['eficiencia', 'gestao-pdi', ano, mesFiltro, area],
+    queryKey: ['eficiencia', 'gestao-pdi', ano, area],
     queryFn: async () => {
       const [mensal, detalhe] = await Promise.all([
         eficienciaService.fetchGestaoPdiMensal(ano, area),
-        eficienciaService.fetchGestaoPdiDetalhe(ano, mesFiltro, area),
+        eficienciaService.fetchGestaoPdiDetalhe(ano, null, area),
       ])
       return { mensal, detalhe }
     },

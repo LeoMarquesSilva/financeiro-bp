@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Download, Loader2, Target } from 'lucide-react'
 import { toast } from 'sonner'
 import { Avatar } from '@/shared/components/Avatar'
@@ -10,18 +10,24 @@ import {
   filtrarMensalPorMesFiltro,
   filtroEfetivoGestaoAVista,
   MESES_EFICIENCIA,
+  mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import { useGestaoPdi } from '../hooks/useEficiencia'
 import { useEvolucaoPorResponsavel } from '../hooks/useEvolucaoPorResponsavel'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
-import { acumuladoGestaoPdi } from '../utils/gestaoPdiCalc'
+import {
+  acumuladoGestaoPdi,
+  buildGestaoPdiPessoasMatrix,
+  mesesColunasGestaoPdiPessoas,
+} from '../utils/gestaoPdiCalc'
 import { exportGestaoPdiDesviosExcel } from '../utils/gestaoPdiExport'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { filtrarPorResponsavel } from '../utils/responsavelMatch'
 import { toPriMaiuscula } from '../utils/textFormat'
+import { GestaoPdiPessoasTable } from './GestaoPdiPessoasTable'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
@@ -60,7 +66,18 @@ export function GestaoPdiTab({
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const mensalFiltrado = filtrarMensalPorMesFiltro(mensal, mesFiltro, ano)
-  const detalheFiltrado = filtrarPorResponsavel(detalhe, (d) => d.colaborador, responsavel)
+  const detalhePeriodo = detalhe.filter((d) => mesNoFiltro(d.mes, mesFiltro, ano))
+  const detalheFiltrado = filtrarPorResponsavel(detalhePeriodo, (d) => d.colaborador, responsavel)
+  const mesesPessoas = useMemo(() => mesesColunasGestaoPdiPessoas(ano), [ano])
+  const detalheGrade = filtrarPorResponsavel(detalhe, (d) => d.colaborador, responsavel)
+  const pessoasLinhas = useMemo(
+    () => buildGestaoPdiPessoasMatrix(detalheGrade, mesesPessoas),
+    [detalheGrade, mesesPessoas],
+  )
+  const mesesEmDestaque = useMemo(() => {
+    if (mesFiltro == null) return undefined
+    return new Set(mesesPessoas.filter((m) => mesNoFiltro(m, mesFiltro, ano)))
+  }, [mesFiltro, mesesPessoas, ano])
   const {
     chartData: evolucaoResp,
     acumulado: acumResp,
@@ -126,6 +143,33 @@ export function GestaoPdiTab({
         responsavelHintDisabled={responsavelHintDisabled}
       />
 
+      <GestaoPdiPessoasTable
+        linhas={pessoasLinhas}
+        meses={mesesPessoas}
+        loading={loading}
+        mesesEmDestaque={mesesEmDestaque}
+        pessoaAtiva={responsavel}
+        onPessoaClick={
+          onResponsavelChange
+            ? (nome) =>
+                onResponsavelChange(responsavel === nome ? null : nome)
+            : undefined
+        }
+      />
+
+      <EficienciaEvolucaoChart
+        title="Gestão de PDI"
+        subtitle={
+          responsavel
+            ? `% aptas · ${responsavel}`
+            : 'Junho = 100% (baseline). Julho+ = % aptas (3 requisitos).'
+        }
+        data={chartData}
+        color="#059669"
+        metaFixa={EFICIENCIA_META_PDI}
+        onRacionalClick={() => setRacionalAberto(true)}
+      />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <EficienciaKpiCard
           title="Gestão de PDI Gestão a Vista"
@@ -166,19 +210,6 @@ export function GestaoPdiTab({
           loading={loadingPeriodo}
         />
       </div>
-
-      <EficienciaEvolucaoChart
-        title="Gestão de PDI"
-        subtitle={
-          responsavel
-            ? `% aptas · ${responsavel}`
-            : 'Junho = 100% (baseline). Julho+ = % aptas (3 requisitos).'
-        }
-        data={chartData}
-        color="#059669"
-        metaFixa={EFICIENCIA_META_PDI}
-        onRacionalClick={() => setRacionalAberto(true)}
-      />
 
       <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-center gap-2">

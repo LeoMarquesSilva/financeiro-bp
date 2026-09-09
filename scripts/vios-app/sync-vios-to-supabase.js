@@ -8,7 +8,8 @@
  * - runSyncRelatorioFinanceiro(filePathOuCsvString): relatório de parcelas (financeiro_parcelas, sync replace) — espera .xlsx, .csv ou string CSV
  * - runSyncRelatorioFinanceiroItens(filePathOuCsvString): relatório de itens (financeiro_parcelas_itens, sync replace) — espera .csv ou string CSV; requer ci_titulo em financeiro_parcelas
  * - runSyncPessoas(filePathOuCsvString): relatório de clientes/pessoas (pessoas) — espera .csv ou string CSV
- * - runSyncTarefasFechamento(filePath): Tarefas.csv VIOS → sp_tarefas_fechamento (9 tarefas Fechamento, qualquer status)
+ * - runSyncTarefasFechamento(filePath): Tarefas.csv VIOS → sp_tarefas_fechamento
+ *   (9 tarefas Fechamento; upsert por CI, sem apagar o que não veio no CSV)
  *
  * No vios-app:
  *   1. npm install dotenv xlsx @supabase/supabase-js
@@ -1905,8 +1906,8 @@ function buildTarefasFechamentoColumnIndexes(headerRow) {
 }
 
 /**
- * Sincroniza as 9 tarefas de Fechamento financeiro Ops Legais (qualquer status)
- * do Tarefas.csv VIOS para sp_tarefas_fechamento.
+ * Sincroniza as 9 tarefas de Fechamento financeiro Ops Legais
+ * do Tarefas.csv VIOS para sp_tarefas_fechamento (upsert por CI; sem delete).
  * @param {string} filePath - Caminho absoluto do Tarefas.csv
  * @returns {Promise<{ upserted: number, deleted: number, total: number }>}
  */
@@ -1987,6 +1988,7 @@ export async function runSyncTarefasFechamento(filePath) {
     p_cis,
     p_rows: rowsDedup,
   });
+  // p_cis permanece na assinatura da RPC; o delete de CIs ausentes foi removido.
 
   if (error) {
     console.error('[Sync Supabase] sync_sp_tarefas_fechamento_replace error:', error.message);
