@@ -4,7 +4,7 @@ import type { OpexMesGrupoRow, OpexMesItemRow } from '../types/opex.types'
 
 type ExportMeta = {
   ano: number
-  mes: number
+  mes: number | null
   mesLabel: string
 }
 
@@ -51,7 +51,10 @@ export async function exportOpexMesGruposExcel(
   grupos: OpexMesGrupoRow[],
   meta: ExportMeta,
 ): Promise<void> {
-  const itens = await opexService.fetchMesItens(meta.ano, meta.mes)
+  const mesesItens = meta.mes != null ? [meta.mes] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  const itens = (
+    await Promise.all(mesesItens.map((mes) => opexService.fetchMesItens(meta.ano, mes)))
+  ).flat()
   const XLSX = await import('xlsx')
 
   const totaisItens = itens.reduce(

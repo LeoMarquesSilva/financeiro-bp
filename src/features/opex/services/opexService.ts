@@ -129,7 +129,7 @@ export const opexService = {
 
   async fetchMesGrupos(
     ano: number,
-    mes: number,
+    mes: number | null,
     planoFiltro?: { gruposExcluidos: string[]; planosExcluidos: string[] } | null,
   ): Promise<OpexMesGrupoRow[]> {
     const { data, error } = await supabase.rpc(

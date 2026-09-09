@@ -14,7 +14,17 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, BarChart3, Download, GitCompareArrows, Loader2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  ArrowUpDown,
+  BarChart3,
+  CalendarRange,
+  Download,
+  GitCompareArrows,
+  Loader2,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyCompact, formatPercent } from '@/shared/utils/format'
@@ -25,6 +35,7 @@ import { opexService } from '../services/opexService'
 import { exportOpexMesGruposExcel } from '../utils/opexMesGruposExport'
 import { aplicarDeParaLinhas, origensDoDestino, mergePlanosGrupo } from '../utils/opexDePara'
 import { mesesFiltroKey, planoFiltroKey, temFiltroMeses, yoyPct } from '../utils/opexPeriodo'
+import { realizadoComProjecaoAno } from '../utils/opexProjecao'
 import type { OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 import type { OpexMesGrupoRow, OpexMesRow, OpexPlanoRow } from '../types/opex.types'
 import { OpexPlanoTitulos } from './OpexPlanoTitulos'
@@ -94,6 +105,7 @@ function clickPayload(data: unknown): Record<string, unknown> | null {
 }
 
 type VariacaoSort = 'off' | 'desc' | 'asc'
+type DrillPeriodo = number | 'ano' | null
 
 function nextVariacaoSort(atual: VariacaoSort): VariacaoSort {
   if (atual === 'off') return 'desc'
@@ -242,12 +254,14 @@ function OpexHorizontalCompareChart({
   compararAnoAnterior,
   ano,
   anoAnterior,
+  realizadoNome = 'Realizado',
 }: {
   data: DrillBarRow[]
   onBarClick: (row: DrillBarRow) => void
   compararAnoAnterior: boolean
   ano: number
   anoAnterior: number
+  realizadoNome?: string
 }) {
   return (
     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
@@ -327,7 +341,7 @@ function OpexHorizontalCompareChart({
             </Bar>
             <Bar
               dataKey="realizado"
-              name={`Realizado ${ano}`}
+              name={`${realizadoNome} ${ano}`}
               fill={OPEX_COLORS.realizado.hex}
               radius={[0, 4, 4, 0]}
               maxBarSize={14}
@@ -358,7 +372,7 @@ function OpexHorizontalCompareChart({
             </Bar>
             <Bar
               dataKey="realizado"
-              name="Realizado"
+              name={realizadoNome}
               fill={OPEX_COLORS.realizado.hex}
               radius={[0, 4, 4, 0]}
               maxBarSize={14}
@@ -385,7 +399,7 @@ export function OpexPrevistoRealizadoChart({
   orcamentoImportado,
   planoFiltro,
 }: Props) {
-  const [drillMes, setDrillMes] = useState<number | null>(null)
+  const [drillPeriodo, setDrillPeriodo] = useState<DrillPeriodo>(null)
   const [drillGrupo, setDrillGrupo] = useState<string | null>(null)
   const [drillPlano, setDrillPlano] = useState<string | null>(null)
   const [drillSortVariacao, setDrillSortVariacao] = useState<VariacaoSort>('off')
@@ -394,11 +408,14 @@ export function OpexPrevistoRealizadoChart({
   const [erroExport, setErroExport] = useState<string | null>(null)
   const anoAnterior = ano - 1
   const filtroAtivo = temFiltroMeses(mesesFiltro)
+  const drillAberto = drillPeriodo != null
+  const drillAno = drillPeriodo === 'ano'
+  const drillMes = typeof drillPeriodo === 'number' ? drillPeriodo : null
   const mesesDrill = drillMes != null ? [drillMes] : []
   const planoFiltroKeyValue = planoFiltroKey(planoFiltro ?? { gruposExcluidos: [], planosExcluidos: [] })
 
   useEffect(() => {
-    setDrillMes(null)
+    setDrillPeriodo(null)
     setDrillGrupo(null)
     setDrillPlano(null)
     setDrillSortVariacao('off')
@@ -410,7 +427,7 @@ export function OpexPrevistoRealizadoChart({
     setDrillGrupo(null)
     setDrillPlano(null)
     setDrillSortVariacao('off')
-  }, [drillMes])
+  }, [drillPeriodo])
 
   const chartData = useMemo(
     () =>
@@ -422,10 +439,10 @@ export function OpexPrevistoRealizadoChart({
     [rows, mesAtual, mesesFiltro, filtroAtivo],
   )
 
-  const { data: gruposMes, isLoading: loadingGrupos } = useOpexMesGrupos(ano, drillMes, planoFiltro)
+  const { data: gruposMes, isLoading: loadingGrupos } = useOpexMesGrupos(ano, drillPeriodo, planoFiltro)
   const { data: gruposAnoAnterior, isLoading: loadingGruposAA } = useOpexMesGrupos(
     anoAnterior,
-    compararAnoAnterior ? drillMes : null,
+    compararAnoAnterior ? drillPeriodo : null,
     planoFiltro,
   )
   const { data: deParaLinhas } = useOpexGrupoDePara(anoAnterior, ano)
@@ -436,7 +453,7 @@ export function OpexPrevistoRealizadoChart({
   const { data: planosGrupo, isLoading: loadingPlanos } = useQuery({
     queryKey: ['opex', 'planos', ano, drillGrupo, mesesFiltroKey(mesesDrill), planoFiltroKeyValue],
     queryFn: () => opexService.fetchPlanosGrupo(ano, drillGrupo!, mesesDrill, planoFiltro),
-    enabled: drillGrupo != null && drillMes != null,
+    enabled: drillGrupo != null && drillAberto,
     staleTime: 60_000,
   })
 
@@ -457,18 +474,21 @@ export function OpexPrevistoRealizadoChart({
       )
       return mergePlanosGrupo(batches.flat())
     },
-    enabled: compararAnoAnterior && drillGrupo != null && drillMes != null,
+    enabled: compararAnoAnterior && drillGrupo != null && drillAberto,
     staleTime: 60_000,
   })
 
   const grupoChartData = useMemo(() => {
-    const atual = (gruposMes ?? []).map((g: OpexMesGrupoRow) => ({
-      key: g.grupo_conta,
-      label: g.grupo_conta,
-      previsto: g.previsto,
-      realizado: g.realizado,
-      variacao: g.variacao,
-    }))
+    const atual = (gruposMes ?? []).map((g: OpexMesGrupoRow) => {
+      const realizado = realizadoComProjecaoAno(g.realizado, g.fixo, mesAtual, drillAno)
+      return {
+        key: g.grupo_conta,
+        label: g.grupo_conta,
+        previsto: g.previsto,
+        realizado,
+        variacao: realizado - g.previsto,
+      }
+    })
     const anteriorBruto = (gruposAnoAnterior ?? []).map((g: OpexMesGrupoRow) => ({
       key: g.grupo_conta,
       label: g.grupo_conta,
@@ -480,16 +500,24 @@ export function OpexPrevistoRealizadoChart({
       drillSortVariacao,
       compararAnoAnterior,
     )
-  }, [gruposMes, gruposAnoAnterior, deParaLinhas, deParaKey, drillSortVariacao, compararAnoAnterior])
+  }, [gruposMes, gruposAnoAnterior, deParaLinhas, deParaKey, drillSortVariacao, compararAnoAnterior, drillAno, mesAtual])
+
+  const grupoFixoSelecionado = Boolean(
+    drillGrupo &&
+      (gruposMes ?? []).find((g: OpexMesGrupoRow) => g.grupo_conta === drillGrupo)?.fixo,
+  )
 
   const planoChartData = useMemo(() => {
-    const atual = (planosGrupo ?? []).map((p: OpexPlanoRow) => ({
-      key: p.plano_contas,
-      label: p.plano_contas,
-      previsto: p.previsto_ano,
-      realizado: p.realizado_ytd,
-      variacao: p.realizado_ytd - p.previsto_ano,
-    }))
+    const atual = (planosGrupo ?? []).map((p: OpexPlanoRow) => {
+      const realizado = realizadoComProjecaoAno(p.realizado_ytd, grupoFixoSelecionado, mesAtual, drillAno)
+      return {
+        key: p.plano_contas,
+        label: p.plano_contas,
+        previsto: p.previsto_ano,
+        realizado,
+        variacao: realizado - p.previsto_ano,
+      }
+    })
     const anterior = (planosAnoAnterior ?? []).map((p: OpexPlanoRow) => ({
       key: p.plano_contas,
       realizado: p.realizado_ytd,
@@ -499,14 +527,14 @@ export function OpexPrevistoRealizadoChart({
       drillSortVariacao,
       compararAnoAnterior,
     )
-  }, [planosGrupo, planosAnoAnterior, drillSortVariacao, compararAnoAnterior])
+  }, [planosGrupo, planosAnoAnterior, drillSortVariacao, compararAnoAnterior, drillAno, mesAtual, grupoFixoSelecionado])
 
-  const drillMesLabel = drillMes != null ? MESES_CURTOS[drillMes - 1] : ''
+  const drillMesLabel = drillAno ? 'Ano' : drillMes != null ? MESES_CURTOS[drillMes - 1] : ''
 
   const handleBarClick = (_data: unknown, index: number) => {
     const mes = chartData[index]?.mes
     if (!mes) return
-    setDrillMes(mes)
+    setDrillPeriodo(mes)
   }
 
   const handleVoltar = () => {
@@ -519,18 +547,18 @@ export function OpexPrevistoRealizadoChart({
       setDrillGrupo(null)
       return
     }
-    setDrillMes(null)
+    setDrillPeriodo(null)
   }
 
   const handleExportar = async () => {
-    if (drillMes == null || !gruposMes?.length) return
+    if (!drillAberto || !gruposMes?.length) return
     setExportando(true)
     setErroExport(null)
     try {
       await exportOpexMesGruposExcel(gruposMes, {
         ano,
         mes: drillMes,
-        mesLabel: drillMesLabel,
+        mesLabel: drillAno ? `ano-${ano}` : drillMesLabel,
       })
     } catch (e) {
       setErroExport(e instanceof Error ? e.message : 'Erro ao exportar planilha.')
@@ -579,14 +607,17 @@ export function OpexPrevistoRealizadoChart({
   const loadingDrill =
     (drillGrupo ? loadingPlanos : loadingGrupos) ||
     (compararAnoAnterior && (drillGrupo ? loadingPlanosAA : loadingGruposAA))
-  const chartHeight = drillMes != null && !drillPlano ? Math.max(320, chartBars.length * 48 + 88) : 320
+  const chartHeight = drillAberto && !drillPlano ? Math.max(320, chartBars.length * 48 + 88) : 320
 
   const tituloDrill = drillPlano
     ? drillPlano
     : drillGrupo
       ? drillGrupo
-      : `Detalhe de ${drillMesLabel} / ${ano}`
+      : drillAno
+        ? `Detalhe de ${ano}`
+        : `Detalhe de ${drillMesLabel} / ${ano}`
 
+  const realizadoAnoLabel = 'Realizado + projetado'
   const subtituloDrill = drillPlano
     ? compararAnoAnterior
       ? `Títulos de ${drillMesLabel}/${ano} · totais vs ${anoAnterior} no cabeçalho`
@@ -594,10 +625,14 @@ export function OpexPrevistoRealizadoChart({
     : drillGrupo
       ? compararAnoAnterior
         ? `Planos · realizado ${ano} vs ${anoAnterior}`
-        : 'Clique no plano para ver os títulos'
+        : drillAno
+          ? 'Clique no plano para ver os títulos · realizado das fixas inclui projeção até dez'
+          : 'Clique no plano para ver os títulos'
       : compararAnoAnterior
         ? `Clique no grupo · barras = realizado ${ano} vs ${anoAnterior}`
-        : 'Clique no grupo para ver os planos · o botão de variação alterna maior gasto e economia'
+        : drillAno
+          ? 'Clique no grupo · realizado das fixas inclui a projeção até dezembro'
+          : 'Clique no grupo para ver os planos · o botão de variação alterna maior gasto e economia'
 
   return (
     <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
@@ -608,27 +643,39 @@ export function OpexPrevistoRealizadoChart({
           </span>
           <div>
             <h2 className="text-sm font-semibold text-slate-900">
-              {drillMes != null
+              {drillAberto
                 ? tituloDrill
                 : orcamentoImportado
                   ? 'Orçamento x realizado mensal'
                   : 'Previsto x realizado mensal'}
             </h2>
             <p className="text-xs text-slate-500">
-              {drillMes != null
+              {drillAberto
                 ? subtituloDrill
-                : 'Clique no mês para detalhar · barras = orçamento (ou VIOS se não importado)'}
+                : 'Clique no mês para detalhar · ou abra o ano inteiro à direita'}
             </p>
-            {drillMes != null && (drillGrupo || drillPlano) && (
+            {drillAberto && (drillGrupo || drillPlano) && (
               <p className="mt-1 text-[11px] text-slate-400">
-                {drillMesLabel} / {ano}
+                {drillAno ? `Ano / ${ano}` : `${drillMesLabel} / ${ano}`}
                 {drillGrupo ? ` · ${drillGrupo}` : ''}
                 {drillPlano ? ` · ${drillPlano}` : ''}
               </p>
             )}
           </div>
         </div>
-        {drillMes != null && (
+        {!drillAberto && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setDrillPeriodo('ano')}
+          >
+            <CalendarRange className="h-3.5 w-3.5" aria-hidden />
+            Ver ano
+          </Button>
+        )}
+        {drillAberto && (
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -698,14 +745,14 @@ export function OpexPrevistoRealizadoChart({
         </p>
       )}
 
-      {drillMes != null && !loadingDrill && (
+      {drillAberto && !loadingDrill && (
         <div className="mb-3 flex flex-wrap gap-3 text-xs text-slate-600">
           <span>
             Orçamento:{' '}
             <strong className="tabular-nums text-slate-800">{formatCurrency(drillTotais.previsto)}</strong>
           </span>
           <span>
-            Realizado:{' '}
+            {drillAno ? realizadoAnoLabel : 'Realizado'}:{' '}
             <strong className={cn('tabular-nums', OPEX_COLORS.realizado.text)}>
               {formatCurrency(drillTotais.realizado)}
             </strong>
@@ -744,7 +791,7 @@ export function OpexPrevistoRealizadoChart({
         </div>
       )}
 
-      {drillMes != null && drillPlano && drillGrupo && (
+      {drillAberto && drillPlano && drillGrupo && (
         <OpexPlanoTitulos
           ano={ano}
           grupo={drillGrupo}
@@ -757,7 +804,7 @@ export function OpexPrevistoRealizadoChart({
         />
       )}
 
-      {drillMes != null && !drillPlano && (
+      {drillAberto && !drillPlano && (
         <div className="w-full" style={{ height: chartHeight, minHeight: 320 }}>
           {loadingDrill && (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-500">
@@ -768,31 +815,32 @@ export function OpexPrevistoRealizadoChart({
 
           {!loadingDrill && chartBars.length === 0 && (
             <div className="flex h-full items-center justify-center text-sm text-slate-500">
-              {drillGrupo ? 'Sem planos neste grupo.' : 'Sem despesas elegíveis neste mês.'}
+              {drillGrupo ? 'Sem planos neste grupo.' : 'Sem despesas elegíveis neste período.'}
             </div>
           )}
 
           {!loadingDrill && chartBars.length > 0 && (
             <OpexHorizontalCompareChart
-              key={`${compararAnoAnterior ? 'yoy' : 'orc'}-${deParaKey}`}
+              key={`${compararAnoAnterior ? 'yoy' : 'orc'}-${deParaKey}-${drillAno ? 'proj' : 'raw'}`}
               data={chartBars}
               compararAnoAnterior={compararAnoAnterior}
               ano={ano}
               anoAnterior={anoAnterior}
+              realizadoNome={drillAno ? realizadoAnoLabel : 'Realizado'}
               onBarClick={(row) => {
                 if (drillGrupo) {
                   setDrillPlano(row.key)
                   return
                 }
                 setDrillGrupo(row.key)
-                setDrillSortVariacao(true)
+                setDrillSortVariacao('desc')
               }}
             />
           )}
         </div>
       )}
 
-      {drillMes == null && (
+      {!drillAberto && (
         <div className="w-full" style={{ height: 320, minHeight: 320 }}>
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
             <ComposedChart data={chartData} margin={{ left: 4, right: 12, top: 28, bottom: 4 }}>
