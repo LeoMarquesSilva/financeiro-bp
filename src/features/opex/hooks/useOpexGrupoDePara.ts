@@ -14,13 +14,13 @@ export function useOpexGrupoDePara(anoOrigem: number, anoDestino: number) {
 
   const query = useQuery({
     queryKey: pairKey,
-    queryFn: () => opexDeParaService.list(anoOrigem, anoDestino),
+    queryFn: (): Promise<OpexGrupoDePara[]> => opexDeParaService.list(anoOrigem, anoDestino),
     enabled,
     staleTime: 0,
   })
 
   const syncCache = (updater: (atual: OpexGrupoDePara[]) => OpexGrupoDePara[]) => {
-    queryClient.setQueryData<OpexGrupoDePara[]>(pairKey, (atual) => updater(atual ?? []))
+    queryClient.setQueryData(pairKey, (atual: OpexGrupoDePara[] | undefined) => updater(atual ?? []))
   }
 
   const refetchRelacionados = async () => {
@@ -31,8 +31,8 @@ export function useOpexGrupoDePara(anoOrigem: number, anoDestino: number) {
   }
 
   const upsert = useMutation({
-    mutationFn: opexDeParaService.upsert,
-    onSuccess: async (salvo) => {
+    mutationFn: (input: Parameters<typeof opexDeParaService.upsert>[0]) => opexDeParaService.upsert(input),
+    onSuccess: async (salvo: OpexGrupoDePara) => {
       syncCache((atual) => {
         const sem = atual.filter(
           (linha) =>
@@ -46,12 +46,17 @@ export function useOpexGrupoDePara(anoOrigem: number, anoDestino: number) {
   })
 
   const remove = useMutation({
-    mutationFn: opexDeParaService.remove,
-    onSuccess: async (_, id) => {
+    mutationFn: (id: string) => opexDeParaService.remove(id),
+    onSuccess: async (_resultado: void, id: string) => {
       syncCache((atual) => atual.filter((linha) => linha.id !== id))
       await refetchRelacionados()
     },
   })
 
-  return { ...query, upsert, remove }
+  return {
+    data: query.data as OpexGrupoDePara[] | undefined,
+    isLoading: query.isLoading,
+    upsert,
+    remove,
+  }
 }

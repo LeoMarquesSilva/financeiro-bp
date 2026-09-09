@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,
   ChevronDown,
-  ChevronRight,
   Download,
   FileSpreadsheet,
   Loader2,
@@ -25,7 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { formatCurrency, formatCurrencyInput, formatDate, formatNumberToCurrencyInput, parseCurrencyBr } from '@/shared/utils/format'
+import { formatCurrency, formatCurrencyCompact, formatCurrencyInput, formatDate, formatNumberToCurrencyInput, parseCurrencyBr } from '@/shared/utils/format'
 import { MESES_CURTOS, MESES_LONGOS, OPEX_FORNECEDOR_NAO_CADASTRADO } from '../constants'
 import { toggleMesFiltro } from '../utils/opexPeriodo'
 import { useOpexOrcamento } from '../hooks/useOpexOrcamento'
@@ -563,44 +562,52 @@ export function OpexOrcamentoSection({ ano }: Props) {
     }
   }
 
+  if (!expandido) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5 text-xs"
+        aria-expanded={false}
+        onClick={() => setExpandido(true)}
+      >
+        <FileSpreadsheet className="h-3.5 w-3.5 text-violet-700" aria-hidden />
+        Orçamento {ano}
+        {meta?.importado ? (
+          <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+            {formatCurrencyCompact(meta.total_ano ?? 0)}
+          </span>
+        ) : (
+          <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+            VIOS
+          </span>
+        )}
+      </Button>
+    )
+  }
+
   return (
-    <section className="rounded-xl border border-slate-200/60 bg-white shadow-sm">
+    <section className="w-full basis-full rounded-xl border border-slate-200/60 bg-white shadow-sm">
       <button
         type="button"
-        onClick={() => setExpandido((v) => !v)}
-        aria-expanded={expandido}
-        className="flex w-full flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 text-left transition-colors hover:bg-slate-50/80 sm:px-5"
+        onClick={() => setExpandido(false)}
+        aria-expanded
+        className="flex w-full items-center gap-2 border-b border-slate-100 px-4 py-2.5 text-left transition-colors hover:bg-slate-50/80 sm:px-5"
       >
-        <div className="flex min-w-0 items-start gap-2">
-          {expandido ? (
-            <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-          ) : (
-            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-          )}
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50">
-            <FileSpreadsheet className="h-4 w-4 text-violet-700" aria-hidden />
+        <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-violet-50">
+          <FileSpreadsheet className="h-3.5 w-3.5 text-violet-700" aria-hidden />
+        </span>
+        <h2 className="text-sm font-semibold text-slate-900">Orçamento congelado — {ano}</h2>
+        {meta?.importado ? (
+          <span className="ml-auto text-[11px] text-emerald-700">
+            Congelado em {formatDate(meta.congelado_em?.slice(0, 10) ?? null)} · {formatCurrencyCompact(meta.total_ano ?? 0)}
           </span>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-slate-900">Orçamento congelado — {ano}</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Previsão orçamentária anual separada do VIOS. Usada como previsto principal no dashboard.
-            </p>
-            {meta?.importado ? (
-              <p className="mt-2 text-xs text-emerald-700">
-                Congelado em {formatDate(meta.congelado_em?.slice(0, 10) ?? null)} ·{' '}
-                {formatCurrency(meta.total_ano ?? 0)}
-              </p>
-            ) : (
-              <p className="mt-2 flex items-center gap-1 text-xs text-amber-700">
-                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                Orçamento não importado — o dashboard usa previsto VIOS como fallback.
-              </p>
-            )}
-          </div>
-        </div>
-        {!expandido && meta?.importado && (
-          <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
-            {formatCurrency(meta.total_ano ?? 0)} / ano
+        ) : (
+          <span className="ml-auto flex items-center gap-1 text-[11px] text-amber-700">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+            Sem importação — fallback VIOS
           </span>
         )}
       </button>

@@ -100,9 +100,10 @@ export function OpexPage() {
         </p>
       )}
 
-      <OpexOrcamentoSection ano={ano} />
-
-      <OpexDeParaSection anoDestino={ano} />
+      <div className="flex flex-wrap items-start gap-2">
+        <OpexOrcamentoSection ano={ano} />
+        <OpexDeParaSection anoDestino={ano} />
+      </div>
 
       <OpexKpis
         kpis={data?.kpis ?? {

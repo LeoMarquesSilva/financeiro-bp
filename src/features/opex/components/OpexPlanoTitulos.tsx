@@ -16,7 +16,7 @@ type Props = {
   mesesFiltro: number[]
   orcamentoImportado?: boolean
   planoFiltro?: OpexPlanoFiltroState
-  sortByVariacao?: boolean
+  sortVariacao?: 'desc' | 'asc'
   /** Orçado do plano no período, quando o orçamento não veio quebrado por título. */
   orcamentoPlano?: number
 }
@@ -133,18 +133,18 @@ export function OpexPlanoTitulos({
   mesesFiltro,
   orcamentoImportado,
   planoFiltro,
-  sortByVariacao,
+  sortVariacao,
   orcamentoPlano,
 }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey>(sortByVariacao ? 'variacao' : 'realizado')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [sortKey, setSortKey] = useState<SortKey>(sortVariacao ? 'variacao' : 'realizado')
+  const [sortDir, setSortDir] = useState<SortDir>(sortVariacao ?? 'desc')
 
   useEffect(() => {
-    if (sortByVariacao) {
+    if (sortVariacao) {
       setSortKey('variacao')
-      setSortDir('desc')
+      setSortDir(sortVariacao)
     }
-  }, [sortByVariacao])
+  }, [sortVariacao])
 
   const referenciaLabel = orcamentoImportado ? 'Orçado' : 'Previsto'
   const referenciaColor = orcamentoImportado ? OPEX_COLORS.orcamento.text : OPEX_COLORS.previsto.text
@@ -159,13 +159,15 @@ export function OpexPlanoTitulos({
       mesesFiltroKey(mesesFiltro),
       planoFiltroKey(planoFiltro ?? { gruposExcluidos: [], planosExcluidos: [] }),
     ],
-    queryFn: () => opexService.fetchPlanoTitulos(ano, grupo, plano, mesesFiltro, planoFiltro),
+    queryFn: (): Promise<OpexTituloRow[]> =>
+      opexService.fetchPlanoTitulos(ano, grupo, plano, mesesFiltro, planoFiltro),
     staleTime: 60_000,
   })
 
   const titulos = useMemo(() => {
-    if (!data?.length) return []
-    const filtrados = data.filter((t) => tituloNoPeriodo(t, mesesFiltro))
+    const rows: OpexTituloRow[] = data ?? []
+    if (!rows.length) return []
+    const filtrados = rows.filter((t) => tituloNoPeriodo(t, mesesFiltro))
     const sign = sortDir === 'asc' ? 1 : -1
     return filtrados.sort((a, b) => sign * compareTitulos(a, b, sortKey, orcamentoImportado))
   }, [data, sortKey, sortDir, orcamentoImportado, mesesFiltro])

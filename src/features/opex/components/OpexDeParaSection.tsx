@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRightLeft, ChevronDown, ChevronRight, Loader2, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, ChevronDown, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
@@ -108,45 +108,60 @@ export function OpexDeParaSection({ anoDestino }: Props) {
     }
   }
 
+  if (!expandido) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5 text-xs"
+        aria-expanded={false}
+        onClick={() => setExpandido(true)}
+      >
+        <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
+        De × Para
+        {pendentes > 0 ? (
+          <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+            {pendentes} sem destino
+          </span>
+        ) : (mapeamentos?.length ?? 0) > 0 ? (
+          <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+            {mapeamentos?.length}
+          </span>
+        ) : null}
+      </Button>
+    )
+  }
+
   return (
-    <section className="rounded-xl border border-slate-200/60 bg-white shadow-sm">
+    <section className="w-full basis-full rounded-xl border border-slate-200/60 bg-white shadow-sm">
       <button
         type="button"
-        onClick={() => setExpandido((v) => !v)}
-        aria-expanded={expandido}
-        className="flex w-full flex-wrap items-start justify-between gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-50/80 sm:px-5"
+        onClick={() => setExpandido(false)}
+        aria-expanded
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-slate-50/80 sm:px-5"
       >
-        <div className="flex min-w-0 items-start gap-2">
-          {expandido ? (
-            <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-          ) : (
-            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-          )}
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-            <ArrowRightLeft className="h-4 w-4 text-slate-600" aria-hidden />
+        <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100">
+          <ArrowRightLeft className="h-3.5 w-3.5 text-slate-600" aria-hidden />
+        </span>
+        <h2 className="text-sm font-semibold text-slate-900">De × Para — anos anteriores</h2>
+        {pendentes > 0 ? (
+          <span className="ml-auto text-[11px] text-amber-800">
+            {pendentes} categoria{pendentes > 1 ? 's' : ''} de {anoOrigem} sem destino em {anoDestino}
           </span>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-slate-900">De × Para — anos anteriores</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Cruza o nome antigo do grupo com o de {anoDestino}, para a comparação YoY somar no lugar certo.
-            </p>
-            {pendentes > 0 && (
-              <p className="mt-1 text-xs text-amber-800">
-                {pendentes} categoria{pendentes > 1 ? 's' : ''} de {anoOrigem} sem destino em {anoDestino}.
-              </p>
-            )}
-            {pendentes === 0 && (mapeamentos?.length ?? 0) > 0 && (
-              <p className="mt-1 text-xs text-emerald-700">
-                {mapeamentos?.length} mapeamento{(mapeamentos?.length ?? 0) > 1 ? 's' : ''} gravado
-                {(mapeamentos?.length ?? 0) > 1 ? 's' : ''}.
-              </p>
-            )}
-          </div>
-        </div>
+        ) : (mapeamentos?.length ?? 0) > 0 ? (
+          <span className="ml-auto text-[11px] text-emerald-700">
+            {mapeamentos?.length} mapeamento{(mapeamentos?.length ?? 0) > 1 ? 's' : ''} gravado
+            {(mapeamentos?.length ?? 0) > 1 ? 's' : ''}
+          </span>
+        ) : null}
       </button>
 
-      {expandido && (
-        <div className="space-y-4 border-t border-slate-100 px-4 py-4 sm:px-5">
+      <div className="space-y-4 border-t border-slate-100 px-4 py-4 sm:px-5">
+          <p className="text-xs text-slate-500">
+            Cruza o nome antigo do grupo com o de {anoDestino}, para a comparação YoY somar no lugar certo.
+          </p>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label htmlFor="opex-de-para-ano-origem" className="text-[11px] text-slate-500">
@@ -272,7 +287,6 @@ export function OpexDeParaSection({ anoDestino }: Props) {
             </div>
           )}
         </div>
-      )}
     </section>
   )
 }

@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { ArrowLeft, ArrowUpDown, BarChart3, Download, GitCompareArrows, Loader2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, BarChart3, Download, GitCompareArrows, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyCompact, formatPercent } from '@/shared/utils/format'
@@ -93,13 +93,26 @@ function clickPayload(data: unknown): Record<string, unknown> | null {
   return rec
 }
 
+type VariacaoSort = 'off' | 'desc' | 'asc'
+
+function nextVariacaoSort(atual: VariacaoSort): VariacaoSort {
+  if (atual === 'off') return 'desc'
+  if (atual === 'desc') return 'asc'
+  return 'off'
+}
+
 function sortByVariacao<T extends { variacao: number; variacaoYoY: number }>(
   rows: T[],
-  enabled: boolean,
+  modo: VariacaoSort,
   porYoY = false,
 ): T[] {
-  if (!enabled) return rows
-  return [...rows].sort((a, b) => (porYoY ? b.variacaoYoY - a.variacaoYoY : b.variacao - a.variacao))
+  if (modo === 'off') return rows
+  const sign = modo === 'desc' ? 1 : -1
+  return [...rows].sort((a, b) => {
+    const av = porYoY ? a.variacaoYoY : a.variacao
+    const bv = porYoY ? b.variacaoYoY : b.variacao
+    return sign * (bv - av)
+  })
 }
 
 function mergeDrillYoY(
@@ -375,7 +388,7 @@ export function OpexPrevistoRealizadoChart({
   const [drillMes, setDrillMes] = useState<number | null>(null)
   const [drillGrupo, setDrillGrupo] = useState<string | null>(null)
   const [drillPlano, setDrillPlano] = useState<string | null>(null)
-  const [drillSortVariacao, setDrillSortVariacao] = useState(false)
+  const [drillSortVariacao, setDrillSortVariacao] = useState<VariacaoSort>('off')
   const [compararAnoAnterior, setCompararAnoAnterior] = useState(false)
   const [exportando, setExportando] = useState(false)
   const [erroExport, setErroExport] = useState<string | null>(null)
@@ -388,7 +401,7 @@ export function OpexPrevistoRealizadoChart({
     setDrillMes(null)
     setDrillGrupo(null)
     setDrillPlano(null)
-    setDrillSortVariacao(false)
+    setDrillSortVariacao('off')
     setCompararAnoAnterior(false)
     setErroExport(null)
   }, [ano, mesesFiltro, planoFiltro])
@@ -396,7 +409,7 @@ export function OpexPrevistoRealizadoChart({
   useEffect(() => {
     setDrillGrupo(null)
     setDrillPlano(null)
-    setDrillSortVariacao(false)
+    setDrillSortVariacao('off')
   }, [drillMes])
 
   const chartData = useMemo(
@@ -416,7 +429,9 @@ export function OpexPrevistoRealizadoChart({
     planoFiltro,
   )
   const { data: deParaLinhas } = useOpexGrupoDePara(anoAnterior, ano)
-  const deParaKey = (deParaLinhas ?? []).map((l) => `${l.nomeOrigem}>${l.nomeDestino}`).join('|')
+  const deParaKey = (deParaLinhas ?? [])
+    .map((l) => `${l.nomeOrigem}>${l.nomeDestino}`)
+    .join('|')
 
   const { data: planosGrupo, isLoading: loadingPlanos } = useQuery({
     queryKey: ['opex', 'planos', ano, drillGrupo, mesesFiltroKey(mesesDrill), planoFiltroKeyValue],
@@ -582,7 +597,7 @@ export function OpexPrevistoRealizadoChart({
         : 'Clique no plano para ver os títulos'
       : compararAnoAnterior
         ? `Clique no grupo · barras = realizado ${ano} vs ${anoAnterior}`
-        : 'Clique no grupo para ver os planos · botão Maior variação ordena o estouro'
+        : 'Clique no grupo para ver os planos · o botão de variação alterna maior gasto e economia'
 
   return (
     <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
@@ -628,14 +643,31 @@ export function OpexPrevistoRealizadoChart({
             </Button>
             <Button
               type="button"
-              variant={drillSortVariacao ? 'default' : 'outline'}
+              variant={drillSortVariacao === 'off' ? 'outline' : 'default'}
               size="sm"
-              className={cn('gap-1.5', drillSortVariacao && 'bg-rose-600 hover:bg-rose-700')}
-              aria-pressed={drillSortVariacao}
-              onClick={() => setDrillSortVariacao((v) => !v)}
+              className={cn(
+                'gap-1.5',
+                drillSortVariacao === 'desc' && 'bg-rose-600 hover:bg-rose-700',
+                drillSortVariacao === 'asc' && 'bg-emerald-600 hover:bg-emerald-700',
+              )}
+              aria-pressed={drillSortVariacao !== 'off'}
+              aria-label={
+                drillSortVariacao === 'desc'
+                  ? 'Ordenado pelo maior gasto. Clique para ver o que mais economizou.'
+                  : drillSortVariacao === 'asc'
+                    ? 'Ordenado pelo que mais economizou. Clique para voltar à ordem padrão.'
+                    : 'Ordenar pelo maior gasto'
+              }
+              onClick={() => setDrillSortVariacao(nextVariacaoSort)}
             >
-              <ArrowUpDown className="h-3.5 w-3.5" aria-hidden />
-              Maior variação
+              {drillSortVariacao === 'desc' ? (
+                <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+              ) : drillSortVariacao === 'asc' ? (
+                <ArrowUp className="h-3.5 w-3.5" aria-hidden />
+              ) : (
+                <ArrowUpDown className="h-3.5 w-3.5" aria-hidden />
+              )}
+              {drillSortVariacao === 'asc' ? 'Mais economizou' : 'Maior variação'}
             </Button>
             <Button
               type="button"
@@ -682,12 +714,12 @@ export function OpexPrevistoRealizadoChart({
             Variação:{' '}
             <button
               type="button"
-              onClick={() => setDrillSortVariacao((v) => !v)}
+              onClick={() => setDrillSortVariacao(nextVariacaoSort)}
               className={cn(
                 'rounded px-1 -mx-1 tabular-nums underline-offset-2 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300',
                 variacaoClass(drillVariacao),
               )}
-              title="Ordenar pela maior variação (realizado − orçamento)"
+              title="Alternar ordem: maior gasto → mais economizou → padrão"
             >
               <strong>{formatCurrency(drillVariacao)}</strong>
             </button>
@@ -720,7 +752,7 @@ export function OpexPrevistoRealizadoChart({
           mesesFiltro={mesesDrill}
           orcamentoImportado={orcamentoImportado}
           planoFiltro={planoFiltro}
-          sortByVariacao={drillSortVariacao}
+          sortVariacao={drillSortVariacao === 'off' ? undefined : drillSortVariacao}
           orcamentoPlano={planoChartData.find((p) => p.key === drillPlano)?.previsto}
         />
       )}

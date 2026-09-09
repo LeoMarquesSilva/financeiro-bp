@@ -14,11 +14,11 @@ function mapRow(row: Record<string, unknown>): OpexGrupoDePara {
 export const opexDeParaService = {
   async list(anoOrigem: number, anoDestino: number): Promise<OpexGrupoDePara[]> {
     const { data, error } = await supabase
-      .from('opex_grupo_de_para')
+      .from('opex_grupo_de_para' as never)
       .select('id, ano_origem, nome_origem, ano_destino, nome_destino')
-      .eq('ano_origem', anoOrigem)
-      .eq('ano_destino', anoDestino)
-      .order('nome_origem')
+      .eq('ano_origem' as never, anoOrigem)
+      .eq('ano_destino' as never, anoDestino)
+      .order('nome_origem' as never)
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map(mapRow)
   },
@@ -37,8 +37,8 @@ export const opexDeParaService = {
       nome_destino: input.nomeDestino.trim(),
     }
     const query = input.id
-      ? supabase.from('opex_grupo_de_para').update(payload).eq('id', input.id)
-      : supabase.from('opex_grupo_de_para').upsert(payload, {
+      ? supabase.from('opex_grupo_de_para' as never).update(payload as never).eq('id' as never, input.id)
+      : supabase.from('opex_grupo_de_para' as never).upsert(payload as never, {
           onConflict: 'ano_origem,nome_origem,ano_destino',
         })
     const { data, error } = await query.select('id, ano_origem, nome_origem, ano_destino, nome_destino').single()
@@ -47,7 +47,7 @@ export const opexDeParaService = {
   },
 
   async remove(id: string): Promise<void> {
-    const { error } = await supabase.from('opex_grupo_de_para').delete().eq('id', id)
+    const { error } = await supabase.from('opex_grupo_de_para' as never).delete().eq('id' as never, id)
     if (error) throw error
   },
 }
