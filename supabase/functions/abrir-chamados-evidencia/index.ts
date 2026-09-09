@@ -15,6 +15,8 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
  *  4. Insere em app_c009c0e4f1_tickets da RESPONSUM com
  *     category=validacao_de_indicadores / subcategory=auditoria_de_excludentes_envio_de_evidencia,
  *     atribuído ao responsável padrão da subcategoria (hoje: Samuel Willian Silva).
+ *  5. acao=listar devolve os CIs com ticket nessa subcategoria, para o SIOE não
+ *     resortear amostra que já foi disparada.
  *
  * Nunca escreve nada no ORQESTRAI — só lê colaboradores (espelho local) e escreve na RESPONSUM.
  */
@@ -42,7 +44,8 @@ interface CasoExcludente {
 }
 
 interface Payload {
-  itens: CasoExcludente[]
+  acao?: 'abrir' | 'listar'
+  itens?: CasoExcludente[]
   /** E-mail de quem disparou a ação no financeiro-bp — fallback quando a área não tem titular mapeado na RESPONSUM. */
   created_by_email?: string | null
   /** Override manual por área (configuração do modal Amostra de chamados). */
@@ -82,6 +85,35 @@ function hostOf(url: string): string {
   }
 }
 
+function parseCiFromTitle(title: string | null | undefined): string | null {
+  const m = String(title ?? '').match(/\bCI\s+(\d+)\b/i)
+  return m?.[1] ?? null
+}
+
+async function listarCisComChamadoEvidencia(
+  responsum: ReturnType<typeof createClient>,
+): Promise<string[]> {
+  const cis = new Set<string>()
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    const { data, error } = await responsum
+      .from('app_c009c0e4f1_tickets')
+      .select('id, title')
+      .eq('subcategory', 'auditoria_de_excludentes_envio_de_evidencia')
+      .range(from, from + pageSize - 1)
+    if (error) throw new Error(error.message)
+    const rows = (data ?? []) as Array<{ title?: string | null }>
+    for (const row of rows) {
+      const ci = parseCiFromTitle(row.title)
+      if (ci) cis.add(ci)
+    }
+    if (rows.length < pageSize) break
+    from += pageSize
+  }
+  return [...cis]
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -113,13 +145,18 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Body inválido.' }, 400)
     }
 
+    const sioe = createClient(SUPABASE_URL, SERVICE_ROLE)
+    const responsum = createClient(RESPONSUM_URL, RESPONSUM_SERVICE_ROLE)
+
+    if (payload.acao === 'listar') {
+      const cis = await listarCisComChamadoEvidencia(responsum)
+      return jsonResponse({ cis })
+    }
+
     const itens = Array.isArray(payload.itens) ? payload.itens : []
     if (itens.length === 0) {
       return jsonResponse({ error: 'Nenhum item para abrir chamado.' }, 400)
     }
-
-    const sioe = createClient(SUPABASE_URL, SERVICE_ROLE)
-    const responsum = createClient(RESPONSUM_URL, RESPONSUM_SERVICE_ROLE)
 
     // Titular (coordenador > gerente > sócio) por área, resolvido uma única vez.
     const areas = [...new Set(itens.map((i) => i.area).filter(Boolean))]

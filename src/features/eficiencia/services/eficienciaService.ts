@@ -73,10 +73,13 @@ import type {
 } from '../types/indicadoresResultado.types'
 import {
   buildResumoAmostra,
+  computarAmostraExcludentes,
   mapSlaRowToFatalExcludente,
-  selecionarAmostraExcludentes,
+  snapshotFromJson,
   type AbrirChamadosResultado,
   type AmostraChamadoItem,
+  type AmostraParaPersistir,
+  type AmostraPersistida,
   type EvidenciaFatalDecisao,
 } from '../utils/amostraChamados'
 import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
@@ -1979,7 +1982,19 @@ export const eficienciaService = {
       .map((row) => mapSlaRowToFatalExcludente(row))
       .filter((row): row is NonNullable<typeof row> => row != null)
 
-    const detalhesExcludentes = selecionarAmostraExcludentes(fatalExcludentes)
+    const persistidos = await this.fetchAmostraChamadosPersistida(ano, mes)
+    let ticketCis = new Set<string>()
+    try {
+      ticketCis = await this.fetchCisChamadosResponsumEvidencia()
+    } catch (e) {
+      if (persistidos.length === 0) throw e
+    }
+    const { detalhes: detalhesExcludentes, paraPersistir } = computarAmostraExcludentes(
+      fatalExcludentes,
+      persistidos,
+      ticketCis,
+    )
+    await this.upsertAmostraChamados(ano, mes, paraPersistir, persistidos)
     const amostraChamados = detalhesExcludentes.filter((r) => r.naAmostra)
     const resumoAmostra = buildResumoAmostra(detalhesExcludentes)
 
@@ -2021,6 +2036,63 @@ export const eficienciaService = {
    * `abrir-chamados-evidencia` (SIOE). created_by_email é o fallback quando a área não
    * tiver coordenador/gerente/sócio mapeado com conta RESPONSUM (ver módulo Usuários).
    */
+  async fetchAmostraChamadosPersistida(ano: number, mes: number): Promise<AmostraPersistida[]> {
+    const { data, error } = await supabase
+      .from('eficiencia_amostra_chamados' as never)
+      .select('ci, na_amostra, snapshot')
+      .eq('ano', ano)
+      .eq('mes', mes)
+    if (error) throw error
+    return ((data ?? []) as Array<{ ci: string; na_amostra: boolean; snapshot: unknown }>).map(
+      (row) => ({
+        ci: String(row.ci),
+        naAmostra: Boolean(row.na_amostra),
+        snapshot: snapshotFromJson(String(row.ci), row.snapshot),
+      }),
+    )
+  },
+
+  async upsertAmostraChamados(
+    ano: number,
+    mes: number,
+    rows: AmostraParaPersistir[],
+    jaPersistidos: AmostraPersistida[] = [],
+  ): Promise<void> {
+    if (rows.length === 0) return
+    const lockedAntes = new Set(jaPersistidos.filter((p) => p.naAmostra).map((p) => p.ci))
+    const payload = rows.map((row) => ({
+      ano,
+      mes,
+      ci: row.ci,
+      na_amostra: lockedAntes.has(row.ci) || row.naAmostra,
+      snapshot: row.snapshot,
+    }))
+    const CHUNK = 500
+    for (let i = 0; i < payload.length; i += CHUNK) {
+      const chunk = payload.slice(i, i + CHUNK)
+      const { error } = await supabase
+        .from('eficiencia_amostra_chamados' as never)
+        .upsert(chunk as never, { onConflict: 'ano,mes,ci' })
+      if (error) throw error
+    }
+  },
+
+  async fetchCisChamadosResponsumEvidencia(): Promise<Set<string>> {
+    const { data, error } = await supabase.functions.invoke('abrir-chamados-evidencia', {
+      body: { acao: 'listar' },
+    })
+    if (error) throw new Error(await parseEdgeFunctionError(error))
+    const cis = Array.isArray((data as { cis?: unknown } | null)?.cis)
+      ? (data as { cis: unknown[] }).cis
+      : []
+    const set = new Set<string>()
+    for (const raw of cis) {
+      const ci = String(raw ?? '').trim()
+      if (ci) set.add(ci)
+    }
+    return set
+  },
+
   async abrirChamadosEvidenciaResponsum(
     itens: AmostraChamadoItem[],
     createdByEmail: string | null,
@@ -2028,6 +2100,7 @@ export const eficienciaService = {
       string,
       { responsum_user_id: string; full_name: string; area: string; email?: string | null }
     > = {},
+    competencia?: { ano: number; mes: number },
   ): Promise<AbrirChamadosResultado> {
     const overrides =
       Object.keys(titularPorArea).length > 0 ? titularPorArea : undefined
@@ -2046,7 +2119,27 @@ export const eficienciaService = {
       },
     })
     if (error) throw new Error(await parseEdgeFunctionError(error))
-    return data as AbrirChamadosResultado
+    const resultado = data as AbrirChamadosResultado
+    if (competencia) {
+      const okCis = new Set(
+        (resultado.resultados ?? []).filter((r) => r.ok).map((r) => r.ci),
+      )
+      const paraPersistir = itens
+        .filter((item) => okCis.has(item.ci))
+        .map((item) => ({
+          ci: item.ci,
+          naAmostra: true,
+          snapshot: item,
+        }))
+      if (paraPersistir.length > 0) {
+        try {
+          await this.upsertAmostraChamados(competencia.ano, competencia.mes, paraPersistir)
+        } catch {
+          // Amostra já foi aberta no RESPONSUM; persistência tenta de novo no próximo load.
+        }
+      }
+    }
+    return resultado
   },
 
   /**

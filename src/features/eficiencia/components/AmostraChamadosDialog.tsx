@@ -470,6 +470,7 @@ export function AmostraChamadosDialog({
         alvo,
         user?.email ?? null,
         responsumPorArea,
+        { ano, mes },
       )
       setResultadoAbertura((prev) => {
         if (!prev) return resultado

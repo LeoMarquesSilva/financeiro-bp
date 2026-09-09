@@ -143,21 +143,35 @@ function tamanhoAmostraEstrato(populacao: number): number {
   return Math.max(1, Math.round(populacao * EFICIENCIA_AMOSTRA_FRACAO))
 }
 
+export type AmostraPersistida = {
+  ci: string
+  naAmostra: boolean
+  snapshot: FatalExcludenteRow | null
+}
+
+export type AmostraParaPersistir = {
+  ci: string
+  naAmostra: boolean
+  snapshot: FatalExcludenteRow
+}
+
 /**
  * Amostra estratificada Área × Justificativa (~30%, mín. 1), na ordem da lista.
  * Onboarding / transição de carteira fica de fora (não pede evidência).
  * Retorna os FATAL excludentes elegíveis com `naAmostra` marcado.
  */
 export function selecionarAmostraExcludentes(rows: FatalExcludenteRow[]): AmostraChamadoItem[] {
-  const elegiveis = rows.filter((row) => !isJustificativaOnboarding(row.justificativa))
+  return selecionarAmostraExcludentesIncremental(rows, new Set(), new Set())
+}
+
+function cisAmostradosNovos(rows: FatalExcludenteRow[]): Set<string> {
   const grupos = new Map<string, FatalExcludenteRow[]>()
-  for (const row of elegiveis) {
+  for (const row of rows) {
     const key = `${row.area}\u0000${justificativaKey(row.justificativa)}`
     const list = grupos.get(key)
     if (list) list.push(row)
     else grupos.set(key, [row])
   }
-
   const amostrados = new Set<string>()
   for (const list of grupos.values()) {
     const n = tamanhoAmostraEstrato(list.length)
@@ -165,16 +179,134 @@ export function selecionarAmostraExcludentes(rows: FatalExcludenteRow[]): Amostr
       amostrados.add(list[i]!.ci)
     }
   }
+  return amostrados
+}
 
-  return elegiveis.map((row) => {
+/**
+ * Travas da amostra por competência.
+ * - Persistida: CI já considerado (sorteado ou não) não entra em novo sorteio.
+ * - Sem persistência + chamados no RESPONSUM: congela a população atual e mantém
+ *   só os CIs com ticket (não resorteia o restante).
+ * - Sem persistência e sem ticket: primeira amostra (~30%).
+ */
+export function resolverEstadoAmostra(opts: {
+  persistidos: AmostraPersistida[]
+  ticketCis: ReadonlySet<string>
+  currentCis: ReadonlySet<string>
+}): { lockedCis: Set<string>; seenCis: Set<string> } {
+  const { persistidos, ticketCis, currentCis } = opts
+
+  if (persistidos.length === 0) {
+    const lockedCis = new Set<string>()
+    for (const ci of ticketCis) {
+      if (currentCis.has(ci)) lockedCis.add(ci)
+    }
+    if (lockedCis.size > 0) {
+      return { lockedCis, seenCis: new Set(currentCis) }
+    }
+    return { lockedCis: new Set(), seenCis: new Set() }
+  }
+
+  const seenCis = new Set(persistidos.map((p) => p.ci))
+  const lockedCis = new Set<string>()
+  for (const p of persistidos) {
+    if (p.naAmostra) lockedCis.add(p.ci)
+  }
+  for (const ci of ticketCis) {
+    if (currentCis.has(ci) || seenCis.has(ci)) lockedCis.add(ci)
+  }
+  return { lockedCis, seenCis }
+}
+
+export function mesclarLinhasComSnapshot(
+  rows: FatalExcludenteRow[],
+  persistidos: AmostraPersistida[],
+  lockedCis: ReadonlySet<string>,
+): FatalExcludenteRow[] {
+  const byCi = new Map(rows.map((row) => [row.ci, row]))
+  for (const p of persistidos) {
+    if (!lockedCis.has(p.ci) || byCi.has(p.ci) || !p.snapshot) continue
+    byCi.set(p.ci, { ...p.snapshot, ci: p.ci })
+  }
+  return [...byCi.values()]
+}
+
+/**
+ * Não resorteia o que já foi considerado.
+ * Só sorteia ~30% entre itens **novos** (CI fora de `seenCis`).
+ * CI travado permanece na amostra mesmo com justificativa de onboarding.
+ */
+export function selecionarAmostraExcludentesIncremental(
+  rows: FatalExcludenteRow[],
+  lockedCis: ReadonlySet<string>,
+  seenCis: ReadonlySet<string>,
+): AmostraChamadoItem[] {
+  const novos = rows.filter(
+    (row) => !seenCis.has(row.ci) && !isJustificativaOnboarding(row.justificativa),
+  )
+  const sorteioNovos = cisAmostradosNovos(novos)
+
+  const visiveis = rows.filter(
+    (row) => lockedCis.has(row.ci) || !isJustificativaOnboarding(row.justificativa),
+  )
+
+  return visiveis.map((row) => {
     const evidencia = evidenciaParaJustificativa(row.justificativa)
     return {
       ...row,
       evidencia,
       textoChamado: buildTextoChamado(row, evidencia),
-      naAmostra: amostrados.has(row.ci),
+      naAmostra: lockedCis.has(row.ci) || sorteioNovos.has(row.ci),
     }
   })
+}
+
+export function computarAmostraExcludentes(
+  rows: FatalExcludenteRow[],
+  persistidos: AmostraPersistida[],
+  ticketCis: ReadonlySet<string>,
+): { detalhes: AmostraChamadoItem[]; paraPersistir: AmostraParaPersistir[] } {
+  const currentCis = new Set(rows.map((row) => row.ci))
+  const { lockedCis, seenCis } = resolverEstadoAmostra({ persistidos, ticketCis, currentCis })
+  const merged = mesclarLinhasComSnapshot(rows, persistidos, lockedCis)
+  const detalhes = selecionarAmostraExcludentesIncremental(merged, lockedCis, seenCis)
+  const amostraSet = new Set(detalhes.filter((d) => d.naAmostra).map((d) => d.ci))
+  const paraPersistir = merged.map((row) => ({
+    ci: row.ci,
+    naAmostra: amostraSet.has(row.ci),
+    snapshot: row,
+  }))
+  return { detalhes, paraPersistir }
+}
+
+export function parseCiFromChamadoTitle(title: string | null | undefined): string | null {
+  const m = String(title ?? '').match(/\bCI\s+(\d+)\b/i)
+  return m?.[1] ?? null
+}
+
+export function snapshotFromJson(ci: string, raw: unknown): FatalExcludenteRow | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  return {
+    ci,
+    area: String(o.area ?? ''),
+    grupoCliente: String(o.grupoCliente ?? ''),
+    tarefa: String(o.tarefa ?? ''),
+    tarefaPai: String(o.tarefaPai ?? ''),
+    nroCnj: String(o.nroCnj ?? ''),
+    responsavel: String(o.responsavel ?? ''),
+    dataParaConclusao:
+      o.dataParaConclusao == null || o.dataParaConclusao === ''
+        ? null
+        : String(o.dataParaConclusao),
+    conclusaoCompleta:
+      o.conclusaoCompleta == null || o.conclusaoCompleta === ''
+        ? null
+        : String(o.conclusaoCompleta),
+    justificativa: String(o.justificativa ?? ''),
+    atrasoDias:
+      typeof o.atrasoDias === 'number' && Number.isFinite(o.atrasoDias) ? o.atrasoDias : null,
+  }
 }
 
 /** Resumo por justificativa (população × amostra) — aba Metodologia. */

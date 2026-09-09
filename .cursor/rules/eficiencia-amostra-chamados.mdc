@@ -13,20 +13,41 @@ para pedir evidências no Responsum dos protocolos FATAL com justificativa **Exc
 - `excludente = 'Excludente'` (lista canônica em `JUSTIFICATIVAS_EXCLUDENTES` / sync SharePoint)
 - Período = **mês único** selecionado no modal (não o multi-filtro do Overview)
 - **Fora da amostra:** justificativa `ONBOARDING / TRANSIÇÃO DE CARTEIRA` (`JUSTIFICATIVA_ONBOARDING`) — exclusão automática de carteira, sem pedido de evidência.
+  **Exceção:** se o CI já teve chamado aberto no RESPONSUM (ou já estava persistido na amostra), **permanece na tela**.
+
+---
+
+## Persistência (não resortear)
+
+A amostra de cada competência (`ano`/`mes`) é gravada em `eficiencia_amostra_chamados`.
+**Insert-only:** CI que já foi considerado **não sai** e **não entra em novo sorteio**.
+
+| Campo | Significado |
+|----|----|
+| `na_amostra = true` | Está na amostra (chamado aberto ou sorteado). Trava permanente. |
+| `na_amostra = false` | Já teve chance no sorteio e ficou de fora. Não sortear de novo. |
+
+CIs com ticket na subcategoria `auditoria_de_excludentes_envio_de_evidencia` também travam
+(`acao: 'listar'` na Edge Function `abrir-chamados-evidencia`).
+
+**Primeiro load após deploy** (tabela vazia + tickets já abertos): congela a população atual,
+mantém só os CIs com chamado, **não** sorteia o restante.
+
+**Itens novos** (CI que ainda não está na tabela): aí sim aplica ~30% só nesse conjunto novo.
 
 ---
 
 ## Algoritmo de amostragem
 
 1. Estrato = **Área × Justificativa de Fatal**
-2. Em cada estrato: `max(1, round(n × 0,30))` casos
+2. Em cada estrato: `max(1, round(n × 0,30))` casos — só sobre **itens novos**
 3. Seleção **pela ordem da lista** (não por atraso em dias)
-4. Marcar `Amostra = SIM` em Detalhes1; aba **Chamados - Amostra** só com os sorteados
+4. Marcar `Amostra = SIM` em Detalhes1; aba **Chamados - Amostra** só com os sorteados / travados
 
 Constantes: `EFICIENCIA_AMOSTRA_FRACAO`, `EFICIENCIA_EVIDENCIA_POR_JUSTIFICATIVA`
 em `src/features/eficiencia/constants.ts`.
 
-Implementação: `src/features/eficiencia/utils/amostraChamados.ts`.
+Implementação: `computarAmostraExcludentes` em `src/features/eficiencia/utils/amostraChamados.ts`.
 
 ---
 
@@ -39,8 +60,11 @@ rows.sort((a, b) => b.atraso - a.atraso).slice(0, n)
 // ❌ BAD — 30% só no total, sem Área × Justificativa
 Math.round(populacao * 0.3)
 
-// ✅ GOOD — estrato + min 1 + ordem da lista
+// ❌ BAD — recalcular 30% da população inteira a cada load (tira CI já aberto no RESPONSUM)
 selecionarAmostraExcludentes(rows)
+
+// ✅ GOOD — trava persistida/ticket + 30% só nos CIs novos
+computarAmostraExcludentes(rows, persistidos, ticketCis)
 ```
 
 ---
