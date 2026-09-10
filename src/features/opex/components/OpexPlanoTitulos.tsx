@@ -12,6 +12,7 @@ import type { OpexTituloRow } from '../types/opex.types'
 type Props = {
   ano: number
   grupo: string
+  aliases?: string[]
   plano: string
   mesesFiltro: number[]
   orcamentoImportado?: boolean
@@ -129,6 +130,7 @@ function SortableTh({
 export function OpexPlanoTitulos({
   ano,
   grupo,
+  aliases,
   plano,
   mesesFiltro,
   orcamentoImportado,
@@ -155,12 +157,13 @@ export function OpexPlanoTitulos({
       'titulos',
       ano,
       grupo,
+      aliases ?? [],
       plano,
       mesesFiltroKey(mesesFiltro),
       planoFiltroKey(planoFiltro ?? { gruposExcluidos: [], planosExcluidos: [] }),
     ],
     queryFn: (): Promise<OpexTituloRow[]> =>
-      opexService.fetchPlanoTitulos(ano, grupo, plano, mesesFiltro, planoFiltro),
+      opexService.fetchPlanoTitulos(ano, grupo, plano, mesesFiltro, planoFiltro, aliases),
     staleTime: 60_000,
   })
 

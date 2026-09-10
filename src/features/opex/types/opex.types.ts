@@ -54,6 +54,8 @@ export type OpexGrupoRow = {
   previsto_vios_futuro: number
   previsto_restante: number
   projetado_ano: number
+  /** Grafias originais (encoding) que este grupo consolida. */
+  aliases?: string[]
 }
 
 export type OpexPlanoRow = {

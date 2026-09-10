@@ -36,6 +36,42 @@ export function variacaoGrupo(g: OpexGrupoRow, usaCompromissoVios: boolean): num
   return compromissoGrupo(g, usaCompromissoVios) - g.previsto_ano
 }
 
+/** Mês futuro no recorte anual: o que o VIOS ainda tem. Mês fechado: o que já saiu. */
+export function compromissoMes(
+  m: OpexMesRow,
+  mesAtual: number,
+  usaCompromissoVios: boolean,
+): number {
+  if (usaCompromissoVios && m.mes > mesAtual) return m.previsto_vios
+  return m.realizado
+}
+
+export function variacaoMesInsight(
+  m: OpexMesRow,
+  mesAtual: number,
+  usaCompromissoVios: boolean,
+): number {
+  return compromissoMes(m, mesAtual, usaCompromissoVios) - m.previsto
+}
+
+function mesesParaInsight(
+  evolucao: OpexMesRow[],
+  mesAtual: number,
+  usaCompromissoVios: boolean,
+  mesesFiltro: number[],
+): OpexMesRow[] {
+  return evolucao
+    .filter((m) => {
+      if (mesesFiltro.length && !mesesFiltro.includes(m.mes)) return false
+      if (usaCompromissoVios && mesAtual > 0 && m.mes === mesAtual) return false
+      return m.previsto > 0 || m.realizado > 0 || m.previsto_vios > 0
+    })
+    .map((m) => ({
+      ...m,
+      variacao: variacaoMesInsight(m, mesAtual, usaCompromissoVios),
+    }))
+}
+
 function toLinha(g: OpexGrupoRow, usaCompromissoVios: boolean): OpexInsightLinha {
   const compromisso = compromissoGrupo(g, usaCompromissoVios)
   return {
@@ -51,6 +87,8 @@ export function buildOpexInsights(
   grupos: OpexGrupoRow[],
   evolucao: OpexMesRow[],
   usaCompromissoVios = false,
+  mesAtual = 0,
+  mesesFiltro: number[] = [],
 ): OpexInsightsModel {
   const linhas = grupos.map((g) => toLinha(g, usaCompromissoVios))
   const realizadoTotal = linhas.reduce((s, g) => s + g.realizado, 0)
@@ -60,7 +98,7 @@ export function buildOpexInsights(
     realizadoTotal > 0 ? (topGastos.reduce((s, g) => s + g.realizado, 0) / realizadoTotal) * 100 : 0
 
   const maioresEstouros = linhas
-    .filter((g) => g.variacao > 0)
+    .filter((g) => g.variacao > 0 && g.previsto > 0)
     .sort((a, b) => b.variacao - a.variacao)
     .slice(0, 3)
 
@@ -83,7 +121,7 @@ export function buildOpexInsights(
     .sort((a, b) => b.previsto - a.previsto)
     .slice(0, 3)
 
-  const mesesComDado = evolucao.filter((m) => m.previsto > 0 || m.realizado > 0)
+  const mesesComDado = mesesParaInsight(evolucao, mesAtual, usaCompromissoVios, mesesFiltro)
   const mesMaisPressionado =
     mesesComDado.length > 0
       ? mesesComDado.reduce((acc, m) => (m.variacao > acc.variacao ? m : acc), mesesComDado[0])

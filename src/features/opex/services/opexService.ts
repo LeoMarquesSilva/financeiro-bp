@@ -12,6 +12,8 @@ import type {
   OpexTituloRow,
 } from '../types/opex.types'
 import type { OpexTituloVinculado } from '../types/opexMetas.types'
+import { gruposConsulta, mergeGruposEncoding } from '../utils/opexGrupoNome'
+import { mergePlanosGrupo } from '../utils/opexDePara'
 
 function mapTituloVinculado(row: Record<string, unknown>): OpexTituloVinculado {
   return {
@@ -48,7 +50,7 @@ function mapDashboard(raw: Record<string, unknown>): OpexDashboard {
       variacao: Number(e.variacao) || 0,
     }
   })
-  const grupos = ((raw.grupos ?? []) as Array<Record<string, unknown>>).map((g) => ({
+  const gruposBrutos = ((raw.grupos ?? []) as Array<Record<string, unknown>>).map((g) => ({
     grupo_conta: String(g.grupo_conta ?? ''),
     fixo: Boolean(g.fixo),
     realizado_ytd: Number(g.realizado_ytd) || 0,
@@ -58,6 +60,7 @@ function mapDashboard(raw: Record<string, unknown>): OpexDashboard {
     previsto_restante: Number(g.previsto_restante) || 0,
     projetado_ano: Number(g.projetado_ano) || 0,
   }))
+  const grupos = mergeGruposEncoding(gruposBrutos)
 
   const mesesFiltroRaw = raw.meses_filtro ?? raw.mes_filtro
   const meses_filtro: number[] = Array.isArray(mesesFiltroRaw)
@@ -180,23 +183,30 @@ export const opexService = {
     grupo: string,
     meses?: number[] | null,
     planoFiltro?: { gruposExcluidos: string[]; planosExcluidos: string[] } | null,
+    aliases?: string[],
   ): Promise<OpexPlanoRow[]> {
-    const { data, error } = await supabase.rpc(
-      'opex_planos_grupo' as never,
-      {
-        p_ano: ano,
-        p_grupo: grupo,
-        p_meses: rpcMeses(meses),
-        ...rpcPlanoFiltro(planoFiltro),
-      } as never,
+    const nomes = gruposConsulta(grupo, aliases)
+    const batches = await Promise.all(
+      nomes.map(async (nome) => {
+        const { data, error } = await supabase.rpc(
+          'opex_planos_grupo' as never,
+          {
+            p_ano: ano,
+            p_grupo: nome,
+            p_meses: rpcMeses(meses),
+            ...rpcPlanoFiltro(planoFiltro),
+          } as never,
+        )
+        if (error) throw error
+        return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+          plano_contas: String(row.plano_contas ?? ''),
+          realizado_ytd: Number(row.realizado_ytd) || 0,
+          previsto_ano: Number(row.previsto_ano) || 0,
+          previsto_vios: Number(row.previsto_vios) || 0,
+        }))
+      }),
     )
-    if (error) throw error
-    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-      plano_contas: String(row.plano_contas ?? ''),
-      realizado_ytd: Number(row.realizado_ytd) || 0,
-      previsto_ano: Number(row.previsto_ano) || 0,
-      previsto_vios: Number(row.previsto_vios) || 0,
-    }))
+    return mergePlanosGrupo(batches.flat())
   },
 
   async fetchPlanoTitulos(
@@ -205,31 +215,46 @@ export const opexService = {
     plano: string,
     meses?: number[] | null,
     planoFiltro?: { gruposExcluidos: string[]; planosExcluidos: string[] } | null,
+    aliases?: string[],
   ): Promise<OpexTituloRow[]> {
-    const { data, error } = await supabase.rpc(
-      'opex_plano_titulos' as never,
-      {
-        p_ano: ano,
-        p_grupo: grupo,
-        p_plano: plano,
-        p_meses: rpcMeses(meses),
-        ...rpcPlanoFiltro(planoFiltro),
-      } as never,
-    )
-    if (error) throw error
-    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-      ci_item: Number(row.ci_item) || 0,
-      nro_titulo: String(row.nro_titulo ?? ''),
-      descricao: String(row.descricao ?? ''),
-      fornecedor: String(row.fornecedor ?? ''),
-      situacao_titulo: String(row.situacao_titulo ?? ''),
-      departamento: String(row.departamento ?? ''),
-      data_vencimento: row.data_vencimento ? String(row.data_vencimento) : null,
-      data_pagamento: row.data_pagamento ? String(row.data_pagamento) : null,
-      valor_previsto: Number(row.valor_previsto) || 0,
-      valor_orcamento: Number(row.valor_orcamento) || 0,
-      valor_realizado: Number(row.valor_realizado) || 0,
-    }))
+    const nomes = gruposConsulta(grupo, aliases)
+    const titulos: OpexTituloRow[] = []
+    const vistos = new Set<string>()
+    for (const nome of nomes) {
+      const { data, error } = await supabase.rpc(
+        'opex_plano_titulos' as never,
+        {
+          p_ano: ano,
+          p_grupo: nome,
+          p_plano: plano,
+          p_meses: rpcMeses(meses),
+          ...rpcPlanoFiltro(planoFiltro),
+        } as never,
+      )
+      if (error) throw error
+      for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+        const mapped: OpexTituloRow = {
+          ci_item: Number(row.ci_item) || 0,
+          nro_titulo: String(row.nro_titulo ?? ''),
+          descricao: String(row.descricao ?? ''),
+          fornecedor: String(row.fornecedor ?? ''),
+          situacao_titulo: String(row.situacao_titulo ?? ''),
+          departamento: String(row.departamento ?? ''),
+          data_vencimento: row.data_vencimento ? String(row.data_vencimento) : null,
+          data_pagamento: row.data_pagamento ? String(row.data_pagamento) : null,
+          valor_previsto: Number(row.valor_previsto) || 0,
+          valor_orcamento: Number(row.valor_orcamento) || 0,
+          valor_realizado: Number(row.valor_realizado) || 0,
+        }
+        const chave = mapped.ci_item
+          ? `ci:${mapped.ci_item}`
+          : `${mapped.nro_titulo}|${mapped.descricao}|${mapped.data_vencimento}`
+        if (vistos.has(chave)) continue
+        vistos.add(chave)
+        titulos.push(mapped)
+      }
+    }
+    return titulos
   },
 
   async fetchDepartamentos(

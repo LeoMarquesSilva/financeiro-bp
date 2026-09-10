@@ -101,7 +101,7 @@ export function OpexInsights({
   orcamentoImportado,
 }: Props) {
   const usaCompromisso = insightUsaCompromissoVios(mesesFiltro, mesAtual)
-  const insights = buildOpexInsights(grupos, evolucao, usaCompromisso)
+  const insights = buildOpexInsights(grupos, evolucao, usaCompromisso, mesAtual, mesesFiltro)
   const baseLabel = orcamentoImportado ? 'orçado' : 'previsto VIOS'
   const comparacaoHint = usaCompromisso
     ? `Pago + VIOS a vencer vs ${baseLabel} do ano`
@@ -149,7 +149,11 @@ export function OpexInsights({
           />
         </InsightCard>
 
-        <InsightCard title="Composição e alertas" hint="Fixas, furos de cadastro e mês crítico" icon={Pin}>
+        <InsightCard
+          title="Composição e alertas"
+          hint={usaCompromisso ? 'Mês futuro = VIOS vs orçado; mês fechado = realizado' : 'Mês crítico no realizado vs orçado'}
+          icon={Pin}
+        >
           <dl className="space-y-2 text-xs">
             <div className="flex items-center justify-between gap-2">
               <dt className="text-slate-500">Fixas no realizado</dt>

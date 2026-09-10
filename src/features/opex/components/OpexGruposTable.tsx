@@ -144,6 +144,7 @@ function PlanoRow({
   plano,
   ano,
   grupo,
+  aliases,
   mesesFiltro,
   orcamentoImportado,
   planoFiltro,
@@ -153,6 +154,7 @@ function PlanoRow({
   plano: OpexPlanoRow
   ano: number
   grupo: string
+  aliases?: string[]
   mesesFiltro: number[]
   orcamentoImportado?: boolean
   planoFiltro?: OpexPlanoFiltroState
@@ -199,6 +201,7 @@ function PlanoRow({
           <OpexPlanoTitulos
             ano={ano}
             grupo={grupo}
+            aliases={aliases}
             plano={plano.plano_contas}
             mesesFiltro={mesesFiltro}
             orcamentoImportado={orcamentoImportado}
@@ -214,12 +217,14 @@ function PlanoRow({
 function GrupoDetalhe({
   ano,
   grupo,
+  aliases,
   mesesFiltro,
   orcamentoImportado,
   planoFiltro,
 }: {
   ano: number
   grupo: string
+  aliases?: string[]
   mesesFiltro: number[]
   orcamentoImportado?: boolean
   planoFiltro?: OpexPlanoFiltroState
@@ -234,8 +239,8 @@ function GrupoDetalhe({
       ? 'Previsto período'
       : 'Previsto ano'
   const { data, isLoading } = useQuery({
-    queryKey: ['opex', 'planos', ano, grupo, mesesFiltroKey(mesesFiltro), planoFiltroKey(planoFiltro ?? { gruposExcluidos: [], planosExcluidos: [] })],
-    queryFn: () => opexService.fetchPlanosGrupo(ano, grupo, mesesFiltro, planoFiltro),
+    queryKey: ['opex', 'planos', ano, grupo, aliases ?? [], mesesFiltroKey(mesesFiltro), planoFiltroKey(planoFiltro ?? { gruposExcluidos: [], planosExcluidos: [] })],
+    queryFn: () => opexService.fetchPlanosGrupo(ano, grupo, mesesFiltro, planoFiltro, aliases),
     staleTime: 60_000,
   })
 
@@ -265,6 +270,7 @@ function GrupoDetalhe({
             plano={p}
             ano={ano}
             grupo={grupo}
+            aliases={aliases}
             mesesFiltro={mesesFiltro}
             orcamentoImportado={orcamentoImportado}
             planoFiltro={planoFiltro}
@@ -503,6 +509,7 @@ export function OpexGruposTable({
                         <GrupoDetalhe
                           ano={ano}
                           grupo={g.grupo_conta}
+                          aliases={g.aliases}
                           mesesFiltro={mesesFiltro}
                           orcamentoImportado={orcamentoImportado}
                           planoFiltro={planoFiltro}
