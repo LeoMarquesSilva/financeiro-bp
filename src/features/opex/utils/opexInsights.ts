@@ -12,7 +12,7 @@ export type OpexInsightsModel = {
   topGastos: OpexInsightLinha[]
   maioresEstouros: OpexInsightLinha[]
   maioresEconomias: OpexInsightLinha[]
-  concentracaoTop3Pct: number
+  concentracaoTopPct: number
   realizadoFixas: number
   realizadoVariaveis: number
   pctFixas: number
@@ -94,19 +94,19 @@ export function buildOpexInsights(
   const linhas = grupos.map((g) => toLinha(g, usaCompromissoVios))
   const realizadoTotal = linhas.reduce((s, g) => s + g.realizado, 0)
 
-  const topGastos = [...linhas].sort((a, b) => b.realizado - a.realizado).slice(0, 3)
-  const concentracaoTop3Pct =
+  const topGastos = [...linhas].sort((a, b) => b.realizado - a.realizado).slice(0, 5)
+  const concentracaoTopPct =
     realizadoTotal > 0 ? (topGastos.reduce((s, g) => s + g.realizado, 0) / realizadoTotal) * 100 : 0
 
   const maioresEstouros = linhas
     .filter((g) => g.variacao > 0 && g.previsto > 0)
     .sort((a, b) => b.variacao - a.variacao)
-    .slice(0, 3)
+    .slice(0, 5)
 
   const maioresEconomias = linhas
     .filter((g) => g.variacao < 0 && g.previsto > 0)
     .sort((a, b) => a.variacao - b.variacao)
-    .slice(0, 3)
+    .slice(0, 5)
 
   const realizadoFixas = grupos.filter((g) => g.fixo).reduce((s, g) => s + g.realizado_ytd, 0)
   const realizadoVariaveis = realizadoTotal - realizadoFixas
@@ -115,12 +115,12 @@ export function buildOpexInsights(
   const semOrcamento = linhas
     .filter((g) => g.previsto <= 0 && g.compromisso > 0)
     .sort((a, b) => b.compromisso - a.compromisso)
-    .slice(0, 3)
+    .slice(0, 5)
 
   const orcadoNaoRealizado = linhas
     .filter((g) => g.previsto > 0 && g.compromisso <= 0)
     .sort((a, b) => b.previsto - a.previsto)
-    .slice(0, 3)
+    .slice(0, 5)
 
   const mesesComDado = mesesParaInsight(evolucao, mesAtual, usaCompromissoVios, mesesFiltro)
   const mesMaisPressionado =
@@ -136,7 +136,7 @@ export function buildOpexInsights(
     topGastos,
     maioresEstouros,
     maioresEconomias,
-    concentracaoTop3Pct,
+    concentracaoTopPct,
     realizadoFixas,
     realizadoVariaveis,
     pctFixas,

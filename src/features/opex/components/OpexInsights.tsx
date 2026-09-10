@@ -126,7 +126,7 @@ export function OpexInsights({
           <RankingList itens={insights.topGastos} empty="Sem realizado no período." />
           {insights.topGastos.length > 0 && (
             <p className="mt-3 text-[11px] text-slate-500">
-              Top 3 concentram <strong>{formatPercent(insights.concentracaoTop3Pct)}</strong> do realizado.
+              Top 5 concentram <strong>{formatPercent(insights.concentracaoTopPct)}</strong> do realizado.
             </p>
           )}
         </InsightCard>
