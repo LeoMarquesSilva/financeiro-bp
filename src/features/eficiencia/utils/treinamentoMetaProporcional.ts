@@ -1,5 +1,64 @@
 import { EFICIENCIA_META_TREINAMENTO_MINUTOS } from '../constants'
 
+export type TurnoverVigenciaRow = {
+  admissao?: string | null
+  desligamento?: string | null
+  tipo_desligamento?: string | null
+}
+
+export function isTurnoverTransferencia(tipo: string | null | undefined): boolean {
+  return String(tipo ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleUpperCase('pt-BR') === 'TRANSFERENCIA'
+}
+
+function isoDate(value: string | null | undefined): string {
+  return String(value ?? '').slice(0, 10)
+}
+
+function ativoNoAno(row: TurnoverVigenciaRow, ano: number): boolean {
+  const adm = isoDate(row.admissao)
+  if (!adm || Number(adm.slice(0, 4)) > ano) return false
+  const desl = isoDate(row.desligamento)
+  return !desl || Number(desl.slice(0, 4)) > ano
+}
+
+/**
+ * Admissão para meta de treinamento: primeira entrada do vínculo atual.
+ * Transferência de setor não conta como nova admissão.
+ */
+export function admissaoCasaTreinamento(
+  rows: TurnoverVigenciaRow[],
+  ano: number,
+): string | null {
+  const atuais = rows.filter((row) => ativoNoAno(row, ano) && isoDate(row.admissao))
+  if (atuais.length === 0) return null
+  const admissaoSetor = atuais
+    .map((row) => isoDate(row.admissao))
+    .sort()
+    .at(-1)
+  if (!admissaoSetor) return null
+
+  let saidaReal: string | null = null
+  for (const row of rows) {
+    const desl = isoDate(row.desligamento)
+    if (!desl || desl >= admissaoSetor) continue
+    if (isTurnoverTransferencia(row.tipo_desligamento)) continue
+    if (!saidaReal || desl > saidaReal) saidaReal = desl
+  }
+
+  let primeira: string | null = null
+  for (const row of rows) {
+    const adm = isoDate(row.admissao)
+    if (!adm || adm > admissaoSetor) continue
+    if (saidaReal && adm <= saidaReal) continue
+    if (!primeira || adm < primeira) primeira = adm
+  }
+  return primeira ?? admissaoSetor
+}
+
 /**
  * Meses elegíveis de treinamento no ano-calendário.
  * - Admitido em ano anterior: 12

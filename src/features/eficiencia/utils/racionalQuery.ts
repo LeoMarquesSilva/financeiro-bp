@@ -32,7 +32,10 @@ import {
   dedupeTreinamentoItens,
   marcarTreinamentoLinhasRacional,
 } from './treinamentosDedupe'
-import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
+import {
+  admissaoCasaTreinamento,
+  metaTreinamentoMinutosProporcional,
+} from './treinamentoMetaProporcional'
 import { formatTreinamentoNome } from './textFormat'
 import { onboardingExclusoesService } from '../services/onboardingExclusoesService'
 import {
@@ -237,29 +240,46 @@ export async function fetchDesenvolvimentoRacional(
   // Ativo no ano: desligamento nulo ou a partir de 1/jan do ano seguinte (equiv. year > ano).
   const turnoverQuery = supabase
     .from('sp_turnover')
-    .select('nome, area, cargo, admissao, desligamento')
+    .select('nome, area, cargo, admissao, desligamento, tipo_desligamento')
     .lte('admissao', `${ano}-12-31`)
-    .or(`desligamento.is.null,desligamento.gte.${ano + 1}-01-01`)
 
   const { data: turnoverRows, error: turnoverError } = await turnoverQuery
   if (turnoverError) throw turnoverError
 
-  // Um nome → vínculo mais recente ativo (mudança de área não duplica).
+  // Área = vínculo ativo mais recente; admissão da meta = entrada na casa (antes da transferência).
   type TvRow = {
     nome: string | null
     area: string | null
     cargo: string | null
     admissao: string | null
+    desligamento?: string | null
+    tipo_desligamento?: string | null
   }
-  const porNome = new Map<string, TvRow>()
+  const rowsPorNome = new Map<string, TvRow[]>()
   for (const row of (turnoverRows ?? []) as TvRow[]) {
-    if (isCargoExcluidoDesenvolvimento(row.cargo)) continue
     const key = normalizeNomeChave(String(row.nome ?? ''))
     if (!key) continue
-    const prev = porNome.get(key)
-    if (!prev || String(row.admissao ?? '') > String(prev.admissao ?? '')) {
-      porNome.set(key, row)
-    }
+    const lista = rowsPorNome.get(key) ?? []
+    lista.push(row)
+    rowsPorNome.set(key, lista)
+  }
+  const porNome = new Map<string, TvRow>()
+  for (const [key, rows] of rowsPorNome) {
+    const ativos = rows.filter((row) => {
+      if (isCargoExcluidoDesenvolvimento(row.cargo)) return false
+      const adm = String(row.admissao ?? '').slice(0, 10)
+      if (!adm || Number(adm.slice(0, 4)) > ano) return false
+      const desl = String(row.desligamento ?? '').slice(0, 10)
+      return !desl || Number(desl.slice(0, 4)) > ano
+    })
+    if (ativos.length === 0) continue
+    const atual = ativos.reduce((best, row) =>
+      String(row.admissao ?? '') > String(best.admissao ?? '') ? row : best,
+    )
+    porNome.set(key, {
+      ...atual,
+      admissao: admissaoCasaTreinamento(rows, ano) ?? atual.admissao,
+    })
   }
 
   const nomesElegiveis = new Set<string>()
