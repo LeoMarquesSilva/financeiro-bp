@@ -63,7 +63,8 @@ function mesesParaInsight(
   return evolucao
     .filter((m) => {
       if (mesesFiltro.length && !mesesFiltro.includes(m.mes)) return false
-      if (usaCompromissoVios && mesAtual > 0 && m.mes === mesAtual) return false
+      // No ano, só mês já fechado: futuro com VIOS ~orçado não é folga de verdade.
+      if (!mesesFiltro.length && mesAtual > 0 && m.mes >= mesAtual) return false
       return m.previsto > 0 || m.realizado > 0 || m.previsto_vios > 0
     })
     .map((m) => ({

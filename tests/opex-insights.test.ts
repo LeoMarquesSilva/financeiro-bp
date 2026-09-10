@@ -138,10 +138,13 @@ test('mês futuro no ano usa VIOS vs orçado, não realizado zero', () => {
   assert.ok(Math.abs(variacaoMesInsight(dezembro, 9, true) + 9_530.05) < 0.01)
   assert.ok(Math.abs(variacaoMesInsight(julho, 9, true) - 162_079.03) < 0.01)
 
-  const insights = buildOpexInsights([], [julho, dezembro], true, 9, [])
-  assert.equal(insights.mesMaisPressionado?.mes, 7)
-  assert.equal(insights.mesMaisFolgado?.mes, 12)
-  assert.ok(Math.abs((insights.mesMaisFolgado?.variacao ?? 0) + 9_530.05) < 0.01)
+  const noAno = buildOpexInsights([], [julho, dezembro], true, 9, [])
+  assert.equal(noAno.mesMaisPressionado?.mes, 7)
+  assert.equal(noAno.mesMaisFolgado, null)
+
+  const soFuturo = buildOpexInsights([], [julho, dezembro], true, 9, [12])
+  assert.equal(soFuturo.mesMaisFolgado?.mes, 12)
+  assert.ok(Math.abs((soFuturo.mesMaisFolgado?.variacao ?? 0) + 9_530.05) < 0.01)
 })
 
 test('filtro de mês passado não usa dezembro como folga', () => {

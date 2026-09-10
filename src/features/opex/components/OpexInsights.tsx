@@ -151,7 +151,11 @@ export function OpexInsights({
 
         <InsightCard
           title="Composição e alertas"
-          hint={usaCompromisso ? 'Mês futuro = VIOS vs orçado; mês fechado = realizado' : 'Mês crítico no realizado vs orçado'}
+          hint={
+            usaCompromisso && mesesFiltro.length === 0
+              ? 'Pressão e folga só nos meses já fechados'
+              : 'Mês crítico no realizado vs orçado'
+          }
           icon={Pin}
         >
           <dl className="space-y-2 text-xs">
