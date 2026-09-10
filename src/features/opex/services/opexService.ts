@@ -54,6 +54,7 @@ function mapDashboard(raw: Record<string, unknown>): OpexDashboard {
     realizado_ytd: Number(g.realizado_ytd) || 0,
     previsto_ano: Number(g.previsto_ano) || 0,
     previsto_vios: Number(g.previsto_vios) || 0,
+    previsto_vios_futuro: Number(g.previsto_vios_futuro) || 0,
     previsto_restante: Number(g.previsto_restante) || 0,
     projetado_ano: Number(g.projetado_ano) || 0,
   }))

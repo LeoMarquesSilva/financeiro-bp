@@ -3,6 +3,7 @@ import type { OpexGrupoRow, OpexMesRow } from '../types/opex.types'
 export type OpexInsightLinha = {
   nome: string
   realizado: number
+  compromisso: number
   previsto: number
   variacao: number
 }
@@ -21,17 +22,37 @@ export type OpexInsightsModel = {
   mesMaisFolgado: OpexMesRow | null
 }
 
-function toLinha(g: OpexGrupoRow): OpexInsightLinha {
+/** Ano inteiro, ou filtro que inclui mês futuro: soma VIOS a vencer. */
+export function insightUsaCompromissoVios(mesesFiltro: number[], mesAtual: number): boolean {
+  if (!mesesFiltro.length) return true
+  return mesesFiltro.some((mes) => mes > mesAtual)
+}
+
+export function compromissoGrupo(g: OpexGrupoRow, usaCompromissoVios: boolean): number {
+  return g.realizado_ytd + (usaCompromissoVios ? g.previsto_vios_futuro : 0)
+}
+
+export function variacaoGrupo(g: OpexGrupoRow, usaCompromissoVios: boolean): number {
+  return compromissoGrupo(g, usaCompromissoVios) - g.previsto_ano
+}
+
+function toLinha(g: OpexGrupoRow, usaCompromissoVios: boolean): OpexInsightLinha {
+  const compromisso = compromissoGrupo(g, usaCompromissoVios)
   return {
     nome: g.grupo_conta,
     realizado: g.realizado_ytd,
+    compromisso,
     previsto: g.previsto_ano,
-    variacao: g.realizado_ytd - g.previsto_ano,
+    variacao: compromisso - g.previsto_ano,
   }
 }
 
-export function buildOpexInsights(grupos: OpexGrupoRow[], evolucao: OpexMesRow[]): OpexInsightsModel {
-  const linhas = grupos.map(toLinha)
+export function buildOpexInsights(
+  grupos: OpexGrupoRow[],
+  evolucao: OpexMesRow[],
+  usaCompromissoVios = false,
+): OpexInsightsModel {
+  const linhas = grupos.map((g) => toLinha(g, usaCompromissoVios))
   const realizadoTotal = linhas.reduce((s, g) => s + g.realizado, 0)
 
   const topGastos = [...linhas].sort((a, b) => b.realizado - a.realizado).slice(0, 3)
@@ -53,12 +74,12 @@ export function buildOpexInsights(grupos: OpexGrupoRow[], evolucao: OpexMesRow[]
   const pctFixas = realizadoTotal > 0 ? (realizadoFixas / realizadoTotal) * 100 : 0
 
   const semOrcamento = linhas
-    .filter((g) => g.previsto <= 0 && g.realizado > 0)
-    .sort((a, b) => b.realizado - a.realizado)
+    .filter((g) => g.previsto <= 0 && g.compromisso > 0)
+    .sort((a, b) => b.compromisso - a.compromisso)
     .slice(0, 3)
 
   const orcadoNaoRealizado = linhas
-    .filter((g) => g.previsto > 0 && g.realizado <= 0)
+    .filter((g) => g.previsto > 0 && g.compromisso <= 0)
     .sort((a, b) => b.previsto - a.previsto)
     .slice(0, 3)
 

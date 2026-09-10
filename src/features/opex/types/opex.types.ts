@@ -51,6 +51,7 @@ export type OpexGrupoRow = {
   realizado_ytd: number
   previsto_ano: number
   previsto_vios: number
+  previsto_vios_futuro: number
   previsto_restante: number
   projetado_ano: number
 }

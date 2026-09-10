@@ -139,6 +139,8 @@ export function OpexPage() {
           <OpexInsights
             grupos={data.grupos}
             evolucao={data.evolucao}
+            mesesFiltro={mesesFiltro}
+            mesAtual={data.mes_atual}
             orcamentoImportado={data.orcamento_importado}
           />
 
@@ -150,6 +152,7 @@ export function OpexPage() {
             grupos={data.grupos}
             ano={data.ano}
             mesesFiltro={mesesFiltro}
+            mesAtual={data.mes_atual}
             soFixas={soFixas}
             orcamentoImportado={data.orcamento_importado}
             onSoFixasChange={setSoFixas}

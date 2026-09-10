@@ -6,6 +6,7 @@ import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { opexService } from '../services/opexService'
 import { OPEX_COLORS } from '../constants'
 import { formatPeriodoOpex, mesesFiltroKey, planoFiltroKey, temFiltroMeses } from '../utils/opexPeriodo'
+import { compromissoGrupo, insightUsaCompromissoVios, variacaoGrupo } from '../utils/opexInsights'
 import type { OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 import { OpexPlanoTitulos } from './OpexPlanoTitulos'
 import type { OpexGrupoRow, OpexPlanoRow } from '../types/opex.types'
@@ -14,6 +15,7 @@ type Props = {
   grupos: OpexGrupoRow[]
   ano: number
   mesesFiltro: number[]
+  mesAtual: number
   soFixas: boolean
   orcamentoImportado?: boolean
   onSoFixasChange: (value: boolean) => void
@@ -53,10 +55,6 @@ function referenciaGrupoMeta(orcamentoImportado: boolean | undefined, filtroAtiv
   }
 }
 
-function grupoVariacao(g: OpexGrupoRow): number {
-  return g.realizado_ytd - g.previsto_ano
-}
-
 function variacaoClass(valor: number): string {
   if (valor > 0) return 'text-rose-700'
   if (valor < 0) return 'text-emerald-700'
@@ -68,7 +66,12 @@ function pctValue(realizado: number, referencia: number): number {
   return (realizado / referencia) * 100
 }
 
-function compareGrupos(a: OpexGrupoRow, b: OpexGrupoRow, key: SortKey): number {
+function compareGrupos(
+  a: OpexGrupoRow,
+  b: OpexGrupoRow,
+  key: SortKey,
+  usaCompromisso: boolean,
+): number {
   switch (key) {
     case 'grupo_conta':
       return a.grupo_conta.localeCompare(b.grupo_conta, 'pt-BR')
@@ -81,9 +84,12 @@ function compareGrupos(a: OpexGrupoRow, b: OpexGrupoRow, key: SortKey): number {
     case 'projetado_ano':
       return a.projetado_ano - b.projetado_ano
     case 'variacao':
-      return grupoVariacao(a) - grupoVariacao(b)
+      return variacaoGrupo(a, usaCompromisso) - variacaoGrupo(b, usaCompromisso)
     case 'pct':
-      return pctValue(a.realizado_ytd, a.previsto_ano) - pctValue(b.realizado_ytd, b.previsto_ano)
+      return (
+        pctValue(compromissoGrupo(a, usaCompromisso), a.previsto_ano)
+        - pctValue(compromissoGrupo(b, usaCompromisso), b.previsto_ano)
+      )
     default:
       return 0
   }
@@ -275,6 +281,7 @@ export function OpexGruposTable({
   grupos,
   ano,
   mesesFiltro,
+  mesAtual,
   soFixas,
   orcamentoImportado,
   onSoFixasChange,
@@ -286,6 +293,7 @@ export function OpexGruposTable({
   const [sortKey, setSortKey] = useState<SortKey>('realizado_ytd')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const filtroAtivo = temFiltroMeses(mesesFiltro)
+  const usaCompromisso = insightUsaCompromissoVios(mesesFiltro, mesAtual)
 
   useEffect(() => {
     if (sortByVariacaoTrigger) {
@@ -307,11 +315,13 @@ export function OpexGruposTable({
     const base = soFixas ? grupos.filter((g) => g.fixo) : grupos
     const list = [...base]
     const sign = sortDir === 'asc' ? 1 : -1
-    list.sort((a, b) => sign * compareGrupos(a, b, sortKey))
+    list.sort((a, b) => sign * compareGrupos(a, b, sortKey, usaCompromisso))
     return list
-  }, [grupos, soFixas, sortKey, sortDir])
+  }, [grupos, soFixas, sortKey, sortDir, usaCompromisso])
 
   const referenciaMeta = referenciaGrupoMeta(orcamentoImportado, filtroAtivo)
+  const variacaoLabel = usaCompromisso ? 'Variação (c/ VIOS)' : 'Variação'
+  const pctLabel = usaCompromisso ? '% comprometido' : referenciaMeta.pctLabel
   const colSpanDetalhe = filtroAtivo
     ? orcamentoImportado
       ? 6
@@ -327,8 +337,10 @@ export function OpexGruposTable({
           <h2 className="text-sm font-semibold text-slate-900">Despesas por grupo de conta</h2>
           <p className="text-xs text-slate-500">
             {filtroAtivo
-              ? `Detalhamento de ${formatPeriodoOpex(mesesFiltro, 0, ano)} · grupo → plano → título`
-              : 'Clique no grupo e depois no plano para ver os títulos'}
+              ? `Detalhamento de ${formatPeriodoOpex(mesesFiltro, 0, ano)} · variação = realizado vs ${orcamentoImportado ? 'orçado' : 'previsto'} do período`
+              : usaCompromisso
+                ? `Variação = pago + VIOS a vencer vs ${orcamentoImportado ? 'orçado' : 'previsto'} do ano`
+                : 'Clique no grupo e depois no plano para ver os títulos'}
           </p>
         </div>
         <button
@@ -401,7 +413,7 @@ export function OpexGruposTable({
                 />
               )}
               <SortableTh
-                label="Variação"
+                label={variacaoLabel}
                 sortKey="variacao"
                 activeKey={sortKey}
                 dir={sortDir}
@@ -410,7 +422,7 @@ export function OpexGruposTable({
                 align="right"
               />
               <SortableTh
-                label={referenciaMeta.pctLabel}
+                label={pctLabel}
                 sortKey="pct"
                 activeKey={sortKey}
                 dir={sortDir}
@@ -423,7 +435,8 @@ export function OpexGruposTable({
           <tbody>
             {lista.map((g) => {
               const expandido = aberto === g.grupo_conta
-              const variacao = grupoVariacao(g)
+              const compromisso = compromissoGrupo(g, usaCompromisso)
+              const variacao = variacaoGrupo(g, usaCompromisso)
               return (
                 <Fragment key={g.grupo_conta}>
                   <tr
@@ -481,7 +494,7 @@ export function OpexGruposTable({
                       {formatCurrency(variacao)}
                     </td>
                     <td className="hidden px-4 py-2.5 text-center tabular-nums text-slate-500 md:table-cell">
-                      {pct(g.realizado_ytd, g.previsto_ano)}
+                      {pct(compromisso, g.previsto_ano)}
                     </td>
                   </tr>
                   {expandido && (

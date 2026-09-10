@@ -3,12 +3,14 @@ import { ArrowDownRight, ArrowUpRight, Lightbulb, Pin, TrendingDown, Wallet } fr
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { OPEX_COLORS } from '../constants'
-import { buildOpexInsights, type OpexInsightLinha } from '../utils/opexInsights'
+import { buildOpexInsights, insightUsaCompromissoVios, type OpexInsightLinha } from '../utils/opexInsights'
 import type { OpexGrupoRow, OpexMesRow } from '../types/opex.types'
 
 type Props = {
   grupos: OpexGrupoRow[]
   evolucao: OpexMesRow[]
+  mesesFiltro: number[]
+  mesAtual: number
   orcamentoImportado?: boolean
 }
 
@@ -53,10 +55,12 @@ function RankingList({
   itens,
   empty,
   showVariacao,
+  usarCompromisso,
 }: {
   itens: OpexInsightLinha[]
   empty: string
   showVariacao?: boolean
+  usarCompromisso?: boolean
 }) {
   if (!itens.length) {
     return <p className="text-xs text-slate-400">{empty}</p>
@@ -74,7 +78,7 @@ function RankingList({
           </span>
           <span className="w-[7.25rem] shrink-0 text-right">
             <span className={cn('block whitespace-nowrap text-xs font-semibold tabular-nums', OPEX_COLORS.realizado.text)}>
-              {formatCurrency(item.realizado)}
+              {formatCurrency(usarCompromisso ? item.compromisso : item.realizado)}
             </span>
             {showVariacao && (
               <span className={cn('block whitespace-nowrap text-[11px] tabular-nums', variacaoClass(item.variacao))}>
@@ -89,9 +93,19 @@ function RankingList({
   )
 }
 
-export function OpexInsights({ grupos, evolucao, orcamentoImportado }: Props) {
-  const insights = buildOpexInsights(grupos, evolucao)
+export function OpexInsights({
+  grupos,
+  evolucao,
+  mesesFiltro,
+  mesAtual,
+  orcamentoImportado,
+}: Props) {
+  const usaCompromisso = insightUsaCompromissoVios(mesesFiltro, mesAtual)
+  const insights = buildOpexInsights(grupos, evolucao, usaCompromisso)
   const baseLabel = orcamentoImportado ? 'orçado' : 'previsto VIOS'
+  const comparacaoHint = usaCompromisso
+    ? `Pago + VIOS a vencer vs ${baseLabel} do ano`
+    : `Realizado vs ${baseLabel} no período`
 
   return (
     <section className="space-y-3">
@@ -102,7 +116,7 @@ export function OpexInsights({ grupos, evolucao, orcamentoImportado }: Props) {
         <div>
           <h2 className="text-sm font-semibold text-slate-900">Leitura operacional</h2>
           <p className="text-xs text-slate-500">
-            O que concentra o gasto, onde estourou ou sobrou {baseLabel} e alertas do período.
+            O que concentra o gasto, onde estourou ou sobrou e alertas do período. {comparacaoHint}.
           </p>
         </div>
       </div>
@@ -117,19 +131,21 @@ export function OpexInsights({ grupos, evolucao, orcamentoImportado }: Props) {
           )}
         </InsightCard>
 
-        <InsightCard title="Onde estourou" hint={`Realizado acima do ${baseLabel}`} icon={ArrowUpRight}>
+        <InsightCard title="Onde estourou" hint={comparacaoHint} icon={ArrowUpRight}>
           <RankingList
             itens={insights.maioresEstouros}
             empty={`Nenhum grupo acima do ${baseLabel}.`}
             showVariacao
+            usarCompromisso={usaCompromisso}
           />
         </InsightCard>
 
-        <InsightCard title="Onde sobrou" hint={`Gastou menos do ${baseLabel}`} icon={ArrowDownRight}>
+        <InsightCard title="Onde sobrou" hint={comparacaoHint} icon={ArrowDownRight}>
           <RankingList
             itens={insights.maioresEconomias}
             empty={`Nenhum grupo abaixo do ${baseLabel}.`}
             showVariacao
+            usarCompromisso={usaCompromisso}
           />
         </InsightCard>
 
