@@ -25,7 +25,10 @@ import {
   buildReceitaMetaAreaSlices,
   type ReceitaMetaAreaSlice,
 } from '../utils/departamentoAreaCores'
-import { RECEITA_RATEIO_OUTRAS_KEY } from '../utils/receitaRateioConsulta'
+import {
+  RECEITA_RATEIO_OUTRAS_KEY,
+  type ReceitaRateioGrupoRow,
+} from '../utils/receitaRateioConsulta'
 import type { ReceitaDepartamentoCoresConfig } from '../types/receita.types'
 
 type Props = {
@@ -82,7 +85,7 @@ export function ReceitaConsultaRateioDialog({
     setBusca('')
   }, [open, ano])
 
-  const gruposFiltrados = useMemo(() => {
+  const gruposFiltrados = useMemo((): ReceitaRateioGrupoRow[] => {
     const q = buscaDebounced.trim().toLowerCase()
     if (!q) return grupos
     return grupos.filter((g) => g.grupo_cliente.toLowerCase().includes(q))

@@ -1,7 +1,11 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { receitaService } from '../services/receitaService'
-import { agruparRateioPorGrupo } from '../utils/receitaRateioConsulta'
+import {
+  agruparRateioPorGrupo,
+  RECEITA_RATEIO_OUTRAS_KEY,
+  type ReceitaRateioGrupoRow,
+} from '../utils/receitaRateioConsulta'
 import { buildClienteGrupoMap } from '../utils/recebidoGrupos'
 
 export function useReceitaRateioConsulta(ano: number, mes: number, enabled: boolean) {
@@ -12,21 +16,25 @@ export function useReceitaRateioConsulta(ano: number, mes: number, enabled: bool
         receitaService.fetchPrevistoMesItens(ano, mes),
         receitaService.fetchEmpresasNomeGrupo(),
       ])
-      return agruparRateioPorGrupo(itens, buildClienteGrupoMap(empresas))
+      const rows: ReceitaRateioGrupoRow[] = agruparRateioPorGrupo(
+        itens,
+        buildClienteGrupoMap(empresas),
+      )
+      return rows
     },
     enabled: enabled && ano > 0 && mes >= 1 && mes <= 12,
   })
 
+  const grupos: ReceitaRateioGrupoRow[] = query.data ?? []
   const hasOutras = useMemo(
-    () => (query.data ?? []).some((row) => (row.pctPorArea.outras ?? 0) > 0),
-    [query.data],
+    () => grupos.some((row) => (row.pctPorArea[RECEITA_RATEIO_OUTRAS_KEY] ?? 0) > 0),
+    [grupos],
   )
 
   return {
-    grupos: query.data ?? [],
+    grupos,
     hasOutras,
     isLoading: query.isLoading,
-    isFetching: query.isFetching,
     error: query.error,
   }
 }
