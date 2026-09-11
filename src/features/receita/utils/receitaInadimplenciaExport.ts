@@ -46,6 +46,83 @@ async function downloadWorkbook(wb: ExcelJS.Workbook, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+export type ExportAreaGrupoRow = {
+  grupo_cliente: string
+  valor: number
+  valor_total_grupo: number
+  qtd_meses: number
+  qtd_clientes: number
+}
+
+export type ExportAreaEmpresaRow = {
+  cliente: string
+  valor: number
+}
+
+/** Planilha da inadimplência filtrada por área (grupos + razões sociais). */
+export async function exportAreaGruposPeriodoExcel(
+  grupos: ExportAreaGrupoRow[],
+  empresasPorGrupo: Map<string, ExportAreaEmpresaRow[]>,
+  meta: ExportMeta & { areaKey: string; areaLabel: string },
+): Promise<void> {
+  const XLSX = await import('xlsx')
+
+  const grupoRows = grupos.map((g) => {
+    const empresas = empresasPorGrupo.get(g.grupo_cliente) ?? []
+    return {
+      Área: meta.areaLabel,
+      Grupo: g.grupo_cliente,
+      'Valor alocado (R$)': g.valor,
+      Empresas: empresas.length || g.qtd_clientes,
+      'Meses inadimplente': g.qtd_meses || '',
+      'Total grupo (R$)': g.valor_total_grupo,
+    }
+  })
+  const totalAlocado = grupos.reduce((s, g) => s + g.valor, 0)
+  grupoRows.push({
+    Área: meta.areaLabel,
+    Grupo: 'TOTAL',
+    'Valor alocado (R$)': totalAlocado,
+    Empresas: grupos.reduce((s, g) => {
+      const empresas = empresasPorGrupo.get(g.grupo_cliente) ?? []
+      return s + (empresas.length || g.qtd_clientes)
+    }, 0),
+    'Meses inadimplente': '',
+    'Total grupo (R$)': grupos.reduce((s, g) => s + g.valor_total_grupo, 0),
+  })
+
+  const empresaRows: Array<Record<string, string | number>> = []
+  for (const g of grupos) {
+    const empresas = empresasPorGrupo.get(g.grupo_cliente) ?? []
+    for (const e of empresas) {
+      empresaRows.push({
+        Área: meta.areaLabel,
+        Grupo: g.grupo_cliente,
+        Empresa: e.cliente,
+        'Valor alocado (R$)': e.valor,
+      })
+    }
+  }
+  if (empresaRows.length > 0) {
+    empresaRows.push({
+      Área: meta.areaLabel,
+      Grupo: 'TOTAL',
+      Empresa: '',
+      'Valor alocado (R$)': empresaRows.reduce((s, r) => s + Number(r['Valor alocado (R$)'] ?? 0), 0),
+    })
+  }
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(grupoRows), 'Grupos')
+  if (empresaRows.length > 0) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(empresaRows), 'Empresas')
+  }
+
+  const safeArea = meta.areaKey.replace(/[^\w-]+/g, '_')
+  const safeLabel = meta.periodoLabel.replace(/[^\w-]+/g, '_')
+  XLSX.writeFile(wb, `inadimplencia-${safeArea}-${meta.ano}-${safeLabel}.xlsx`)
+}
+
 export async function exportClientesPeriodoExcel(
   clientes: ReceitaInadimplenciaClientePeriodo[],
   incluidos: Set<string>,

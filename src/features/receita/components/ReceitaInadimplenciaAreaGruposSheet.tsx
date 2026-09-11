@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Loader2, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, Loader2, Search } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -24,6 +24,7 @@ import {
   gruposAlocadosPorArea,
   gruposAlocadosPorAreaPeriodo,
 } from '../utils/receitaInadimplenciaAreaFilter'
+import { exportAreaGruposPeriodoExcel } from '../utils/receitaInadimplenciaExport'
 import { ReceitaInadimplenciaClienteTitulosDetalhe } from './ReceitaInadimplenciaClienteTitulosDetalhe'
 
 type Props = {
@@ -134,6 +135,8 @@ export function ReceitaInadimplenciaAreaGruposSheet({
   const [clientesDept, setClientesDept] = useState<ReceitaInadimplenciaClienteDepartamentoPeriodo[]>([])
   const [clientesDeptLoading, setClientesDeptLoading] = useState(false)
   const [clientesDeptError, setClientesDeptError] = useState<string | null>(null)
+  const [exportando, setExportando] = useState(false)
+  const [exportErro, setExportErro] = useState<string | null>(null)
 
   const buscaDebounced = useDebounce(busca, 250)
 
@@ -160,6 +163,7 @@ export function ReceitaInadimplenciaAreaGruposSheet({
     if (!open) {
       setBusca('')
       setExpandido(null)
+      setExportErro(null)
       return
     }
     let cancelled = false
@@ -225,6 +229,24 @@ export function ReceitaInadimplenciaAreaGruposSheet({
     setExpandido((prev) => (prev === grupo ? null : grupo))
   }
 
+  const handleExportar = async () => {
+    if (grupos.length === 0) return
+    setExportando(true)
+    setExportErro(null)
+    try {
+      await exportAreaGruposPeriodoExcel(grupos, empresasPorGrupo, {
+        periodoLabel: tituloPeriodo,
+        ano,
+        areaKey,
+        areaLabel,
+      })
+    } catch (e) {
+      setExportErro(e instanceof Error ? e.message : 'Erro ao exportar planilha.')
+    } finally {
+      setExportando(false)
+    }
+  }
+
   return (
     <Sheet
       open={open}
@@ -232,6 +254,7 @@ export function ReceitaInadimplenciaAreaGruposSheet({
         if (!next) {
           setBusca('')
           setExpandido(null)
+          setExportErro(null)
         }
         onOpenChange(next)
       }}
@@ -251,6 +274,24 @@ export function ReceitaInadimplenciaAreaGruposSheet({
         </SheetHeader>
 
         <div className="space-y-3 border-y border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              disabled={listaLoading || exportando || grupos.length === 0}
+              onClick={() => void handleExportar()}
+            >
+              {exportando ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              Exportar Excel
+            </Button>
+          </div>
+          {exportErro && <p className="text-xs text-rose-600">{exportErro}</p>}
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <Input
