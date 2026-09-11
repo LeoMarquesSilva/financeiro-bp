@@ -79,7 +79,7 @@ export function ReceitaPage() {
 
   return (
     <div className="space-y-8">
-      <header className="sticky top-14 z-20 -mx-6 -mt-6 flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50/95 px-6 py-2.5 backdrop-blur-sm lg:-mx-8 lg:px-8">
+      <header className="relative sticky top-14 z-20 -mx-6 -mt-6 flex items-center justify-center border-b border-slate-200/80 bg-slate-50/95 px-6 py-2.5 backdrop-blur-sm lg:-mx-8 lg:px-8">
         <ReceitaPageMenu
           onNavigateSection={(id) => {
             if (id === RECEITA_SECTION_IDS.detalhamento) setAbrirDetalhamento(true)
@@ -92,7 +92,7 @@ export function ReceitaPage() {
             type="button"
             variant="outline"
             size="sm"
-            className="group h-8 w-8 shrink-0 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-auto hover:gap-2 hover:px-3 focus-visible:w-auto focus-visible:gap-2 focus-visible:px-3"
+            className="group absolute right-6 top-1/2 z-10 h-8 w-8 shrink-0 -translate-y-1/2 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-auto hover:gap-2 hover:px-3 focus-visible:w-auto focus-visible:gap-2 focus-visible:px-3 lg:right-8"
             onClick={() => setConfigOpen(true)}
             aria-label="Configurações"
             title="Configurações"

@@ -55,7 +55,7 @@ type Props = {
 export function ReceitaPageMenu({ onNavigateSection, onRelatorio, onRateio }: Props) {
   return (
     <nav
-      className="flex min-w-0 items-center gap-0.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex w-full min-w-0 items-center justify-center gap-0.5 overflow-x-auto px-10 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       aria-label="Seções de Receita"
     >
       <h1 className="sr-only">Receita</h1>
