@@ -16,12 +16,14 @@ import {
   MESES_ABREV,
   RECEITA_DEPARTAMENTO_CORES,
   mesMaxDisponivelInadimplencia,
-  mesNome,
 } from '../constants'
 import type { ReceitaDepartamentoCoresConfig } from '../types/receita.types'
 import { buildReceitaMetaAreaSlices } from '../utils/departamentoAreaCores'
 import { isMesFuturo } from '../utils/receitaMes'
-import { carregarRelatorioGerencialGrupos } from '../utils/receitaRelatorioGerencial'
+import {
+  carregarRelatorioGerencialGrupos,
+  periodoRelatorioGerencial,
+} from '../utils/receitaRelatorioGerencial'
 import { exportRelatorioGerencialExcel } from '../utils/receitaRelatorioGerencialExport'
 
 type Props = {
@@ -40,7 +42,7 @@ export function ReceitaRelatorioGerencialDialog({
   departamentoCores,
 }: Props) {
   const mesPadrao = mesMaxDisponivelInadimplencia(ano) || 1
-  const [mes, setMes] = useState(mesPadrao)
+  const [meses, setMeses] = useState<number[]>([mesPadrao])
   const [areaKey, setAreaKey] = useState<string | null>(areaKeyInicial)
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -50,9 +52,17 @@ export function ReceitaRelatorioGerencialDialog({
     [departamentoCores],
   )
 
+  const mesesDisponiveis = useMemo(
+    () => MESES_ABREV.map((_, idx) => idx + 1).filter((m) => !isMesFuturo(ano, m)),
+    [ano],
+  )
+
+  const todosMarcados =
+    mesesDisponiveis.length > 0 && mesesDisponiveis.every((m) => meses.includes(m))
+
   useEffect(() => {
     if (!open) return
-    setMes(mesMaxDisponivelInadimplencia(ano) || 1)
+    setMeses([mesMaxDisponivelInadimplencia(ano) || 1])
     setAreaKey(areaKeyInicial)
     setErro(null)
     setGerando(false)
@@ -63,14 +73,28 @@ export function ReceitaRelatorioGerencialDialog({
       ? 'Todas as áreas'
       : (areaSlices.find((a) => a.key === areaKey)?.label ?? areaKey)
 
+  const toggleMes = (valor: number) => {
+    setMeses((prev) => {
+      if (prev.includes(valor)) {
+        if (prev.length <= 1) return prev
+        return prev.filter((m) => m !== valor)
+      }
+      return [...prev, valor].sort((a, b) => a - b)
+    })
+  }
+
   const handleGerar = async (): Promise<void> => {
+    if (meses.length === 0) {
+      setErro('Selecione pelo menos um mês.')
+      return
+    }
     setGerando(true)
     setErro(null)
     try {
-      const grupos = await carregarRelatorioGerencialGrupos(ano, mes, areaKey)
-      await exportRelatorioGerencialExcel(grupos, {
+      const linhas = await carregarRelatorioGerencialGrupos(ano, meses, areaKey)
+      await exportRelatorioGerencialExcel(linhas, {
         ano,
-        periodoLabel: mesNome(mes),
+        periodoLabel: periodoRelatorioGerencial(meses),
         areaLabel,
       })
       toast.success('Planilha gerada')
@@ -87,34 +111,45 @@ export function ReceitaRelatorioGerencialDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-0 overflow-hidden">
+      <DialogContent className="max-w-lg gap-0 overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-slate-500" aria-hidden />
             Relatório gerencial
           </DialogTitle>
           <DialogDescription>
-            Escolha o mês e a área para gerar a planilha de previsto faturado, pago e
-            inadimplente por grupo.
+            Selecione um ou mais meses e a área. A planilha traz previsto, pago, inadimplente e
+            a data de vencimento de cada linha.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 px-6 py-4">
           <div className="space-y-2">
-            <Label>Mês</Label>
-            <div className="flex flex-wrap gap-1.5" role="listbox" aria-label="Mês">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Meses</Label>
+              <button
+                type="button"
+                disabled={gerando || mesesDisponiveis.length === 0}
+                onClick={() =>
+                  setMeses(todosMarcados ? [mesPadrao] : [...mesesDisponiveis])
+                }
+                className="text-[11px] font-medium text-slate-500 hover:text-slate-800 disabled:opacity-40"
+              >
+                {todosMarcados ? 'Só o mês atual' : 'Todos os meses'}
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Meses">
               {MESES_ABREV.map((label, idx) => {
                 const valor = idx + 1
-                const ativo = valor === mes
+                const ativo = meses.includes(valor)
                 const futuro = isMesFuturo(ano, valor)
                 return (
                   <button
                     key={label}
                     type="button"
-                    role="option"
-                    aria-selected={ativo}
+                    aria-pressed={ativo}
                     disabled={futuro || gerando}
-                    onClick={() => setMes(valor)}
+                    onClick={() => toggleMes(valor)}
                     className={cn(
                       'rounded-md px-2.5 py-1 text-xs font-semibold uppercase tracking-wide transition-colors',
                       ativo
@@ -198,7 +233,11 @@ export function ReceitaRelatorioGerencialDialog({
           >
             Cancelar
           </Button>
-          <Button type="button" onClick={() => void handleGerar()} disabled={gerando}>
+          <Button
+            type="button"
+            onClick={() => void handleGerar()}
+            disabled={gerando || meses.length === 0}
+          >
             {gerando ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             ) : (

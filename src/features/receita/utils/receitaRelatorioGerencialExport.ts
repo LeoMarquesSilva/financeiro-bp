@@ -1,11 +1,23 @@
 import ExcelJS from 'exceljs'
 
-export type RelatorioGerencialGrupo = {
+export type RelatorioGerencialLinha = {
   grupo_cliente: string
   tipo_receita: string
+  data_vencimento: string | null
   faturado: number
   recebido: number
   inadimplencia: number
+}
+
+export type RelatorioGerencialGrupo = Omit<RelatorioGerencialLinha, 'data_vencimento'>
+
+const DATE_FMT = 'DD/MM/YYYY'
+
+export function vencimentoParaExcel(iso: string | null): Date | string {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return new Date(y, m - 1, d)
 }
 
 export type RelatorioGerencialMeta = {
@@ -87,18 +99,18 @@ export function agruparNetPorChaveGrupo(
     )
 }
 
-/** Planilha gerencial azul: previsto faturado, grupo, pago e inadimplente. */
+/** Planilha gerencial: previsto faturado, grupo, vencimento, pago e inadimplente. */
 export async function exportRelatorioGerencialExcel(
-  grupos: RelatorioGerencialGrupo[],
+  linhas: RelatorioGerencialLinha[],
   meta: RelatorioGerencialMeta,
 ): Promise<void> {
-  if (grupos.length === 0) {
+  if (linhas.length === 0) {
     throw new Error('Não há grupos com receita no período selecionado.')
   }
 
-  const totalFat = grupos.reduce((s, g) => s + g.faturado, 0)
-  const totalRec = grupos.reduce((s, g) => s + g.recebido, 0)
-  const totalInad = grupos.reduce((s, g) => s + g.inadimplencia, 0)
+  const totalFat = linhas.reduce((s, g) => s + g.faturado, 0)
+  const totalRec = linhas.reduce((s, g) => s + g.recebido, 0)
+  const totalInad = linhas.reduce((s, g) => s + g.inadimplencia, 0)
   const gerado = meta.geradoEm ?? new Date()
   const geradoLabel = gerado.toLocaleString('pt-BR', {
     day: '2-digit',
@@ -110,7 +122,7 @@ export async function exportRelatorioGerencialExcel(
   const periodo = `${meta.periodoLabel.toUpperCase()}/${meta.ano}`
   const areaLabel = meta.areaLabel?.trim() || 'Todas as áreas'
 
-  const COLS = 7
+  const COLS = 8
 
   const wb = new ExcelJS.Workbook()
   wb.creator = 'SIOE'
@@ -142,13 +154,13 @@ export async function exportRelatorioGerencialExcel(
   ws.mergeCells(2, 1, 2, COLS)
   const sub = ws.getCell(2, 1)
   sub.value =
-    `Títulos vencidos na cota · saldo líquido por grupo e tipo · ${areaLabel} · Bismarchi Pires`
+    `Todo o previsto do período · grupo, tipo e data de vencimento · ${areaLabel} · Bismarchi Pires`
   sub.font = { name: 'Calibri', size: 10, italic: true, color: { argb: `FF${MUTED}` } }
   sub.alignment = { vertical: 'middle', indent: 1 }
   ws.getRow(2).height = 18
 
   const kpis: Array<[string, string | number, string | undefined]> = [
-    ['Linhas', grupos.length, undefined],
+    ['Linhas', linhas.length, undefined],
     ['Previsto faturado', totalFat, MONEY_FMT],
     ['Valor pago', totalRec, MONEY_FMT],
     ['Inadimplente', totalInad, MONEY_FMT],
@@ -177,13 +189,14 @@ export async function exportRelatorioGerencialExcel(
 
   ws.mergeCells(7, 1, 7, COLS)
   const sec = ws.getCell(7, 1)
-  sec.value = 'Composição por grupo e tipo de receita'
+  sec.value = 'Composição por grupo, tipo de receita e data de vencimento'
   sec.font = { name: 'Calibri', size: 13, bold: true, color: { argb: `FF${BRAND}` } }
 
   const headers = [
     '#',
     'Grupo',
     'Tipo de receita',
+    'Data de vencimento',
     'Receita prevista faturada',
     'Valor pago',
     'Valor inadimplente',
@@ -200,12 +213,13 @@ export async function exportRelatorioGerencialExcel(
   ws.getRow(8).height = 22
   ws.autoFilter = { from: { row: 8, column: 1 }, to: { row: 8, column: COLS } }
 
-  grupos.forEach((g, i) => {
+  linhas.forEach((g, i) => {
     const row = 9 + i
     const zebra = i % 2 === 1
     const share = totalFat > 0 ? g.faturado / totalFat : 0
+    const venc = vencimentoParaExcel(g.data_vencimento)
     const values: Array<{
-      v: string | number
+      v: string | number | Date
       fmt?: string
       align?: 'left' | 'center' | 'right'
       fill?: string
@@ -213,6 +227,7 @@ export async function exportRelatorioGerencialExcel(
       { v: i + 1, align: 'center' },
       { v: g.grupo_cliente, align: 'left' },
       { v: g.tipo_receita, align: 'left' },
+      { v: venc, fmt: venc instanceof Date ? DATE_FMT : undefined, align: 'center' },
       { v: g.faturado, fmt: MONEY_FMT, align: 'right' },
       { v: g.recebido, fmt: MONEY_FMT, align: 'right', fill: PAGO_SOFT },
       { v: g.inadimplencia, fmt: MONEY_FMT, align: 'right', fill: INAD_SOFT },
@@ -225,16 +240,19 @@ export async function exportRelatorioGerencialExcel(
       cell.border = thinBorder
       cell.alignment = { vertical: 'middle', horizontal: item.align ?? 'left' }
       cell.fill = fillArgb(item.fill ?? (zebra ? ZEBRA : WHITE))
-      if (item.fmt && typeof item.v === 'number') cell.numFmt = item.fmt
+      if (item.fmt && (typeof item.v === 'number' || item.v instanceof Date)) {
+        cell.numFmt = item.fmt
+      }
     })
     ws.getRow(row).height = 18
   })
 
-  const totalRow = 9 + grupos.length
+  const totalRow = 9 + linhas.length
   const totalVals: Array<{ v: string | number; fmt?: string; align?: 'left' | 'center' | 'right' }> = [
     { v: '', align: 'center' },
     { v: 'TOTAL', align: 'left' },
     { v: '', align: 'left' },
+    { v: '', align: 'center' },
     { v: totalFat, fmt: MONEY_FMT, align: 'right' },
     { v: totalRec, fmt: MONEY_FMT, align: 'right' },
     { v: totalInad, fmt: MONEY_FMT, align: 'right' },
@@ -255,9 +273,9 @@ export async function exportRelatorioGerencialExcel(
   ws.mergeCells(noteRow, 1, noteRow, COLS)
   const note = ws.getCell(noteRow, 1)
   note.value =
-    'Critérios: previsto faturado = títulos vencidos na cota no período. ' +
+    'Critérios: previsto faturado = todos os títulos com vencimento nos meses selecionados. ' +
     'Valor pago = baixa do título (inclui posterior). ' +
-    'Inadimplente = max(0, previsto faturado − valor pago) por grupo e tipo de receita. Gerado em ' +
+    'Inadimplente = título vencido até o corte (ontem) e sem pagamento. Gerado em ' +
     geradoLabel +
     '.'
   note.font = { name: 'Calibri', size: 9, italic: true, color: { argb: `FF${MUTED}` } }
@@ -267,10 +285,11 @@ export async function exportRelatorioGerencialExcel(
   ws.getColumn(1).width = 6
   ws.getColumn(2).width = 38
   ws.getColumn(3).width = 28
-  ws.getColumn(4).width = 24
-  ws.getColumn(5).width = 16
-  ws.getColumn(6).width = 20
-  ws.getColumn(7).width = 14
+  ws.getColumn(4).width = 18
+  ws.getColumn(5).width = 24
+  ws.getColumn(6).width = 16
+  ws.getColumn(7).width = 20
+  ws.getColumn(8).width = 14
 
   ws.headerFooter.oddFooter = `&LSIOE · Relatório gerencial&C${periodo}&R&P / &N`
 
