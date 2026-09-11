@@ -35,10 +35,8 @@ export function admissaoCasaTreinamento(
 ): string | null {
   const atuais = rows.filter((row) => ativoNoAno(row, ano) && isoDate(row.admissao))
   if (atuais.length === 0) return null
-  const admissaoSetor = atuais
-    .map((row) => isoDate(row.admissao))
-    .sort()
-    .at(-1)
+  const admissoes = atuais.map((row) => isoDate(row.admissao)).sort()
+  const admissaoSetor = admissoes[admissoes.length - 1]
   if (!admissaoSetor) return null
 
   let saidaReal: string | null = null
