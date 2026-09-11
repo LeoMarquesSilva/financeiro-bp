@@ -11,6 +11,7 @@ export type ReceitaRateioGrupoRow = {
   total: number
   quantidadeTitulos: number
   pctPorArea: Record<string, number>
+  valorPorArea: Record<string, number>
 }
 
 export function areaKeyForDepartamento(departamento: string | null | undefined): string {
@@ -73,6 +74,7 @@ export function agruparRateioPorGrupo(
           v.total > 0 ? (valor / v.total) * 100 : 0,
         ]),
       ),
+      valorPorArea: v.valorPorArea,
     }))
     .sort((a, b) => a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR'))
 }

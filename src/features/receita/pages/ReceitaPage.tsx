@@ -1,29 +1,32 @@
-import { useState } from 'react'
-import { TrendingUp, RefreshCw, Settings2, PieChart } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { RefreshCw, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import { formatDateTime } from '@/shared/utils/format'
 import { useReceitaMetas } from '../hooks/useReceitaMetas'
 import { useReceitaDepartamentoCores } from '../hooks/useReceitaDepartamentoCores'
 import { useReceitaDashboard } from '../hooks/useReceitaDashboard'
-import { useReceitaUltimaAtualizacao } from '../hooks/useReceitaUltimaAtualizacao'
 import { ReceitaConfiguracoesSheet } from '../components/ReceitaConfiguracoesSheet'
 import { ReceitaConsultaRateioDialog } from '../components/ReceitaConsultaRateioDialog'
+import { ReceitaRelatorioGerencialDialog } from '../components/ReceitaRelatorioGerencialDialog'
 import { ReceitaComparativoChart } from '../components/ReceitaComparativoChart'
 import { ReceitaComparativoColunasChart } from '../components/ReceitaComparativoColunasChart'
 import { ReceitaAcumuladoChart } from '../components/ReceitaAcumuladoChart'
 import { ReceitaKpis } from '../components/ReceitaKpis'
 import { ReceitaGestaoAVistaSection } from '../components/ReceitaGestaoAVistaSection'
 import { ReceitaInadimplenciaSection } from '../components/ReceitaInadimplenciaSection'
+import { ReceitaPageMenu } from '../components/ReceitaPageMenu'
+import { PLANOS_CONTAS_INCLUIDOS_COTA, RECEITA_DEPARTAMENTO_CORES } from '../constants'
 import {
-  PLANOS_CONTAS_INCLUIDOS_COTA,
-  RECEITA_COLORS,
-  RECEITA_DEPARTAMENTO_CORES,
-} from '../constants'
+  RECEITA_SECTION_IDS,
+  scrollToReceitaSection,
+  type ReceitaSectionId,
+} from '../utils/receitaNav'
 
 export function ReceitaPage() {
   const [configOpen, setConfigOpen] = useState(false)
   const [rateioOpen, setRateioOpen] = useState(false)
+  const [relatorioOpen, setRelatorioOpen] = useState(false)
+  const [abrirDetalhamento, setAbrirDetalhamento] = useState(false)
+  const [pendingScrollId, setPendingScrollId] = useState<ReceitaSectionId | null>(null)
   const { metas, isLoading: metasLoading, error: metasError, refetch: refetchMetas, updateMetas, isUpdating } =
     useReceitaMetas()
   const {
@@ -32,9 +35,14 @@ export function ReceitaPage() {
     isUpdating: coresUpdating,
   } = useReceitaDepartamentoCores()
   const { data, isLoading: dashLoading, error } = useReceitaDashboard(metas)
-  const { data: ultimaAtualizacao } = useReceitaUltimaAtualizacao()
 
   const coresParaGrafico = departamentoCores ?? RECEITA_DEPARTAMENTO_CORES
+
+  useEffect(() => {
+    if (!pendingScrollId) return
+    const ok = scrollToReceitaSection(pendingScrollId)
+    if (ok) setPendingScrollId(null)
+  }, [pendingScrollId, dashLoading, data, abrirDetalhamento])
 
   if (metasLoading) {
     return (
@@ -71,46 +79,29 @@ export function ReceitaPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
-            <TrendingUp className={cn('h-6 w-6 shrink-0', RECEITA_COLORS.meta.text)} aria-hidden />
-            Receita
-          </h1>
-        </div>
-        <div className="flex shrink-0 items-start gap-3 self-start">
-          {ultimaAtualizacao && (
-            <span
-              className="flex items-center gap-1.5 pt-2 text-xs text-slate-400"
-              title="Última carga VIOS (parcelas e itens financeiros)"
-            >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-              Atualizado em {formatDateTime(ultimaAtualizacao)}
-            </span>
-          )}
-          <div className="flex flex-col items-stretch gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => setConfigOpen(true)}
-            >
-              <Settings2 className="h-4 w-4" aria-hidden />
+      <header className="sticky top-14 z-20 -mx-6 -mt-6 flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50/95 px-6 py-2.5 backdrop-blur-sm lg:-mx-8 lg:px-8">
+        <ReceitaPageMenu
+          onNavigateSection={(id) => {
+            if (id === RECEITA_SECTION_IDS.detalhamento) setAbrirDetalhamento(true)
+            setPendingScrollId(id)
+          }}
+          onRelatorio={() => setRelatorioOpen(true)}
+          onRateio={() => setRateioOpen(true)}
+        />
+        <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="group h-8 w-8 shrink-0 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-auto hover:gap-2 hover:px-3 focus-visible:w-auto focus-visible:gap-2 focus-visible:px-3"
+            onClick={() => setConfigOpen(true)}
+            aria-label="Configurações"
+            title="Configurações"
+          >
+            <Settings2 className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:max-w-[9rem] group-hover:opacity-100 group-focus-visible:max-w-[9rem] group-focus-visible:opacity-100">
               Configurações
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => setRateioOpen(true)}
-            >
-              <PieChart className="h-4 w-4" aria-hidden />
-              Consulta Rateio
-            </Button>
-          </div>
-        </div>
+            </span>
+          </Button>
       </header>
 
       <ReceitaConfiguracoesSheet
@@ -129,6 +120,12 @@ export function ReceitaPage() {
         ano={metas.ano}
         departamentoCores={coresParaGrafico}
       />
+      <ReceitaRelatorioGerencialDialog
+        open={relatorioOpen}
+        onOpenChange={setRelatorioOpen}
+        ano={metas.ano}
+        departamentoCores={coresParaGrafico}
+      />
 
       {error && (
         <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -137,16 +134,22 @@ export function ReceitaPage() {
         </p>
       )}
 
-      <ReceitaKpis rows={data?.rows ?? []} ano={data?.ano ?? metas.ano} loading={dashLoading} />
+      <div id={RECEITA_SECTION_IDS.resumo} className="scroll-mt-36">
+        <ReceitaKpis rows={data?.rows ?? []} ano={data?.ano ?? metas.ano} loading={dashLoading} />
+      </div>
 
-      <ReceitaGestaoAVistaSection
-        ano={metas.ano}
-        rows={data?.rows ?? []}
-        departamentoCores={coresParaGrafico}
-        loading={dashLoading}
-      />
+      <div id={RECEITA_SECTION_IDS.gestaoAVista} className="scroll-mt-36">
+        <ReceitaGestaoAVistaSection
+          ano={metas.ano}
+          rows={data?.rows ?? []}
+          departamentoCores={coresParaGrafico}
+          loading={dashLoading}
+        />
+      </div>
 
-      <ReceitaInadimplenciaSection ano={metas.ano} />
+      <div id={RECEITA_SECTION_IDS.inadimplencia} className="scroll-mt-36">
+        <ReceitaInadimplenciaSection ano={metas.ano} />
+      </div>
 
       {dashLoading && (
         <div className="space-y-6">
@@ -158,21 +161,26 @@ export function ReceitaPage() {
 
       {data && !dashLoading && (
         <>
-          <ReceitaComparativoChart
-            rows={data.rows}
-            ano={data.ano}
-            departamentoCores={coresParaGrafico}
-          />
+          <div id={RECEITA_SECTION_IDS.comparativo} className="scroll-mt-36">
+            <ReceitaComparativoChart
+              rows={data.rows}
+              ano={data.ano}
+              departamentoCores={coresParaGrafico}
+              abrirDetalhamento={abrirDetalhamento}
+            />
+          </div>
           <ReceitaComparativoColunasChart
             rows={data.rows}
             ano={data.ano}
             departamentoCores={coresParaGrafico}
           />
-          <ReceitaAcumuladoChart
-            rows={data.rows}
-            ano={data.ano}
-            departamentoCores={coresParaGrafico}
-          />
+          <div id={RECEITA_SECTION_IDS.acumulado} className="scroll-mt-36">
+            <ReceitaAcumuladoChart
+              rows={data.rows}
+              ano={data.ano}
+              departamentoCores={coresParaGrafico}
+            />
+          </div>
         </>
       )}
 

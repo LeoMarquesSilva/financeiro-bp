@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Building2,
@@ -43,6 +43,7 @@ import {
   RECEITA_DEPARTAMENTO_LABELS,
   mesAbrev,
 } from '../constants'
+import { RECEITA_SECTION_IDS } from '../utils/receitaNav'
 import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
 import { ReceitaAreaRecebidoGrupoSheet } from './ReceitaAreaRecebidoGrupoSheet'
 import { ReceitaRecebidoClassificacaoSheet } from './ReceitaRecebidoClassificacaoSheet'
@@ -702,6 +703,8 @@ type Props = {
    * controles ficam fora da cópia para slide (`data-chart-export-ignore`).
    */
   apresentacaoMode?: boolean
+  /** Abre a tabela de detalhamento (menu da página Receita). */
+  abrirDetalhamento?: boolean
 }
 
 export function ReceitaComparativoChart({
@@ -709,6 +712,7 @@ export function ReceitaComparativoChart({
   ano,
   departamentoCores = RECEITA_DEPARTAMENTO_CORES,
   apresentacaoMode = false,
+  abrirDetalhamento = false,
 }: Props) {
   const [detalheMes, setDetalheMes] = useState<ReceitaMesRow | null>(null)
   const [areaMesDetalhe, setAreaMesDetalhe] = useState<{
@@ -719,6 +723,10 @@ export function ReceitaComparativoChart({
   } | null>(null)
   const [semAreaAberto, setSemAreaAberto] = useState(false)
   const [tabelaAberta, setTabelaAberta] = useState(false)
+
+  useEffect(() => {
+    if (abrirDetalhamento) setTabelaAberta(true)
+  }, [abrirDetalhamento])
   // Na Apresentação, o comparativo é exclusivamente percentual — sem valores em R$.
   const [percentMode, setPercentMode] = useState(apresentacaoMode)
   const [porAreaMode, setPorAreaMode] = useState(false)
@@ -2049,7 +2057,7 @@ export function ReceitaComparativoChart({
 
       {!apresentacaoMode ? (
       <>
-      <section className="space-y-3">
+      <section id={RECEITA_SECTION_IDS.detalhamento} className="scroll-mt-36 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Table2 className="h-4 w-4 text-slate-500" aria-hidden />

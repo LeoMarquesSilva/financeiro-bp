@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, PieChart, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, PieChart, Search } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { useDebounce } from '@/shared/hooks/useDebounce'
@@ -49,6 +55,14 @@ function celulaPct(pct: number | undefined): string {
   return formatPercent(pct)
 }
 
+function pctArea(grupo: ReceitaRateioGrupoRow, areaKey: string): number {
+  const v = grupo.pctPorArea[areaKey]
+  if (v == null || !Number.isFinite(v)) return 0
+  return v
+}
+
+type SortDir = 'asc' | 'desc'
+
 export function ReceitaConsultaRateioDialog({
   open,
   onOpenChange,
@@ -57,6 +71,8 @@ export function ReceitaConsultaRateioDialog({
 }: Props) {
   const [mes, setMes] = useState(() => mesPadrao(ano))
   const [busca, setBusca] = useState('')
+  const [sortArea, setSortArea] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const buscaDebounced = useDebounce(busca, 250)
 
   const { grupos, hasOutras, isLoading, error } = useReceitaRateioConsulta(ano, mes, open)
@@ -83,13 +99,32 @@ export function ReceitaConsultaRateioDialog({
     if (!open) return
     setMes(mesPadrao(ano))
     setBusca('')
+    setSortArea(null)
+    setSortDir('desc')
   }, [open, ano])
 
   const gruposFiltrados = useMemo((): ReceitaRateioGrupoRow[] => {
     const q = buscaDebounced.trim().toLowerCase()
-    if (!q) return grupos
-    return grupos.filter((g) => g.grupo_cliente.toLowerCase().includes(q))
-  }, [grupos, buscaDebounced])
+    const filtrados = q
+      ? grupos.filter((g) => g.grupo_cliente.toLowerCase().includes(q))
+      : grupos
+    if (!sortArea) return filtrados
+    const sign = sortDir === 'asc' ? 1 : -1
+    return [...filtrados].sort((a, b) => {
+      const cmp = pctArea(a, sortArea) - pctArea(b, sortArea)
+      if (cmp !== 0) return cmp * sign
+      return a.grupo_cliente.localeCompare(b.grupo_cliente, 'pt-BR')
+    })
+  }, [grupos, buscaDebounced, sortArea, sortDir])
+
+  const handleSortArea = (areaKey: string) => {
+    if (sortArea === areaKey) {
+      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+      return
+    }
+    setSortArea(areaKey)
+    setSortDir('desc')
+  }
 
   const totalMes = useMemo(
     () => gruposFiltrados.reduce((s, g) => s + g.total, 0),
@@ -170,26 +205,50 @@ export function ReceitaConsultaRateioDialog({
                 Nenhum título lançado neste mês.
               </div>
             ) : (
+              <TooltipProvider delayDuration={200}>
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-white">
                   <TableRow>
                     <TableHead className="sticky left-0 z-20 min-w-[160px] bg-white">
                       Grupo cliente
                     </TableHead>
-                    {colunas.map((area) => (
-                      <TableHead key={area.key} className="min-w-[92px] text-right">
-                        <span className="inline-flex items-center justify-end gap-1.5">
-                          <span
-                            className="inline-block h-2 w-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: area.color }}
-                            aria-hidden
-                          />
-                          <span className="max-w-[7.5rem] truncate" title={area.label}>
-                            {area.label}
-                          </span>
-                        </span>
-                      </TableHead>
-                    ))}
+                    {colunas.map((area) => {
+                      const ativo = sortArea === area.key
+                      const SortIcon = ativo
+                        ? sortDir === 'asc'
+                          ? ArrowUp
+                          : ArrowDown
+                        : ArrowUpDown
+                      return (
+                        <TableHead key={area.key} className="min-w-[92px] p-0 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleSortArea(area.key)}
+                            aria-sort={
+                              ativo ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                            }
+                            title={`Ordenar por ${area.label}`}
+                            className={cn(
+                              'inline-flex h-10 w-full items-center justify-center gap-1.5 px-3 text-xs font-semibold uppercase tracking-wide transition-colors hover:text-slate-800',
+                              ativo ? 'text-slate-800' : 'text-slate-500',
+                            )}
+                          >
+                            <span
+                              className="inline-block h-2 w-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: area.color }}
+                              aria-hidden
+                            />
+                            <span className="max-w-[7.5rem] truncate" title={area.label}>
+                              {area.label}
+                            </span>
+                            <SortIcon
+                              className={cn('h-3 w-3 shrink-0', !ativo && 'opacity-40')}
+                              aria-hidden
+                            />
+                          </button>
+                        </TableHead>
+                      )
+                    })}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -200,18 +259,35 @@ export function ReceitaConsultaRateioDialog({
                           {grupo.grupo_cliente}
                         </span>
                       </TableCell>
-                      {colunas.map((area) => (
-                        <TableCell
-                          key={area.key}
-                          className="text-right tabular-nums text-slate-800"
-                        >
-                          {celulaPct(grupo.pctPorArea[area.key])}
-                        </TableCell>
-                      ))}
+                      {colunas.map((area) => {
+                        const pct = grupo.pctPorArea[area.key]
+                        const valor = grupo.valorPorArea[area.key] ?? 0
+                        const label = celulaPct(pct)
+                        return (
+                          <TableCell
+                            key={area.key}
+                            className="text-center tabular-nums text-slate-800"
+                          >
+                            {valor > 0 ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-default">{label}</span>
+                                </TooltipTrigger>
+                                <TooltipContent className="z-[80]">
+                                  {formatCurrency(valor)}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              label
+                            )}
+                          </TableCell>
+                        )
+                      })}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              </TooltipProvider>
             )}
           </div>
         </div>
