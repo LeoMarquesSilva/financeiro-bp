@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { TrendingUp, RefreshCw, Settings2 } from 'lucide-react'
+import { TrendingUp, RefreshCw, Settings2, PieChart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/shared/utils/format'
@@ -8,6 +8,7 @@ import { useReceitaDepartamentoCores } from '../hooks/useReceitaDepartamentoCore
 import { useReceitaDashboard } from '../hooks/useReceitaDashboard'
 import { useReceitaUltimaAtualizacao } from '../hooks/useReceitaUltimaAtualizacao'
 import { ReceitaConfiguracoesSheet } from '../components/ReceitaConfiguracoesSheet'
+import { ReceitaConsultaRateioDialog } from '../components/ReceitaConsultaRateioDialog'
 import { ReceitaComparativoChart } from '../components/ReceitaComparativoChart'
 import { ReceitaComparativoColunasChart } from '../components/ReceitaComparativoColunasChart'
 import { ReceitaAcumuladoChart } from '../components/ReceitaAcumuladoChart'
@@ -19,8 +20,10 @@ import {
   RECEITA_COLORS,
   RECEITA_DEPARTAMENTO_CORES,
 } from '../constants'
+
 export function ReceitaPage() {
   const [configOpen, setConfigOpen] = useState(false)
+  const [rateioOpen, setRateioOpen] = useState(false)
   const { metas, isLoading: metasLoading, error: metasError, refetch: refetchMetas, updateMetas, isUpdating } =
     useReceitaMetas()
   const {
@@ -75,26 +78,38 @@ export function ReceitaPage() {
             Receita
           </h1>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-3 self-start">
+        <div className="flex shrink-0 items-start gap-3 self-start">
           {ultimaAtualizacao && (
             <span
-              className="flex items-center gap-1.5 text-xs text-slate-400"
+              className="flex items-center gap-1.5 pt-2 text-xs text-slate-400"
               title="Última carga VIOS (parcelas e itens financeiros)"
             >
               <RefreshCw className="h-3.5 w-3.5" aria-hidden />
               Atualizado em {formatDateTime(ultimaAtualizacao)}
             </span>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => setConfigOpen(true)}
-          >
-            <Settings2 className="h-4 w-4" aria-hidden />
-            Configurações
-          </Button>
+          <div className="flex flex-col items-stretch gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setConfigOpen(true)}
+            >
+              <Settings2 className="h-4 w-4" aria-hidden />
+              Configurações
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setRateioOpen(true)}
+            >
+              <PieChart className="h-4 w-4" aria-hidden />
+              Consulta Rateio
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -107,6 +122,12 @@ export function ReceitaPage() {
         cores={coresParaGrafico}
         onSaveCores={updateCores}
         isSavingCores={coresUpdating}
+      />
+      <ReceitaConsultaRateioDialog
+        open={rateioOpen}
+        onOpenChange={setRateioOpen}
+        ano={metas.ano}
+        departamentoCores={coresParaGrafico}
       />
 
       {error && (

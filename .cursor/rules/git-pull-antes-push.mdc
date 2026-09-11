@@ -1,22 +1,23 @@
 ---
-description: Sempre pull e push antes de subir — repositório compartilhado
+description: Sempre pull antes de commitar e push imediatamente depois — repositório compartilhado
 alwaysApply: true
 ---
 
-# Git — pull e push antes de subir
+# Git — pull antes do commit, push imediatamente depois
 
 O repositório é **compartilhado**. Outra pessoa pode ter commitado enquanto trabalhamos
-(ex.: correção de TS no Vercel). **Nunca subir** (commit/push/deploy) sem sincronizar.
+(ex.: correção de TS no Vercel). **Nunca commitar em cima de um local atrasado.**
+**Nunca deixar commit só no computador** — depois de commitar, faça push.
 
-## Fluxo obrigatório
+## Regra fixa
 
-Antes de **qualquer** commit, push ou “subir pro ar”:
-
-1. **`git pull --rebase origin main`** (ou a branch atual).
+1. **Antes de qualquer commit:** `git pull --rebase origin main` (ou a branch atual).
 2. Resolver conflitos, se houver, e validar o projeto.
 3. **`git add`** + **`git commit`** (somente quando o usuário pedir).
 4. **`git pull --rebase`** de novo (o remoto pode ter avançado no meio tempo).
-5. **`git push`** — só depois do pull ter sucesso. Sem push, a alteração **não subiu**.
+5. **`git push` imediatamente** — só depois do pull ter sucesso. Sem push, a alteração **não subiu**.
+
+Não pule o passo 1. Não termine no passo 3.
 
 ## O que evitar
 
