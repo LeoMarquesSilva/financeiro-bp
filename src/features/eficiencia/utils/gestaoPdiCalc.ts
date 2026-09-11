@@ -2,6 +2,25 @@ import { formatPercent } from '@/shared/utils/format'
 import type { HeatCell } from '../components/OverviewKpiHeatRow'
 import { mesNoFiltro, type MesFiltroEficiencia } from '../constants'
 import type { GestaoPdiDetalheRow, GestaoPdiElegivelRow, GestaoPdiMesRow } from '../types/eficiencia.types'
+import { normalizeResponsavelChave } from './responsavelMatch'
+
+/** Progresso do mês anterior na aba Elegíveis (mesmo colaborador). */
+export function progressoMesAnteriorElegiveis(
+  elegiveis: GestaoPdiElegivelRow[],
+  colaborador: string,
+  mes: number,
+): number | null {
+  const alvo = mes - 1
+  if (alvo < 1) return null
+  const key = normalizeResponsavelChave(colaborador)
+  const hit = elegiveis.find(
+    (row) =>
+      row.mes === alvo &&
+      normalizeResponsavelChave(row.colaborador) === key &&
+      row.progresso != null,
+  )
+  return hit == null ? null : Number(hit.progresso)
+}
 
 /** Junho = baseline 100% (regra de negócio validada). */
 export const GESTAO_PDI_MES_BASELINE = 6

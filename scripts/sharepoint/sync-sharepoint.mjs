@@ -45,6 +45,7 @@ import {
   computeAdesaoApos18,
   areaNaConclusao,
   turnoverRowDedupeKey,
+  normalizeNomeChave,
   resolveNomeCanonico,
   resolveTaskAssignee,
   parseNumeroProcessoLista,
@@ -544,9 +545,23 @@ function parsePeriodoAnalisadoPdi(v, anoFallback) {
   return { ano: ano || anoFallback, mes }
 }
 
+function normalizePdiHeader(v) {
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function findPdiCol(headers, testers) {
+  const idx = headers.findIndex((h) => testers.some((test) => test(h)))
+  return idx >= 0 ? idx : -1
+}
+
 /**
- * Abas "Desvio …" / "Análise Desvios":
- * Período | Área | Colaborador | Estrutura | Progresso (ant) | Progresso | Evidências | 1:1 | Desvio Critério de Puração
+ * Abas "Desvio …" / "Análise Desvios" — colunas pelo cabeçalho
+ * (a planilha atual não tem mais Progresso anterior).
  */
 function parsePdiDesviosBuffer(buffer, anoFallback) {
   const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
@@ -564,29 +579,68 @@ function parsePdiDesviosBuffer(buffer, anoFallback) {
     if (!sheet) continue
     const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true })
     if (!matrix || matrix.length < 2) continue
-    console.log(`[gestao_pdi] lendo aba "${sheetName}" (${matrix.length - 1} linhas)`)
+    const headers = (matrix[0] ?? []).map(normalizePdiHeader)
+    const colPeriodo = findPdiCol(headers, [(h) => h.includes('periodo')])
+    const colArea = findPdiCol(headers, [(h) => h === 'area'])
+    const colColab = findPdiCol(headers, [(h) => h.includes('colaborador')])
+    const colEstrutura = findPdiCol(headers, [(h) => h.includes('estrutura')])
+    const colProgAnt = findPdiCol(headers, [
+      (h) => h.includes('progresso') && (h.includes('ant') || h.includes('anterior')),
+    ])
+    const colProgresso = findPdiCol(headers, [
+      (h) => h === 'progresso' || (h.includes('progresso') && colProgAnt < 0),
+    ])
+    const colEvid = findPdiCol(headers, [(h) => h.includes('evidenc')])
+    const colOne = findPdiCol(headers, [(h) => h.includes('1:1') || h.includes('1 a 1')])
+    const colCriterio = findPdiCol(headers, [
+      (h) => h.includes('criterio') || h.includes('puracao') || h.includes('apuracao'),
+    ])
+    console.log(
+      `[gestao_pdi] lendo aba "${sheetName}" (${matrix.length - 1} linhas) criterioCol=${colCriterio}`,
+    )
 
     for (let r = 1; r < matrix.length; r++) {
       const line = matrix[r] ?? []
-      const periodo = parsePeriodoAnalisadoPdi(line[0], anoFallback)
-      const colaborador = strOrNull(line[2])
+      const periodo = parsePeriodoAnalisadoPdi(
+        colPeriodo >= 0 ? line[colPeriodo] : line[0],
+        anoFallback,
+      )
+      const colaborador = strOrNull(colColab >= 0 ? line[colColab] : line[2])
       if (!periodo || !colaborador) continue
-      const criterio = strOrNull(line[8])
+      const criterio = strOrNull(colCriterio >= 0 ? line[colCriterio] : null)
       rows.push({
         ano: periodo.ano,
         mes: periodo.mes,
-        area: normalizePdiArea(line[1]),
+        area: normalizePdiArea(colArea >= 0 ? line[colArea] : line[1]),
         colaborador,
-        estrutura: strOrNull(line[3]),
-        progresso_anterior: numOrNull(line[4]),
-        progresso: numOrNull(line[5]),
-        evidencias_execucao: strOrNull(line[6]),
-        one_a_one: numOrNull(line[7]),
+        estrutura: strOrNull(colEstrutura >= 0 ? line[colEstrutura] : null),
+        progresso_anterior: colProgAnt >= 0 ? numOrNull(line[colProgAnt]) : null,
+        progresso: colProgresso >= 0 ? numOrNull(line[colProgresso]) : null,
+        evidencias_execucao: strOrNull(colEvid >= 0 ? line[colEvid] : null),
+        one_a_one: colOne >= 0 ? numOrNull(line[colOne]) : null,
         desvio_criterio_apuracao: criterio ? criterio.replace(/\r\n/g, '\n') : null,
       })
     }
   }
   return rows
+}
+
+/** Progresso anterior = coluna do mês anterior na aba Elegíveis. */
+function enrichPdiDesviosComElegiveis(desvios, elegiveis) {
+  const progressoPorChave = new Map()
+  for (const row of elegiveis) {
+    const key = `${row.mes}|${normalizeNomeChave(row.colaborador)}`
+    if (row.progresso != null) progressoPorChave.set(key, row.progresso)
+  }
+  return desvios.map((row) => {
+    const ant = row.mes > 1 ? progressoPorChave.get(`${row.mes - 1}|${normalizeNomeChave(row.colaborador)}`) : null
+    const atual = progressoPorChave.get(`${row.mes}|${normalizeNomeChave(row.colaborador)}`)
+    return {
+      ...row,
+      progresso_anterior: ant ?? row.progresso_anterior ?? null,
+      progresso: atual ?? row.progresso ?? null,
+    }
+  })
 }
 
 function parseDate(v) {
@@ -639,7 +693,10 @@ const FONTES = {
       const buffer = await fetchDriveFile(ctx.siteControladoria, PDI_XLSX_PATH)
       console.log(`[gestao_pdi] lendo ${PDI_XLSX_PATH} (ano=${anoRef})`)
       const elegiveis = parsePdiElegiveisBuffer(buffer, anoRef)
-      const desvios = parsePdiDesviosBuffer(buffer, anoRef)
+      const desvios = enrichPdiDesviosComElegiveis(
+        parsePdiDesviosBuffer(buffer, anoRef),
+        elegiveis,
+      )
       const elegiveisSync = await replaceAll(
         'sp_gestao_pdi_elegiveis',
         dedupeBy(elegiveis, (r) => `${r.ano}|${r.mes}|${r.colaborador}`),

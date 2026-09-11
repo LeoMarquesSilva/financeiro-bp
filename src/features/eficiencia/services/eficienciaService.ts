@@ -84,8 +84,16 @@ import {
   type EvidenciaFatalDecisao,
 } from '../utils/amostraChamados'
 import { parseEdgeFunctionError } from '@/features/cobranca/utils/phone'
-import { agregarGestaoPdiMensal, avaliarGestaoPdi } from '../utils/gestaoPdiCalc'
-import { nomesResponsavelMatch, RACIONAL_COLUNA_RESPONSAVEL } from '../utils/responsavelMatch'
+import {
+  agregarGestaoPdiMensal,
+  avaliarGestaoPdi,
+  progressoMesAnteriorElegiveis,
+} from '../utils/gestaoPdiCalc'
+import {
+  nomesResponsavelMatch,
+  normalizeResponsavelChave,
+  RACIONAL_COLUNA_RESPONSAVEL,
+} from '../utils/responsavelMatch'
 import { antecipacaoHonorariosStatusLabel } from '../utils/opsAntecipacaoHonorarios'
 import {
   fechamentoCompetenciaAno,
@@ -1482,14 +1490,17 @@ export const eficienciaService = {
 
     const criterioPorChave = new Map(
       desviosPlanilha.map((d) => [
-        `${d.mes}|${d.colaborador.trim().toLocaleLowerCase('pt-BR')}`,
+        `${d.mes}|${normalizeResponsavelChave(d.colaborador)}`,
         d.desvio_criterio_apuracao,
       ]),
     )
     return detalhe.map((d) => ({
       ...d,
+      progresso_anterior:
+        progressoMesAnteriorElegiveis(elegiveis, d.colaborador, d.mes) ??
+        (d.progresso_anterior == null ? null : Number(d.progresso_anterior)),
       desvio_criterio_apuracao:
-        criterioPorChave.get(`${d.mes}|${d.colaborador.trim().toLocaleLowerCase('pt-BR')}`) ??
+        criterioPorChave.get(`${d.mes}|${normalizeResponsavelChave(d.colaborador)}`) ??
         d.desvio_criterio_apuracao ??
         null,
     }))
