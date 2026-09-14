@@ -39,6 +39,53 @@ export function marcarTreinamentosDuplicados(rows: TreinamentoItemRow[]): Treina
   }))
 }
 
+/** Presenças cujo colaborador está no headcount da lista/área atual. */
+export function itensDaEquipe(
+  itens: TreinamentoItemRow[],
+  equipe: Array<{ colaborador?: string | null }>,
+): TreinamentoItemRow[] {
+  const keys = new Set(
+    equipe
+      .map((p) => normalizeResponsavelChave(String(p.colaborador ?? '')))
+      .filter(Boolean),
+  )
+  if (keys.size === 0) return []
+  return itens.filter((item) => keys.has(normalizeResponsavelChave(item.colaborador)))
+}
+
+export type TreinamentoDuplicadoGrupo = {
+  colaborador: string
+  treinamento: string
+  data: string | null
+  qtd: number
+}
+
+/** Uma entrada por pessoa + treinamento + data, só linhas já marcadas. */
+export function agruparTreinamentosDuplicados(
+  itens: TreinamentoItemRow[],
+): TreinamentoDuplicadoGrupo[] {
+  const map = new Map<string, TreinamentoDuplicadoGrupo>()
+  for (const item of itens) {
+    if (!item.duplicado) continue
+    const key = chavePresenca(item)
+    if (key.startsWith('|')) continue
+    const existing = map.get(key)
+    if (existing) {
+      existing.qtd += 1
+      continue
+    }
+    map.set(key, {
+      colaborador: item.colaborador,
+      treinamento: item.treinamento?.trim() || 'Treinamento sem nome',
+      data: item.data ? String(item.data).slice(0, 10) : null,
+      qtd: 1,
+    })
+  }
+  return [...map.values()].sort((a, b) =>
+    a.colaborador.localeCompare(b.colaborador, 'pt-BR', { sensitivity: 'base' }),
+  )
+}
+
 export function marcarTreinamentoLinhasRacional(
   rows: Array<Record<string, unknown>>,
 ): Array<Record<string, unknown>> {

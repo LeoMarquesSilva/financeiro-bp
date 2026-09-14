@@ -1,7 +1,7 @@
 /**
  * Fechamento financeiro mensal (Ops Legais / Financeiro).
  *
- * Competência = mês anterior ao mês da data limite (fechamento de jun/26 → prazos em jul/26).
+ * Competência = mesmo mês da data limite (prazos em set/26 → competência Set/26).
  * KPI na tarefa final; as demais precisam estar concluídas para validar a entrega.
  */
 
@@ -27,20 +27,18 @@ function parseIsoDate(value: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-/** Mês de competência (1–12) a partir da data limite do ciclo. */
+/** Mês de competência (1–12): mesmo mês da data limite. */
 export function fechamentoCompetenciaMes(dataLimite: unknown): number | null {
   const limite = parseIsoDate(dataLimite)
   if (!limite) return null
-  const ref = new Date(limite.getFullYear(), limite.getMonth() - 1, 1)
-  return ref.getMonth() + 1
+  return limite.getMonth() + 1
 }
 
-/** Ano de competência a partir da data limite do ciclo. */
+/** Ano de competência: mesmo ano da data limite. */
 export function fechamentoCompetenciaAno(dataLimite: unknown): number | null {
   const limite = parseIsoDate(dataLimite)
   if (!limite) return null
-  const ref = new Date(limite.getFullYear(), limite.getMonth() - 1, 1)
-  return ref.getFullYear()
+  return limite.getFullYear()
 }
 
 /** Chave do ciclo (mês das datas limite) para agrupar as 9 tarefas. */

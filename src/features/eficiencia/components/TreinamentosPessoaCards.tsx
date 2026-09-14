@@ -11,6 +11,7 @@ import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { formatTreinamentoNome } from '../utils/textFormat'
 import type { TreinamentoItemRow, TreinamentosPorPessoaRow } from '../types/eficiencia.types'
 import { EFICIENCIA_META_TREINAMENTO_MINUTOS } from '../constants'
+import { agruparTreinamentosDuplicados } from '../utils/treinamentosDedupe'
 
 function formatHorasMinutos(minutos: number): string {
   const h = Math.floor(minutos / 60)
@@ -36,6 +37,8 @@ type Props = {
   metaMinutos?: number | null
   badgeLabel?: string
   accentClass?: Accent
+  /** false no Jurídico consolidado (Todas as áreas). Default true. */
+  mostrarBannerDuplicados?: boolean
 }
 
 const ACCENT: Record<
@@ -292,11 +295,18 @@ export function TreinamentosPessoaCards({
   metaMinutos = EFICIENCIA_META_TREINAMENTO_MINUTOS,
   badgeLabel,
   accentClass = 'default',
+  mostrarBannerDuplicados = true,
 }: Props) {
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
   const [abertoId, setAbertoId] = useState<string | null>(null)
+  const [bannerDuplicadosAberto, setBannerDuplicadosAberto] = useState(false)
   const accent = ACCENT[accentClass]
+  const gruposDuplicados = useMemo(() => agruparTreinamentosDuplicados(itens), [itens])
+  const qtdDuplicados = useMemo(
+    () => itens.filter((item) => item.duplicado).length,
+    [itens],
+  )
 
   const itensPorPessoa = useMemo(() => {
     const map = new Map<string, TreinamentoItemRow[]>()
@@ -378,16 +388,57 @@ export function TreinamentosPessoaCards({
     )
   }
 
-  const qtdDuplicados = itens.filter((item) => item.duplicado).length
-
   return (
     <div className="space-y-3">
-      {qtdDuplicados > 0 ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {qtdDuplicados} {qtdDuplicados === 1 ? 'lançamento duplicado' : 'lançamentos duplicados'}{' '}
-          (mesma pessoa, treinamento e data). Destacados em vermelho para o gestor conferir na
-          origem.
-        </p>
+      {mostrarBannerDuplicados && qtdDuplicados > 0 ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 text-xs text-red-700">
+          <button
+            type="button"
+            aria-expanded={bannerDuplicadosAberto}
+            aria-controls="treinamentos-duplicados-detalhe"
+            onClick={() => setBannerDuplicadosAberto((aberto) => !aberto)}
+            className="flex w-full items-start gap-2 px-3 py-2 text-left"
+          >
+            <span className="min-w-0 flex-1">
+              {qtdDuplicados} {qtdDuplicados === 1 ? 'lançamento duplicado' : 'lançamentos duplicados'}{' '}
+              (mesma pessoa, treinamento e data). Abra para ver quem e conferir na origem.
+            </span>
+            <ChevronDown
+              className={cn(
+                'mt-0.5 h-4 w-4 shrink-0 transition-transform',
+                bannerDuplicadosAberto && 'rotate-180',
+              )}
+              aria-hidden
+            />
+          </button>
+          {bannerDuplicadosAberto ? (
+            <ul
+              id="treinamentos-duplicados-detalhe"
+              className="space-y-2 border-t border-red-200/70 px-3 py-2"
+            >
+              {gruposDuplicados.map((grupo) => {
+                const nome = resolvePessoaDisplayNome(
+                  grupo.colaborador,
+                  teamMembers,
+                  avatarCatalog,
+                )
+                return (
+                  <li
+                    key={`${grupo.colaborador}|${grupo.treinamento}|${grupo.data ?? ''}`}
+                    className="rounded-md bg-white/70 px-2.5 py-2 text-red-800"
+                  >
+                    <p className="font-semibold">{nome}</p>
+                    <p className="mt-0.5 text-red-700">{grupo.treinamento}</p>
+                    <p className="mt-0.5 text-red-600">
+                      {grupo.data ? formatDate(grupo.data) : 'Data não informada'}
+                      {grupo.qtd > 1 ? ` · ${grupo.qtd} lançamentos` : null}
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
 
       {/* Mobile: uma coluna */}

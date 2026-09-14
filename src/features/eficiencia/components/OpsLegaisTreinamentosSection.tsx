@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { GraduationCap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPercent } from '@/shared/utils/format'
@@ -11,6 +12,9 @@ import {
   buildOpsTreinamentosCategorias,
   type OpsTurnoverAtivo,
 } from '../utils/opsTreinamentosCategorias'
+import { agruparTreinamentosDuplicados, itensDaEquipe } from '../utils/treinamentosDedupe'
+import { normalizeResponsavelChave } from '../utils/responsavelMatch'
+import { eficienciaService } from '../services/eficienciaService'
 import { metaTreinamentoMinutosProporcional } from '../utils/treinamentoMetaProporcional'
 import { toPriMaiuscula } from '../utils/textFormat'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
@@ -18,6 +22,7 @@ import { TreinamentosPessoasPanel } from './TreinamentosPessoasPanel'
 import { TreinamentosCursoCards } from './TreinamentosCursoCards'
 import { TreinamentosFuturosCards } from './TreinamentosFuturosCards'
 import { TreinamentosPessoaCards } from './TreinamentosPessoaCards'
+import { TreinamentosDuplicadosPanel } from './TreinamentosDuplicadosPanel'
 import {
   TreinamentosVisaoToggle,
   type TreinamentosVisao,
@@ -86,7 +91,10 @@ export function OpsLegaisTreinamentosSection({
       }))
   }, [pessoas, categoriaAtiva, ano])
 
-  const itensFiltrados = itens
+  const itensFiltrados = useMemo(
+    () => itensDaEquipe(itens, pessoasLista),
+    [itens, pessoasLista],
+  )
 
   const equipeEmLiderancaCards = useMemo(
     () =>
@@ -99,9 +107,48 @@ export function OpsLegaisTreinamentosSection({
   )
 
   const itensEquipeLideranca = useMemo(
-    () => itens.filter((i) => isTreinamentoLideranca(i.treinamento)),
+    () =>
+      itensDaEquipe(
+        itens.filter((i) => isTreinamentoLideranca(i.treinamento)),
+        equipeEmLiderancaCards,
+      ),
+    [itens, equipeEmLiderancaCards],
+  )
+
+  const gruposDuplicadosBase = useMemo(() => agruparTreinamentosDuplicados(itens), [itens])
+  const qtdLancamentosDuplicados = useMemo(
+    () => itens.filter((item) => item.duplicado).length,
     [itens],
   )
+  const { data: ativosTodasAreas } = useQuery({
+    queryKey: ['eficiencia', 'turnover-ativos-detalhe', ano, null],
+    queryFn: () => eficienciaService.fetchTurnoverAtivosAreaDetalhe(ano, null),
+    enabled: gruposDuplicadosBase.length > 0,
+  })
+  const gruposDuplicados = useMemo(() => {
+    const areaPorNome = new Map<string, string>()
+    for (const ativo of ativosTodasAreas ?? []) {
+      const key = normalizeResponsavelChave(ativo.nome)
+      if (key && ativo.area) areaPorNome.set(key, ativo.area)
+    }
+    return gruposDuplicadosBase.map((grupo) => ({
+      ...grupo,
+      area: areaPorNome.get(normalizeResponsavelChave(grupo.colaborador)) ?? null,
+    }))
+  }, [gruposDuplicadosBase, ativosTodasAreas])
+  const areasDuplicados = useMemo(
+    () =>
+      [...new Set(gruposDuplicados.map((grupo) => grupo.area).filter((area): area is string => Boolean(area)))].sort(
+        (a, b) => a.localeCompare(b, 'pt-BR'),
+      ),
+    [gruposDuplicados],
+  )
+
+  useEffect(() => {
+    if (visao === 'duplicados' && gruposDuplicadosBase.length === 0) {
+      setVisao('equipe')
+    }
+  }, [visao, gruposDuplicadosBase.length])
 
   if (loading) {
     return (
@@ -123,6 +170,9 @@ export function OpsLegaisTreinamentosSection({
           value={visao}
           onChange={setVisao}
           showPessoasVisao
+          showDuplicadosVisao
+          qtdDuplicados={qtdLancamentosDuplicados}
+          areasDuplicados={areasDuplicados}
         />
         {onRacionalClick ? (
           <OverviewRacionalButton
@@ -132,7 +182,7 @@ export function OpsLegaisTreinamentosSection({
         ) : null}
       </div>
 
-      {visao !== 'futuros' ? (
+      {visao !== 'futuros' && visao !== 'duplicados' ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {resumos.map((r) => {
             const style = CARD_STYLE[r.categoria]
@@ -255,6 +305,8 @@ export function OpsLegaisTreinamentosSection({
           <GraduationCap className="h-3.5 w-3.5" aria-hidden />
           {visao === 'futuros'
             ? toPriMaiuscula(`Treinamentos previstos — ${ano}`)
+            : visao === 'duplicados'
+              ? toPriMaiuscula(`Duplicidades — qualquer área · ${ano}`)
             : visao === 'pessoas'
               ? toPriMaiuscula(`Meta por pessoa — ${categoriaAtiva}`)
               : visao === 'treinamentos'
@@ -267,6 +319,8 @@ export function OpsLegaisTreinamentosSection({
         </div>
         {visao === 'futuros' ? (
           <TreinamentosFuturosCards sessoes={sessoesFuturas} />
+        ) : visao === 'duplicados' ? (
+          <TreinamentosDuplicadosPanel grupos={gruposDuplicados} />
         ) : visao === 'pessoas' ? (
           categoriaAtiva === 'Gerente' ? (
             <p className="py-6 text-center text-sm text-slate-400">
@@ -294,6 +348,7 @@ export function OpsLegaisTreinamentosSection({
                   ? 'amber'
                   : 'default'
             }
+            mostrarBannerDuplicados={false}
           />
         ) : (
           <TreinamentosCursoCards porPessoa={pessoasLista} itens={itensFiltrados} />
@@ -302,6 +357,7 @@ export function OpsLegaisTreinamentosSection({
 
       {visao !== 'futuros' &&
       visao !== 'pessoas' &&
+      visao !== 'duplicados' &&
       categoriaAtiva === 'Liderança' &&
       equipeEmLiderancaCards.length > 0 ? (
         <section className="rounded-xl border border-indigo-100 bg-white p-4 shadow-sm sm:p-5">
@@ -322,6 +378,7 @@ export function OpsLegaisTreinamentosSection({
             metaMinutos={null}
             badgeLabel="Equipe"
             accentClass="indigo"
+            mostrarBannerDuplicados={false}
           />
         </section>
       ) : null}

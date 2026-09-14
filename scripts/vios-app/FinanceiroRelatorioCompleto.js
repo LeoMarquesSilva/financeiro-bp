@@ -1,49 +1,42 @@
 /**
- * Sync completo: parcelas (RECEBER + PAGAR) e, em seguida, itens — mesma sessão VIOS.
+ * Atalho opcional — NÃO substitui a sequência do vios-app:
+ *   RelatorioPessoas.js → FinanceiroRelatorioParcelas.js → RelatorioTitulos.js
  *
- * Uso no vios-app:
- *   node FinanceiroRelatorioCompleto.js
+ * Este arquivo hoje só replica o passo de parcelas (última edição / upsert).
  */
 import 'dotenv/config';
-import { runSyncRelatorioFinanceiro, runSyncRelatorioFinanceiroItens } from './sync-vios-to-supabase.js';
+import { runSyncRelatorioFinanceiro } from './sync-vios-to-supabase.js';
 import {
   abrirRelatorioFinanceiro,
   baixarCsvRelatorio,
   configureRelatorioFinanceiroFiltros,
+  periodoMesAtualBR,
   withViosBrowser,
 } from './financeiroRelatorioViosUtils.js';
 
 const PARCELAS_PATH = process.env.VIOS_FIN_REL_PARCELAS_PATH || 'sys/financeiro/rel-parcelas.php';
-const ITENS_PATH = process.env.VIOS_FIN_REL_ITENS_PATH || 'sys/financeiro/rel-itens.php';
 const PARCELAS_LINK =
   process.env.VIOS_FIN_REL_PARCELAS_LINK ||
   "a[href*='rel-parcelas'][href$='.csv'], a[href*='parcelas'][href$='.csv']";
-const ITENS_LINK =
-  process.env.VIOS_FIN_REL_ITENS_LINK ||
-  "a[href*='rel-itens'][href$='.csv'], a[href*='itens'][href$='.csv']";
 
 async function main() {
   await withViosBrowser(async ({ page, context, config }) => {
     await abrirRelatorioFinanceiro(page, config, PARCELAS_PATH);
-    await configureRelatorioFinanceiroFiltros(page, config);
+    const periodo = periodoMesAtualBR();
+    await configureRelatorioFinanceiroFiltros(page, config, {
+      ...periodo,
+      situacao: ['TODAS', 'TODOS'],
+      tipoData: ['Última Edição', 'Ultima Edicao'],
+    });
     const csvParcelas = await baixarCsvRelatorio(page, context, config, {
       linkSelector: PARCELAS_LINK,
       label: 'parcelas',
     });
-    const resParcelas = await runSyncRelatorioFinanceiro(csvParcelas);
+    const resParcelas = await runSyncRelatorioFinanceiro(csvParcelas, { mode: 'upsert' });
     console.log('Parcelas:', resParcelas);
-
-    await abrirRelatorioFinanceiro(page, config, ITENS_PATH);
-    await configureRelatorioFinanceiroFiltros(page, config);
-    const csvItens = await baixarCsvRelatorio(page, context, config, {
-      linkSelector: ITENS_LINK,
-      label: 'itens',
-    });
-    const resItens = await runSyncRelatorioFinanceiroItens(csvItens);
-    console.log('Itens:', resItens);
   });
 
-  console.log('Sync financeiro completo finalizado.');
+  console.log('Sync de parcelas (última edição) finalizado.');
 }
 
 main().catch((err) => {

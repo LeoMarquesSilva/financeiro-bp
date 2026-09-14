@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { GraduationCap, Timer, Users } from 'lucide-react'
 import { formatPercent } from '@/shared/utils/format'
 import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
@@ -9,6 +9,7 @@ import {
 import { useTreinamentos } from '../hooks/useEficiencia'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { filtrarPorResponsavel } from '../utils/responsavelMatch'
+import { itensDaEquipe } from '../utils/treinamentosDedupe'
 import { formatMinutosHeatLabel } from '../utils/desenvolvimentoEquipeHeatCell'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
@@ -49,7 +50,14 @@ export function TreinamentosTab({
   const porColaboradorRef = useRef<HTMLDivElement>(null)
   const { anual, porPessoa, itens, sessoesFuturas, loading } = useTreinamentos(ano, area)
   const porPessoaFiltrado = filtrarPorResponsavel(porPessoa, (p) => p.colaborador, responsavel)
-  const itensFiltrados = filtrarPorResponsavel(itens, (i) => i.colaborador, responsavel)
+  const itensFiltrados = useMemo(
+    () =>
+      itensDaEquipe(
+        filtrarPorResponsavel(itens, (i) => i.colaborador, responsavel),
+        porPessoaFiltrado,
+      ),
+    [itens, porPessoaFiltrado, responsavel],
+  )
   const mesRacional: MesFiltroEficiencia =
     mesFiltro === 'resultado' ? null : mesFiltro
 
@@ -156,6 +164,7 @@ export function TreinamentosTab({
             porPessoa={porPessoaFiltrado}
             itens={itensFiltrados}
             loading={loading}
+            mostrarBannerDuplicados={area != null}
           />
         ) : (
           <TreinamentosCursoCards

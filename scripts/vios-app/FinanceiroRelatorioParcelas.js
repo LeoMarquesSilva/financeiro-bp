@@ -1,5 +1,7 @@
 ﻿/**
  * Baixa o Relatório de Parcelas do VIOS (RECEBER + PAGAR) e sincroniza financeiro_parcelas.
+ * Filtros: situação TODAS, tipo de data Última Edição, período = 1º dia do mês atual até hoje.
+ * Sync em upsert (não apaga CIs que não vieram no recorte do mês).
  *
  * Uso no vios-app:
  *   node FinanceiroRelatorioParcelas.js
@@ -10,6 +12,7 @@ import {
   abrirRelatorioFinanceiro,
   baixarCsvRelatorio,
   configureRelatorioFinanceiroFiltros,
+  periodoMesAtualBR,
   withViosBrowser,
 } from './financeiroRelatorioViosUtils.js';
 
@@ -21,14 +24,19 @@ const LINK_SELECTOR =
 async function main() {
   await withViosBrowser(async ({ page, context, config }) => {
     await abrirRelatorioFinanceiro(page, config, REL_PATH);
-    await configureRelatorioFinanceiroFiltros(page, config);
+    const periodo = periodoMesAtualBR();
+    await configureRelatorioFinanceiroFiltros(page, config, {
+      ...periodo,
+      situacao: ['TODAS', 'TODOS'],
+      tipoData: ['Última Edição', 'Ultima Edicao'],
+    });
     const csvData = await baixarCsvRelatorio(page, context, config, {
       linkSelector: LINK_SELECTOR,
       label: 'parcelas',
     });
 
     console.log('Sincronizando financeiro_parcelas no Supabase...');
-    const result = await runSyncRelatorioFinanceiro(csvData);
+    const result = await runSyncRelatorioFinanceiro(csvData, { mode: 'upsert' });
     console.log(
       `Supabase atualizado (parcelas). Upserted: ${result.upserted}, deleted: ${result.deleted}, erros: ${result.errors}`,
     );

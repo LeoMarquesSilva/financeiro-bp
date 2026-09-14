@@ -5,7 +5,7 @@
  * Use este se o vios-app for todo em JS com import/export (ESM).
  * - runSync(filePath): Processo Completo (pessoas) — espera .xlsx
  * - runSyncTimeSheets(filePath): relatório de horas (timesheets) — espera .xlsx/.csv
- * - runSyncRelatorioFinanceiro(filePathOuCsvString): relatório de parcelas (financeiro_parcelas, sync replace) — espera .xlsx, .csv ou string CSV
+ * - runSyncRelatorioFinanceiro(filePathOuCsvString, { mode }): parcelas — replace (padrão) ou upsert (não apaga CIs ausentes)
  * - runSyncRelatorioFinanceiroItens(filePathOuCsvString): relatório de itens (financeiro_parcelas_itens, sync replace) — espera .csv ou string CSV; requer ci_titulo em financeiro_parcelas
  * - runSyncPessoas(filePathOuCsvString): relatório de clientes/pessoas (pessoas) — espera .csv ou string CSV
  * - runSyncTarefasFechamento(filePath): Tarefas.csv VIOS → sp_tarefas_fechamento
@@ -1129,9 +1129,10 @@ function readRelatorioFinanceiroFile(filePathOrContent) {
  * Assim, parcelas/faturas excluídas no VIOS passam a sumir do banco. Relatório = fonte da verdade.
  * Duplicatas no mesmo arquivo são removidas por ci_titulo (fica a última).
  * @param {string} filePathOrCsvContent - Caminho do arquivo (.csv ou .xlsx) OU string com o conteúdo CSV (ex.: após axios.get em memória).
+ * @param {{ mode?: 'replace' | 'upsert' }} [options] - replace = apaga CIs que não vieram (padrão). upsert = só atualiza/inclui.
  * @returns {Promise<{ upserted: number, deleted: number, errors: number }>}
  */
-export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
+export async function runSyncRelatorioFinanceiro(filePathOrCsvContent, options = {}) {
   const url = process.env.VITE_SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) {
@@ -1246,19 +1247,25 @@ export async function runSyncRelatorioFinanceiro(filePathOrCsvContent) {
   );
   console.log('[Sync Supabase] financeiro_parcelas por tipo:', tipos);
 
+  const mode = options.mode === 'upsert' ? 'upsert' : 'replace';
   const p_ci_titulos = rowsDedup.map((r) => r.ci_titulo);
-  console.log('[Sync Supabase] Linhas válidas para sync replace:', rowsDedup.length);
+  console.log(`[Sync Supabase] Linhas válidas para sync ${mode}:`, rowsDedup.length);
 
-  const { data: result, error } = await supabase.rpc('sync_relatorio_financeiro_replace', {
-    p_ci_titulos,
-    p_rows: rowsDedup,
-  });
+  const { data: result, error } =
+    mode === 'upsert'
+      ? await supabase.rpc('sync_relatorio_financeiro_upsert', {
+          p_rows: rowsDedup,
+        })
+      : await supabase.rpc('sync_relatorio_financeiro_replace', {
+          p_ci_titulos,
+          p_rows: rowsDedup,
+        });
 
   if (error) {
-    console.error('[Sync Supabase] sync_relatorio_financeiro_replace error:', error.message);
+    console.error(`[Sync Supabase] sync_relatorio_financeiro_${mode} error:`, error.message);
     if (error.details) console.error('[Sync Supabase] details:', error.details);
     if (error.hint) console.error('[Sync Supabase] hint:', error.hint);
-    throw new Error('Erro ao sincronizar relatório financeiro (replace): ' + error.message);
+    throw new Error(`Erro ao sincronizar relatório financeiro (${mode}): ` + error.message);
   }
 
   const deleted = result?.deleted ?? 0;
@@ -1322,9 +1329,10 @@ function buildFinanceiroItensColumnIndexes(headerRow) {
  * Sincroniza o relatório de itens (CSV) para financeiro_parcelas_itens.
  * Estratégia replace por ci_item. Rode runSyncRelatorioFinanceiro antes (FK em ci_titulo).
  * @param {string} filePathOrCsvContent
+ * @param {{ mode?: 'replace' | 'upsert' }} [options]
  * @returns {Promise<{ upserted: number, deleted: number, errors: number, skipped: number }>}
  */
-export async function runSyncRelatorioFinanceiroItens(filePathOrCsvContent) {
+export async function runSyncRelatorioFinanceiroItens(filePathOrCsvContent, options = {}) {
   const url = process.env.VITE_SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !key) {
@@ -1433,6 +1441,7 @@ export async function runSyncRelatorioFinanceiroItens(filePathOrCsvContent) {
     skipped += semParcela.length;
   }
 
+  const mode = options.mode === 'upsert' ? 'upsert' : 'replace';
   const p_ci_items = rowsDedup.map((r) => r.ci_item);
 
   const tiposItens = rowsDedup.reduce(
@@ -1444,7 +1453,27 @@ export async function runSyncRelatorioFinanceiroItens(filePathOrCsvContent) {
     /** @type {Record<string, number>} */ ({}),
   );
   console.log('[Sync Supabase] financeiro_parcelas_itens por tipo:', tiposItens);
-  console.log('[Sync Supabase] Itens para sync:', rowsDedup.length, '| Ignoradas:', skipped);
+  console.log('[Sync Supabase] Itens para sync', mode, ':', rowsDedup.length, '| Ignoradas:', skipped);
+
+  if (mode === 'upsert') {
+    const CHUNK = 120;
+    let upserted = 0;
+    for (let i = 0; i < rowsDedup.length; i += CHUNK) {
+      const chunk = rowsDedup.slice(i, i + CHUNK);
+      console.log(`[Sync Supabase] itens upsert lote ${i + 1}-${i + chunk.length} / ${rowsDedup.length}`);
+      const { data: result, error } = await supabase.rpc('sync_relatorio_financeiro_itens_upsert', {
+        p_rows: chunk,
+      });
+      if (error) {
+        console.error('[Sync Supabase] sync_relatorio_financeiro_itens_upsert error:', error.message);
+        if (error.details) console.error('[Sync Supabase] details:', error.details);
+        throw new Error('Erro ao sincronizar relatório de itens (upsert): ' + error.message);
+      }
+      upserted += result?.upserted ?? chunk.length;
+    }
+    console.log('[Sync Supabase] financeiro_parcelas_itens | Deleted: 0 | Upserted:', upserted);
+    return { upserted, deleted: 0, errors: 0, skipped };
+  }
 
   const { data: result, error } = await supabase.rpc('sync_relatorio_financeiro_itens_replace', {
     p_ci_items,
