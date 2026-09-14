@@ -13,6 +13,7 @@ import {
   type OpsTreinamentoPessoaDetalhe,
 } from './opsTreinamentosCategorias'
 import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
+import { matchNomeChaveNaEquipe, normalizeResponsavelChave } from './responsavelMatch'
 import { dedupeTreinamentoItens } from './treinamentosDedupe'
 
 export type ApresentacaoLiderancaMesCell = {
@@ -50,15 +51,6 @@ export type ApresentacaoLiderancaData = {
   pessoas: ApresentacaoLiderancaPessoa[]
 }
 
-function normalizeNome(s: string | null | undefined): string {
-  return String(s ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLocaleUpperCase('pt-BR')
-    .replace(/\s+/g, ' ')
-}
-
 function mesFromIso(iso: string | null | undefined): number | null {
   if (!iso) return null
   const m = Number(String(iso).slice(5, 7))
@@ -93,9 +85,9 @@ function itensDaPessoa(
   mesFiltro: MesFiltroEficiencia,
   ano: number,
 ): TreinamentoItemRow[] {
-  const key = normalizeNome(colaborador)
+  const key = normalizeResponsavelChave(colaborador)
   return itens
-    .filter((i) => normalizeNome(i.colaborador) === key)
+    .filter((i) => matchNomeChaveNaEquipe(i.colaborador, [key]) === key)
     .filter((i) => {
       const mes = mesFromIso(i.data)
       if (mes == null) return false
@@ -128,11 +120,11 @@ function minutosYtdAte(
   itens: TreinamentoItemRow[],
   mesAte: number,
 ): number {
-  const keys = new Set(lideres.map((p) => normalizeNome(p.colaborador)))
+  const keys = new Set(lideres.map((p) => normalizeResponsavelChave(p.colaborador)))
   let total = 0
   for (const i of dedupeTreinamentoItens(itens)) {
-    const key = normalizeNome(i.colaborador)
-    if (!keys.has(key)) continue
+    const key = matchNomeChaveNaEquipe(i.colaborador, keys)
+    if (!key) continue
     const mes = mesFromIso(i.data)
     if (mes == null || mes > mesAte) continue
     const min = Number(i.duracao_minutos ?? 0)
@@ -147,10 +139,10 @@ function minutosNoMes(
   itens: TreinamentoItemRow[],
   mesAlvo: number,
 ): number {
-  const keys = new Set(lideres.map((p) => normalizeNome(p.colaborador)))
+  const keys = new Set(lideres.map((p) => normalizeResponsavelChave(p.colaborador)))
   let total = 0
   for (const i of itens) {
-    if (!keys.has(normalizeNome(i.colaborador))) continue
+    if (!matchNomeChaveNaEquipe(i.colaborador, keys)) continue
     if (mesFromIso(i.data) !== mesAlvo) continue
     const min = Number(i.duracao_minutos ?? 0)
     if (!Number.isFinite(min) || min <= 0) continue
@@ -165,11 +157,11 @@ function minutosNoFiltro(
   mesFiltro: MesFiltroEficiencia,
   ano: number,
 ): number {
-  const keys = new Set(lideres.map((p) => normalizeNome(p.colaborador)))
+  const keys = new Set(lideres.map((p) => normalizeResponsavelChave(p.colaborador)))
   let total = 0
   for (const i of dedupeTreinamentoItens(itens)) {
-    const key = normalizeNome(i.colaborador)
-    if (!keys.has(key)) continue
+    const key = matchNomeChaveNaEquipe(i.colaborador, keys)
+    if (!key) continue
     const mes = mesFromIso(i.data)
     if (mes == null || !mesNoFiltro(mes, mesFiltro, ano)) continue
     const min = Number(i.duracao_minutos ?? 0)

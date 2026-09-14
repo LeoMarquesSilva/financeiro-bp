@@ -11,20 +11,13 @@ import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { formatTreinamentoNome } from '../utils/textFormat'
 import type { TreinamentoItemRow, TreinamentosPorPessoaRow } from '../types/eficiencia.types'
 import { EFICIENCIA_META_TREINAMENTO_MINUTOS } from '../constants'
+import { matchNomeChaveNaEquipe, normalizeResponsavelChave } from '../utils/responsavelMatch'
 import { agruparTreinamentosDuplicados } from '../utils/treinamentosDedupe'
 
 function formatHorasMinutos(minutos: number): string {
   const h = Math.floor(minutos / 60)
   const m = Math.round(minutos % 60)
   return `${h}h ${String(m).padStart(2, '0')}min`
-}
-
-function normalizeNome(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLocaleLowerCase('pt-BR')
 }
 
 type Accent = 'default' | 'violet' | 'amber' | 'indigo'
@@ -309,16 +302,19 @@ export function TreinamentosPessoaCards({
   )
 
   const itensPorPessoa = useMemo(() => {
+    const equipe = porPessoa.map((p) => p.colaborador)
     const map = new Map<string, TreinamentoItemRow[]>()
     for (const item of itens) {
       if (!item.colaborador) continue
-      const key = normalizeNome(item.colaborador)
+      const key =
+        matchNomeChaveNaEquipe(item.colaborador, equipe) ??
+        normalizeResponsavelChave(item.colaborador)
       const list = map.get(key) ?? []
       list.push(item)
       map.set(key, list)
     }
     return map
-  }, [itens])
+  }, [itens, porPessoa])
 
   function toggle(cardId: string) {
     setAbertoId((prev) => (prev === cardId ? null : cardId))
@@ -339,8 +335,8 @@ export function TreinamentosPessoaCards({
       ordenados.map((pessoa, index) => ({
         pessoa,
         index,
-        cardId: `${normalizeNome(pessoa.colaborador) || pessoa.colaborador}-${index}`,
-        lista: itensPorPessoa.get(normalizeNome(pessoa.colaborador)) ?? [],
+        cardId: `${normalizeResponsavelChave(pessoa.colaborador) || pessoa.colaborador}-${index}`,
+        lista: itensPorPessoa.get(normalizeResponsavelChave(pessoa.colaborador)) ?? [],
       })),
     [itensPorPessoa, ordenados],
   )

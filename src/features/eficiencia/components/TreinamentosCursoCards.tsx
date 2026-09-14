@@ -10,6 +10,7 @@ import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { formatTreinamentoNome } from '../utils/textFormat'
 import type { TreinamentoItemRow, TreinamentosPorPessoaRow } from '../types/eficiencia.types'
+import { matchNomeChaveNaEquipe, normalizeResponsavelChave } from '../utils/responsavelMatch'
 
 type ParticipanteCurso = {
   colaborador: string
@@ -58,7 +59,10 @@ export function buildTreinamentosPorCurso(
   porPessoa: TreinamentosPorPessoaRow[],
   itens: TreinamentoItemRow[],
 ): TreinamentoCurso[] {
-  const elegiveis = new Set(porPessoa.map((p) => normalizeKey(p.colaborador)))
+  const nomePorChave = new Map(
+    porPessoa.map((p) => [normalizeResponsavelChave(p.colaborador), p.colaborador] as const),
+  )
+  const elegiveis = [...nomePorChave.keys()]
   const cursos = new Map<
     string,
     {
@@ -79,8 +83,8 @@ export function buildTreinamentosPorCurso(
   >()
 
   for (const item of itens) {
-    const colaboradorKey = normalizeKey(item.colaborador)
-    if (!colaboradorKey || !elegiveis.has(colaboradorKey)) continue
+    const colaboradorKey = matchNomeChaveNaEquipe(item.colaborador, elegiveis)
+    if (!colaboradorKey) continue
 
     const raw = item.treinamento?.trim() || 'Treinamento não informado'
     const treinamentoKey = normalizeKey(raw)
@@ -94,7 +98,7 @@ export function buildTreinamentosPorCurso(
       participantes: new Map(),
     }
     const participante = curso.participantes.get(colaboradorKey) ?? {
-      colaborador: item.colaborador,
+      colaborador: nomePorChave.get(colaboradorKey) ?? item.colaborador,
       minutos: 0,
       datas: new Set<string>(),
       duplicado: false,

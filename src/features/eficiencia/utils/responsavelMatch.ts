@@ -110,6 +110,24 @@ export function nomesResponsavelMatch(
   return aInB || bInA
 }
 
+/**
+ * Liga nome curto do SharePoint (ex.: Catharina Silva) ao canônico do headcount
+ * quando o match for único na equipe.
+ */
+export function matchNomeChaveNaEquipe(
+  nome: string,
+  equipeChaves: Iterable<string>,
+): string | null {
+  const key = normalizeResponsavelChave(nome)
+  if (!key) return null
+  const keys = [...new Set(
+    [...equipeChaves].map((k) => normalizeResponsavelChave(k)).filter(Boolean),
+  )]
+  if (keys.includes(key)) return key
+  const hits = keys.filter((k) => nomesResponsavelMatch(nome, k))
+  return hits.length === 1 ? hits[0] : null
+}
+
 export function filtrarPorResponsavel<T>(
   rows: T[],
   getNome: (row: T) => string | null | undefined,

@@ -197,6 +197,7 @@ export const EFICIENCIA_META_INDICE_INADIMPLENCIA = 10
  */
 export const EFICIENCIA_NOME_ALIASES_CHAVE: Record<string, string> = {
   'MEMBROS DE CRISTIANA.COSTA@BISMARCHIPIRES.COM.BR': 'CRISTIANE PEREIRA DA COSTA',
+  'CATHARINA SILVA': 'CATHARINA CARDOSO DA SILVA',
 }
 
 /** Cargos excluídos do KPI Desenvolvimento Equipe (Overview BI). Match trim + case-insensitive. */

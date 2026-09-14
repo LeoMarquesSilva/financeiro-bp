@@ -6,6 +6,7 @@ import {
 import type { TreinamentoItemRow, TreinamentoSessaoFuturaRow } from '../types/eficiencia.types'
 import { metaTreinamentoMinutosProporcional } from './treinamentoMetaProporcional'
 import { buildTreinamentoPessoasResumo } from './treinamentoPessoaStats'
+import { matchNomeChaveNaEquipe, normalizeResponsavelChave } from './responsavelMatch'
 import { dedupeTreinamentoItens } from './treinamentosDedupe'
 
 export type OpsTurnoverAtivo = {
@@ -36,15 +37,6 @@ export type OpsTreinamentoCategoriaResumo = {
   /** % do headcount que concluiu a meta individual (ex.: 3/10 = 30%). */
   pctPessoasMeta: number | null
   horasLabel: string
-}
-
-function normalizeNome(s: string | null | undefined): string {
-  return String(s ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLocaleUpperCase('pt-BR')
-    .replace(/\s+/g, ' ')
 }
 
 function formatHorasMinutos(minutos: number): string {
@@ -79,7 +71,7 @@ export function buildOpsTreinamentosCategorias(
   const pessoasMap = new Map<string, OpsTreinamentoPessoaDetalhe>()
 
   for (const a of ativos) {
-    const key = normalizeNome(a.nome)
+    const key = normalizeResponsavelChave(a.nome)
     if (!key) continue
     const categoria = resolveOpsTreinamentoCategoria(a.cargo)
     pessoasMap.set(key, {
@@ -93,7 +85,7 @@ export function buildOpsTreinamentosCategorias(
   }
 
   for (const item of dedupeTreinamentoItens(itens)) {
-    const key = normalizeNome(item.colaborador)
+    const key = matchNomeChaveNaEquipe(item.colaborador, pessoasMap.keys())
     if (!key) continue
     const pessoa = pessoasMap.get(key)
     if (!pessoa) continue

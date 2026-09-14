@@ -1,5 +1,5 @@
 import type { TreinamentoItemRow } from '../types/eficiencia.types'
-import { normalizeResponsavelChave } from './responsavelMatch'
+import { matchNomeChaveNaEquipe, normalizeResponsavelChave } from './responsavelMatch'
 
 function chavePresenca(row: {
   colaborador?: string | null
@@ -50,7 +50,7 @@ export function itensDaEquipe(
       .filter(Boolean),
   )
   if (keys.size === 0) return []
-  return itens.filter((item) => keys.has(normalizeResponsavelChave(item.colaborador)))
+  return itens.filter((item) => matchNomeChaveNaEquipe(item.colaborador, keys) != null)
 }
 
 export type TreinamentoDuplicadoGrupo = {
