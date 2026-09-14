@@ -7,7 +7,6 @@ import {
   GraduationCap,
   Instagram,
   LayoutDashboard,
-  Lightbulb,
   Newspaper,
   Presentation,
   RefreshCcw,
@@ -25,7 +24,10 @@ import { MesFilterButtons } from '@/features/eficiencia/components/MesFilterButt
 import { OperacoesLegaisOverviewTab } from '@/features/eficiencia/components/OperacoesLegaisOverviewTab'
 import { OperacoesLegaisRgTab } from '@/features/eficiencia/components/OperacoesLegaisRgTab'
 import { OpsLegaisFinanceiroTab } from '@/features/eficiencia/components/OpsLegaisFinanceiroTab'
-import { OpsLegaisIniciativasTab } from '@/features/eficiencia/components/OpsLegaisIniciativasTab'
+import {
+  ForjaiSymbol,
+  OpsLegaisIniciativasTab,
+} from '@/features/eficiencia/components/OpsLegaisIniciativasTab'
 import { ReportarIndicadorButton } from '@/features/eficiencia/components/ReportarIndicadorButton'
 import { useEficienciaOverview } from '@/features/eficiencia/hooks/useEficiencia'
 import {
@@ -122,14 +124,18 @@ const TABS: TabDef[] = [
   { id: 'tarefas', label: 'Tarefas', icon: CalendarCheck2 },
   { id: 'financeiro', label: 'Financeiro', icon: Wallet },
   { id: 'marketing', label: 'Marketing', icon: Instagram },
-  { id: 'iniciativas', label: 'Iniciativas Estratégicas', icon: Lightbulb },
+  { id: 'iniciativas', label: 'Iniciativas Estratégicas', icon: Briefcase },
 ]
 
 function OpsLegaisTabTrigger({ tab }: { tab: TabDef }) {
   const Icon = tab.icon
   return (
     <TabsTrigger value={tab.id} className="whitespace-nowrap">
-      <Icon className="h-4 w-4" />
+      {tab.id === 'iniciativas' ? (
+        <ForjaiSymbol className="h-4 w-4 object-contain" alt="" />
+      ) : (
+        <Icon className="h-4 w-4" />
+      )}
       {toPriMaiuscula(tab.label)}
     </TabsTrigger>
   )
@@ -189,7 +195,7 @@ export function OperacoesLegaisPage() {
           </p>
         </div>
 
-        {tab !== 'marketing' && (
+        {tab !== 'marketing' && tab !== 'iniciativas' && (
           <div className="flex flex-wrap items-center gap-3">
             {maisRecente && (
               <span
@@ -263,7 +269,7 @@ export function OperacoesLegaisPage() {
           </TabsList>
         </div>
 
-        {tab !== 'marketing' && (
+        {tab !== 'marketing' && tab !== 'iniciativas' && (
           <div className="mt-6">
             <MesFilterButtons
               value={mesFiltro}
@@ -319,7 +325,7 @@ export function OperacoesLegaisPage() {
         </TabsContent>
 
         <TabsContent value="iniciativas" className="mt-5">
-          <OpsLegaisIniciativasTab ano={ano} mesFiltro={mesFiltro} />
+          <OpsLegaisIniciativasTab />
         </TabsContent>
 
         <TabsContent value="marketing" className="mt-5">
