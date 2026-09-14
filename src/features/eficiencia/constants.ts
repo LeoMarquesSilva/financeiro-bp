@@ -115,13 +115,29 @@ export const OPS_LEGAIS_FECHAMENTO_TAREFAS = [
   'ATUALIZAÇÃO DA PLANILHA DE RATEIOS',
   'VALIDAÇÃO DA PARTICIPAÇÃO DOS SÓCIOS PATRIMONIAIS NOS CONTRATOS NOVOS',
   'VALIDAÇÃO DA MOVIMENTAÇÃO FINANCEIRA',
-  'ENVIO DO EXTRATO ADGM - RICARDO',
+  'ENVIO DO EXTRATO ADGM',
   'LANÇAMENTO DO EXTRATO ADGM',
   'ENVIO DA MOVIMENTAÇÃO FINANCEIRA',
   'ENVIO TIMESHEET',
   'ENVIO HEADCOUNT',
   'ENVIO FECHAMENTO COMPLETO E DL APURADA',
 ] as const
+
+/** Nome antigo VIOS → etapa canônica (mesmo passo). */
+export const OPS_LEGAIS_FECHAMENTO_TAREFA_ALIASES: Record<string, string> = {
+  'ENVIO DO EXTRATO ADGM - RICARDO': 'ENVIO DO EXTRATO ADGM',
+}
+
+/** Nomes aceitos no sync e no racional (canônicos + aliases). */
+export const OPS_LEGAIS_FECHAMENTO_TAREFAS_MATCH = [
+  ...OPS_LEGAIS_FECHAMENTO_TAREFAS,
+  ...Object.keys(OPS_LEGAIS_FECHAMENTO_TAREFA_ALIASES),
+] as const
+
+export function canonicalFechamentoTarefa(tarefa: string): string {
+  const nome = tarefa.trim()
+  return OPS_LEGAIS_FECHAMENTO_TAREFA_ALIASES[nome] ?? nome
+}
 
 /** Tarefa que define o KPI de Fechamento. */
 export const OPS_LEGAIS_FECHAMENTO_TAREFA_KPI =

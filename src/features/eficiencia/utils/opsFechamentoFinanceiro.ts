@@ -11,6 +11,7 @@ import {
   OPS_FECHAMENTO_HISTORICO_MANUAL,
   OPS_LEGAIS_FECHAMENTO_TAREFA_KPI,
   OPS_LEGAIS_FECHAMENTO_TAREFAS,
+  canonicalFechamentoTarefa,
 } from '../constants'
 import type { OpsLegaisFechamentoMesRow } from '../types/eficiencia.types'
 
@@ -49,7 +50,7 @@ export function fechamentoCicloKey(dataLimite: unknown): string | null {
 }
 
 export function fechamentoEtapaOrdem(tarefa: unknown): number {
-  const nome = String(tarefa ?? '').trim()
+  const nome = canonicalFechamentoTarefa(String(tarefa ?? ''))
   const idx = OPS_LEGAIS_FECHAMENTO_TAREFAS.indexOf(
     nome as (typeof OPS_LEGAIS_FECHAMENTO_TAREFAS)[number],
   )

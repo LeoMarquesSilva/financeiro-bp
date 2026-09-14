@@ -11,7 +11,7 @@ import {
   MES_INICIO_RESULTADO,
   OPS_LEGAIS_CADASTRO_CONTROLADORIA,
   OPS_LEGAIS_CADASTRO_TIPOS_ABERTURA,
-  OPS_LEGAIS_FECHAMENTO_TAREFAS,
+  OPS_LEGAIS_FECHAMENTO_TAREFAS_MATCH,
   areaFiltroParaIndicador,
   isAgendamentoVistagemIndisponivelPorArea,
   isCargoExcluidoDesenvolvimento,
@@ -562,7 +562,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
     dataColuna: 'data_limite',
     areaColuna: null,
     filtros: [
-      { tipo: 'orEq', coluna: 'tarefa', valores: [...OPS_LEGAIS_FECHAMENTO_TAREFAS] },
+      { tipo: 'orEq', coluna: 'tarefa', valores: [...OPS_LEGAIS_FECHAMENTO_TAREFAS_MATCH] },
       { tipo: 'notNull', coluna: 'data_limite' },
     ],
     colunas: [
