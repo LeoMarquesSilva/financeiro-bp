@@ -12,6 +12,7 @@ import {
   carteiraCurrency,
 } from '../components/DashboardCarteiraCard'
 import { DashboardComposicaoBar } from '../components/DashboardComposicaoBar'
+import { DashboardSaldoDevedorSection } from '../components/DashboardSaldoDevedorSection'
 import { AlertTriangle, Clock, Scale } from 'lucide-react'
 
 export function InadimplenciaDashboardPage() {
@@ -154,6 +155,8 @@ export function InadimplenciaDashboardPage() {
           />
         </div>
       </section>
+
+      <DashboardSaldoDevedorSection />
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-800">Resumo</h2>
