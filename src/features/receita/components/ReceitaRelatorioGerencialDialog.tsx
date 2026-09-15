@@ -15,10 +15,14 @@ import { cn } from '@/lib/utils'
 import {
   MESES_ABREV,
   RECEITA_DEPARTAMENTO_CORES,
+  RECEITA_DEPARTAMENTO_LABELS,
   mesMaxDisponivelInadimplencia,
 } from '../constants'
 import type { ReceitaDepartamentoCoresConfig } from '../types/receita.types'
-import { buildReceitaMetaAreaSlices } from '../utils/departamentoAreaCores'
+import {
+  buildReceitaMetaAreaSlices,
+  resolveDepartamentoAreaColor,
+} from '../utils/departamentoAreaCores'
 import { isMesFuturo } from '../utils/receitaMes'
 import {
   carregarRelatorioGerencialGrupos,
@@ -47,10 +51,18 @@ export function ReceitaRelatorioGerencialDialog({
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
-  const areaSlices = useMemo(
-    () => buildReceitaMetaAreaSlices(departamentoCores ?? RECEITA_DEPARTAMENTO_CORES),
-    [departamentoCores],
-  )
+  const areaSlices = useMemo(() => {
+    const cores = departamentoCores ?? RECEITA_DEPARTAMENTO_CORES
+    return [
+      ...buildReceitaMetaAreaSlices(cores),
+      {
+        key: 'tributario',
+        pct: 0,
+        label: RECEITA_DEPARTAMENTO_LABELS.tributario,
+        color: resolveDepartamentoAreaColor('tributario', cores),
+      },
+    ]
+  }, [departamentoCores])
 
   const mesesDisponiveis = useMemo(
     () => MESES_ABREV.map((_, idx) => idx + 1).filter((m) => !isMesFuturo(ano, m)),
@@ -96,6 +108,7 @@ export function ReceitaRelatorioGerencialDialog({
         ano,
         periodoLabel: periodoRelatorioGerencial(meses),
         areaLabel,
+        departamentoCores,
       })
       toast.success('Planilha gerada')
       onOpenChange(false)
@@ -118,8 +131,8 @@ export function ReceitaRelatorioGerencialDialog({
             Relatório gerencial
           </DialogTitle>
           <DialogDescription>
-            Selecione um ou mais meses e a área. A planilha traz previsto, pago, inadimplente e
-            a data de vencimento de cada linha.
+            Selecione um ou mais meses e a área. A planilha traz o previsto faturado no período,
+            o recebido no caixa (incluindo títulos de outros meses) e o valor por área.
           </DialogDescription>
         </DialogHeader>
 

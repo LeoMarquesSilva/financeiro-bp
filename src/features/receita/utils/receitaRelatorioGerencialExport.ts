@@ -1,17 +1,33 @@
 import ExcelJS from 'exceljs'
+import {
+  RECEITA_DEPARTAMENTO_CORES,
+  RECEITA_DEPARTAMENTO_LABELS,
+} from '../constants'
+import type { ReceitaDepartamentoCoresConfig } from '../types/receita.types'
+import {
+  buildReceitaMetaAreaSlices,
+  resolveDepartamentoAreaColor,
+} from './departamentoAreaCores'
+import { RECEITA_RATEIO_OUTRAS_KEY } from './receitaRateioConsulta'
 
 export type RelatorioGerencialLinha = {
   grupo_cliente: string
   tipo_receita: string
   data_vencimento: string | null
+  data_pagamento: string | null
   faturado: number
   recebido: number
   inadimplencia: number
+  valorPorArea: Record<string, number>
 }
 
-export type RelatorioGerencialGrupo = Omit<RelatorioGerencialLinha, 'data_vencimento'>
+export type RelatorioGerencialGrupo = Omit<
+  RelatorioGerencialLinha,
+  'data_vencimento' | 'data_pagamento' | 'valorPorArea'
+>
 
 const DATE_FMT = 'DD/MM/YYYY'
+const BASE_COLS = 9
 
 export function vencimentoParaExcel(iso: string | null): Date | string {
   if (!iso) return '—'
@@ -25,6 +41,7 @@ export type RelatorioGerencialMeta = {
   periodoLabel: string
   areaLabel?: string
   geradoEm?: Date
+  departamentoCores?: ReceitaDepartamentoCoresConfig
 }
 
 const BRAND = '475569'
@@ -47,7 +64,7 @@ const thinBorder: Partial<ExcelJS.Borders> = {
 }
 
 function fillArgb(hex: string): ExcelJS.Fill {
-  return { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${hex}` } }
+  return { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${hex.replace(/^#/, '')}` } }
 }
 
 async function downloadWorkbook(wb: ExcelJS.Workbook, filename: string) {
@@ -99,7 +116,37 @@ export function agruparNetPorChaveGrupo(
     )
 }
 
-/** Planilha gerencial: previsto faturado, grupo, vencimento, pago e inadimplente. */
+type AreaCol = { key: string; label: string; color: string }
+
+function areaColsDoRelatorio(
+  linhas: RelatorioGerencialLinha[],
+  departamentoCores?: ReceitaDepartamentoCoresConfig,
+): AreaCol[] {
+  const cores = departamentoCores ?? RECEITA_DEPARTAMENTO_CORES
+  const slices = buildReceitaMetaAreaSlices(cores)
+  const cols: AreaCol[] = slices.map((s) => ({ key: s.key, label: s.label, color: s.color }))
+  cols.push({
+    key: 'tributario',
+    label: RECEITA_DEPARTAMENTO_LABELS.tributario ?? 'Tributário',
+    color: resolveDepartamentoAreaColor('tributario', cores),
+  })
+  const outras = linhas.reduce((s, l) => s + (l.valorPorArea[RECEITA_RATEIO_OUTRAS_KEY] ?? 0), 0)
+  if (outras > 0) {
+    cols.push({
+      key: RECEITA_RATEIO_OUTRAS_KEY,
+      label: RECEITA_DEPARTAMENTO_LABELS.sem_departamento ?? 'Outras',
+      color: resolveDepartamentoAreaColor('sem_departamento', cores),
+    })
+  }
+  return cols
+}
+
+function areaLabelCurta(label: string): string {
+  if (label === 'Recuperação de Crédito') return 'Rec. Crédito'
+  return label
+}
+
+/** Planilha gerencial: previsto, caixa do mês, vencimento, pago, inadimplente e áreas. */
 export async function exportRelatorioGerencialExcel(
   linhas: RelatorioGerencialLinha[],
   meta: RelatorioGerencialMeta,
@@ -108,6 +155,8 @@ export async function exportRelatorioGerencialExcel(
     throw new Error('Não há grupos com receita no período selecionado.')
   }
 
+  const areaCols = areaColsDoRelatorio(linhas, meta.departamentoCores)
+  const COLS = BASE_COLS + areaCols.length
   const totalFat = linhas.reduce((s, g) => s + g.faturado, 0)
   const totalRec = linhas.reduce((s, g) => s + g.recebido, 0)
   const totalInad = linhas.reduce((s, g) => s + g.inadimplencia, 0)
@@ -121,8 +170,6 @@ export async function exportRelatorioGerencialExcel(
   })
   const periodo = `${meta.periodoLabel.toUpperCase()}/${meta.ano}`
   const areaLabel = meta.areaLabel?.trim() || 'Todas as áreas'
-
-  const COLS = 8
 
   const wb = new ExcelJS.Workbook()
   wb.creator = 'SIOE'
@@ -154,14 +201,14 @@ export async function exportRelatorioGerencialExcel(
   ws.mergeCells(2, 1, 2, COLS)
   const sub = ws.getCell(2, 1)
   sub.value =
-    `Todo o previsto do período · grupo, tipo e data de vencimento · ${areaLabel} · Bismarchi Pires`
+    `Faturado no período + recebido no caixa (inclui títulos de outros meses) · valor por área · ${areaLabel} · Bismarchi Pires`
   sub.font = { name: 'Calibri', size: 10, italic: true, color: { argb: `FF${MUTED}` } }
   sub.alignment = { vertical: 'middle', indent: 1 }
   ws.getRow(2).height = 18
 
   const kpis: Array<[string, string | number, string | undefined]> = [
     ['Linhas', linhas.length, undefined],
-    ['Previsto faturado', totalFat, MONEY_FMT],
+    ['Previsto', totalFat, MONEY_FMT],
     ['Valor pago', totalRec, MONEY_FMT],
     ['Inadimplente', totalInad, MONEY_FMT],
   ]
@@ -182,14 +229,12 @@ export async function exportRelatorioGerencialExcel(
     val.border = thinBorder
     if (numFmt && typeof value === 'number') val.numFmt = numFmt
   })
-  ws.mergeCells(4, 4, 4, COLS)
-  ws.mergeCells(5, 4, 5, COLS)
   ws.getRow(4).height = 18
   ws.getRow(5).height = 22
 
   ws.mergeCells(7, 1, 7, COLS)
   const sec = ws.getCell(7, 1)
-  sec.value = 'Composição por grupo, tipo de receita e data de vencimento'
+  sec.value = 'Composição por grupo, tipo, vencimento, pagamento e área'
   sec.font = { name: 'Calibri', size: 13, bold: true, color: { argb: `FF${BRAND}` } }
 
   const headers = [
@@ -197,16 +242,19 @@ export async function exportRelatorioGerencialExcel(
     'Grupo',
     'Tipo de receita',
     'Data de vencimento',
-    'Receita prevista faturada',
+    'Data do pagamento',
+    'Previsto',
     'Valor pago',
     'Valor inadimplente',
     '% do previsto',
+    ...areaCols.map((a) => areaLabelCurta(a.label)),
   ]
   headers.forEach((h, i) => {
     const cell = ws.getCell(8, i + 1)
     cell.value = h
+    const area = i >= BASE_COLS ? areaCols[i - BASE_COLS] : null
     cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: `FF${WHITE}` } }
-    cell.fill = fillArgb(BRAND)
+    cell.fill = fillArgb(area?.color ?? BRAND)
     cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
     cell.border = thinBorder
   })
@@ -218,6 +266,7 @@ export async function exportRelatorioGerencialExcel(
     const zebra = i % 2 === 1
     const share = totalFat > 0 ? g.faturado / totalFat : 0
     const venc = vencimentoParaExcel(g.data_vencimento)
+    const pagto = vencimentoParaExcel(g.data_pagamento)
     const values: Array<{
       v: string | number | Date
       fmt?: string
@@ -228,10 +277,16 @@ export async function exportRelatorioGerencialExcel(
       { v: g.grupo_cliente, align: 'left' },
       { v: g.tipo_receita, align: 'left' },
       { v: venc, fmt: venc instanceof Date ? DATE_FMT : undefined, align: 'center' },
+      { v: pagto, fmt: pagto instanceof Date ? DATE_FMT : undefined, align: 'center' },
       { v: g.faturado, fmt: MONEY_FMT, align: 'right' },
       { v: g.recebido, fmt: MONEY_FMT, align: 'right', fill: PAGO_SOFT },
       { v: g.inadimplencia, fmt: MONEY_FMT, align: 'right', fill: INAD_SOFT },
       { v: share, fmt: PCT_FMT, align: 'center' },
+      ...areaCols.map((a) => ({
+        v: g.valorPorArea[a.key] ?? 0,
+        fmt: MONEY_FMT,
+        align: 'right' as const,
+      })),
     ]
     values.forEach((item, c) => {
       const cell = ws.getCell(row, c + 1)
@@ -253,10 +308,16 @@ export async function exportRelatorioGerencialExcel(
     { v: 'TOTAL', align: 'left' },
     { v: '', align: 'left' },
     { v: '', align: 'center' },
+    { v: '', align: 'center' },
     { v: totalFat, fmt: MONEY_FMT, align: 'right' },
     { v: totalRec, fmt: MONEY_FMT, align: 'right' },
     { v: totalInad, fmt: MONEY_FMT, align: 'right' },
     { v: 1, fmt: PCT_FMT, align: 'center' },
+    ...areaCols.map((a) => ({
+      v: linhas.reduce((s, l) => s + (l.valorPorArea[a.key] ?? 0), 0),
+      fmt: MONEY_FMT,
+      align: 'right' as const,
+    })),
   ]
   totalVals.forEach((item, c) => {
     const cell = ws.getCell(totalRow, c + 1)
@@ -273,23 +334,28 @@ export async function exportRelatorioGerencialExcel(
   ws.mergeCells(noteRow, 1, noteRow, COLS)
   const note = ws.getCell(noteRow, 1)
   note.value =
-    'Critérios: previsto faturado = todos os títulos com vencimento nos meses selecionados. ' +
-    'Valor pago = baixa do título (inclui posterior). ' +
-    'Inadimplente = título vencido até o corte (ontem) e sem pagamento. Gerado em ' +
+    'Critérios: Previsto = títulos com vencimento nos meses selecionados. ' +
+    'Valor pago = baixa desses títulos + recebimentos no caixa do período de títulos de outros meses. ' +
+    'Inadimplente = título do período vencido até o corte (ontem) e sem pagamento. ' +
+    'Colunas de área = rateio do valor pago pelo departamento VIOS do item. Gerado em ' +
     geradoLabel +
     '.'
   note.font = { name: 'Calibri', size: 9, italic: true, color: { argb: `FF${MUTED}` } }
   note.alignment = { wrapText: true, vertical: 'top' }
-  ws.getRow(noteRow).height = 36
+  ws.getRow(noteRow).height = 48
 
   ws.getColumn(1).width = 6
   ws.getColumn(2).width = 38
   ws.getColumn(3).width = 28
   ws.getColumn(4).width = 18
-  ws.getColumn(5).width = 24
+  ws.getColumn(5).width = 18
   ws.getColumn(6).width = 16
-  ws.getColumn(7).width = 20
-  ws.getColumn(8).width = 14
+  ws.getColumn(7).width = 16
+  ws.getColumn(8).width = 20
+  ws.getColumn(9).width = 14
+  areaCols.forEach((_, i) => {
+    ws.getColumn(BASE_COLS + 1 + i).width = 16
+  })
 
   ws.headerFooter.oddFooter = `&LSIOE · Relatório gerencial&C${periodo}&R&P / &N`
 
