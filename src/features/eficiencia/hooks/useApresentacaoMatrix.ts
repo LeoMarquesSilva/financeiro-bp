@@ -309,6 +309,7 @@ export function useApresentacaoMatrix(
   })
 
   const consolidado = byKey.get('__consolidado__')
+  const consolidadoQuery = queries[APRESENTACAO_COLUNAS.findIndex((c) => c.key === '__consolidado__')]
   const metaDev = metaDesenvolvimentoApresentacao(consolidado)
   const financeiro = financeiroQuery.data
 
@@ -322,6 +323,12 @@ export function useApresentacaoMatrix(
           bonusMesFim,
         )
       : null
+
+  const loadingBonus =
+    enabled &&
+    (Boolean(consolidadoQuery?.isLoading || consolidadoQuery?.isPending) ||
+      financeiroQuery.isLoading ||
+      financeiroQuery.isPending)
 
   const rows: ApresentacaoMatrixRow[] = APRESENTACAO_KPIS.map((kpi) => {
     const metaLabel =
@@ -363,6 +370,7 @@ export function useApresentacaoMatrix(
     marketing,
     financeiroOps,
     bonus,
+    loadingBonus,
     loading,
     loadingMatrix,
     loadingComposicao,

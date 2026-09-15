@@ -119,6 +119,7 @@ type Props = {
   loadingIniciativas?: boolean
   loadingMarketing?: boolean
   loadingFinanceiroOps?: boolean
+  loadingBonus?: boolean
   bigNumberError?: Error | null
   controladoriaError?: Error | null
   liderancaError?: Error | null
@@ -711,6 +712,7 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
     loadingIniciativas = false,
     loadingMarketing = false,
     loadingFinanceiroOps = false,
+    loadingBonus = false,
     bigNumberError = null,
     controladoriaError = null,
     liderancaError = null,
@@ -840,7 +842,7 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
           content = (
             <ApresentacaoBonusBloco
               data={bonus}
-              loading={loading}
+              loading={loadingBonus}
               ano={ano}
               mesInicio={bonusMesInicio}
               mesFim={bonusMesFim}

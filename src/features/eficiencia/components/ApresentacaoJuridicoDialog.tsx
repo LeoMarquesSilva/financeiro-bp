@@ -135,6 +135,7 @@ export function ApresentacaoJuridicoDialog({
     marketing,
     financeiroOps,
     bonus,
+    loadingBonus,
     loading,
     loadingComposicao,
     loadingBigNumber,
@@ -199,7 +200,7 @@ export function ApresentacaoJuridicoDialog({
       toast.error('Composição ainda carregando')
       return
     }
-    if (blocoId === 'programa_bonus' && (loading || !bonus)) {
+    if (blocoId === 'programa_bonus' && (loadingBonus || !bonus)) {
       toast.error('Programa de Bônus ainda carregando')
       return
     }
@@ -277,7 +278,7 @@ export function ApresentacaoJuridicoDialog({
                                   : bloco.id === 'governanca_interna'
                                     ? false
                                   : bloco.id === 'programa_bonus'
-                                    ? loading || !bonus
+                                    ? loadingBonus || !bonus
                                     : loading
                 return (
                   <Button
@@ -344,6 +345,7 @@ export function ApresentacaoJuridicoDialog({
               loadingIniciativas={loadingIniciativas}
               loadingMarketing={loadingMarketing}
               loadingFinanceiroOps={loadingFinanceiroOps}
+              loadingBonus={loadingBonus}
               bigNumberError={bigNumberError}
               controladoriaError={controladoriaError}
               liderancaError={liderancaError}
