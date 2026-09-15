@@ -132,7 +132,7 @@ export function ReceitaRelatorioGerencialDialog({
           </DialogTitle>
           <DialogDescription>
             Selecione um ou mais meses e a área. A planilha traz o previsto faturado no período,
-            o recebido no caixa (incluindo títulos de outros meses) e o valor por área.
+            o recebido no caixa do período (igual ao Recebido da Gestão à vista) e o valor por área.
           </DialogDescription>
         </DialogHeader>
 

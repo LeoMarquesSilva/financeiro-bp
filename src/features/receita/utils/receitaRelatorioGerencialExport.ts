@@ -335,7 +335,7 @@ export async function exportRelatorioGerencialExcel(
   const note = ws.getCell(noteRow, 1)
   note.value =
     'Critérios: Previsto = títulos com vencimento nos meses selecionados. ' +
-    'Valor pago = baixa desses títulos + recebimentos no caixa do período de títulos de outros meses. ' +
+    'Valor pago = caixa do período (honorários líquidos na data de pagamento), mesma base do Recebido da Gestão à vista — inclui títulos de outros meses pagos no período. ' +
     'Inadimplente = título do período vencido até o corte (ontem) e sem pagamento. ' +
     'Colunas de área = rateio do valor pago pelo departamento VIOS do item. Gerado em ' +
     geradoLabel +

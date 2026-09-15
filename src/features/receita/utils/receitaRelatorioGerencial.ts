@@ -117,7 +117,7 @@ function upsertLinha(
   })
 }
 
-/** Previsto do mês + caixa do mês (títulos de outros meses), agrupado por grupo × tipo × vencimento × pagamento. */
+/** Previsto (vencimento no período) + valor pago = caixa do período (mesma base da Gestão à vista). */
 export function montarLinhasRelatorioGerencial(
   previsto: PrevistoItemGrupo[],
   recebidoCaixa: ReceitaRecebidoClassificacaoItemRow[],
@@ -125,23 +125,38 @@ export function montarLinhasRelatorioGerencial(
   ano: number,
 ): RelatorioGerencialLinha[] {
   const map = new Map<string, RelatorioGerencialLinha>()
-  const previstoIds = new Set<number>()
+  const caixaPorCi = new Map<number, ReceitaRecebidoClassificacaoItemRow[]>()
+  for (const item of recebidoCaixa) {
+    if (item.ci_item <= 0) continue
+    const lista = caixaPorCi.get(item.ci_item) ?? []
+    lista.push(item)
+    caixaPorCi.set(item.ci_item, lista)
+  }
+  const caixaUsado = new Set<number>()
 
   for (const item of previsto) {
     const valor = Number(item.valor_item) || 0
     if (valor === 0) continue
-    if (item.ci_item && item.ci_item > 0) previstoIds.add(item.ci_item)
     const cliente = item.cliente?.trim() || 'Sem cliente'
     const grupoCadastro = resolverGrupoCliente(item.cliente, clienteGrupoMap)
     const grupo = chaveGrupoRelatorioGerencial(grupoCadastro, cliente)
     const data_vencimento = vencimentoIso(item.data_vencimento)
-    const data_pagamento = vencimentoIso(item.data_pagamento)
-    const pago = Boolean(data_pagamento)
-    const recebido = pago ? valor : 0
+    const caixaLista =
+      item.ci_item && item.ci_item > 0 ? caixaPorCi.get(item.ci_item) : undefined
+    const recebido = caixaLista
+      ? caixaLista.reduce((s, x) => s + valorRecebidoItem(x), 0)
+      : 0
+    if (item.ci_item && item.ci_item > 0 && caixaLista) caixaUsado.add(item.ci_item)
+    const data_pagamento = vencimentoIso(
+      caixaLista?.[0]?.data_pagamento ?? item.data_pagamento,
+    )
+    const pagoAlgumaVez = Boolean(vencimentoIso(item.data_pagamento))
     const mesItem = mesDoVencimento(data_vencimento, item.mesFonte)
     const corte = refDateCorteInadMes(ano, mesItem)
     const inadimplencia =
-      !pago && itemVencimentoVencidoAteCorte(item.data_vencimento, corte) ? valor : 0
+      !pagoAlgumaVez && itemVencimentoVencidoAteCorte(item.data_vencimento, corte)
+        ? valor
+        : 0
     upsertLinha(map, {
       grupo,
       tipo_receita: tipoReceitaItem(item.plano_contas),
@@ -156,7 +171,7 @@ export function montarLinhasRelatorioGerencial(
   }
 
   for (const item of recebidoCaixa) {
-    if (item.ci_item > 0 && previstoIds.has(item.ci_item)) continue
+    if (item.ci_item > 0 && caixaUsado.has(item.ci_item)) continue
     const valor = valorRecebidoItem(item)
     if (valor === 0) continue
     const cliente = item.cliente?.trim() || 'Sem cliente'
