@@ -23,7 +23,6 @@ import {
   buildReceitaMetaAreaSlices,
   resolveDepartamentoAreaColor,
 } from '../utils/departamentoAreaCores'
-import { isMesFuturo } from '../utils/receitaMes'
 import {
   carregarRelatorioGerencialGrupos,
   periodoRelatorioGerencial,
@@ -65,8 +64,8 @@ export function ReceitaRelatorioGerencialDialog({
   }, [departamentoCores])
 
   const mesesDisponiveis = useMemo(
-    () => MESES_ABREV.map((_, idx) => idx + 1).filter((m) => !isMesFuturo(ano, m)),
-    [ano],
+    () => MESES_ABREV.map((_, idx) => idx + 1),
+    [],
   )
 
   const todosMarcados =
@@ -133,6 +132,7 @@ export function ReceitaRelatorioGerencialDialog({
           <DialogDescription>
             Selecione um ou mais meses e a área. A planilha traz o previsto faturado no período,
             o recebido no caixa do período (igual ao Recebido da Gestão à vista) e o valor por área.
+            Meses futuros entram mesmo sem caixa — nesses casos vem só o previsto.
           </DialogDescription>
         </DialogHeader>
 
@@ -155,20 +155,18 @@ export function ReceitaRelatorioGerencialDialog({
               {MESES_ABREV.map((label, idx) => {
                 const valor = idx + 1
                 const ativo = meses.includes(valor)
-                const futuro = isMesFuturo(ano, valor)
                 return (
                   <button
                     key={label}
                     type="button"
                     aria-pressed={ativo}
-                    disabled={futuro || gerando}
+                    disabled={gerando}
                     onClick={() => toggleMes(valor)}
                     className={cn(
                       'rounded-md px-2.5 py-1 text-xs font-semibold uppercase tracking-wide transition-colors',
                       ativo
                         ? 'bg-slate-900 text-white shadow-sm'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900',
-                      futuro && 'cursor-not-allowed opacity-40',
                     )}
                   >
                     {label}

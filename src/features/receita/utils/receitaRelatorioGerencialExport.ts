@@ -334,7 +334,7 @@ export async function exportRelatorioGerencialExcel(
   ws.mergeCells(noteRow, 1, noteRow, COLS)
   const note = ws.getCell(noteRow, 1)
   note.value =
-    'Critérios: Previsto = títulos com vencimento nos meses selecionados. ' +
+    'Critérios: Previsto = títulos com vencimento nos meses selecionados (meses futuros entram só com previsto, sem caixa). ' +
     'Valor pago = caixa do período (honorários líquidos na data de pagamento), mesma base do Recebido da Gestão à vista — inclui títulos de outros meses pagos no período. ' +
     'Inadimplente = título do período vencido até o corte (ontem) e sem pagamento. ' +
     'Colunas de área = rateio do valor pago pelo departamento VIOS do item. Gerado em ' +
