@@ -564,6 +564,8 @@ export interface RacionalResultado {
   resumo?: RacionalResumo
 }
 
+export type { NpsKpi } from '../utils/npsCalc'
+
 export interface EficienciaOverview {
   slaVistagemRisco: SlaVistagemMesRow[]
   slaVistagemComum: SlaVistagemMesRow[]

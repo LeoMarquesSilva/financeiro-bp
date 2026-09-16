@@ -383,37 +383,24 @@ export function OverviewKpiHeatCard({
               ) : cellColSpans && cellColSpans.length > 0 ? (
                 cells.map((cell, i) => {
                   const span = Math.max(1, cellColSpans[i] ?? 1)
-                  const st = cellStyle(cell, metaForCell(i), metaComparacao)
-                  /** Cartões por ano via colspan — evitar no export PPT (desalinha). */
                   return (
                     <td
                       key={i}
                       colSpan={span}
                       {...heatCellStackedAttr(cell)}
                       style={{
-                        padding: i > 0 ? '2px 2px 2px 6px' : '2px 2px 2px 2px',
+                        padding: 4,
                         textAlign: 'center',
-                        verticalAlign: 'middle',
-                        background: 'transparent',
+                        fontSize: 11,
+                        ...cellStyle(
+                          cell,
+                          metaForCell(i),
+                          metaComparacao,
+                          span > 1 ? CELL_FONT_ACUM : undefined,
+                        ),
                       }}
                     >
-                      <div
-                        style={{
-                          ...st,
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          borderRadius: 6,
-                          padding: '5px 8px',
-                          border: '1px solid rgba(15,23,42,0.08)',
-                          minHeight: 24,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 11,
-                        }}
-                      >
-                        {renderHeatCellContent(cell)}
-                      </div>
+                      {renderHeatCellContent(cell)}
                     </td>
                   )
                 })

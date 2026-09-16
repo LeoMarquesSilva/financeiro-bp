@@ -25,6 +25,7 @@ import type {
   TurnoverAnualRow,
   TurnoverDesligamentoRow,
   VistagemDesvioRankingRow,
+  NpsKpi,
 } from '../types/eficiencia.types'
 
 export function useEficienciaOverview(ano: number, area: string | null = null) {
@@ -362,6 +363,16 @@ export function useOpsLegaisTarefas(
     loading: isLoading,
     error: error as Error | null,
   }
+}
+
+export function useNpsKpi(ano: number) {
+  const { data, error, isLoading, refetch } = useQuery({
+    queryKey: ['eficiencia', 'nps', ano],
+    queryFn: () => eficienciaService.fetchNpsKpi(ano),
+    staleTime: 5 * 60 * 1000,
+  })
+  const kpi: NpsKpi | null = data ?? null
+  return { data: kpi, loading: isLoading, error, refetch }
 }
 
 export function useGestaoPdi(ano: number, _mesFiltro: MesFiltroEficiencia, area: string | null = null) {

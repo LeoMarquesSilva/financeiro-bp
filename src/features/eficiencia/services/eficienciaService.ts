@@ -67,7 +67,9 @@ import type {
   TurnoverAtivoAreaRow,
   ColaboradorFeriasRow,
   UltimaAtualizacaoRow,
+  NpsKpi,
 } from '../types/eficiencia.types'
+import { EMPTY_NPS_KPI } from '../utils/npsCalc'
 import type {
   IndicadoresResultadoMes,
   TreinamentoParticipacaoExport,
@@ -1123,6 +1125,26 @@ export const eficienciaService = {
       p_inicio: inicio,
       p_fim: fimExclusivo,
     })
+  },
+
+  async fetchNpsKpi(ano: number): Promise<NpsKpi> {
+    const { data, error } = await supabase.functions.invoke('nps-orquestrai', {
+      body: { ano },
+    })
+    const payload = (data ?? {}) as NpsKpi & { error?: string }
+    const status = (error as { context?: Response } | null)?.context?.status
+    if (payload.unavailable || status === 503 || status === 502) {
+      return { ...EMPTY_NPS_KPI, unavailable: true }
+    }
+    if (error) throw error
+    if (payload.error && payload.nps == null && payload.total == null) {
+      throw new Error(String(payload.error))
+    }
+    return {
+      ...EMPTY_NPS_KPI,
+      ...payload,
+      unavailable: payload.unavailable,
+    }
   },
 
   async fetchOpsLegaisResponsum(

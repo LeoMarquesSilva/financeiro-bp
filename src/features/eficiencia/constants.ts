@@ -206,6 +206,10 @@ export const EFICIENCIA_META_PDI = 100
 export const EFICIENCIA_META_RECEITA_BRUTA = 100
 /** Índice de inadimplência: meta máxima (menor é melhor). */
 export const EFICIENCIA_META_INDICE_INADIMPLENCIA = 10
+/** NPS de clientes (OrqestrAI) — avaliação única no ano. */
+export const EFICIENCIA_META_NPS = 85
+/** A pesquisa NPS 2026 começa em agosto — a faixa no Overview cobre Ago–Dez. */
+export const EFICIENCIA_NPS_MES_INICIO = 8
 
 /**
  * Aliases de colaborador (chave normalizada → nome canônico no turnover).
@@ -285,6 +289,8 @@ export const EFICIENCIA_EVIDENCIA_POR_JUSTIFICATIVA: Record<string, string> = {
     'Fornecer a contagem do prazo de 24/48h: registro do recebimento da demanda e o marco inicial da contagem.',
   'EXCLUDENTE DE FATAL - VALIDADO POR OPS. LEGAIS':
     'Fornecer a validação de Ops. Legais: registro/aprovação que fundamentou a exclusão do FATAL.',
+  'PRAZO NÃO PEREMPTÓRIO - ESTRATÉGIA PROCESSUAL':
+    'Fornecer o fundamento de que o prazo não era peremptório e a estratégia processual: despacho/decisão ou publicação, e o registro da opção de não protocolar no FATAL.',
 }
 
 /** Fração da amostra por estrato (Área × Justificativa). */

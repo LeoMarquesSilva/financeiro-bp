@@ -9,6 +9,7 @@ import {
   APRESENTACAO_KPIS,
   areaKeyFromColuna,
   cellApresentacaoKpi,
+  cellApresentacaoNps,
   metaDesenvolvimentoApresentacao,
   rodapeDesenvolvimentoApresentacao,
   type ApresentacaoCell,
@@ -129,6 +130,13 @@ export function useApresentacaoMatrix(
     enabled,
     staleTime: 60_000,
     retry: 1,
+  })
+
+  const npsQuery = useQuery({
+    queryKey: ['eficiencia', 'nps', ano] as const,
+    queryFn: () => eficienciaService.fetchNpsKpi(ano),
+    enabled,
+    staleTime: 5 * 60 * 1000,
   })
 
   /** Mesmo cache da aba Ops Legais — ClickUp uma vez por ano. */
@@ -321,6 +329,7 @@ export function useApresentacaoMatrix(
           ano,
           bonusMesInicio,
           bonusMesFim,
+          npsQuery.data?.nps ?? null,
         )
       : null
 
@@ -328,7 +337,9 @@ export function useApresentacaoMatrix(
     enabled &&
     (Boolean(consolidadoQuery?.isLoading || consolidadoQuery?.isPending) ||
       financeiroQuery.isLoading ||
-      financeiroQuery.isPending)
+      financeiroQuery.isPending ||
+      npsQuery.isLoading ||
+      npsQuery.isPending)
 
   const rows: ApresentacaoMatrixRow[] = APRESENTACAO_KPIS.map((kpi) => {
     const metaLabel =
@@ -339,6 +350,9 @@ export function useApresentacaoMatrix(
       }
       if (kpi.id === 'indice_inadimplencia') {
         return cellApresentacaoIndiceInadimplencia(col.key, financeiro, mesFiltro, ano)
+      }
+      if (kpi.id === 'nps') {
+        return cellApresentacaoNps(npsQuery.data?.nps)
       }
       return cellApresentacaoKpi(
         kpi.id,

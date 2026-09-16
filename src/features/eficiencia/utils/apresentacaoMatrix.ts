@@ -5,6 +5,7 @@ import {
   EFICIENCIA_META_AGENDAMENTO,
   EFICIENCIA_META_EFICIENCIA_PROTOCOLO,
   EFICIENCIA_META_INDICE_INADIMPLENCIA,
+  EFICIENCIA_META_NPS,
   EFICIENCIA_META_PDI,
   EFICIENCIA_META_SLA_PROTOCOLO,
   EFICIENCIA_META_VISTAGEM,
@@ -241,8 +242,8 @@ export const APRESENTACAO_KPIS: ApresentacaoKpiDef[] = [
     id: 'nps',
     secao: 'satisfacao_cliente',
     title: 'NPS',
-    metaLabel: '85%',
-    meta: 85,
+    metaLabel: `${EFICIENCIA_META_NPS}%`,
+    meta: EFICIENCIA_META_NPS,
   },
   {
     id: 'gestao_pdi',
@@ -388,6 +389,15 @@ function cellPct(value: number | null, meta: number): ApresentacaoCell {
     label: formatPercent(value),
     atingiu: atingiuMetaKpi(value, meta),
   }
+}
+
+/** NPS é único no ano (OrqestrAI) — mesmo valor em todas as colunas. */
+export function cellApresentacaoNps(
+  nps: number | null | undefined,
+  meta = EFICIENCIA_META_NPS,
+): ApresentacaoCell {
+  if (nps == null) return cellVazio()
+  return cellPct(nps, meta)
 }
 
 /**

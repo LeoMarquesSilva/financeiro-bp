@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Smile, Award, Trophy } from 'lucide-react'
+import { Award, Trophy } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useAuth } from '@/lib/AuthContext'
 import { useEficienciaOverview } from '../hooks/useEficiencia'
@@ -22,6 +22,7 @@ import { AgendamentoTab } from '../components/AgendamentoTab'
 import { TreinamentosTab } from '../components/TreinamentosTab'
 import { TurnoverTab } from '../components/TurnoverTab'
 import { GestaoPdiTab } from '../components/GestaoPdiTab'
+import { NpsTab } from '../components/NpsTab'
 import { ReceitaBrutaTab } from '../components/ReceitaBrutaTab'
 import { InadimplenciaTab } from '../components/InadimplenciaTab'
 import { EficienciaPlaceholderTab } from '../components/EficienciaPlaceholderTab'
@@ -100,9 +101,7 @@ function EficienciaTabPanel({
     case 'gestao-pdi':
       return <GestaoPdiTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'nps':
-      return (
-        <EficienciaPlaceholderTab title="NPS" icon={Smile} meta="Meta 85%" hint="Sem dado no Overview (BI)." />
-      )
+      return <NpsTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'receita-bruta':
       return <ReceitaBrutaTab ano={ano} mesFiltro={mesFiltro} {...responsavelProps} />
     case 'inadimplencia':

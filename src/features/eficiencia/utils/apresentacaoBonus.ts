@@ -7,6 +7,7 @@ import {
   EFICIENCIA_META_RECEITA_BRUTA,
   EFICIENCIA_META_SLA_PROTOCOLO,
   EFICIENCIA_META_VISTAGEM,
+  EFICIENCIA_META_NPS,
   MESES_EFICIENCIA_ARQUIVO,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -88,17 +89,6 @@ export const BONUS_PESOS: Record<BonusIndicadorId, number> = {
 /** Indicadores sem fonte no SIOE — sempre “bateu” (valores do print / combinado). */
 const BONUS_FIXOS: BonusIndicadorRow[] = [
   {
-    id: 'nps',
-    label: 'NPS',
-    meta: 85,
-    resultado: 100,
-    direcao: 'maior',
-    peso: BONUS_PESOS.nps,
-    contribuicao: BONUS_PESOS.nps,
-    bateu: true,
-    fixo: true,
-  },
-  {
     id: 'avaliacao_competencia',
     label: 'Avaliação de Competência',
     meta: 5,
@@ -179,7 +169,7 @@ function rowFromValue(
 
 /**
  * Monta o Programa de Bônus consolidado no período (visão escritório).
- * NPS sem série no overview → resultado null.
+ * NPS vem da pesquisa única do OrqestrAI (não tem série mensal).
  */
 export function buildApresentacaoBonus(
   overview: EficienciaOverview | null | undefined,
@@ -187,6 +177,7 @@ export function buildApresentacaoBonus(
   ano: number,
   mesInicio: number,
   mesFim: number,
+  npsScore: number | null = null,
 ): ApresentacaoBonusData {
   const meses = mesesRangeBonus(mesInicio, mesFim)
   const mesFiltro: MesFiltroEficiencia = meses
@@ -273,6 +264,7 @@ export function buildApresentacaoBonus(
       kpi('desenvolvimento').value,
       'maior',
     ),
+    rowFromValue('nps', 'NPS', EFICIENCIA_META_NPS, npsScore, 'maior'),
   ]
 
   const indicadores = [...dinamicos, ...BONUS_FIXOS]

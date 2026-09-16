@@ -11,6 +11,8 @@ import { RacionalSheet } from './RacionalSheet'
 import {
   EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL,
   EFICIENCIA_META_INDICE_INADIMPLENCIA,
+  EFICIENCIA_META_NPS,
+  EFICIENCIA_NPS_MES_INICIO,
   EFICIENCIA_META_OPS_CADASTRO,
   EFICIENCIA_META_OPS_EFICIENCIA,
   EFICIENCIA_META_OPS_PUBLICACOES,
@@ -23,6 +25,7 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
+import { useNpsKpi } from '../hooks/useEficiencia'
 import type { EficienciaOverview, RacionalIndicador } from '../types/eficiencia.types'
 import {
   aplicarCelulasFiltro,
@@ -171,6 +174,7 @@ export function OverviewTab({
   const mesDestaque = isMesesFiltro(mesFiltro) ? mesFiltro : null
   const periodoCurtoAtivo = isPeriodoCurtoFiltro(mesFiltro)
   const { data: financeiroKpis, isLoading: loadingFinanceiroKpis } = useOverviewFinanceiroKpis(ano)
+  const { data: npsKpi, loading: loadingNps } = useNpsKpi(ano)
 
   const { data: resumosPeriodo } = useQuery({
     queryKey: ['eficiencia', 'overview-periodo-resumos', ano, mesFiltro, area],
@@ -235,6 +239,31 @@ export function OverviewTab({
   const retencaoCell: HeatCell = data.turnover
     ? { value: data.turnover.pct_retencao, label: formatPercent(data.turnover.pct_retencao) }
     : { value: null, label: '-' }
+
+  const npsValor = loadingNps ? null : (npsKpi?.nps ?? null)
+  const npsLabel = loadingNps ? '…' : npsValor == null ? '-' : formatPercent(npsValor)
+  const npsVazio: HeatCell = { value: null, label: loadingNps ? '…' : '-' }
+  const npsTemValor = npsValor != null
+  const npsCells: HeatCell[] = npsTemValor
+    ? [
+        ...Array.from({ length: EFICIENCIA_NPS_MES_INICIO - 1 }, () => ({
+          value: null,
+          label: '-',
+        })),
+        { value: npsValor, label: npsLabel },
+      ]
+    : Array.from({ length: 12 }, () => npsVazio)
+  const npsColSpans = npsTemValor
+    ? [
+        ...Array.from({ length: EFICIENCIA_NPS_MES_INICIO - 1 }, () => 1),
+        13 - EFICIENCIA_NPS_MES_INICIO,
+      ]
+    : undefined
+  const npsAcumulado: HeatCell = loadingNps
+    ? { value: null, label: '…' }
+    : npsValor == null
+      ? { value: null, label: '-' }
+      : { value: npsValor, label: npsLabel }
 
   const filterMensal = <T extends { mes: number }>(rows: T[]) =>
     rows.filter((r) => mesNoFiltro(r.mes, mesFiltro, ano))
@@ -675,11 +704,12 @@ export function OverviewTab({
       <div className="space-y-3">
         <OverviewKpiHeatRow
           title="NPS"
-          meta={Infinity}
-          metaLabel="Meta 85%"
+          meta={EFICIENCIA_META_NPS}
+          metaLabel={`Meta ${formatPercent(EFICIENCIA_META_NPS)}`}
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
-          acumulado={{ value: null, label: '-' }}
+          cellColSpans={npsColSpans}
+          cells={npsCells}
+          acumulado={npsAcumulado}
         />
         <OverviewKpiHeatRow
           title="Reputação**"

@@ -1,11 +1,16 @@
 import type { ReactNode } from 'react'
+import { useQueries } from '@tanstack/react-query'
 import { formatPercent } from '@/shared/utils/format'
 import {
   EFICIENCIA_META_INDICE_INADIMPLENCIA,
+  EFICIENCIA_META_NPS,
+  EFICIENCIA_NPS_MES_INICIO,
   EFICIENCIA_META_SLA_PROTOCOLO,
   MES_INICIO_RESULTADO,
 } from '../constants'
 import type { EficienciaOverview } from '../types/eficiencia.types'
+import { eficienciaService } from '../services/eficienciaService'
+import type { NpsKpi } from '../utils/npsCalc'
 import type { ApresentacaoFinanceiroBundle } from '../utils/apresentacaoFinanceiro'
 import { valorExibicaoEvolucao } from '@/features/receita/utils/receitaInadimplenciaCalc'
 import {
@@ -118,6 +123,18 @@ export function ApresentacaoJuridicoUnificadoBloco({
   const slots = enumerateMesAno(inicio, fim)
   const monthLabels = slots.map(labelMesAno)
   const anos = anosNoPeriodo(inicio, fim)
+  const npsQueries = useQueries({
+    queries: anos.map((y) => ({
+      queryKey: ['eficiencia', 'nps', y] as const,
+      queryFn: (): Promise<NpsKpi> => eficienciaService.fetchNpsKpi(y),
+      staleTime: 5 * 60 * 1000,
+    })),
+  })
+  const npsByAno = new Map<number, NpsKpi>()
+  anos.forEach((y, i) => {
+    const kpi = npsQueries[i]?.data
+    if (kpi) npsByAno.set(y, kpi)
+  })
 
   const pick = <T,>(
     getRows: (ov: EficienciaOverview) => T[],
@@ -131,7 +148,11 @@ export function ApresentacaoJuridicoUnificadoBloco({
 
   let content: ReactNode
 
-  if (loading || anos.some((a) => !overviewByAno.has(a))) {
+  if (
+    loading ||
+    anos.some((a) => !overviewByAno.has(a)) ||
+    npsQueries.some((q: { isLoading: boolean; isPending: boolean }) => q.isLoading || q.isPending)
+  ) {
     content = (
       <div style={{ display: 'grid', gap: 8, padding: 4 }}>
         {Array.from({ length: 6 }, (_, i) => (
@@ -200,7 +221,37 @@ export function ApresentacaoJuridicoUnificadoBloco({
       return pctCell(pct)
     })
 
-    const npsCells = slots.map(() => VAZIA)
+    const npsBuilt = (() => {
+      const cells: HeatCell[] = []
+      const colSpans: number[] = []
+      let i = 0
+      while (i < slots.length) {
+        const anoSlot = slots[i]!.ano
+        let j = i + 1
+        while (j < slots.length && slots[j]!.ano === anoSlot) j += 1
+        const yearSlots = slots.slice(i, j)
+        const kpi = npsByAno.get(anoSlot)
+        const nps = kpi?.nps
+        const startBand = yearSlots.findIndex((s) => s.mes >= EFICIENCIA_NPS_MES_INICIO)
+        if (nps == null || startBand < 0) {
+          for (let k = 0; k < yearSlots.length; k++) {
+            cells.push(VAZIA)
+            colSpans.push(1)
+          }
+        } else {
+          for (let k = 0; k < startBand; k++) {
+            cells.push(VAZIA)
+            colSpans.push(1)
+          }
+          cells.push({ value: nps, label: formatPercent(nps) })
+          colSpans.push(yearSlots.length - startBand)
+        }
+        i = j
+      }
+      return { cells, colSpans }
+    })()
+    const npsCells = npsBuilt.cells
+    const npsColSpans = npsBuilt.colSpans
 
     // Acumulados no intervalo
     const slaRows = slots
@@ -437,9 +488,10 @@ export function ApresentacaoJuridicoUnificadoBloco({
         <OverviewKpiHeatCard
           showAcumulado={false}
           title="NPS"
-          meta={Infinity}
-          metaLabel="Meta 85%"
+          meta={EFICIENCIA_META_NPS}
+          metaLabel={`Meta ${formatPercent(EFICIENCIA_META_NPS)}`}
           monthLabels={monthLabels}
+          cellColSpans={npsColSpans}
           cells={npsCells}
           acumulado={VAZIA}
         />
