@@ -116,6 +116,21 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   return (data ?? []) as T
 }
 
+async function rpcRetry<T>(run: () => Promise<T>, attempts = 3): Promise<T> {
+  let last: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await run()
+    } catch (e) {
+      last = e
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 400 * (i + 1)))
+      }
+    }
+  }
+  throw last
+}
+
 import {
   aplicarOnboardingNoRacional,
   buildRacionalBaseQuery,
@@ -1698,23 +1713,21 @@ export const eficienciaService = {
       slaProtocolo,
       eficienciaProtocolo,
       agendamento,
-      turnover,
-      treinamentos,
-      treinamentosMensal,
-      gestaoPdiMensal,
-      ultimaAtualizacao,
     ] = await Promise.all([
-      this.fetchSlaVistagemMensal(ano, true, area),
-      this.fetchSlaVistagemMensal(ano, false, area),
-      this.fetchSlaProtocoloMensal(ano, area),
-      this.fetchEficienciaProtocoloMensal(ano, area),
-      this.fetchAgendamentoMensal(ano, area),
-      this.fetchTurnoverAnual(ano, area),
-      this.fetchTreinamentosAnual(ano, area),
-      this.fetchTreinamentosMensal(ano, area),
-      this.fetchGestaoPdiMensal(ano, area),
-      this.fetchUltimaAtualizacao(),
+      rpcRetry(() => this.fetchSlaVistagemMensal(ano, true, area)),
+      rpcRetry(() => this.fetchSlaVistagemMensal(ano, false, area)),
+      rpcRetry(() => this.fetchSlaProtocoloMensal(ano, area)),
+      rpcRetry(() => this.fetchEficienciaProtocoloMensal(ano, area)),
+      rpcRetry(() => this.fetchAgendamentoMensal(ano, area)),
     ])
+    const [turnover, treinamentos, treinamentosMensal, gestaoPdiMensal, ultimaAtualizacao] =
+      await Promise.all([
+        rpcRetry(() => this.fetchTurnoverAnual(ano, area)),
+        rpcRetry(() => this.fetchTreinamentosAnual(ano, area)),
+        rpcRetry(() => this.fetchTreinamentosMensal(ano, area)),
+        rpcRetry(() => this.fetchGestaoPdiMensal(ano, area)),
+        rpcRetry(() => this.fetchUltimaAtualizacao()),
+      ])
     return {
       slaVistagemRisco,
       slaVistagemComum,

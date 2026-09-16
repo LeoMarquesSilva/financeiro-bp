@@ -288,7 +288,7 @@ function somaRazao(
 ): { value: number | null; label: string } {
   const num = numeros.reduce((a, b) => a + b, 0)
   const den = denominadores.reduce((a, b) => a + b, 0)
-  if (den === 0) return { value: 0, label: formatPercent(0) }
+  if (den === 0) return { value: null, label: '-' }
   const v = (num / den) * 100
   return { value: v, label: formatPercent(v) }
 }
@@ -391,11 +391,13 @@ function cellPct(value: number | null, meta: number): ApresentacaoCell {
   }
 }
 
-/** NPS é único no ano (OrqestrAI) — mesmo valor em todas as colunas. */
+/** NPS jurídico (OrqestrAI) — mesmo valor nas áreas jurídicas; Ops Legais não aplica. */
 export function cellApresentacaoNps(
   nps: number | null | undefined,
   meta = EFICIENCIA_META_NPS,
+  areaKey?: ApresentacaoColunaKey,
 ): ApresentacaoCell {
+  if (areaKey === EFICIENCIA_AREA_OPS_LEGAIS) return cellVazio()
   if (nps == null) return cellVazio()
   return cellPct(nps, meta)
 }
@@ -421,13 +423,13 @@ export function cellApresentacaoKpi(
 
   switch (kpi) {
     case 'sla_protocolo': {
-      // Ops Legais: KPI de área não aplica na grade (fica `-`).
       if (opsOuIndisp) return cellVazio()
       const rows = filterMensal(data.slaProtocolo)
       const { value } = somaRazao(
         rows.map((r) => r.qtd_d1),
         rows.map((r) => r.qtd_total),
       )
+      if (value == null) return cellVazio()
       const metas = rows.map((r) => r.meta).filter((m): m is number => m != null)
       const meta =
         metas.length > 0 ? Math.min(...metas) : EFICIENCIA_META_SLA_PROTOCOLO
@@ -440,6 +442,7 @@ export function cellApresentacaoKpi(
         rows.map((r) => r.sem_inconsistencia),
         rows.map((r) => r.total),
       )
+      if (value == null) return cellVazio()
       return cellPct(value, metaOverride ?? EFICIENCIA_META_EFICIENCIA_PROTOCOLO)
     }
     case 'sla_ciencia': {
@@ -449,6 +452,7 @@ export function cellApresentacaoKpi(
         rows.map((r) => r.dentro_prazo),
         rows.map((r) => r.dentro_prazo + r.fora_prazo),
       )
+      if (value == null) return cellVazio()
       return cellPct(value, metaOverride ?? EFICIENCIA_META_AGENDAMENTO)
     }
     case 'sla_vistagem_risco': {

@@ -4,6 +4,7 @@ import type {
   EficienciaOverview,
   OpsLegaisIniciativasDashboard,
 } from '../types/eficiencia.types'
+import type { MesFiltroEficiencia } from '../constants'
 import {
   APRESENTACAO_COLUNAS,
   APRESENTACAO_KPIS,
@@ -38,7 +39,6 @@ import { fetchApresentacaoLideranca } from '../utils/apresentacaoLideranca'
 import { buildApresentacaoBonus } from '../utils/apresentacaoBonus'
 import { instagramService } from '@/features/operacoes-legais/marketing/instagramService'
 import { cobrancaService } from '@/features/cobranca/services/cobrancaService'
-import type { MesFiltroEficiencia } from '../constants'
 
 export type ApresentacaoMatrixRow = {
   kpiId: ApresentacaoKpiId
@@ -68,14 +68,19 @@ export function useApresentacaoMatrix(
   bonusMesFim = 12,
 ) {
   const queries = useQueries({
-    queries: APRESENTACAO_COLUNAS.map((col) => {
+    queries: APRESENTACAO_COLUNAS.map((col, index) => {
       const area = areaKeyFromColuna(col)
       return {
-        queryKey: ['eficiencia', 'overview', ano, area] as const,
-        queryFn: (): Promise<EficienciaOverview> =>
-          eficienciaService.getOverview(ano, area),
+        queryKey: ['eficiencia', 'apresentacao-overview', ano, area] as const,
+        queryFn: async (): Promise<EficienciaOverview> => {
+          if (index > 0) {
+            await new Promise((r) => setTimeout(r, index * 180))
+          }
+          return eficienciaService.getOverview(ano, area)
+        },
         enabled,
         staleTime: 1000 * 60,
+        retry: 2,
       }
     }),
   })
@@ -352,7 +357,7 @@ export function useApresentacaoMatrix(
         return cellApresentacaoIndiceInadimplencia(col.key, financeiro, mesFiltro, ano)
       }
       if (kpi.id === 'nps') {
-        return cellApresentacaoNps(npsQuery.data?.nps)
+        return cellApresentacaoNps(npsQuery.data?.nps, undefined, col.key)
       }
       return cellApresentacaoKpi(
         kpi.id,
