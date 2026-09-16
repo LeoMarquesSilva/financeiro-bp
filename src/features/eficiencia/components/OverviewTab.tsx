@@ -173,7 +173,10 @@ export function OverviewTab({
   const copyRef = useRef<HTMLDivElement>(null)
   const mesDestaque = isMesesFiltro(mesFiltro) ? mesFiltro : null
   const periodoCurtoAtivo = isPeriodoCurtoFiltro(mesFiltro)
-  const { data: financeiroKpis, isLoading: loadingFinanceiroKpis } = useOverviewFinanceiroKpis(ano)
+  const { data: financeiroKpis, isLoading: loadingFinanceiroKpis } = useOverviewFinanceiroKpis(
+    ano,
+    !loading && data != null,
+  )
   const { data: npsKpi, loading: loadingNps } = useNpsKpi(ano)
 
   const { data: resumosPeriodo } = useQuery({

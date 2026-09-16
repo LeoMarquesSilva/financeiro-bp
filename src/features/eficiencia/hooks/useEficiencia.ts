@@ -32,6 +32,7 @@ export function useEficienciaOverview(ano: number, area: string | null = null) {
   const { data, error, isLoading, refetch } = useQuery({
     queryKey: ['eficiencia', 'overview', ano, area],
     queryFn: () => eficienciaService.getOverview(ano, area),
+    staleTime: 5 * 60 * 1000,
   })
   return { data: data ?? null, loading: isLoading, error, refetch }
 }

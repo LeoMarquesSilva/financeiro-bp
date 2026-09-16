@@ -6,7 +6,7 @@ import { receitaService } from '@/features/receita/services/receitaService'
 import { mesMaxDisponivelInadimplencia } from '@/features/receita/constants'
 import { buildGestaoConsolidadoFromInadDashboard } from '../utils/overviewFinanceiroKpis'
 
-export function useOverviewFinanceiroKpis(ano: number) {
+export function useOverviewFinanceiroKpis(ano: number, enabled = true) {
   return useQuery({
     queryKey: ['eficiencia', 'overview-financeiro', ano],
     queryFn: async () => {
@@ -22,6 +22,7 @@ export function useOverviewFinanceiroKpis(ano: number) {
       return { rows, meses, resumo }
     },
     staleTime: 60_000,
+    enabled,
   })
 }
 
