@@ -523,17 +523,22 @@ function ApresentacaoKpiHeatCard({
   colunas,
   cells,
   mostrarValores = false,
+  linhaUnica = false,
 }: {
   title: string
   metaLabel: string
   colunas: typeof APRESENTACAO_COLUNAS
   cells: ApresentacaoCell[]
   mostrarValores?: boolean
+  /** Um valor para o escritório — faixa única nas colunas de área + consolidado. */
+  linhaUnica?: boolean
 }) {
   const areaCols = colunas.filter((c) => !('consolidado' in c && c.consolidado))
   const consCol = colunas.find((c) => 'consolidado' in c && c.consolidado)
   const consIdx = consCol ? colunas.indexOf(consCol) : -1
   const consCell = consIdx >= 0 ? cells[consIdx] : null
+  const unicaCell = cells.find((c) => c.value != null) ?? consCell ?? cells[0] ?? null
+  const unicaSpan = areaCols.length + (consCol ? 1 : 0)
 
   return (
     <div
@@ -590,34 +595,51 @@ function ApresentacaoKpiHeatCard({
             >
               {metaTexto(metaLabel)}
             </td>
-            {areaCols.map((col) => {
-              const idx = colunas.findIndex((c) => c.key === col.key)
-              const cell = cells[idx]!
-              return (
-                <td
-                  key={col.key}
-                  {...(mostrarValores && cell.valorDetalhe
-                    ? { 'data-heat-cell-stacked': '1' as const }
-                    : {})}
-                  style={kpiDataCellStyle(cell, false, mostrarValores)}
-                >
-                  {renderKpiCellContent(cell, mostrarValores)}
-                </td>
-              )
-            })}
-            {consCol && consCell ? (
+            {linhaUnica && unicaCell && unicaSpan > 0 ? (
               <td
-                {...(mostrarValores && consCell.valorDetalhe
+                colSpan={unicaSpan}
+                {...(mostrarValores && unicaCell.valorDetalhe
                   ? { 'data-heat-cell-stacked': '1' as const }
                   : {})}
                 style={{
-                  ...kpiDataCellStyle(consCell, true, mostrarValores),
-                  borderLeft: '2px solid #94A3B8',
+                  ...kpiDataCellStyle(unicaCell, true, mostrarValores),
+                  borderLeft: '1px solid #CBD5E1',
                 }}
               >
-                {renderKpiCellContent(consCell, mostrarValores)}
+                {renderKpiCellContent(unicaCell, mostrarValores)}
               </td>
-            ) : null}
+            ) : (
+              <>
+                {areaCols.map((col) => {
+                  const idx = colunas.findIndex((c) => c.key === col.key)
+                  const cell = cells[idx]!
+                  return (
+                    <td
+                      key={col.key}
+                      {...(mostrarValores && cell.valorDetalhe
+                        ? { 'data-heat-cell-stacked': '1' as const }
+                        : {})}
+                      style={kpiDataCellStyle(cell, false, mostrarValores)}
+                    >
+                      {renderKpiCellContent(cell, mostrarValores)}
+                    </td>
+                  )
+                })}
+                {consCol && consCell ? (
+                  <td
+                    {...(mostrarValores && consCell.valorDetalhe
+                      ? { 'data-heat-cell-stacked': '1' as const }
+                      : {})}
+                    style={{
+                      ...kpiDataCellStyle(consCell, true, mostrarValores),
+                      borderLeft: '2px solid #94A3B8',
+                    }}
+                  >
+                    {renderKpiCellContent(consCell, mostrarValores)}
+                  </td>
+                ) : null}
+              </>
+            )}
           </tr>
         </tbody>
       </table>
@@ -672,6 +694,7 @@ function BlocoExport({
                   colunas={colunas}
                   cells={row.cells}
                   mostrarValores={mostrarValores}
+                  linhaUnica={row.kpiId === 'nps'}
                 />
               ))}
             </div>

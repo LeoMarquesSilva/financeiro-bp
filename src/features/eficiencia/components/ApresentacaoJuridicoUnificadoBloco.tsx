@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useState } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { formatPercent } from '@/shared/utils/format'
 import {
@@ -27,6 +28,11 @@ import {
   buildDesenvolvimentoEquipeHeatCell,
   formatMinutosHeatLabel,
 } from '../utils/desenvolvimentoEquipeHeatCell'
+import {
+  ApresentacaoUnificadoLinhasGrid,
+  type UnificadoLinhaPonto,
+  type UnificadoLinhaSerie,
+} from './ApresentacaoUnificadoLinhasGrid'
 import { OverviewKpiHeatCard, type HeatCell } from './OverviewKpiHeatRow'
 
 type Props = {
@@ -42,6 +48,19 @@ type Props = {
 }
 
 const VAZIA: HeatCell = { value: null, label: '-' }
+
+type VisaoUnificado = 'tabela' | 'linha'
+
+function cellsToLinePoints(cells: HeatCell[], labels: string[]): UnificadoLinhaPonto[] {
+  return cells.map((cell, i) => ({
+    label: labels[i] ?? '',
+    valor: cell.value,
+    rotulo:
+      cell.value == null || cell.label === '-' || cell.label === '\u00A0'
+        ? undefined
+        : (cell.subLabel ?? cell.label),
+  }))
+}
 
 function pctCell(value: number): HeatCell {
   return { value, label: formatPercent(value) }
@@ -119,6 +138,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
   onInicioChange,
   onFimChange,
 }: Props) {
+  const [visao, setVisao] = useState<VisaoUnificado>('tabela')
   const opcoes = opcoesMesAnoAteHoje()
   const slots = enumerateMesAno(inicio, fim)
   const monthLabels = slots.map(labelMesAno)
@@ -366,6 +386,52 @@ export function ApresentacaoJuridicoUnificadoBloco({
       return pctCell(last.exib.pct)
     })()
 
+    const metaTreinoMin = anos.reduce(
+      (s, a) => s + (overviewByAno.get(a)?.treinamentos?.meta_minutos ?? 0),
+      0,
+    )
+    const treinoLinhaPoints: UnificadoLinhaPonto[] = (() => {
+      let acc = 0
+      let started = false
+      return slots.map((slot, i) => {
+        const row = pick((o) => o.treinamentosMensal, slot, (r, m) => r.mes === m)
+        if (row) {
+          acc += row.minutos_lancados
+          started = true
+        }
+        return {
+          label: monthLabels[i] ?? '',
+          valor: started ? acc : null,
+          rotulo: started ? formatMinutosHeatLabel(acc) : undefined,
+        }
+      })
+    })()
+
+    const npsLinhaPoints: UnificadoLinhaPonto[] = slots.map((slot, i) => {
+      const nps = npsByAno.get(slot.ano)?.nps
+      if (nps == null || slot.mes < EFICIENCIA_NPS_MES_INICIO) {
+        return { label: monthLabels[i] ?? '', valor: null }
+      }
+      const firstOfYear =
+        slots.findIndex((s) => s.ano === slot.ano && s.mes >= EFICIENCIA_NPS_MES_INICIO) === i
+      return {
+        label: monthLabels[i] ?? '',
+        valor: nps,
+        rotulo: firstOfYear ? formatPercent(nps) : undefined,
+      }
+    })
+
+    const retencaoLinhaPoints: UnificadoLinhaPonto[] = slots.map((slot, i) => {
+      const pct = overviewByAno.get(slot.ano)?.turnover?.pct_retencao
+      if (pct == null) return { label: monthLabels[i] ?? '', valor: null }
+      const firstOfYear = slots.findIndex((s) => s.ano === slot.ano) === i
+      return {
+        label: monthLabels[i] ?? '',
+        valor: pct,
+        rotulo: firstOfYear ? formatPercent(pct) : undefined,
+      }
+    })
+
     const fimNorm = compareMesAno(inicio, fim) <= 0 ? fim : inicio
 
     /** Retenção: indicador anual — valor único por ano, rótulo no 1º mês da faixa. */
@@ -398,7 +464,101 @@ export function ApresentacaoJuridicoUnificadoBloco({
       overviewByAno.get(slots[0]?.ano ?? fimNorm.ano)?.turnover?.meta_pct_retencao_minima ??
       90
 
-    content = (
+    const seriesLinha: UnificadoLinhaSerie[] = [
+      {
+        id: 'sla_protocolo',
+        title: 'SLA Protocolo',
+        meta: slaMetaAcum,
+        metaLabel: `Meta ${formatPercent(slaMetaAcum)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(slaCells, monthLabels),
+      },
+      {
+        id: 'efi_protocolo',
+        title: 'Eficiência Protocolo',
+        meta: 95,
+        metaLabel: `Meta ${formatPercent(95)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(efiCells, monthLabels),
+      },
+      {
+        id: 'ciencia',
+        title: 'SLA Ciência Agendamentos',
+        meta: 95,
+        metaLabel: `Meta ${formatPercent(95)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(agendaCells, monthLabels),
+      },
+      {
+        id: 'vist_risco',
+        title: 'SLA Vistagem Risco',
+        meta: 98,
+        metaLabel: `Meta ${formatPercent(98)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(vistRiscoCells, monthLabels),
+      },
+      {
+        id: 'vist_normal',
+        title: 'SLA Vistagem Normal',
+        meta: 98,
+        metaLabel: `Meta ${formatPercent(98)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(vistNormalCells, monthLabels),
+      },
+      {
+        id: 'desenvolvimento',
+        title: 'Desenvolvimento Equipe',
+        meta: metaTreinoMin,
+        metaLabel: formatMetaDesenvolvimentoEquipe(overviewByAno, slots),
+        yKind: 'horas',
+        points: treinoLinhaPoints,
+      },
+      {
+        id: 'retencao',
+        title: 'Retenção de Talentos',
+        meta: metaRetencao,
+        metaLabel: `Meta ${formatPercent(metaRetencao)}`,
+        yKind: 'pct',
+        points: retencaoLinhaPoints,
+      },
+      {
+        id: 'pdi',
+        title: 'Gestão de PDI',
+        meta: 100,
+        metaLabel: `Meta ${formatPercent(100)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(pdiCells, monthLabels),
+      },
+      {
+        id: 'receita',
+        title: 'Receita Bruta',
+        meta: 100,
+        metaLabel: `Meta ${formatPercent(100)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(receitaCells, monthLabels),
+      },
+      {
+        id: 'inadimplencia',
+        title: 'Índice de Inadimplência',
+        meta: EFICIENCIA_META_INDICE_INADIMPLENCIA,
+        metaLabel: `Meta ${formatPercent(EFICIENCIA_META_INDICE_INADIMPLENCIA)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(inadCells, monthLabels),
+      },
+      {
+        id: 'nps',
+        title: 'NPS',
+        meta: EFICIENCIA_META_NPS,
+        metaLabel: `Meta ${formatPercent(EFICIENCIA_META_NPS)}`,
+        yKind: 'pct',
+        points: npsLinhaPoints,
+      },
+    ]
+
+    content =
+      visao === 'linha' ? (
+        <ApresentacaoUnificadoLinhasGrid series={seriesLinha} />
+      ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <OverviewKpiHeatCard
           showAcumulado={false}
@@ -496,7 +656,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
           acumulado={VAZIA}
         />
       </div>
-    )
+      )
   }
 
   const periodoLabel =
@@ -509,6 +669,8 @@ export function ApresentacaoJuridicoUnificadoBloco({
       style={{
         width: '100%',
         minWidth: 1100,
+        minHeight: visao === 'linha' ? 'calc(95vh - 200px)' : undefined,
+        height: visao === 'linha' ? 'calc(95vh - 200px)' : undefined,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
@@ -543,6 +705,49 @@ export function ApresentacaoJuridicoUnificadoBloco({
             {periodoLabel}
           </span>
         ) : null}
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Ver por</span>
+          {(
+            [
+              ['tabela', 'Tabela'] as const,
+              ['linha', 'Gráfico de linha'] as const,
+            ] as const
+          ).map(([id, label]) => {
+            const ativo = visao === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setVisao(id)}
+                style={{
+                  height: 28,
+                  borderRadius: 6,
+                  border: ativo ? '1px solid #1D4ED8' : '1px solid #CBD5E1',
+                  background: ativo ? '#EFF6FF' : '#fff',
+                  padding: '0 10px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: ativo ? '#1D4ED8' : '#334155',
+                  cursor: 'pointer',
+                }}
+              >
+                {label}
+              </button>
+            )
+          })}
+          {visao === 'linha' ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginLeft: 8, fontSize: 10, fontWeight: 600, color: '#2B2B2B' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 14, height: 2, background: '#1B3A6B', borderRadius: 1 }} />
+                Resultado
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 14, height: 0, borderTop: '2px dashed #E6C200' }} />
+                Meta
+              </span>
+            </span>
+          ) : null}
+        </span>
       </div>
 
       <div
@@ -551,9 +756,12 @@ export function ApresentacaoJuridicoUnificadoBloco({
         style={{
           width: '100%',
           minWidth: 1100,
+          flex: visao === 'linha' ? '1 1 auto' : undefined,
+          minHeight: visao === 'linha' ? 0 : undefined,
+          height: visao === 'linha' ? '100%' : undefined,
           boxSizing: 'border-box',
           backgroundColor: 'transparent',
-          padding: 4,
+          padding: visao === 'linha' ? 0 : 4,
           display: 'flex',
           flexDirection: 'column',
           gap: 8,

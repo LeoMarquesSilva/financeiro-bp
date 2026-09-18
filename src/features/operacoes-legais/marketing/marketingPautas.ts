@@ -255,3 +255,29 @@ export function marketingPautasInRange(pautas: MarketingPauta[], range: Instagra
   return pautas.filter((pauta) => pauta.stage !== 'cancelada'
     && (isDateInRange(pauta.dueDate, range) || isDateInRange(pauta.completedAt, range)))
 }
+
+/** Entregues no recorte — mesma regra do painel de pautas (não cancela + data de conclusão). */
+export function countPautasEntregues(
+  pautas: MarketingPauta[],
+  range: InstagramPeriodRange,
+): number {
+  return pautas.filter(
+    (pauta) => pauta.stage !== 'cancelada' && isDateInRange(pauta.completedAt, range),
+  ).length
+}
+
+/** Entregues por mês civil do ano (chave 1–12). */
+export function countPautasEntreguesPorMes(
+  pautas: MarketingPauta[],
+  ano: number,
+): Map<number, number> {
+  const byMes = new Map<number, number>()
+  for (const pauta of pautas) {
+    if (pauta.stage === 'cancelada' || !pauta.completedAt) continue
+    const y = Number(pauta.completedAt.slice(0, 4))
+    const m = Number(pauta.completedAt.slice(5, 7))
+    if (y !== ano || m < 1 || m > 12) continue
+    byMes.set(m, (byMes.get(m) ?? 0) + 1)
+  }
+  return byMes
+}

@@ -391,13 +391,11 @@ function cellPct(value: number | null, meta: number): ApresentacaoCell {
   }
 }
 
-/** NPS jurídico (OrqestrAI) — mesmo valor nas áreas jurídicas; Ops Legais não aplica. */
+/** NPS do escritório (OrqestrAI) — um valor para todas as áreas, inclusive Ops. */
 export function cellApresentacaoNps(
   nps: number | null | undefined,
   meta = EFICIENCIA_META_NPS,
-  areaKey?: ApresentacaoColunaKey,
 ): ApresentacaoCell {
-  if (areaKey === EFICIENCIA_AREA_OPS_LEGAIS) return cellVazio()
   if (nps == null) return cellVazio()
   return cellPct(nps, meta)
 }

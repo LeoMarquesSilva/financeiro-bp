@@ -12,7 +12,7 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import type { EficienciaOverview } from '../types/eficiencia.types'
-import { cellApresentacaoKpi } from './apresentacaoMatrix'
+import { cellApresentacaoKpi, cellApresentacaoNps } from './apresentacaoMatrix'
 import {
   cellApresentacaoCrescimentoReceita,
   cellApresentacaoIndiceInadimplencia,
@@ -143,6 +143,22 @@ export function labelPeriodoBonus(mesInicio: number, mesFim: number, ano: number
   return `${nome(a)}–${nome(b)}/${String(ano).slice(2)}`
 }
 
+/** Atingimento 0–1 vs meta, capado em 100% (texto da tabela). */
+function atingimentoCapado(
+  resultado: number | null,
+  meta: number,
+  direcao: BonusDirecao,
+): number | null {
+  if (resultado == null || !Number.isFinite(resultado) || !Number.isFinite(meta)) {
+    return null
+  }
+  if (direcao === 'menor') {
+    return resultado <= meta ? 1 : 0
+  }
+  if (meta <= 0) return resultado > 0 ? 1 : 0
+  return Math.min(1, resultado / meta)
+}
+
 function rowFromValue(
   id: BonusIndicadorId,
   label: string,
@@ -153,8 +169,8 @@ function rowFromValue(
   const peso = BONUS_PESOS[id]
   const comparacao = direcao === 'menor' ? 'maximo' : 'minimo'
   const bateu = atingiuMetaKpi(resultado, meta, comparacao)
-  /** Como no print: bateu → contribuição = peso; senão 0. */
-  const contribuicao = bateu ? peso : 0
+  const at = atingimentoCapado(resultado, meta, direcao)
+  const contribuicao = at == null ? 0 : Math.round(peso * at * 100) / 100
   return {
     id,
     label,
@@ -264,7 +280,13 @@ export function buildApresentacaoBonus(
       kpi('desenvolvimento').value,
       'maior',
     ),
-    rowFromValue('nps', 'NPS', EFICIENCIA_META_NPS, npsScore, 'maior'),
+    rowFromValue(
+      'nps',
+      'NPS',
+      EFICIENCIA_META_NPS,
+      cellApresentacaoNps(npsScore).value,
+      'maior',
+    ),
   ]
 
   const indicadores = [...dinamicos, ...BONUS_FIXOS]

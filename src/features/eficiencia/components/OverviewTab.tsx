@@ -702,9 +702,6 @@ export function OverviewTab({
           }
           onRacionalClick={() => setRacionalAberto('indice_inadimplencia')}
         />
-      </div>
-
-      <div className="space-y-3">
         <OverviewKpiHeatRow
           title="NPS"
           meta={EFICIENCIA_META_NPS}
@@ -721,6 +718,7 @@ export function OverviewTab({
           mesDestaque={mesDestaque}
           cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
           acumulado={{ value: null, label: '-' }}
+          includeInCopy={false}
         />
         <OverviewKpiHeatRow
           title="Êxito**"
@@ -729,6 +727,7 @@ export function OverviewTab({
           mesDestaque={mesDestaque}
           cells={aplicarCelulasFiltro(staticCells({}), mesFiltro, ano)}
           acumulado={{ value: null, label: '-' }}
+          includeInCopy={false}
         />
       </div>
 

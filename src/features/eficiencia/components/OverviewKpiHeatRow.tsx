@@ -528,7 +528,10 @@ export function OverviewKpiHeatRow({
   return (
     <div className="flex items-stretch gap-2">
       <div ref={visibleWrapRef} className="relative min-w-0 flex-1">
-        <OverviewKpiHeatCard {...cardProps} includeInCopy={!copyAnual} />
+        <OverviewKpiHeatCard
+          {...cardProps}
+          includeInCopy={!copyAnual && cardProps.includeInCopy !== false}
+        />
         {copyAnual ? (
           <div
             aria-hidden

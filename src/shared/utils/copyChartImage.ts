@@ -2516,12 +2516,211 @@ function fitApresentacaoTableText(root: HTMLElement): void {
   })
 }
 
+function applyUnificadoLinhasFillSlide(
+  root: HTMLElement,
+  grid: HTMLElement,
+  slideW: number,
+  slideH: number,
+): void {
+  const pad = 10
+  const gap = 10
+  const cols = 4
+  const rows = 3
+  const innerW = slideW - pad * 2
+  const innerH = slideH - pad * 2
+  const cardW = Math.floor((innerW - gap * (cols - 1)) / cols)
+  const cardH = Math.floor((innerH - gap * (rows - 1)) / rows)
+  const titleH = 22
+  const plotW = Math.max(80, cardW - 16)
+  const plotH = Math.max(80, cardH - titleH - 12)
+
+  root.style.setProperty('position', 'relative', 'important')
+  root.style.setProperty('width', `${slideW}px`, 'important')
+  root.style.setProperty('min-width', `${slideW}px`, 'important')
+  root.style.setProperty('max-width', `${slideW}px`, 'important')
+  root.style.setProperty('height', `${slideH}px`, 'important')
+  root.style.setProperty('min-height', `${slideH}px`, 'important')
+  root.style.setProperty('max-height', `${slideH}px`, 'important')
+  root.style.setProperty('padding', `${pad}px`, 'important')
+  root.style.setProperty('margin', '0', 'important')
+  root.style.setProperty('box-sizing', 'border-box', 'important')
+  root.style.setProperty('overflow', 'hidden', 'important')
+  root.style.setProperty('background', 'transparent', 'important')
+  root.style.setProperty('background-color', 'transparent', 'important')
+  root.style.setProperty('display', 'block', 'important')
+
+  let climb: HTMLElement | null = grid
+  while (climb && climb !== root) {
+    climb.style.setProperty('width', `${innerW}px`, 'important')
+    climb.style.setProperty('height', `${innerH}px`, 'important')
+    climb.style.setProperty('max-width', 'none', 'important')
+    climb.style.setProperty('max-height', 'none', 'important')
+    climb.style.setProperty('min-width', '0', 'important')
+    climb.style.setProperty('min-height', '0', 'important')
+    climb.style.setProperty('margin', '0', 'important')
+    climb.style.setProperty('padding', '0', 'important')
+    climb = climb.parentElement
+  }
+
+  grid.style.setProperty('display', 'grid', 'important')
+  grid.style.setProperty('grid-template-columns', `repeat(${cols}, ${cardW}px)`, 'important')
+  grid.style.setProperty('grid-template-rows', `repeat(${rows}, ${cardH}px)`, 'important')
+  grid.style.setProperty('gap', `${gap}px`, 'important')
+  grid.style.setProperty('align-content', 'stretch', 'important')
+  grid.style.setProperty('justify-content', 'start', 'important')
+  grid.style.setProperty('width', `${innerW}px`, 'important')
+  grid.style.setProperty('height', `${innerH}px`, 'important')
+  grid.style.setProperty('min-width', `${innerW}px`, 'important')
+  grid.style.setProperty('min-height', `${innerH}px`, 'important')
+  grid.style.setProperty('max-width', `${innerW}px`, 'important')
+  grid.style.setProperty('max-height', `${innerH}px`, 'important')
+  grid.style.setProperty('background', 'transparent', 'important')
+  grid.style.setProperty('background-color', 'transparent', 'important')
+  grid.style.setProperty('overflow', 'hidden', 'important')
+  grid.style.setProperty('box-sizing', 'border-box', 'important')
+
+  grid.querySelectorAll<HTMLElement>('[data-unificado-linha-card]').forEach((card) => {
+    card.style.setProperty('width', `${cardW}px`, 'important')
+    card.style.setProperty('height', `${cardH}px`, 'important')
+    card.style.setProperty('min-width', `${cardW}px`, 'important')
+    card.style.setProperty('min-height', `${cardH}px`, 'important')
+    card.style.setProperty('max-width', `${cardW}px`, 'important')
+    card.style.setProperty('max-height', `${cardH}px`, 'important')
+    card.style.setProperty('display', 'flex', 'important')
+    card.style.setProperty('flex-direction', 'column', 'important')
+    card.style.setProperty('background', 'transparent', 'important')
+    card.style.setProperty('background-color', 'transparent', 'important')
+    card.style.setProperty('border', 'none', 'important')
+    card.style.setProperty('border-radius', '0', 'important')
+    card.style.setProperty('box-shadow', 'none', 'important')
+    card.style.setProperty('padding', '2px 4px 0', 'important')
+    card.style.setProperty('box-sizing', 'border-box', 'important')
+    card.style.setProperty('overflow', 'hidden', 'important')
+    card.style.setProperty('margin', '0', 'important')
+
+    const title = card.querySelector<HTMLElement>('[data-unificado-linha-title]')
+    if (title) {
+      title.style.setProperty('flex', '0 0 auto', 'important')
+      title.style.setProperty('font-size', '15px', 'important')
+      title.style.setProperty('line-height', '20px', 'important')
+      title.style.setProperty('font-weight', '600', 'important')
+      title.style.setProperty('color', '#2B2B2B', 'important')
+      title.style.setProperty('height', `${titleH}px`, 'important')
+      title.style.setProperty('margin', '0', 'important')
+    }
+
+    const plot = card.querySelector<HTMLElement>('[data-unificado-linha-plot]')
+    if (!plot) return
+    plot.style.setProperty('flex', '1 1 auto', 'important')
+    plot.style.setProperty('width', `${plotW}px`, 'important')
+    plot.style.setProperty('height', `${plotH}px`, 'important')
+    plot.style.setProperty('min-width', `${plotW}px`, 'important')
+    plot.style.setProperty('min-height', `${plotH}px`, 'important')
+    plot.style.setProperty('max-width', `${plotW}px`, 'important')
+    plot.style.setProperty('max-height', `${plotH}px`, 'important')
+  })
+}
+
+async function rasterizeUnificadoLinhasCharts(grid: HTMLElement): Promise<void> {
+  const plots = Array.from(grid.querySelectorAll<HTMLElement>('[data-unificado-linha-plot]'))
+  await Promise.all(
+    plots.map(async (plot) => {
+      const svg =
+        plot.querySelector<SVGSVGElement>('svg.recharts-surface') ??
+        plot.querySelector<SVGSVGElement>('svg')
+      if (!svg) return
+      const width = Math.max(
+        1,
+        Math.ceil(
+          plot.clientWidth ||
+            parseFloat(plot.style.width) ||
+            svg.clientWidth ||
+            Number(svg.getAttribute('width')) ||
+            0,
+        ),
+      )
+      const height = Math.max(
+        1,
+        Math.ceil(
+          plot.clientHeight ||
+            parseFloat(plot.style.height) ||
+            svg.clientHeight ||
+            Number(svg.getAttribute('height')) ||
+            0,
+        ),
+      )
+      if (width < 8 || height < 8) return
+      const clone = svg.cloneNode(true) as SVGSVGElement
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+      clone.setAttribute('width', String(width))
+      clone.setAttribute('height', String(height))
+      clone.style.background = 'transparent'
+      await inlineRasterImagesForExport(clone)
+      const serialized = new XMLSerializer().serializeToString(clone)
+      const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serialized)}`
+      const img = document.createElement('img')
+      img.src = dataUrl
+      img.width = width
+      img.height = height
+      img.setAttribute('alt', '')
+      img.style.setProperty('width', '100%', 'important')
+      img.style.setProperty('height', '100%', 'important')
+      img.style.setProperty('display', 'block', 'important')
+      img.style.setProperty('object-fit', 'contain', 'important')
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve()
+        img.onerror = () => resolve()
+      })
+      plot.replaceChildren(img)
+    }),
+  )
+}
+
+function scaleUnificadoLinhasSvgs(grid: HTMLElement): void {
+  grid.querySelectorAll<HTMLElement>('[data-unificado-linha-card]').forEach((card) => {
+    const plot = card.querySelector<HTMLElement>('[data-unificado-linha-plot]')
+    if (!plot) return
+    const w = Math.max(80, Math.floor(plot.clientWidth || parseFloat(plot.style.width) || 0))
+    const h = Math.max(80, Math.floor(plot.clientHeight || parseFloat(plot.style.height) || 0))
+    plot.querySelectorAll<HTMLElement>('.recharts-responsive-container, .recharts-wrapper').forEach((box) => {
+      box.style.setProperty('width', `${w}px`, 'important')
+      box.style.setProperty('height', `${h}px`, 'important')
+      box.style.setProperty('min-width', `${w}px`, 'important')
+      box.style.setProperty('min-height', `${h}px`, 'important')
+      box.style.setProperty('max-width', `${w}px`, 'important')
+      box.style.setProperty('max-height', `${h}px`, 'important')
+    })
+    const svg =
+      plot.querySelector<SVGSVGElement>('svg.recharts-surface') ??
+      plot.querySelector<SVGSVGElement>('svg')
+    if (!svg) return
+    if (!svg.getAttribute('viewBox')) {
+      const ow = Number(svg.getAttribute('width')) || w
+      const oh = Number(svg.getAttribute('height')) || h
+      svg.setAttribute('viewBox', `0 0 ${ow} ${oh}`)
+    }
+    svg.setAttribute('width', String(w))
+    svg.setAttribute('height', String(h))
+    svg.setAttribute('preserveAspectRatio', 'none')
+    svg.style.setProperty('width', `${w}px`, 'important')
+    svg.style.setProperty('height', `${h}px`, 'important')
+    svg.style.setProperty('max-width', 'none', 'important')
+    svg.style.setProperty('max-height', 'none', 'important')
+  })
+}
+
 function applyApresentacaoFillSlideLayout(
   root: HTMLElement,
   slideW: number,
   slideH: number,
   fontScale = 1,
 ): void {
+  const linhasGrid = root.querySelector<HTMLElement>('[data-apresentacao-linhas-grid]')
+  if (linhasGrid) {
+    applyUnificadoLinhasFillSlide(root, linhasGrid, slideW, slideH)
+    return
+  }
+
   const scalePx = (value: number) => Math.round(value * fontScale * 10) / 10
   /**
    * Big Numbers / Programa de Bônus: preenche o slide mantendo o visual do preview
@@ -3340,10 +3539,21 @@ export async function copyApresentacaoSlideToClipboard(
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
     })
     if (exportId === 'juridico_unificado') {
-      fitApresentacaoTableText(prepared)
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => resolve())
-      })
+      const linhasGrid = prepared.querySelector<HTMLElement>('[data-apresentacao-linhas-grid]')
+      if (linhasGrid) {
+        prepared.style.setProperty('visibility', 'visible', 'important')
+        scaleUnificadoLinhasSvgs(linhasGrid)
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        })
+        scaleUnificadoLinhasSvgs(linhasGrid)
+        await rasterizeUnificadoLinhasCharts(linhasGrid)
+      } else {
+        fitApresentacaoTableText(prepared)
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve())
+        })
+      }
     }
     // Retenção: funde pílulas mensais em faixas por ano (html2canvas não une células).
     prepared.style.setProperty('visibility', 'visible', 'important')
@@ -3408,7 +3618,10 @@ export async function copyApresentacaoSlideToClipboard(
   }
 }
 
-/** Cards KPI do Overview — snapshot fiel (cores das células alinhadas ao card branco). */
+/**
+ * Cards KPI do Overview — mesmo slide PPT do Bloco 2 (Jurídico Unificado):
+ * 33,87×16,32 cm, tipografia e altura dos cards padronizadas.
+ */
 export async function copyOverviewKpiCardsToClipboard(
   cards: HTMLElement[],
   scale = DEFAULT_SCALE,
@@ -3417,20 +3630,36 @@ export async function copyOverviewKpiCardsToClipboard(
     throw new Error('Conteúdo não disponível para cópia')
   }
 
-  const gapPx = Math.round(12 * scale)
-  const parts = await Promise.all(
-    cards.map(async (card) => {
-      const rect = card.getBoundingClientRect()
-      const width = Math.max(1, Math.ceil(rect.width))
-      const height = Math.max(1, Math.ceil(rect.height))
-      const prepared = preparePrintSnapshotElement(card, { preserveBackground: true })
-      const blob = await renderPreparedElementToPngBlob(prepared, width, height, scale)
-      return measureBlobPart(blob)
-    }),
-  )
+  const wrap = document.createElement('div')
+  wrap.setAttribute('data-apresentacao-export', 'juridico_unificado')
+  wrap.setAttribute('data-apresentacao-fill-slide', '')
+  wrap.style.cssText = [
+    'position:fixed',
+    'left:-10000px',
+    'top:0',
+    'width:1920px',
+    'box-sizing:border-box',
+    'background:transparent',
+    'background-color:transparent',
+    'padding:4px',
+    'display:flex',
+    'flex-direction:column',
+    'gap:8px',
+    'font-family:"Segoe UI",system-ui,sans-serif',
+  ].join(';')
 
-  const stacked = await compositeColumnParts(parts, gapPx)
-  await copyPngBlobToClipboard(stacked.blob, 96 * scale)
+  for (const card of cards) {
+    wrap.appendChild(card.cloneNode(true) as HTMLElement)
+  }
+  document.body.appendChild(wrap)
+  try {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve())
+    })
+    await copyApresentacaoSlideToClipboard(wrap, scale)
+  } finally {
+    wrap.remove()
+  }
 }
 
 export async function chartToPngBlob(

@@ -34,6 +34,7 @@ import { fetchApresentacaoBigNumber } from '../utils/apresentacaoBigNumber'
 import { fetchApresentacaoControladoria } from '../utils/apresentacaoControladoria'
 import { buildApresentacaoIniciativas } from '../utils/apresentacaoIniciativas'
 import { buildApresentacaoMarketing } from '../utils/apresentacaoMarketing'
+import { buildMarketingPautas } from '@/features/operacoes-legais/marketing/marketingPautas'
 import { buildApresentacaoFinanceiroOps } from '../utils/apresentacaoFinanceiroOps'
 import { fetchApresentacaoLideranca } from '../utils/apresentacaoLideranca'
 import { buildApresentacaoBonus } from '../utils/apresentacaoBonus'
@@ -163,6 +164,14 @@ export function useApresentacaoMatrix(
     retry: 1,
   })
 
+  const marketingPautasQuery = useQuery({
+    queryKey: ['operacoes-legais', 'marketing', 'pautas'] as const,
+    queryFn: () => instagramService.listMarketingTasks(),
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  })
+
   const antecipacaoQuery = useQuery({
     queryKey: ['eficiencia', 'ops-antecipacao-mensal', ano] as const,
     queryFn: () => eficienciaService.fetchOpsLegaisAntecipacaoMensal(ano),
@@ -215,7 +224,11 @@ export function useApresentacaoMatrix(
     enabled && (iniciativasAnoQuery.isLoading || iniciativasAnoQuery.isPending)
 
   const loadingMarketing =
-    enabled && (marketingQuery.isLoading || marketingQuery.isPending)
+    enabled &&
+    (marketingQuery.isLoading ||
+      marketingQuery.isPending ||
+      marketingPautasQuery.isLoading ||
+      marketingPautasQuery.isPending)
 
   const loadingFinanceiroOps =
     enabled &&
@@ -300,6 +313,7 @@ export function useApresentacaoMatrix(
         marketingQuery.data.posts ?? [],
         ano,
         marketingMesFiltro,
+        buildMarketingPautas(marketingPautasQuery.data ?? []),
       )
     : null
 
@@ -357,7 +371,7 @@ export function useApresentacaoMatrix(
         return cellApresentacaoIndiceInadimplencia(col.key, financeiro, mesFiltro, ano)
       }
       if (kpi.id === 'nps') {
-        return cellApresentacaoNps(npsQuery.data?.nps, undefined, col.key)
+        return cellApresentacaoNps(npsQuery.data?.nps)
       }
       return cellApresentacaoKpi(
         kpi.id,

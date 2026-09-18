@@ -7,8 +7,9 @@ import {
   MARKETING_META_POSTS_ANUAL,
   buildMonthlyIndicadoresSeries,
 } from '@/features/operacoes-legais/marketing/computeMarketingIndicadores'
-import type { InstagramPost } from '@/features/operacoes-legais/marketing/types'
+import type { InstagramPost, MarketingPauta } from '@/features/operacoes-legais/marketing/types'
 import { instagramService } from '@/features/operacoes-legais/marketing/instagramService'
+import { buildMarketingPautas } from '@/features/operacoes-legais/marketing/marketingPautas'
 import {
   mesesEfetivosFiltro,
   type MesFiltroEficiencia,
@@ -69,9 +70,10 @@ export function buildApresentacaoMarketing(
   posts: InstagramPost[],
   ano: number,
   mesFiltro: MesFiltroEficiencia,
+  pautas: MarketingPauta[] = [],
 ): ApresentacaoMarketingData {
   const meses = mesesAtivos(mesFiltro, ano)
-  const serieFull = buildMonthlyIndicadoresSeries(posts, ano, null)
+  const serieFull = buildMonthlyIndicadoresSeries(posts, ano, null, pautas)
   const byMes = new Map(
     serieFull.map((p) => [Number(p.month.slice(5, 7)), p]),
   )
@@ -192,6 +194,14 @@ export async function fetchApresentacaoMarketing(
   ano: number,
   mesFiltro: MesFiltroEficiencia,
 ): Promise<ApresentacaoMarketingData> {
-  const dash = await instagramService.getDashboard()
-  return buildApresentacaoMarketing(dash.posts ?? [], ano, mesFiltro)
+  const [dash, taskRows] = await Promise.all([
+    instagramService.getDashboard(),
+    instagramService.listMarketingTasks(),
+  ])
+  return buildApresentacaoMarketing(
+    dash.posts ?? [],
+    ano,
+    mesFiltro,
+    buildMarketingPautas(taskRows),
+  )
 }

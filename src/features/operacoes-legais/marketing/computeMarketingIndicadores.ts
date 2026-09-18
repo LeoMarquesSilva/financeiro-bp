@@ -1,5 +1,9 @@
 import { groupPostsByMonth, summarizeInstagram } from './instagramAnalytics'
-import type { InstagramPeriodRange, InstagramPost } from './types'
+import {
+  countPautasEntregues,
+  countPautasEntreguesPorMes,
+} from './marketingPautas'
+import type { InstagramPeriodRange, InstagramPost, MarketingPauta } from './types'
 
 /** Meta fixa anual de posts (BI: Pct_Meta_Posts_Anual). */
 export const MARKETING_META_POSTS_ANUAL = 144
@@ -150,6 +154,7 @@ export function computeMarketingIndicadores(
   postsNoPeriodo: InstagramPost[],
   allPosts: InstagramPost[],
   range: InstagramPeriodRange,
+  pautas: MarketingPauta[] = [],
 ): {
   posts: MarketingIndicadorKpi
   engajamento: MarketingIndicadorKpi
@@ -169,8 +174,7 @@ export function computeMarketingIndicadores(
       ? engajDisplay / MARKETING_META_ENGAJAMENTO_PCT
       : 0
 
-  // BI: Pautas_Realizadas — sem ClickUp TarefasMarketing no SIOE, usa volume de posts do período.
-  const qtdPautas = qtdPosts
+  const qtdPautas = countPautasEntregues(pautas, range)
   const metaPautas =
     countMonthsInRange(range, postsNoPeriodo) * MARKETING_META_PAUTAS_POR_MES
   const pctPautas = metaPautas > 0 ? qtdPautas / metaPautas : 0
@@ -236,6 +240,7 @@ export function buildMonthlyIndicadoresSeries(
   posts: InstagramPost[],
   ano: number,
   mesFiltro: number | null,
+  pautas: MarketingPauta[] = [],
 ): MonthlyIndicadorPoint[] {
   const monthsToShow =
     mesFiltro != null
@@ -252,18 +257,20 @@ export function buildMonthlyIndicadoresSeries(
   })
 
   const byMonth = new Map(groupPostsByMonth(inScope).map((row) => [row.month, row]))
+  const pautasPorMes = countPautasEntreguesPorMes(pautas, ano)
   const postsMetaMensal = MARKETING_META_POSTS_ANUAL / 12
 
   return monthsToShow.map((month) => {
     const row = byMonth.get(month)
     const qtd = row?.posts ?? 0
+    const mes = Number(month.slice(5, 7))
     return {
       month,
       posts: qtd,
       postsMetaMensal,
       engajamentoPct: row?.engagementRate ?? 0,
       engajamentoMeta: MARKETING_META_ENGAJAMENTO_PCT,
-      pautas: qtd,
+      pautas: pautasPorMes.get(mes) ?? 0,
       pautasMeta: MARKETING_META_PAUTAS_POR_MES,
       alcance: row?.reach ?? 0,
       alcanceMeta: MARKETING_META_ALCANCE,

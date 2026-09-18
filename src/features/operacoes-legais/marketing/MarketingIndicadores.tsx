@@ -11,6 +11,8 @@ import { resolveInstagramPeriod } from './instagramPeriod'
 import { MarketingIndicadorCards } from './MarketingIndicadorCards'
 import { MarketingIndicadorSeriesChart } from './MarketingCharts'
 import type { InstagramPost } from './types'
+import { buildMarketingPautas } from './marketingPautas'
+import { useMarketingPautas } from './useInstagramMarketing'
 
 const MESES_CURTOS = [
   'Jan',
@@ -53,6 +55,8 @@ function ChartCard({
 }
 
 export function MarketingIndicadores({ allPosts }: { allPosts: InstagramPost[] }) {
+  const { data: taskRows } = useMarketingPautas()
+  const pautas = useMemo(() => buildMarketingPautas(taskRows ?? []), [taskRows])
   const anos = useMemo(() => {
     const set = new Set(
       allPosts.flatMap((p) => (p.published_at ? [Number(p.published_at.slice(0, 4))] : [])),
@@ -72,8 +76,8 @@ export function MarketingIndicadores({ allPosts }: { allPosts: InstagramPost[] }
       : { kind: 'month', year: anoEfetivo, month: mes },
   )
   const posts = filterPostsByPeriod(allPosts, range)
-  const kpis = computeMarketingIndicadores(posts, allPosts, range)
-  const series = buildMonthlyIndicadoresSeries(allPosts, anoEfetivo, mes)
+  const kpis = computeMarketingIndicadores(posts, allPosts, range, pautas)
+  const series = buildMonthlyIndicadoresSeries(allPosts, anoEfetivo, mes, pautas)
 
   return (
     <div className="space-y-5">

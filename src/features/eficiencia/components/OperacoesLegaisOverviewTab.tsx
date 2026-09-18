@@ -3,10 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { Check, Copy, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatPercent } from '@/shared/utils/format'
-import { copyOverviewKpiCardsToClipboard } from '@/shared/utils/copyChartImage'
+import {
+  copyApresentacaoSlideToClipboard,
+  copyOverviewKpiCardsToClipboard,
+} from '@/shared/utils/copyChartImage'
 import { Button } from '@/components/ui/button'
 import {
   EFICIENCIA_AREA_OPS_LEGAIS,
+  MESES_EFICIENCIA,
   EFICIENCIA_META_OPS_CADASTRO,
   EFICIENCIA_META_OPS_EFICIENCIA,
   EFICIENCIA_META_OPS_INICIATIVAS,
@@ -16,6 +20,7 @@ import {
   filtrarMensalPorMesFiltro,
   isMesesFiltro,
   isResultadoFiltro,
+  mesesEfetivosFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import {
@@ -34,9 +39,19 @@ import type {
   RacionalIndicador,
   TreinamentosMesRow,
 } from '../types/eficiencia.types'
+import {
+  ApresentacaoUnificadoLinhasGrid,
+  type UnificadoLinhaPonto,
+  type UnificadoLinhaSerie,
+} from './ApresentacaoUnificadoLinhasGrid'
 import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
+import { formatMinutosHeatLabel } from '../utils/desenvolvimentoEquipeHeatCell'
 import { RacionalSheet } from './RacionalSheet'
-import { useInstagramMarketing } from '@/features/operacoes-legais/marketing/useInstagramMarketing'
+import {
+  useInstagramMarketing,
+  useMarketingPautas,
+} from '@/features/operacoes-legais/marketing/useInstagramMarketing'
+import { buildMarketingPautas } from '@/features/operacoes-legais/marketing/marketingPautas'
 import {
   MARKETING_META_ALCANCE,
   MARKETING_META_ENGAJAMENTO_PCT,
@@ -73,6 +88,28 @@ function somaRazaoPct(nums: number[], dens: number[]): HeatCell {
   return { value: v, label: PCT0(v) }
 }
 
+function mesesDoGrafico(filtro: MesFiltroEficiencia, ano: number): number[] {
+  const efetivos = mesesEfetivosFiltro(filtro, ano)
+  return efetivos ?? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+}
+
+function cellsToLinePoints(
+  cells: HeatCell[],
+  meses: number[],
+): UnificadoLinhaPonto[] {
+  return meses.map((mes) => {
+    const cell = cells[mes - 1]
+    return {
+      label: MESES_EFICIENCIA[mes - 1] ?? String(mes),
+      valor: cell?.value ?? null,
+      rotulo:
+        cell?.value == null || cell.label === '-' || cell.label === '…'
+          ? undefined
+          : cell.label,
+    }
+  })
+}
+
 function formatMinutosTreino(min: number): string {
   const h = Math.floor(min / 60)
   const m = Math.round(min % 60)
@@ -82,6 +119,7 @@ function formatMinutosTreino(min: number): string {
 export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   const [racionalAberto, setRacionalAberto] = useState<RacionalIndicador | null>(null)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
+  const [visao, setVisao] = useState<'tabela' | 'linha'>('tabela')
   const copyRef = useRef<HTMLDivElement>(null)
 
   const {
@@ -127,7 +165,13 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     staleTime: 5 * 60_000,
   })
 
-  const { data: marketingDash, isLoading: loadingMarketing } = useInstagramMarketing()
+  const { data: marketingDash, isLoading: loadingInstagram } = useInstagramMarketing()
+  const { data: marketingTaskRows, isLoading: loadingPautas } = useMarketingPautas()
+  const loadingMarketing = loadingInstagram || loadingPautas
+  const marketingPautas = useMemo(
+    () => buildMarketingPautas(marketingTaskRows ?? []),
+    [marketingTaskRows],
+  )
   const treinoResumos = useMemo(
     () => buildOpsTreinamentosCategorias(ativos, itens, ano).resumos,
     [ativos, itens, ano],
@@ -292,7 +336,12 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
   })()
 
   const marketingPorMes = useMemo(() => {
-    return buildMonthlyIndicadoresSeries(marketingDash?.posts ?? [], ano, null).map(
+    return buildMonthlyIndicadoresSeries(
+      marketingDash?.posts ?? [],
+      ano,
+      null,
+      marketingPautas,
+    ).map(
       (row, i) => ({
         mes: i + 1,
         posts: row.posts,
@@ -303,7 +352,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
         alcance: row.alcance,
       }),
     )
-  }, [marketingDash?.posts, ano])
+  }, [marketingDash?.posts, marketingPautas, ano])
 
   const cellsMarketingPosts = aplicarCelulasFiltro(
     marketingPorMes.map((r) =>
@@ -389,6 +438,139 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     ? mesFiltro
     : null
 
+  const seriesLinha: UnificadoLinhaSerie[] = useMemo(() => {
+    const meses = mesesDoGrafico(mesFiltro, ano)
+    const metaRetencao = turnAnual?.meta_pct_retencao_minima ?? 90
+    const retencaoPct = turnAnual?.pct_retencao
+
+    const treinoPoints: UnificadoLinhaPonto[] = (() => {
+      let acc = 0
+      let started = false
+      return meses.map((mes) => {
+        const row = treinoMensal.find((r) => r.mes === mes)
+        const cell = cellsTreino[mes - 1]
+        if (cell?.value != null && row) {
+          acc += Number(row.minutos_lancados)
+          started = true
+        }
+        return {
+          label: MESES_EFICIENCIA[mes - 1] ?? String(mes),
+          valor: started ? acc : null,
+          rotulo: started ? formatMinutosHeatLabel(acc) : undefined,
+        }
+      })
+    })()
+
+    const retencaoPoints: UnificadoLinhaPonto[] = meses.map((mes, idx) => ({
+      label: MESES_EFICIENCIA[mes - 1] ?? String(mes),
+      valor: retencaoPct ?? null,
+      rotulo: idx === 0 && retencaoPct != null ? formatPercent(retencaoPct) : undefined,
+    }))
+
+    const iniciativasPoints: UnificadoLinhaPonto[] = meses.map((mes) => {
+      const row = iniciativasPorMes[mes - 1]
+      const ytd = row?.ytd ?? 0
+      return {
+        label: MESES_EFICIENCIA[mes - 1] ?? String(mes),
+        valor: ytd > 0 ? ytd : null,
+        rotulo: ytd > 0 ? String(ytd) : undefined,
+      }
+    })
+
+    const metaTreinoMin = Number(treinoAnual?.meta_minutos) || 0
+
+    return [
+      {
+        id: 'sla',
+        title: 'SLA Protocolo',
+        meta: EFICIENCIA_META_OPS_SLA_PROTOCOLO,
+        metaLabel: `Meta ${formatPercent(EFICIENCIA_META_OPS_SLA_PROTOCOLO)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(cellsSla, meses),
+      },
+      {
+        id: 'efi',
+        title: 'Eficiência Protocolo',
+        meta: EFICIENCIA_META_OPS_EFICIENCIA,
+        metaLabel: `Meta ${formatPercent(EFICIENCIA_META_OPS_EFICIENCIA)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(cellsEfi, meses),
+      },
+      {
+        id: 'analise',
+        title: 'Eficiência Análise de Publicação',
+        meta: EFICIENCIA_META_OPS_PUBLICACOES,
+        metaLabel: `Meta ${formatPercent(EFICIENCIA_META_OPS_PUBLICACOES)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(cellsAnalise, meses),
+      },
+      {
+        id: 'agenda',
+        title: 'Eficiência Agendamento',
+        meta: EFICIENCIA_META_OPS_PUBLICACOES,
+        metaLabel: `Meta ${formatPercent(EFICIENCIA_META_OPS_PUBLICACOES)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(cellsAgenda, meses),
+      },
+      {
+        id: 'cadastro',
+        title: 'Eficiência no Cadastro de Processos',
+        meta: EFICIENCIA_META_OPS_CADASTRO,
+        metaLabel: `Meta ${formatPercent(EFICIENCIA_META_OPS_CADASTRO)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(cellsCadastro, meses),
+      },
+      {
+        id: 'desenvolvimento',
+        title: 'Desenvolvimento Contínuo',
+        meta: metaTreinoMin,
+        metaLabel: metaTreinoLabel,
+        yKind: 'horas',
+        points: treinoPoints,
+      },
+      {
+        id: 'retencao',
+        title: 'Retenção de Talentos',
+        meta: metaRetencao,
+        metaLabel: `Meta ${formatPercent(metaRetencao)}`,
+        yKind: 'pct',
+        points: retencaoPoints,
+      },
+      {
+        id: 'pdi',
+        title: 'Gestão de PDI',
+        meta: EFICIENCIA_META_PDI,
+        metaLabel: `Meta ${formatPercent(EFICIENCIA_META_PDI)}`,
+        yKind: 'pct',
+        points: cellsToLinePoints(cellsPdi, meses),
+      },
+      {
+        id: 'iniciativas',
+        title: 'Iniciativas Estratégicas',
+        meta: EFICIENCIA_META_OPS_INICIATIVAS,
+        metaLabel: `Meta ${EFICIENCIA_META_OPS_INICIATIVAS} projetos`,
+        yKind: 'numero',
+        points: iniciativasPoints,
+      },
+    ]
+  }, [
+    cellsSla,
+    cellsEfi,
+    cellsAnalise,
+    cellsAgenda,
+    cellsCadastro,
+    cellsTreino,
+    cellsPdi,
+    cellsIniciativas,
+    treinoMensal,
+    treinoAnual,
+    turnAnual,
+    iniciativasPorMes,
+    metaTreinoLabel,
+    mesFiltro,
+    ano,
+  ])
+
   const busy =
     loading ||
     loadingTurn ||
@@ -404,16 +586,25 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
       toast.error('Conteúdo não disponível para cópia')
       return
     }
-    const cards = Array.from(
-      container.querySelectorAll<HTMLElement>('[data-overview-copy-card]'),
-    ).filter((el) => !el.closest('[data-overview-copy-group="mkt"]'))
-    if (cards.length === 0) {
-      toast.error('Conteúdo não disponível para cópia')
-      return
-    }
     setCopyStatus('loading')
     try {
-      await copyOverviewKpiCardsToClipboard(cards)
+      if (visao === 'linha') {
+        const slide = container.querySelector<HTMLElement>(
+          '[data-apresentacao-export="juridico_unificado"]',
+        )
+        if (!slide) {
+          throw new Error('Gráfico não disponível para cópia')
+        }
+        await copyApresentacaoSlideToClipboard(slide)
+      } else {
+        const cards = Array.from(
+          container.querySelectorAll<HTMLElement>('[data-overview-copy-card]'),
+        ).filter((el) => !el.closest('[data-overview-copy-group="mkt"]'))
+        if (cards.length === 0) {
+          throw new Error('Conteúdo não disponível para cópia')
+        }
+        await copyOverviewKpiCardsToClipboard(cards)
+      }
       setCopyStatus('done')
       toast.success('Overview copiado')
       window.setTimeout(() => setCopyStatus('idle'), 1500)
@@ -435,7 +626,16 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button
+          type="button"
+          variant={visao === 'linha' ? 'default' : 'outline'}
+          size="sm"
+          className="h-8 shrink-0 text-xs font-semibold"
+          onClick={() => setVisao((v) => (v === 'linha' ? 'tabela' : 'linha'))}
+        >
+          Gráfico de linha
+        </Button>
         <Button
           type="button"
           variant="outline"
@@ -456,7 +656,19 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
       </div>
 
       <div ref={copyRef} className="space-y-3">
-        <div data-overview-copy-group="ops" className="space-y-3">
+        {visao === 'linha' ? (
+          <div
+            data-apresentacao-export="juridico_unificado"
+            data-apresentacao-fill-slide
+            className="min-h-[720px]"
+          >
+            <ApresentacaoUnificadoLinhasGrid series={seriesLinha} />
+          </div>
+        ) : null}
+        <div
+          data-overview-copy-group="ops"
+          className={visao === 'linha' ? 'hidden' : 'space-y-3'}
+        >
         <OverviewKpiHeatRow
           title="SLA Protocolo"
           meta={EFICIENCIA_META_OPS_SLA_PROTOCOLO}
@@ -547,7 +759,10 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           onRacionalClick={() => setRacionalAberto('ops_legais_iniciativas')}
         />
         </div>
-        <div data-overview-copy-group="mkt" className="space-y-3">
+        <div
+          data-overview-copy-group="mkt"
+          className={visao === 'linha' ? 'hidden' : 'space-y-3'}
+        >
         <OverviewKpiHeatRow
           title="MKT - Posts Anuais"
           meta={100}
