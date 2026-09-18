@@ -77,7 +77,7 @@ export type ReceitaInadimplenciaGrupoMes = {
 export type ReceitaInadimplenciaEvolucaoMes = {
   mes: number
   mes_label: string
-  /** Valor exibido na evolução (congelado ou calculado). */
+  /** Valor calculado ao vivo (a tabela de evolução usa valorExibicaoEvolucao). */
   valor: number
   /** Valor calculado ao vivo — usado no acumulado do período. */
   valor_calculado?: number
@@ -91,7 +91,7 @@ export type ReceitaInadimplenciaEvolucaoMes = {
   congelado: boolean
   /** Data/hora em que o mês foi congelado (ISO). */
   congelado_em?: string
-  /** Valor recalculado após seleção manual de grupos na UI. */
+  /** Mês corrente recalculado após seleção manual de grupos. Mês congelado não usa este flag na evolução. */
   ajustado?: boolean
 }
 

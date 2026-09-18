@@ -881,7 +881,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                         ano={dashboard.ano}
                         mes={m.mes}
                         valor={exibicao.valor}
-                        ajustado={m.ajustado}
+                        ajustado={Boolean(m.ajustado && !m.congelado)}
                         onClick={() =>
                           filtroAreaAtivo ? abrirDetalheAreaMes(m.mes) : setMesDetalhe(m.mes)
                         }
@@ -915,7 +915,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                     * Mês corrente — valor ao vivo; meses encerrados são congelados automaticamente na virada
                   </span>
                 )}
-                {dashboard.evolucao.some((m) => m.ajustado) && (
+                {dashboard.evolucao.some((m) => m.ajustado && !m.congelado) && (
                   <span className="block text-amber-800/90">
                     Valores destacados foram ajustados pela seleção manual de grupos
                   </span>

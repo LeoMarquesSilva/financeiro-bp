@@ -56,11 +56,10 @@ export function valorEfetivoMes(m: ReceitaInadimplenciaEvolucaoMes): { valor: nu
 }
 
 /**
- * Valor/% exibidos na tabela de evolução — meses congelados usam o snapshot oficial
- * (mesmo número do sheet de grupos / fechamento), salvo ajuste manual de grupos.
+ * Valor/% da tabela de evolução. Mês congelado = snapshot oficial do fechamento,
+ * mesmo se houver seleção de grupos (a seleção afeta só o KPI do período).
  */
 export function valorExibicaoEvolucao(m: ReceitaInadimplenciaEvolucaoMes): { valor: number; pct: number } {
-  if (m.ajustado) return { valor: m.valor, pct: m.pct }
   if (m.congelado) {
     const valor = m.valor_congelado ?? m.valor
     const pct =
@@ -69,16 +68,17 @@ export function valorExibicaoEvolucao(m: ReceitaInadimplenciaEvolucaoMes): { val
         : calcularPctInadimplencia(valor, previstoMesEvolucao(m))
     return { valor, pct }
   }
+  if (m.ajustado) return { valor: m.valor, pct: m.pct }
   return valorEfetivoMes(m)
 }
 
-/** Substitui snapshots congelados pelos valores calculados ao vivo (exceto meses com seleção manual). */
+/** Recalcula meses ainda não congelados (mês corrente). Congelados ficam no snapshot oficial. */
 export function normalizarEvolucaoCalculada(
   dashboard: ReceitaInadimplenciaDashboard,
 ): ReceitaInadimplenciaDashboard {
   let alterou = false
   const evolucao = dashboard.evolucao.map((m) => {
-    if (m.ajustado) return m
+    if (m.congelado || m.ajustado) return m
     const { valor, pct } = valorEfetivoMes(m)
     if (Math.abs(valor - m.valor) < 0.01 && Math.abs(pct - m.pct) < 0.01) return m
     alterou = true
@@ -98,13 +98,13 @@ export function aplicarSelecaoGrupos(
     const grupos = gruposPorMes[m.mes]
     const incluidos = selecaoPorMes[m.mes]
     if (!grupos?.length || !incluidos) return m
+    // Seleção de mês congelado não substitui o snapshot da evolução — só o KPI do período.
+    if (m.congelado) return m
 
     algumMesAjustado = true
     const previsto = previstoMesEvolucao(m)
     const { valor, pct } = calcularMesAjustado(grupos, incluidos, previsto)
-    const ajustado =
-      Math.abs(valor - (m.valor_calculado ?? m.valor)) > 0.01 ||
-      (m.congelado && Math.abs(valor - m.valor) > 0.01)
+    const ajustado = Math.abs(valor - (m.valor_calculado ?? m.valor)) > 0.01
     return { ...m, valor, pct, ajustado }
   })
 
