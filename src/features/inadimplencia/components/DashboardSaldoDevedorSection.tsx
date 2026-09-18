@@ -1,4 +1,4 @@
-import { formatCurrency, formatPercent } from '@/shared/utils/format'
+import { formatCurrency } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { useSaldoDevedor } from '../hooks/useSaldoDevedor'
 import {
@@ -86,9 +86,24 @@ function TabelaClientes({
         <tr className="text-[10px] uppercase tracking-wide text-slate-500">
           <th className="pb-2 pr-2 font-medium">Cliente</th>
           <th className="pb-2 pr-2 font-medium">Classificação</th>
-          <th className="pb-2 pr-2 text-right font-medium">Saldo {anoAnterior}</th>
-          <th className="pb-2 pr-2 text-right font-medium">Gerado {ano}</th>
-          <th className="pb-2 text-right font-medium">Acumulado</th>
+          <th
+            className="pb-2 pr-2 text-right font-medium"
+            title={`Posição de fechamento de ${anoAnterior}, sem baixa de pagamentos de ${ano}`}
+          >
+            Saldo {anoAnterior}
+          </th>
+          <th
+            className="pb-2 pr-2 text-right font-medium"
+            title={`Títulos com vencimento em ${ano} ainda em aberto`}
+          >
+            Gerado {ano}
+          </th>
+          <th
+            className="pb-2 text-right font-medium"
+            title="Saldo em aberto agora: faturado − pago. Não é a soma das colunas anteriores."
+          >
+            Acumulado
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -148,9 +163,6 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
   const leitura = buildLeituraSaldoDevedor(data)
   const abrev = periodoAbrevLabel(mesInicio, mesFim)
   const posicao = periodoPosicaoLabel(ano, mesInicio, mesFim)
-  const pctEstoque = totais.acumulado > 0 ? (totais.saldoAnterior / totais.acumulado) * 100 : 0
-  const pctGeradoSobreEstoque =
-    totais.saldoAnterior > 0 ? (totais.geradoAno / totais.saldoAnterior) * 100 : 0
 
   return (
     <div className="space-y-5">
@@ -160,7 +172,8 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
         </h2>
         <p className="mt-1 text-sm text-slate-500">
           Base de clientes ativos inadimplentes · do maior para o menor saldo acumulado · posição
-          de {posicao}
+          de {posicao}. Saldo {anoAnterior} é o fechamento daquele ano, mesmo se pago em {ano}.
+          Acumulado é o saldo em aberto agora (faturado − pago), não a soma das duas colunas.
         </p>
       </header>
 
@@ -168,19 +181,19 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
         <KpiCard
           title="Saldo devedor acumulado"
           value={formatCurrency(totais.acumulado)}
-          hint={`${totais.qtd} cliente${totais.qtd === 1 ? '' : 's'} na régua`}
+          hint={`${totais.qtd} cliente${totais.qtd === 1 ? '' : 's'} · faturado − pago`}
           accent="blue"
         />
         <KpiCard
           title={`Estoque de ${anoAnterior}`}
           value={formatCurrency(totais.saldoAnterior)}
-          hint={`${formatPercent(pctEstoque)} do acumulado`}
+          hint={`Fechamento de ${anoAnterior}`}
           accent="blue"
         />
         <KpiCard
           title={`Gerado em ${ano} (${abrev})`}
           value={formatCurrency(totais.geradoAno)}
-          hint={`${pctGeradoSobreEstoque >= 0 ? '+' : ''}${formatPercent(pctGeradoSobreEstoque)} sobre o estoque de ${anoAnterior}`}
+          hint={`Em aberto com vencimento em ${ano}`}
           accent={totais.geradoAno >= 0 ? 'red' : 'green'}
         />
         <KpiCard

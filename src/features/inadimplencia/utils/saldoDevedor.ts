@@ -144,12 +144,13 @@ export function montarTotaisSaldoDevedor(clientes: ClienteSaldoDevedor[]) {
     acumulado += c.acumulado
     saldoAnterior += c.saldoAnterior
     geradoAno += c.geradoAno
-    if (c.geradoAno > EPS) {
+    const delta = c.acumulado - c.saldoAnterior
+    if (delta > EPS) {
       qtdCresceram += 1
-      dividaNova += c.geradoAno
-    } else {
+      dividaNova += delta
+    } else if (delta < -EPS) {
       qtdReduziram += 1
-      if (c.geradoAno < -EPS) amortizado += Math.abs(c.geradoAno)
+      amortizado += Math.abs(delta)
     }
   }
 
@@ -169,12 +170,13 @@ export function buildLeituraSaldoDevedor(data: EvolucaoSaldoDevedorData): string
   const { ano, anoAnterior, mesInicio, mesFim, clientes, totais } = data
   const nMeses = mesFim - mesInicio + 1
   const mesesLabel = nMeses === 1 ? '1 mês' : `${nMeses} meses`
+  const variacao = totais.acumulado - totais.saldoAnterior
   const pctEstoque =
-    totais.saldoAnterior > 0 ? (totais.geradoAno / totais.saldoAnterior) * 100 : 0
+    totais.saldoAnterior > 0 ? (variacao / totais.saldoAnterior) * 100 : 0
 
   const nomesReduziram = clientes
-    .filter((c) => c.geradoAno <= EPS)
-    .sort((a, b) => a.geradoAno - b.geradoAno)
+    .filter((c) => c.acumulado - c.saldoAnterior < -EPS)
+    .sort((a, b) => a.acumulado - a.saldoAnterior - (b.acumulado - b.saldoAnterior))
     .slice(0, 8)
     .map((c) => nomeExibicaoGrupo(c.nome))
 
@@ -183,9 +185,9 @@ export function buildLeituraSaldoDevedor(data: EvolucaoSaldoDevedorData): string
   const pctTop5 = totais.acumulado > 0 ? (top5Total / totais.acumulado) * 100 : 0
 
   const linha1 =
-    totais.geradoAno >= 0
-      ? `Em ${mesesLabel} de ${ano}, a carteira gerou ${formatCurrency(totais.geradoAno)} de dívida nova (${formatPercent(pctEstoque)} do estoque de ${anoAnterior}).`
-      : `Em ${mesesLabel} de ${ano}, a carteira amortizou ${formatCurrency(Math.abs(totais.geradoAno))} sobre o estoque de ${anoAnterior}.`
+    variacao >= 0
+      ? `Em ${mesesLabel} de ${ano}, o saldo em aberto subiu ${formatCurrency(variacao)} (${formatPercent(pctEstoque)} sobre o fechamento de ${anoAnterior}).`
+      : `Em ${mesesLabel} de ${ano}, a carteira amortizou ${formatCurrency(Math.abs(variacao))} sobre o fechamento de ${anoAnterior}.`
 
   let linha2 = `${totais.qtdCresceram} de ${totais.qtd} clientes aumentaram o saldo`
   if (totais.qtdReduziram > 0) {
