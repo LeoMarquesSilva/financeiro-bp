@@ -137,7 +137,10 @@ export function ReceitaClusteredChartLabels<T>({
   const maxY = plotArea.y + plotArea.height - RECEITA_CHART_LAYOUT.labelMinBottom
 
   const months = data.flatMap((row, index) => {
-    const rawX = xScale(row[xKey] as string | number, { position: 'middle' })
+    const category = row[xKey] as string | number
+    const rawX =
+      xScale(category, { position: 'middle' }) ??
+      xScale(category)
     if (rawX == null || !Number.isFinite(rawX)) return []
 
     const cluster = series.flatMap((s) => {
@@ -155,6 +158,7 @@ export function ReceitaClusteredChartLabels<T>({
           key: s.key,
           value,
           pointY,
+          preferBelow: s.key === 'recebido',
           boxHeight: chartLabelBoxHeight(secondaryText, fontSize),
           text: s.getText?.(row, value) ?? (percentMode ? formatPercent(value) : formatCurrency(value)),
           secondaryText,

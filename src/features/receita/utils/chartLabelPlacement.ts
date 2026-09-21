@@ -206,6 +206,8 @@ export type ClusterLabelPixelEntry = ClusterLabelEntry & {
   boxHeight?: number
   /** cy real da escala do gráfico. Sem isso, estima pelo domínio. */
   pointY?: number
+  /** Força o rótulo abaixo do ponto (recebido / linha azul). */
+  preferBelow?: boolean
 }
 
 export type ClusterLabelPixelBounds = {
@@ -260,11 +262,15 @@ function estimatePointY(
   return marginTop + padTop + (1 - value / domainMax) * usable
 }
 
+function pinLabelBelow(entry: ClusterLabelPixelEntry): boolean {
+  return entry.preferBelow === true || entry.key === 'recebido'
+}
+
 function clusterPixelItems(
   cluster: ClusterLabelPixelEntry[],
   domainMax: number,
   plotHeight: number,
-): Array<{ key: string; value: number; pointY: number; h: number }> {
+): Array<{ key: string; value: number; pointY: number; h: number; below: boolean }> {
   return cluster
     .filter((e): e is ClusterLabelPixelEntry & { value: number } => {
       if (e.value == null || !Number.isFinite(e.value)) return false
@@ -278,50 +284,78 @@ function clusterPixelItems(
           ? e.pointY
           : estimatePointY(e.value, domainMax, plotHeight),
       h: e.boxHeight ?? chartLabelBoxHeight(),
+      below: pinLabelBelow(e),
     }))
 }
 
-type LayerBox = { key: string; value: number; pointY: number; h: number; boxTop: number }
+type LayerBox = {
+  key: string
+  value: number
+  pointY: number
+  h: number
+  below: boolean
+  boxTop: number
+}
 
-/** Abre o vão só nos grupos colados — não puxa a meta para o fundo. */
-function expandTightLabelRuns(
-  boxes: LayerBox[],
+function clampBoxTop(top: number, h: number, minY: number, maxY: number): number {
+  return Math.min(Math.max(top, minY), Math.max(minY, maxY - h))
+}
+
+function preferredBoxTop(
+  item: { pointY: number; h: number; below: boolean },
   minY: number,
-  gap: number,
-): void {
-  let i = 0
-  while (i < boxes.length) {
-    let j = i
-    while (j + 1 < boxes.length) {
-      const a = boxes[j]!
-      const b = boxes[j + 1]!
-      if (b.boxTop - (a.boxTop + a.h) <= gap + 8) j += 1
-      else break
-    }
-    if (j > i) {
-      const ceiling = i === 0 ? minY : boxes[i - 1]!.boxTop + boxes[i - 1]!.h + gap
-      const floor = boxes[j]!.boxTop
-      const runH = boxes.slice(i, j).reduce((s, b) => s + b.h, 0)
-      const slots = j - i
-      const slack = floor - ceiling - runH - gap * slots
-      if (slack > 16) {
-        const spread = Math.min(34, gap + (slack * 0.7) / slots)
-        let cursor = floor
-        for (let k = j - 1; k >= i; k--) {
-          cursor -= spread + boxes[k]!.h
-          boxes[k]!.boxTop = Math.max(ceiling, cursor)
-          cursor = boxes[k]!.boxTop
-        }
+  maxY: number,
+): number {
+  const raw = item.below
+    ? item.pointY + PIXEL_SOLO_OFFSET
+    : item.pointY - PIXEL_SOLO_OFFSET - item.h
+  return clampBoxTop(raw, item.h, minY, maxY)
+}
+
+/** Separa sobreposição com o menor deslocamento — cada rótulo fica perto do próprio ponto. */
+function separateOverlappingBoxes(boxes: LayerBox[], minY: number, maxY: number, gap: number): void {
+  for (let pass = 0; pass < boxes.length + 2; pass++) {
+    boxes.sort((a, b) => a.boxTop - b.boxTop || a.key.localeCompare(b.key))
+    let moved = false
+    for (let i = 0; i < boxes.length - 1; i++) {
+      const a = boxes[i]!
+      const b = boxes[i + 1]!
+      const need = a.boxTop + a.h + gap - b.boxTop
+      if (need <= 0.01) continue
+      moved = true
+
+      const aCanUp = a.boxTop - minY
+      const bCanDown = Math.max(0, maxY - b.h - b.boxTop)
+
+      if (b.below && !a.below) {
+        const down = Math.min(need, bCanDown)
+        b.boxTop += down
+        const still = a.boxTop + a.h + gap - b.boxTop
+        if (still > 0.01) a.boxTop = clampBoxTop(a.boxTop - still, a.h, minY, maxY)
+      } else if (a.below && !b.below) {
+        const up = Math.min(need, aCanUp)
+        a.boxTop -= up
+        const still = a.boxTop + a.h + gap - b.boxTop
+        if (still > 0.01) b.boxTop = clampBoxTop(b.boxTop + still, b.h, minY, maxY)
+      } else {
+        const up = Math.min(need, aCanUp)
+        a.boxTop -= up
+        const still = a.boxTop + a.h + gap - b.boxTop
+        if (still > 0.01) b.boxTop = clampBoxTop(b.boxTop + still, b.h, minY, maxY)
       }
     }
-    i = j + 1
+    if (!moved) break
+  }
+
+  for (const box of boxes) {
+    box.boxTop = clampBoxTop(box.boxTop, box.h, minY, maxY)
   }
 }
 
 /**
  * Empacota os rótulos do mês sem sobrepor.
- * Ordem fixa Meta → Previsto → Recebido → Inadimplência.
- * Colisão empurra a camada de cima para o espaço em branco — não amontoa no fundo.
+ * Cada série fica ancorada no próprio ponto: recebido (azul) abaixo da linha;
+ * as demais (previsto, inadimplência, meta) acima da respectiva linha.
  */
 export function layoutClusterLabelPixels(
   cluster: ClusterLabelPixelEntry[],
@@ -333,58 +367,20 @@ export function layoutClusterLabelPixels(
   const minY = bounds?.minY ?? fallback.minY
   const maxY = bounds?.maxY ?? fallback.maxY
   const gap = CLUSTER_LABEL_PIXEL_GAP
-  const items = clusterPixelItems(cluster, domainMax, plotHeight).sort(
-    (a, b) => receitaLabelLayerRank(a.key) - receitaLabelLayerRank(b.key) || a.key.localeCompare(b.key),
-  )
+  const items = clusterPixelItems(cluster, domainMax, plotHeight)
   const result = new Map<string, ClusterLabelPixelPlacement>()
   if (items.length === 0) return result
 
-  const boxes = items.map((item) => {
-    const preferred = item.pointY - PIXEL_SOLO_OFFSET - item.h
-    const maxTop = maxY - item.h
-    return {
-      ...item,
-      boxTop: Math.min(Math.max(preferred, minY), Math.max(minY, maxTop)),
-    }
-  })
-
-  for (let i = boxes.length - 2; i >= 0; i--) {
-    const below = boxes[i + 1]!
-    const cur = boxes[i]!
-    const maxBottom = below.boxTop - gap
-    if (cur.boxTop + cur.h > maxBottom) {
-      cur.boxTop = maxBottom - cur.h
-    }
-  }
-
-  if (boxes[0]!.boxTop < minY) {
-    let cursor = minY
-    for (const box of boxes) {
-      box.boxTop = cursor
-      cursor += box.h + gap
-    }
-  }
-
-  const last = boxes[boxes.length - 1]!
-  const overflow = last.boxTop + last.h - maxY
-  if (overflow > 0) {
-    for (const box of boxes) box.boxTop -= overflow
-    if (boxes[0]!.boxTop < minY) {
-      let cursor = minY
-      for (const box of boxes) {
-        box.boxTop = cursor
-        cursor += box.h + gap
-      }
-    }
-  }
-
-  expandTightLabelRuns(boxes, minY, gap)
+  const boxes: LayerBox[] = items.map((item) => ({
+    ...item,
+    boxTop: preferredBoxTop(item, minY, maxY),
+  }))
+  separateOverlappingBoxes(boxes, minY, maxY, gap)
 
   for (const box of boxes) {
-    const mid = box.boxTop + box.h / 2
     result.set(box.key, {
       y: box.boxTop + 2,
-      position: mid <= box.pointY ? 'above' : 'below',
+      position: box.below || box.boxTop + box.h / 2 > box.pointY ? 'below' : 'above',
       boxTop: box.boxTop,
       boxHeight: box.h,
     })

@@ -130,7 +130,7 @@ export function RacionalSheet({
 
   return (
     <Sheet open={indicador != null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex w-full flex-col overflow-hidden sm:max-w-4xl">
+      <SheetContent className="flex w-[calc(100vw-5rem)] max-w-none flex-col overflow-hidden sm:max-w-none">
         <SheetHeader>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 space-y-1.5">

@@ -135,7 +135,7 @@ export function ReceitaConsultaRateioDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showClose
-        className="flex h-[min(90vh,90vw)] w-[min(90vh,90vw)] max-w-none flex-col gap-0 overflow-hidden p-0"
+        className="flex h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:h-[calc(100vh-1.5rem)] sm:w-[calc(100vw-1.5rem)]"
       >
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
@@ -190,7 +190,7 @@ export function ReceitaConsultaRateioDialog({
             </p>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200">
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-lg border border-slate-200">
             {isLoading ? (
               <div className="flex h-full min-h-[220px] items-center justify-center gap-2 text-sm text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -206,10 +206,10 @@ export function ReceitaConsultaRateioDialog({
               </div>
             ) : (
               <TooltipProvider delayDuration={200}>
-              <Table>
+              <Table className="table-fixed">
                 <TableHeader className="sticky top-0 z-10 bg-white">
                   <TableRow>
-                    <TableHead className="sticky left-0 z-20 min-w-[160px] bg-white">
+                    <TableHead className="w-[28%] bg-white whitespace-normal">
                       Grupo cliente
                     </TableHead>
                     {colunas.map((area) => {
@@ -220,7 +220,10 @@ export function ReceitaConsultaRateioDialog({
                           : ArrowDown
                         : ArrowUpDown
                       return (
-                        <TableHead key={area.key} className="min-w-[92px] p-0 text-center">
+                        <TableHead
+                          key={area.key}
+                          className="p-0 text-center whitespace-normal"
+                        >
                           <button
                             type="button"
                             onClick={() => handleSortArea(area.key)}
@@ -229,7 +232,7 @@ export function ReceitaConsultaRateioDialog({
                             }
                             title={`Ordenar por ${area.label}`}
                             className={cn(
-                              'inline-flex h-10 w-full items-center justify-center gap-1.5 px-3 text-xs font-semibold uppercase tracking-wide transition-colors hover:text-slate-800',
+                              'inline-flex min-h-10 w-full items-center justify-center gap-1 px-1.5 py-1.5 text-[11px] font-semibold uppercase leading-tight tracking-wide transition-colors hover:text-slate-800',
                               ativo ? 'text-slate-800' : 'text-slate-500',
                             )}
                           >
@@ -238,7 +241,7 @@ export function ReceitaConsultaRateioDialog({
                               style={{ backgroundColor: area.color }}
                               aria-hidden
                             />
-                            <span className="max-w-[7.5rem] truncate" title={area.label}>
+                            <span className="min-w-0 text-balance" title={area.label}>
                               {area.label}
                             </span>
                             <SortIcon
@@ -254,8 +257,8 @@ export function ReceitaConsultaRateioDialog({
                 <TableBody>
                   {gruposFiltrados.map((grupo) => (
                     <TableRow key={grupo.grupo_cliente}>
-                      <TableCell className="sticky left-0 bg-white font-medium text-slate-900">
-                        <span className="block max-w-[220px] truncate" title={grupo.grupo_cliente}>
+                      <TableCell className="font-medium text-slate-900">
+                        <span className="block truncate" title={grupo.grupo_cliente}>
                           {grupo.grupo_cliente}
                         </span>
                       </TableCell>

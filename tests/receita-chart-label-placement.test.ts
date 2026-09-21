@@ -106,7 +106,7 @@ test('jul com meta: 100% acima; recebido e previsto abaixo, recebido mais perto 
   assert.equal(clusterLabelSidesAreInverted(cluster), false)
 })
 
-test('pixel: 3 rótulos próximos (mar da área) — ordem Meta/Previsto/Recebido/Inad', () => {
+test('pixel: 3 rótulos próximos (mar da área) — recebido abaixo, demais acima', () => {
   const cluster = [
     { key: 'previsto', value: 9285.04, boxHeight: chartLabelBoxHeight() },
     { key: 'recebido', value: 2492.81, boxHeight: chartLabelBoxHeight() },
@@ -123,8 +123,8 @@ test('pixel: 3 rótulos próximos (mar da área) — ordem Meta/Previsto/Recebid
   const rec = layout.get('recebido')
   const inad = layout.get('inadimplencia')
   assert.ok(prev && rec && inad)
+  assert.equal(rec.position, 'below')
   assert.ok(prev.boxTop < rec.boxTop)
-  assert.ok(rec.boxTop < inad.boxTop)
 })
 
 test('pixel: ignora zero e não deixa caixas encavalar no fundo do eixo', () => {
@@ -153,7 +153,7 @@ test('pixel: valores distantes no eixo ficam em grupos separados', () => {
   assert.ok(layout.get('previsto')!.boxTop < layout.get('recebido')!.boxTop)
 })
 
-test('pixel: mesmos cy (jan da área) — recebido acima da inad, sem overlap', () => {
+test('pixel: mesmos cy (jan da área) — recebido abaixo, inad acima, sem overlap', () => {
   const cluster = [
     { key: 'recebido', value: 137.39, boxHeight: chartLabelBoxHeight(), pointY: 248 },
     {
@@ -171,8 +171,9 @@ test('pixel: mesmos cy (jan da área) — recebido acima da inad, sem overlap', 
   assert.equal(clusterLabelBoxesOverlap(layout.values()), false)
   const rec = layout.get('recebido')!
   const inad = layout.get('inadimplencia')!
-  assert.ok(rec.boxTop < inad.boxTop)
-  assert.ok(inad.boxTop >= rec.boxTop + rec.boxHeight + CLUSTER_LABEL_PIXEL_GAP - 0.01)
+  assert.equal(rec.position, 'below')
+  assert.ok(inad.boxTop < rec.boxTop)
+  assert.ok(rec.boxTop >= inad.boxTop + inad.boxHeight + CLUSTER_LABEL_PIXEL_GAP - 0.01)
 })
 
 test('pixel: 3 rótulos no fundo (mar) com cy real não se sobrepõem', () => {
@@ -192,8 +193,10 @@ test('pixel: 3 rótulos no fundo (mar) com cy real não se sobrepõem', () => {
   })
   assert.equal(layout.size, 3)
   assert.equal(clusterLabelBoxesOverlap(layout.values()), false)
+  assert.equal(layout.get('recebido')!.position, 'below')
   assert.ok(layout.get('previsto')!.boxTop < layout.get('recebido')!.boxTop)
-  assert.ok(layout.get('recebido')!.boxTop < layout.get('inadimplencia')!.boxTop)
+  const inad = layout.get('inadimplencia')!
+  assert.ok(inad.boxTop + inad.boxHeight / 2 < 248 + 20, 'inadimplência deve ficar perto da linha')
 })
 
 test('pixel: recebido maior que previsto — previsto continua acima (ordem das camadas)', () => {
@@ -209,7 +212,7 @@ test('pixel: recebido maior que previsto — previsto continua acima (ordem das 
   assert.ok(layout.get('previsto')!.boxTop < layout.get('recebido')!.boxTop)
 })
 
-test('pixel: pontos no fundo usam o espaço em branco acima', () => {
+test('pixel: rótulos ficam perto da própria linha, sem voar para o espaço vazio', () => {
   const cluster = [
     { key: 'previsto', value: 5501, boxHeight: 13, pointY: 240 },
     { key: 'recebido', value: 137, boxHeight: 13, pointY: 248 },
@@ -220,10 +223,22 @@ test('pixel: pontos no fundo usam o espaço em branco acima', () => {
     maxY: 252,
   })
   assert.equal(clusterLabelBoxesOverlap(layout.values()), false)
-  assert.ok(layout.get('previsto')!.boxTop < layout.get('recebido')!.boxTop)
-  assert.ok(layout.get('recebido')!.boxTop < layout.get('inadimplencia')!.boxTop)
-  assert.ok(
-    layout.get('previsto')!.boxTop < 160,
-    'previsto deve subir para o espaço vazio, não ficar no fundo',
-  )
+  assert.equal(layout.get('recebido')!.position, 'below')
+  assert.ok(layout.get('previsto')!.boxTop >= 200, 'previsto deve seguir a linha (~240)')
+  assert.ok(layout.get('inadimplencia')!.boxTop >= 165, 'inadimplência deve seguir a linha (~242)')
+})
+
+test('pixel: azul no meio e vermelho embaixo — inadimplência não sobe até o recebido', () => {
+  const cluster = [
+    { key: 'recebido', value: 66_000, boxHeight: 13, pointY: 90 },
+    { key: 'inadimplencia', value: 4_000, boxHeight: 25, pointY: 236 },
+  ]
+  const layout = layoutClusterLabelPixels(cluster, 160_000, undefined, {
+    minY: 4,
+    maxY: 252,
+  })
+  assert.equal(clusterLabelBoxesOverlap(layout.values()), false)
+  assert.equal(layout.get('recebido')!.position, 'below')
+  assert.ok(layout.get('recebido')!.boxTop < 130)
+  assert.ok(layout.get('inadimplencia')!.boxTop > 190)
 })

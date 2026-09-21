@@ -1031,7 +1031,7 @@ export function ReceitaComparativoChart({
 
   const areaLinhaData = useMemo(() => {
     if (!areaLinhaSelecionada || !areaLinhaAtual) return []
-    const data = buildAreaLinhaData(
+    let data = buildAreaLinhaData(
       rowsGrafico,
       deptRows ?? [],
       previstoDeptRows ?? [],
@@ -1042,8 +1042,13 @@ export function ReceitaComparativoChart({
       ano,
       graficoOpts,
     )
-    if (graficoOpts.mesInicioExibicao == null) return data
-    return data.filter((d) => mesExibicaoGraficoComparativo(d.mes, graficoOpts))
+    if (graficoOpts.mesInicioExibicao != null) {
+      data = data.filter((d) => mesExibicaoGraficoComparativo(d.mes, graficoOpts))
+    }
+    if (areaMesesSelecionados != null) {
+      data = data.filter((d) => areaMesesSelecionados.has(d.mes))
+    }
+    return data
   }, [
     rowsGrafico,
     deptRows,
@@ -1054,6 +1059,7 @@ export function ReceitaComparativoChart({
     areaLinhaAtual,
     ano,
     graficoOpts,
+    areaMesesSelecionados,
   ])
 
   const chartData = useMemo(() => {
@@ -1462,7 +1468,7 @@ export function ReceitaComparativoChart({
                 return (
                 <Area
                   key={s.key}
-                  type="monotone"
+                  type="linear"
                   dataKey={s.key}
                   stroke={seriesColor}
                   strokeWidth={2.5}
@@ -1533,7 +1539,7 @@ export function ReceitaComparativoChart({
               {AREA_LINHA_SERIES.filter((s) => s.type === 'line').map((s) => (
                 <Line
                   key={s.key}
-                  type="monotone"
+                  type="linear"
                   dataKey={s.key}
                   stroke={s.color}
                   strokeWidth={2}
@@ -1834,7 +1840,7 @@ export function ReceitaComparativoChart({
               {SERIES.filter((s) => s.type === 'area' && visibleSeries.has(s.key)).map((s) => (
                 <Area
                   key={s.key}
-                  type="monotone"
+                  type="linear"
                   dataKey={s.key}
                   stroke={s.color}
                   strokeWidth={2.5}
@@ -1926,7 +1932,7 @@ export function ReceitaComparativoChart({
               {SERIES.filter((s) => s.type === 'line' && visibleSeries.has(s.key)).map((s) => (
                 <Line
                   key={s.key}
-                  type="monotone"
+                  type="linear"
                   dataKey={s.key}
                   stroke={s.color}
                   strokeWidth={2}

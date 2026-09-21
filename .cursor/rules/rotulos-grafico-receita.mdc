@@ -21,10 +21,10 @@ Ao criar ou alterar um gráfico com rótulos, **validar a ordem** com
 
 2. **Cluster no mesmo mês** — gráficos de linha com 2+ séries (comparativo e área)
    devem usar `ReceitaClusteredChartLabels` (escala real do Recharts +
-   `layoutClusterLabelPixels`). Ordem fixa das camadas, de cima para baixo:
-   **Meta → Previsto → Recebido → Inadimplência** (não ordenar por valor).
-   Colisão empurra a camada de cima para o espaço em branco do plot — não
-   amontoar no fundo do eixo. Zero não recebe rótulo.
+   `layoutClusterLabelPixels`). Cada rótulo fica ancorado no próprio ponto:
+   **Recebido (azul) abaixo** da linha; **Previsto / Meta / Inadimplência (vermelha)
+   acima** da respectiva linha. Só afasta se as caixas se sobrepõem — não empilhar
+   tudo acima do azul nem lançar rótulo para o espaço vazio. Zero não recebe rótulo.
 
 3. **Posicionamento solo** — série isolada: `resolveLabelVerticalPosition` +
    `labelYForPosition` (aí sim pode ir para baixo se não couber no topo).
