@@ -116,7 +116,6 @@ export function TurnoverTab({
       return {
         nome: p.nome,
         area: p.area,
-        cargo: p.cargo,
         tempoLabel: formatTempoCasa(valido, ref),
         diasCasa: valido ? Math.max(0, differenceInDays(ref, valido)) : 0,
       }
@@ -247,9 +246,9 @@ export function TurnoverTab({
                     />
                     <div className="min-w-0">
                       <p className="truncate font-medium text-slate-900">{nome}</p>
-                      <p className="text-xs text-slate-400">
-                        {p.cargo ?? '—'} · {p.area ?? '—'}
-                      </p>
+                      {p.area ? (
+                        <p className="text-xs text-slate-400">{p.area}</p>
+                      ) : null}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
