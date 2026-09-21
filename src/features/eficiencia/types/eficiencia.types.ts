@@ -234,7 +234,7 @@ export interface OpsLegaisIniciativasProjeto {
   extensao: string
   responsavel: string
   data: string | null
-  /** Tarefa pai concluída no ClickUp (payload edge `ops-legais-iniciativas`). */
+  /** Tarefa pai concluída no FORJAI (payload edge `ops-legais-iniciativas`). */
   concluido?: boolean
   subtarefas: OpsLegaisIniciativasSubtarefa[]
   total_sub: number

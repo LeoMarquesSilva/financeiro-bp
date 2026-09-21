@@ -24,10 +24,8 @@ import { MesFilterButtons } from '@/features/eficiencia/components/MesFilterButt
 import { OperacoesLegaisOverviewTab } from '@/features/eficiencia/components/OperacoesLegaisOverviewTab'
 import { OperacoesLegaisRgTab } from '@/features/eficiencia/components/OperacoesLegaisRgTab'
 import { OpsLegaisFinanceiroTab } from '@/features/eficiencia/components/OpsLegaisFinanceiroTab'
-import {
-  ForjaiSymbol,
-  OpsLegaisIniciativasTab,
-} from '@/features/eficiencia/components/OpsLegaisIniciativasTab'
+import { ForjaiSymbol } from '@/features/eficiencia/components/ForjaiSymbol'
+import { OpsLegaisIniciativasTab } from '@/features/eficiencia/components/OpsLegaisIniciativasTab'
 import { ReportarIndicadorButton } from '@/features/eficiencia/components/ReportarIndicadorButton'
 import { useEficienciaOverview } from '@/features/eficiencia/hooks/useEficiencia'
 import {
@@ -195,7 +193,7 @@ export function OperacoesLegaisPage() {
           </p>
         </div>
 
-        {tab !== 'marketing' && tab !== 'iniciativas' && (
+        {tab !== 'marketing' && (
           <div className="flex flex-wrap items-center gap-3">
             {maisRecente && (
               <span
@@ -269,7 +267,7 @@ export function OperacoesLegaisPage() {
           </TabsList>
         </div>
 
-        {tab !== 'marketing' && tab !== 'iniciativas' && (
+        {tab !== 'marketing' && (
           <div className="mt-6">
             <MesFilterButtons
               value={mesFiltro}
@@ -325,7 +323,7 @@ export function OperacoesLegaisPage() {
         </TabsContent>
 
         <TabsContent value="iniciativas" className="mt-5">
-          <OpsLegaisIniciativasTab />
+          <OpsLegaisIniciativasTab ano={ano} mesFiltro={mesFiltro} />
         </TabsContent>
 
         <TabsContent value="marketing" className="mt-5">

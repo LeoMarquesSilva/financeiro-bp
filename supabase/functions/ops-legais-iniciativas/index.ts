@@ -1,16 +1,18 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 /**
- * KPIs Iniciativas Estratégicas (BI Ops Legais / ClickUp list 901110394818).
- * Token: secret CLICKUP_API_TOKEN (nunca no browser).
+ * KPIs Iniciativas Estratégicas — fonte FORJAI (projetos + tarefas).
+ * Secrets: FORJAI_SUPABASE_URL, FORJAI_SUPABASE_SERVICE_ROLE_KEY (nunca no browser).
  *
- * PARTE1: KPIs topo (meta 24, projetos/melhorias, horas).
- * PARTE2: painel Projetos Realizados (Concluídos / Semana passada / Em andamento).
+ * Meta anual 24. Melhorias = project_type process_improvement; demais = Projetos.
+ * Entrega = estágio counts_as_delivery (completed / production).
  */
 
-const LIST_ID = '901110394818'
 const META_ANUAL = 24
 const TZ = 'America/Sao_Paulo'
+const DEFAULT_FORJAI_URL = 'https://rhdnurwwwylgfrxevdlv.supabase.co'
+const FORJAI_APP_URL = 'https://forjai.vercel.app'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,26 +27,40 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-type ClickUpAssignee = {
-  username?: string | null
-  email?: string | null
-  initials?: string | null
-}
-type ClickUpTask = {
+type StageRow = {
   id: string
-  name?: string
-  parent?: string | null
-  status?: { status?: string } | string
-  tags?: Array<{ name?: string }>
-  assignees?: ClickUpAssignee[]
-  time_estimate?: number | null
-  date_created?: string | number | null
-  date_updated?: string | number | null
-  date_closed?: string | number | null
-  date_done?: string | number | null
-  url?: string | null
-  creator?: { username?: string | null; email?: string | null } | null
+  slug: string
+  name: string
+  counts_as_delivery: boolean | null
+  is_terminal: boolean | null
 }
+
+type ProjectRow = {
+  id: string
+  name: string
+  slug: string | null
+  project_type: string | null
+  completed_at: string | null
+  production_date: string | null
+  owner_user_id: string | null
+  stage_id: string | null
+  archived_at: string | null
+}
+
+type TaskRow = {
+  id: string
+  project_id: string
+  parent_task_id: string | null
+  name: string
+  status_id: string | null
+  completed_at: string | null
+  estimate_minutes: number | null
+}
+
+type StatusRow = { id: string; slug: string; name: string; is_done: boolean | null }
+type ProfileRow = { id: string; full_name: string | null; email: string | null }
+type AssigneeRow = { task_id: string; user_id: string }
+type TimeRow = { project_id: string | null; duration_seconds: number | null }
 
 type SubtarefaOut = {
   id: string
@@ -61,9 +77,7 @@ type ProjetoOut = {
   tipo: string
   extensao: string
   responsavel: string
-  /** Data de conclusão da tarefa pai — só quando o pai está concluído. */
   data: string | null
-  /** Tarefa pai baixada no ClickUp (não apenas subtarefas). */
   concluido: boolean
   subtarefas: SubtarefaOut[]
   total_sub: number
@@ -80,64 +94,9 @@ type ItemSemanaOut = {
   data: string | null
 }
 
-function statusName(t: ClickUpTask): string {
-  if (typeof t.status === 'string') return t.status
-  return t.status?.status ?? ''
-}
-
-function normStatus(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
-}
-
-/** Status de conclusão no ClickUp (lista Ops Legais / BI). */
-function isConcluidoStatus(t: ClickUpTask): boolean {
-  const n = normStatus(statusName(t))
-  return (
-    n === 'concluido' ||
-    n === 'complete' ||
-    n === 'completed' ||
-    n === 'closed' ||
-    n === 'done' ||
-    n === 'fechado' ||
-    n === 'fechados'
-  )
-}
-
-function maxIso(a: string | null, b: string | null): string | null {
-  if (!a) return b
-  if (!b) return a
-  return a >= b ? a : b
-}
-
-function msToIsoDate(ms: string | number | null | undefined): string | null {
-  if (ms == null || ms === '') return null
-  const n = typeof ms === 'number' ? ms : Number(ms)
-  if (!Number.isFinite(n) || n <= 0) return null
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(n))
-}
-
-/** Finalizacao BI: done → closed → updated → created. */
-function taskDate(t: ClickUpTask): string | null {
-  return (
-    msToIsoDate(t.date_done) ??
-    msToIsoDate(t.date_closed) ??
-    msToIsoDate(t.date_updated) ??
-    msToIsoDate(t.date_created)
-  )
-}
-
-function inPeriod(iso: string | null, inicio: string, fim: string): boolean {
-  if (!iso) return false
-  return iso >= inicio && iso < fim
+function isoDate(value: string | null | undefined): string | null {
+  if (!value) return null
+  return value.slice(0, 10)
 }
 
 function inInclusive(iso: string | null, inicio: string, fim: string): boolean {
@@ -145,45 +104,22 @@ function inInclusive(iso: string | null, inicio: string, fim: string): boolean {
   return iso >= inicio && iso <= fim
 }
 
-function hasTag(t: ClickUpTask, tag: string): boolean {
-  const target = normStatus(tag)
-  return (t.tags ?? []).some((x) => normStatus(x.name ?? '') === target)
+function inPeriod(iso: string | null, inicio: string, fim: string): boolean {
+  if (!iso) return false
+  return iso >= inicio && iso < fim
 }
 
-function tagNames(t: ClickUpTask): string[] {
-  return (t.tags ?? []).map((x) => x.name ?? '').filter(Boolean)
+function tipoProjeto(projectType: string | null): 'Projetos' | 'Melhorias' {
+  return projectType === 'process_improvement' ? 'Melhorias' : 'Projetos'
 }
 
-/** Tipo = Projetos/Melhorias; Extensão = demais tags (ex.: cross áreas). */
-function classifyTags(tags: string[]): { tipo: string; extensao: string } {
-  let tipo = ''
-  const extensao: string[] = []
-  for (const raw of tags) {
-    const n = normStatus(raw)
-    if (n === 'projetos') {
-      if (!tipo) tipo = 'Projetos'
-    } else if (n === 'melhorias') {
-      if (!tipo) tipo = 'Melhorias'
-    } else {
-      extensao.push(raw)
-    }
-  }
-  return { tipo, extensao: extensao.join(', ') }
+function projectUrl(slug: string | null, id: string): string {
+  if (slug) return `${FORJAI_APP_URL}/projects/${slug}`
+  return `${FORJAI_APP_URL}/pipeline`
 }
 
-function assigneeLabel(a: ClickUpAssignee): string {
-  return (a.username || a.email || a.initials || '').trim()
-}
-
-function responsaveis(t: ClickUpTask): string {
-  const names = (t.assignees ?? []).map(assigneeLabel).filter(Boolean)
-  if (names.length) return [...new Set(names)].join(', ')
-  const creator = t.creator
-  if (creator) {
-    const c = (creator.username || creator.email || '').trim()
-    if (c) return c
-  }
-  return ''
+function profileName(p: ProfileRow | undefined): string {
+  return (p?.full_name || p?.email || '').trim()
 }
 
 function todayBrazil(): string {
@@ -206,42 +142,17 @@ function addDaysIso(iso: string, days: number): string {
   }).format(d)
 }
 
-/** WEEKDAY(date, 2): Mon=1 … Sun=7. */
 function weekdayMon1(iso: string): number {
   const utcDay = new Date(`${iso}T12:00:00.000-03:00`).getUTCDay()
   return utcDay === 0 ? 7 : utcDay
 }
 
-/** Segunda da semana passada → hoje (DAX KPI_HTML_PROJETOS_PARTE2). */
 function rangeSemanaPassada(): { inicio: string; fim: string } {
   const hoje = todayBrazil()
   const dia = weekdayMon1(hoje)
   const inicioSemanaAtual = addDaysIso(hoje, -(dia - 1))
   const inicioSemanaPassada = addDaysIso(inicioSemanaAtual, -7)
   return { inicio: inicioSemanaPassada, fim: hoje }
-}
-
-async function fetchAllTasks(token: string): Promise<ClickUpTask[]> {
-  const out: ClickUpTask[] = []
-  let page = 0
-  for (;;) {
-    const url =
-      `https://api.clickup.com/api/v2/list/${LIST_ID}/task` +
-      `?subtasks=true&include_closed=true&page=${page}`
-    const res = await fetch(url, {
-      headers: { Authorization: token, 'Content-Type': 'application/json' },
-    })
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`ClickUp ${res.status}: ${text.slice(0, 400)}`)
-    }
-    const json = (await res.json()) as { tasks?: ClickUpTask[]; last_page?: boolean }
-    out.push(...(json.tasks ?? []))
-    if (json.last_page === true || !(json.tasks?.length)) break
-    page += 1
-    if (page > 50) break
-  }
-  return out
 }
 
 function progressColor(pct: number): string {
@@ -257,250 +168,230 @@ function formatHoras(horas: number): string {
   return `${h}:${String(m).padStart(2, '0')}`
 }
 
-function isTopLevel(t: ClickUpTask): boolean {
-  return t.parent == null || t.parent === ''
+function deliveryDate(p: ProjectRow, stage: StageRow | undefined): string | null {
+  return isoDate(p.completed_at) ?? (stage?.counts_as_delivery ? isoDate(p.production_date) : null)
 }
 
-function parentId(t: ClickUpTask): string | null {
-  if (t.parent == null || t.parent === '') return null
-  return String(t.parent)
-}
-
-function dedupeById(tasks: ClickUpTask[]): ClickUpTask[] {
-  const byId = new Map<string, ClickUpTask>()
-  for (const t of tasks) byId.set(t.id, t)
-  return [...byId.values()]
-}
-
-function mapSubtarefa(t: ClickUpTask): SubtarefaOut {
-  return {
-    id: t.id,
-    nome: t.name ?? '',
-    responsavel: responsaveis(t),
-    data: taskDate(t),
-    // UI filtra por 'concluido' — normaliza aliases do ClickUp
-    status: isConcluidoStatus(t) ? 'concluido' : normStatus(statusName(t)),
-  }
-}
-
-function buildProjeto(t: ClickUpTask, children: ClickUpTask[]): ProjetoOut {
-  const { tipo, extensao } = classifyTags(tagNames(t))
-  const paiConcluido = isConcluidoStatus(t)
-  const subs = dedupeById(children)
-    .map(mapSubtarefa)
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-  let responsavel = responsaveis(t)
-  if (!responsavel) {
-    responsavel = [...new Set(subs.map((s) => s.responsavel).filter(Boolean))].join(', ')
-  }
-  return {
-    id: t.id,
-    nome: t.name ?? '',
-    url: t.url ?? null,
-    tipo,
-    extensao,
-    responsavel,
-    data: paiConcluido ? taskDate(t) : null,
-    concluido: paiConcluido,
-    subtarefas: subs,
-    total_sub: subs.length,
-    sub_concluidas: subs.filter((s) => s.status === 'concluido').length,
-  }
-}
-
-/**
- * Agrupa pelo título da TAREFA (não da subtarefa).
- * - Folha concluída → linha = pai (tarefa), com todas as subtarefas concluídas.
- * - Item com filhos concluído no período → linha própria (não sobe para o projeto).
- */
-function buildPainelPorTarefa(
-  all: ClickUpTask[],
-  byId: Map<string, ClickUpTask>,
-  childrenOf: Map<string, ClickUpTask[]>,
-  inicio: string,
-  fim: string,
-  inclusive: boolean,
-  /** baixados = só tarefa pai concluída; atividade = inclui pai quando subtarefa concluiu no período. */
-  modo: 'baixados' | 'atividade' = 'baixados',
-): ProjetoOut[] {
-  const inRange = (iso: string | null) =>
-    inclusive ? inInclusive(iso, inicio, fim) : inPeriod(iso, inicio, fim)
-
-  const tarefaIds = new Set<string>()
-
-  for (const t of all) {
-    if (!isConcluidoStatus(t) || !inRange(taskDate(t))) continue
-    const hasChildren = (childrenOf.get(t.id) ?? []).length > 0
-    if (hasChildren) {
-      tarefaIds.add(t.id)
-      continue
-    }
-    const p = parentId(t)
-    if (p) {
-      if (modo === 'atividade') tarefaIds.add(p)
-      continue
-    }
-    tarefaIds.add(t.id)
-  }
-
-  const out: ProjetoOut[] = []
-  for (const tarefaId of tarefaIds) {
-    const tarefa = byId.get(tarefaId)
-    if (!tarefa) continue
-
-    const todasSubsConcluidas = dedupeById(childrenOf.get(tarefaId) ?? []).filter(
-      (s) => isConcluidoStatus(s) && inRange(taskDate(s)),
-    )
-
-    let tagsSource = tarefa
-    let walk: ClickUpTask | undefined = tarefa
-    const seen = new Set<string>()
-    while (walk) {
-      const pid = parentId(walk)
-      if (!pid || seen.has(pid)) break
-      seen.add(pid)
-      const parent = byId.get(pid)
-      if (!parent) break
-      tagsSource = parent
-      walk = parent
-    }
-    const { tipo, extensao } = classifyTags(tagNames(tagsSource))
-    const projeto = buildProjeto(tarefa, todasSubsConcluidas)
-    if (!projeto.tipo && tipo) projeto.tipo = tipo
-    if (!projeto.extensao && extensao) projeto.extensao = extensao
-    if (modo === 'baixados' && !projeto.concluido) continue
-    out.push(projeto)
-  }
-
-  return out.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-}
-
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const token = Deno.env.get('CLICKUP_API_TOKEN')?.trim()
-    if (!token) {
+    const forjaiUrl =
+      Deno.env.get('FORJAI_SUPABASE_URL')?.trim() || DEFAULT_FORJAI_URL
+    const forjaiKey = Deno.env.get('FORJAI_SUPABASE_SERVICE_ROLE_KEY')?.trim()
+    if (!forjaiKey) {
       return jsonResponse(
-        { error: 'CLICKUP_API_TOKEN ausente. Configure o secret no Supabase.' },
+        { error: 'FORJAI não configurado (secret FORJAI_SUPABASE_SERVICE_ROLE_KEY).' },
         500,
       )
     }
 
-    const year = new Date().getUTCFullYear()
-    let inicio = `${year}-01-01`
-    let fim = `${year + 1}-01-01`
+    let ano = new Date().getFullYear()
+    let inicio = `${ano}-01-01`
+    let fim = `${ano + 1}-01-01`
     if (req.method === 'POST') {
       const body = (await req.json().catch(() => ({}))) as {
+        ano?: number
         inicio?: string
         fim?: string
+      }
+      if (body.ano && Number.isFinite(body.ano)) {
+        ano = Number(body.ano)
+        inicio = `${ano}-01-01`
+        fim = `${ano + 1}-01-01`
       }
       if (body.inicio) inicio = body.inicio.slice(0, 10)
       if (body.fim) fim = body.fim.slice(0, 10)
     }
 
-    const all = dedupeById(await fetchAllTasks(token))
-    const byId = new Map(all.map((t) => [t.id, t]))
-    const childrenOf = new Map<string, ClickUpTask[]>()
-    for (const t of all) {
-      const p = parentId(t)
-      if (!p) continue
-      const arr = childrenOf.get(p) ?? []
-      arr.push(t)
-      childrenOf.set(p, arr)
-    }
-
-    const topLevel = all.filter(isTopLevel)
-    const concluidosPeriodo = topLevel.filter((t) => {
-      return isConcluidoStatus(t) && inPeriod(taskDate(t), inicio, fim)
+    const forjai = createClient(forjaiUrl, forjaiKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    /** Meta anual = só tarefas com tag Projetos ou Melhorias (não conta “Outro”). */
-    const contaNaMeta = (t: ClickUpTask) => hasTag(t, 'Projetos') || hasTag(t, 'Melhorias')
-    const unicos = concluidosPeriodo.filter(contaNaMeta)
-    const projetosConcluidos = unicos.length
-    const projetosFinalizados = unicos.filter((t) => hasTag(t, 'Projetos')).length
-    const melhoriasFinalizadas = unicos.filter((t) => hasTag(t, 'Melhorias')).length
+    const [
+      { data: stages, error: stagesErr },
+      { data: projects, error: projectsErr },
+      { data: tasks, error: tasksErr },
+      { data: statuses, error: statusesErr },
+      { data: profiles, error: profilesErr },
+      { data: assignees, error: assigneesErr },
+      { data: times, error: timesErr },
+    ] = await Promise.all([
+      forjai.from('project_stages').select('id,slug,name,counts_as_delivery,is_terminal'),
+      forjai
+        .from('projects')
+        .select(
+          'id,name,slug,project_type,completed_at,production_date,owner_user_id,stage_id,archived_at',
+        )
+        .is('archived_at', null),
+      forjai
+        .from('tasks')
+        .select('id,project_id,parent_task_id,name,status_id,completed_at,estimate_minutes'),
+      forjai.from('task_statuses').select('id,slug,name,is_done'),
+      forjai.from('profiles').select('id,full_name,email'),
+      forjai.from('task_assignees').select('task_id,user_id'),
+      forjai.from('time_entries').select('project_id,duration_seconds'),
+    ])
 
-    const msTotal = unicos.reduce((s, t) => s + (Number(t.time_estimate) || 0), 0)
-    const horasGanhas = msTotal / 3_600_000
+    const firstErr =
+      stagesErr ?? projectsErr ?? tasksErr ?? statusesErr ?? profilesErr ?? assigneesErr ?? timesErr
+    if (firstErr) throw new Error(firstErr.message)
+
+    const stageById = new Map((stages as StageRow[] ?? []).map((s) => [s.id, s]))
+    const statusById = new Map((statuses as StatusRow[] ?? []).map((s) => [s.id, s]))
+    const profileById = new Map((profiles as ProfileRow[] ?? []).map((p) => [p.id, p]))
+    const hoursByProject = new Map<string, number>()
+    for (const te of (times as TimeRow[] ?? [])) {
+      if (!te.project_id) continue
+      hoursByProject.set(
+        te.project_id,
+        (hoursByProject.get(te.project_id) ?? 0) + (Number(te.duration_seconds) || 0) / 3600,
+      )
+    }
+
+    const tasksByProject = new Map<string, TaskRow[]>()
+    for (const t of (tasks as TaskRow[] ?? [])) {
+      const arr = tasksByProject.get(t.project_id) ?? []
+      arr.push(t)
+      tasksByProject.set(t.project_id, arr)
+    }
+
+    const assigneesByTask = new Map<string, string[]>()
+    for (const a of (assignees as AssigneeRow[] ?? [])) {
+      const name = profileName(profileById.get(a.user_id))
+      if (!name) continue
+      const arr = assigneesByTask.get(a.task_id) ?? []
+      arr.push(name)
+      assigneesByTask.set(a.task_id, arr)
+    }
+
+    const allProjects = (projects as ProjectRow[] ?? []).filter((p) => !p.archived_at)
+    const isDelivery = (p: ProjectRow) =>
+      Boolean(stageById.get(p.stage_id ?? '')?.counts_as_delivery)
+
+    const entreguesPeriodo = allProjects.filter((p) => {
+      if (!isDelivery(p)) return false
+      const data = deliveryDate(p, stageById.get(p.stage_id ?? ''))
+      return inPeriod(data, inicio, fim)
+    })
+
+    const projetosFinalizados = entreguesPeriodo.filter((p) => tipoProjeto(p.project_type) === 'Projetos').length
+    const melhoriasFinalizadas = entreguesPeriodo.filter((p) => tipoProjeto(p.project_type) === 'Melhorias').length
+    const projetosConcluidos = entreguesPeriodo.length
+
+    const horasGanhas = entreguesPeriodo.reduce((s, p) => {
+      const tracked = hoursByProject.get(p.id) ?? 0
+      if (tracked > 0) return s + tracked
+      const mins = (tasksByProject.get(p.id) ?? []).reduce(
+        (acc, t) => acc + (Number(t.estimate_minutes) || 0),
+        0,
+      )
+      return s + mins / 60
+    }, 0)
+
     const diasUteis = horasGanhas / 8
     const diasUteisMensal = diasUteis / 12
     const pctProgresso = META_ANUAL > 0 ? projetosConcluidos / META_ANUAL : 0
-
     const semana = rangeSemanaPassada()
 
-    const emAndamento = topLevel.filter((t) => {
-      const n = normStatus(statusName(t))
-      return n === 'in progress' || n === 'em andamento'
-    })
-    const idsAndamento = new Set(emAndamento.map((t) => t.id))
-    let tarefasSobEmAndamento = 0
-    for (const id of idsAndamento) {
-      tarefasSobEmAndamento += (childrenOf.get(id) ?? []).length
+    const ownerName = (p: ProjectRow) => profileName(profileById.get(p.owner_user_id ?? ''))
+
+    const mapTaskStatus = (t: TaskRow): string => {
+      const slug = statusById.get(t.status_id ?? '')?.slug ?? ''
+      if (slug === 'done') return 'concluido'
+      if (slug === 'in-progress') return 'in progress'
+      if (slug === 'todo') return 'backlog'
+      return slug
+    }
+    const taskDone = (t: TaskRow) => {
+      const st = statusById.get(t.status_id ?? '')
+      return Boolean(st?.is_done && st.slug !== 'cancelled')
     }
 
-    const subtarefasConcluidasPeriodo = all.filter((t) => {
-      const p = parentId(t)
-      if (!p) return false
-      return isConcluidoStatus(t) && inInclusive(taskDate(t), semana.inicio, semana.fim)
-    }).length
-
-    // Painel: agrega pela TAREFA (pai); só Projetos/Melhorias entram no racional da meta
-    const concluidosPainel = buildPainelPorTarefa(
-      all,
-      byId,
-      childrenOf,
-      inicio,
-      fim,
-      false,
-      'baixados',
-    ).filter((p) => p.tipo === 'Projetos' || p.tipo === 'Melhorias')
-
-    const semanaAgrupada = buildPainelPorTarefa(
-      all,
-      byId,
-      childrenOf,
-      semana.inicio,
-      semana.fim,
-      true,
-      'atividade',
-    )
-
-    // Compat: lista plana da semana (opcional) — UI usa agrupado em `concluidos`-like
-    const itensSemana: ItemSemanaOut[] = semanaAgrupada.flatMap((p) => {
-      if (p.subtarefas.length === 0) {
-        return [
-          {
-            id: p.id,
-            nome: p.nome,
-            url: p.url,
-            tipo: 'Projeto' as const,
-            pai_titulo: '',
-            responsavel: p.responsavel,
-            data: p.data,
-          },
-        ]
-      }
-      return p.subtarefas.map((s) => ({
-        id: s.id,
-        nome: s.nome,
-        url: null,
-        tipo: 'Subtarefa' as const,
-        pai_titulo: p.nome,
-        responsavel: s.responsavel,
-        data: s.data,
+    const buildProjeto = (p: ProjectRow, concluido: boolean): ProjetoOut => {
+      const subs = (tasksByProject.get(p.id) ?? []).filter((t) => !t.parent_task_id)
+      const subtarefas: SubtarefaOut[] = subs.map((t) => ({
+        id: t.id,
+        nome: t.name,
+        responsavel: (assigneesByTask.get(t.id) ?? []).join(', '),
+        data: isoDate(t.completed_at),
+        status: mapTaskStatus(t),
       }))
+      const subOk = subtarefas.filter((s) => {
+        const raw = (tasksByProject.get(p.id) ?? []).find((t) => t.id === s.id)
+        return raw ? taskDone(raw) : false
+      }).length
+      return {
+        id: p.id,
+        nome: p.name,
+        url: projectUrl(p.slug, p.id),
+        tipo: tipoProjeto(p.project_type),
+        extensao: p.project_type ?? '',
+        responsavel: ownerName(p),
+        data: deliveryDate(p, stageById.get(p.stage_id ?? '')),
+        concluido,
+        subtarefas,
+        total_sub: subtarefas.length,
+        sub_concluidas: subOk,
+      }
+    }
+
+    const concluidosPainel = entreguesPeriodo
+      .map((p) => buildProjeto(p, true))
+      .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''))
+
+    const andamento = allProjects.filter((p) => {
+      const slug = stageById.get(p.stage_id ?? '')?.slug ?? ''
+      return slug === 'development' || slug === 'production'
     })
 
-    const andamentoPainel: ProjetoOut[] = emAndamento
-      .map((t) => {
-        const subs = dedupeById(childrenOf.get(t.id) ?? [])
-        return buildProjeto(t, subs)
-      })
+    const andamentoPainel = andamento
+      .map((p) => buildProjeto(p, false))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
+    const tarefasSemana = (tasks as TaskRow[] ?? []).filter((t) => {
+      if (!taskDone(t)) return false
+      return inInclusive(isoDate(t.completed_at), semana.inicio, semana.fim)
+    })
+
+    const projetosSemana = allProjects.filter((p) =>
+      inInclusive(deliveryDate(p, stageById.get(p.stage_id ?? '')), semana.inicio, semana.fim) &&
+      isDelivery(p),
+    )
+
+    const projetoById = new Map(allProjects.map((p) => [p.id, p]))
+    const itensSemana: ItemSemanaOut[] = [
+      ...projetosSemana.map((p) => ({
+        id: p.id,
+        nome: p.name,
+        url: projectUrl(p.slug, p.id),
+        tipo: 'Projeto' as const,
+        pai_titulo: '',
+        responsavel: ownerName(p),
+        data: deliveryDate(p, stageById.get(p.stage_id ?? '')),
+      })),
+      ...tarefasSemana.map((t) => {
+        const pai = projetoById.get(t.project_id)
+        return {
+          id: t.id,
+          nome: t.name,
+          url: pai ? projectUrl(pai.slug, pai.id) : FORJAI_APP_URL + '/pipeline',
+          tipo: 'Subtarefa' as const,
+          pai_titulo: pai?.name ?? '',
+          responsavel: (assigneesByTask.get(t.id) ?? []).join(', '),
+          data: isoDate(t.completed_at),
+        }
+      }),
+    ].sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''))
+
+    const semanaPorTarefa = projetosSemana
+      .map((p) => buildProjeto(p, true))
+      .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''))
+
+    const tarefasSobEmAndamento = andamento.reduce(
+      (s, p) => s + (tasksByProject.get(p.id) ?? []).length,
+      0,
+    )
 
     return jsonResponse({
       meta_anual: META_ANUAL,
@@ -523,25 +414,25 @@ Deno.serve(async (req: Request) => {
       cor_progresso: progressColor(pctProgresso),
       inicio,
       fim,
-      itens: unicos
-        .map((t) => ({
-          id: t.id,
-          nome: t.name ?? '',
-          url: t.url ?? null,
-          tags: tagNames(t),
-          horas: Math.round(((Number(t.time_estimate) || 0) / 3_600_000) * 100) / 100,
-          data: taskDate(t),
+      itens: entreguesPeriodo
+        .map((p) => ({
+          id: p.id,
+          nome: p.name,
+          url: projectUrl(p.slug, p.id),
+          tags: [tipoProjeto(p.project_type)],
+          horas: Math.round((hoursByProject.get(p.id) ?? 0) * 100) / 100,
+          data: deliveryDate(p, stageById.get(p.stage_id ?? '')),
         }))
         .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? '')),
       painel: {
-        projetos_em_andamento: emAndamento.length,
+        projetos_em_andamento: andamento.length,
         tarefas_sob_em_andamento: tarefasSobEmAndamento,
-        subtarefas_concluidas_periodo: subtarefasConcluidasPeriodo,
+        subtarefas_concluidas_periodo: tarefasSemana.length,
         semana_inicio: semana.inicio,
         semana_fim: semana.fim,
         concluidos: concluidosPainel,
         semana: itensSemana,
-        semana_por_tarefa: semanaAgrupada,
+        semana_por_tarefa: semanaPorTarefa,
         andamento: andamentoPainel,
       },
     })
