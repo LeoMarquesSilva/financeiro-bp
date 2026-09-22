@@ -2,7 +2,6 @@ import { formatCurrency } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { useSaldoDevedor } from '../hooks/useSaldoDevedor'
 import {
-  CLASSIFICACAO_SALDO_DEVEDOR,
   buildLeituraSaldoDevedor,
   formatSaldoDevedorInt,
   nomeExibicaoGrupo,
@@ -76,8 +75,7 @@ function TabelaClientes({
   return (
     <table className="w-full table-fixed text-left text-[12px]">
       <colgroup>
-        <col className="w-[42%]" />
-        <col className="w-[18%]" />
+        <col className="w-[46%]" />
         <col />
         <col />
         <col />
@@ -85,7 +83,6 @@ function TabelaClientes({
       <thead>
         <tr className="text-[10px] uppercase tracking-wide text-slate-500">
           <th className="pb-2 pr-2 font-medium">Cliente</th>
-          <th className="pb-2 pr-2 font-medium">Classificação</th>
           <th
             className="pb-2 pr-2 text-right font-medium"
             title={`Posição de fechamento de ${anoAnterior}, sem baixa de pagamentos de ${ano}`}
@@ -109,7 +106,6 @@ function TabelaClientes({
       <tbody>
         {clientes.map((c, i) => {
           const rank = offset + i + 1
-          const cls = CLASSIFICACAO_SALDO_DEVEDOR[c.classificacao]
           const nome = nomeExibicaoGrupo(c.nome)
           const nomeLongo = nome.length > 28
           return (
@@ -120,10 +116,6 @@ function TabelaClientes({
                     {rank}
                   </span>
                   <span
-                    className="mt-1.5 h-2 w-2 shrink-0 rounded-[2px]"
-                    style={{ backgroundColor: cls.color }}
-                  />
-                  <span
                     className={cn(
                       'min-w-0 break-words font-medium leading-snug text-slate-800',
                       nomeLongo && 'text-[11px]',
@@ -133,12 +125,6 @@ function TabelaClientes({
                     {nome}
                   </span>
                 </span>
-              </td>
-              <td
-                className="whitespace-nowrap py-1.5 pr-2 align-top"
-                style={{ color: cls.color }}
-              >
-                {cls.label}
               </td>
               <td className="py-1.5 pr-2 text-right align-top tabular-nums text-slate-600">
                 {formatSaldoDevedorInt(c.saldoAnterior)}
