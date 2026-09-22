@@ -91,3 +91,26 @@ export function metaTreinamentoMinutosProporcional(
   const meses = mesesElegiveisTreinamento(admissao, ano)
   return Math.round(((EFICIENCIA_META_TREINAMENTO_MINUTOS * meses) / 12) * 100) / 100
 }
+
+/**
+ * Fatia mensal da meta anual da equipe (minutos).
+ * A RPC mensal devolve a meta anual em cada mês — não somar 12× nem 2 anos inteiros.
+ */
+export function metaTreinamentoMensalDaAnual(metaAnualMinutos: number): number {
+  if (!(metaAnualMinutos > 0)) return 0
+  return metaAnualMinutos / 12
+}
+
+/**
+ * Meta da equipe no recorte De–Até: Σ (meta anual do ano × meses selecionados nesse ano / 12).
+ * Ex.: set/25–ago/26 = 4/12 da meta 2025 + 8/12 da meta 2026.
+ */
+export function metaTreinamentoPeriodoMinutos(
+  metaAnualPorAno: (ano: number) => number,
+  slots: Array<{ ano: number }>,
+): number {
+  return slots.reduce(
+    (soma, slot) => soma + metaTreinamentoMensalDaAnual(metaAnualPorAno(slot.ano)),
+    0,
+  )
+}

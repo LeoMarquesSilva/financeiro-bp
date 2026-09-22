@@ -28,6 +28,7 @@ import {
   buildDesenvolvimentoEquipeHeatCell,
   formatMinutosHeatLabel,
 } from '../utils/desenvolvimentoEquipeHeatCell'
+import { metaTreinamentoPeriodoMinutos } from '../utils/treinamentoMetaProporcional'
 import {
   ApresentacaoUnificadoLinhasGrid,
   type UnificadoLinhaPonto,
@@ -74,14 +75,20 @@ function somaRazaoPct(numeros: number[], denominadores: number[]): HeatCell {
   return pctCell(v)
 }
 
+function metaAnualEquipeMinutos(
+  overviewByAno: Map<number, EficienciaOverview>,
+  ano: number,
+): number {
+  return overviewByAno.get(ano)?.treinamentos?.meta_minutos ?? 0
+}
+
 function formatMetaDesenvolvimentoEquipe(
   overviewByAno: Map<number, EficienciaOverview>,
   slots: MesAno[],
 ): string {
-  const anos = [...new Set(slots.map((s) => s.ano))]
-  const metaMin = anos.reduce(
-    (s, a) => s + (overviewByAno.get(a)?.treinamentos?.meta_minutos ?? 0),
-    0,
+  const metaMin = metaTreinamentoPeriodoMinutos(
+    (ano) => metaAnualEquipeMinutos(overviewByAno, ano),
+    slots,
   )
   if (metaMin <= 0) return 'Meta 100%'
   return `Meta ${formatMinutosHeatLabel(metaMin)}h`
@@ -326,9 +333,9 @@ export function ApresentacaoJuridicoUnificadoBloco({
     const acumuladoTreino: HeatCell = (() => {
       if (treinoRows.length === 0) return VAZIA
       const minutos = treinoRows.reduce((s, r) => s + r.minutos_lancados, 0)
-      const metaMin = anos.reduce(
-        (s, a) => s + (overviewByAno.get(a)?.treinamentos?.meta_minutos ?? 0),
-        0,
+      const metaMin = metaTreinamentoPeriodoMinutos(
+        (ano) => metaAnualEquipeMinutos(overviewByAno, ano),
+        slots,
       )
       const pct = metaMin > 0 ? (minutos / metaMin) * 100 : treinoRows[0]!.pct_atingimento
       return buildDesenvolvimentoEquipeHeatCell(minutos, pct)
@@ -386,9 +393,9 @@ export function ApresentacaoJuridicoUnificadoBloco({
       return pctCell(last.exib.pct)
     })()
 
-    const metaTreinoMin = anos.reduce(
-      (s, a) => s + (overviewByAno.get(a)?.treinamentos?.meta_minutos ?? 0),
-      0,
+    const metaTreinoMin = metaTreinamentoPeriodoMinutos(
+      (ano) => metaAnualEquipeMinutos(overviewByAno, ano),
+      slots,
     )
     const treinoLinhaPoints: UnificadoLinhaPonto[] = (() => {
       let acc = 0
