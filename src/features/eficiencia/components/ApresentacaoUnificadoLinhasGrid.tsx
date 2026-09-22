@@ -23,6 +23,8 @@ export type UnificadoLinhaSerie = {
   meta: number
   metaLabel: string
   yKind: 'pct' | 'horas' | 'numero'
+  /** Menor é melhor: 0 fica no topo e a linha sobe quando o índice cai. */
+  yInvertido?: boolean
   points: UnificadoLinhaPonto[]
 }
 
@@ -120,6 +122,7 @@ function UnificadoMiniLinha({ serie }: { serie: UnificadoLinhaSerie }) {
             />
             <YAxis
               domain={[yMin, yMax]}
+              reversed={serie.yInvertido === true}
               tickFormatter={(v: number) => formatY(serie.yKind, Number(v))}
               tick={{ fontSize: 8, fill: UNIFICADO_LINHAS_THEME.axis }}
               axisLine={false}
@@ -172,6 +175,19 @@ function UnificadoMiniLinha({ serie }: { serie: UnificadoLinhaSerie }) {
           </LineChart>
         </ResponsiveContainer>
       </div>
+      {serie.yInvertido ? (
+        <div
+          style={{
+            fontSize: 8,
+            lineHeight: 1.2,
+            color: UNIFICADO_LINHAS_THEME.axis,
+            padding: '1px 2px 0',
+            letterSpacing: '0.01em',
+          }}
+        >
+          * escala invertida, quanto menor melhor
+        </div>
+      ) : null}
     </div>
   )
 }

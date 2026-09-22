@@ -713,6 +713,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           title="Desenvolvimento Contínuo"
           meta={100}
           metaLabel={metaTreinoLabel}
+          colorirMesesComoAcumulado
           mesDestaque={mesDestaque}
           cells={
             loadingTreino || loadingTreinoMensal
@@ -720,8 +721,10 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
               : cellsTreino
           }
           acumulado={acumTreino}
-          copyAnualAcumulado={acumTreinoAnual}
-          copyAnualCells={cellsTreinoAnual}
+          copyAnualAcumulado={
+            isResultadoFiltro(mesFiltro) ? undefined : acumTreinoAnual
+          }
+          copyAnualCells={isResultadoFiltro(mesFiltro) ? undefined : cellsTreinoAnual}
           onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
         />
         <OverviewKpiHeatRow

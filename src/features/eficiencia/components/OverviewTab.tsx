@@ -21,6 +21,7 @@ import {
   isAgendamentoVistagemIndisponivelPorArea,
   isMesesFiltro,
   isPeriodoCurtoFiltro,
+  mesFimResultado,
   mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
@@ -227,8 +228,16 @@ export function OverviewTab({
   }
 
   // Indicadores anuais: Resultado NÃO apaga jan–mai nem recorta o Acum. (meta = ano todo).
+  // Mês em aberto (ex.: set/26 com Resultado até ago) fica de fora, na tela e no Copiar.
   const treinamentosCells: HeatCell[] = Array.from({ length: 12 }, (_, i) => {
-    const row = data.treinamentosMensal.find((r) => r.mes === i + 1)
+    const mes = i + 1
+    if (mesFiltro === 'resultado' && mes > mesFimResultado(ano)) {
+      return { value: null, label: '-' }
+    }
+    if (mesFiltro === 'resultado_ytd' && !mesNoFiltro(mes, mesFiltro, ano)) {
+      return { value: null, label: '-' }
+    }
+    const row = data.treinamentosMensal.find((r) => r.mes === mes)
     if (!row) return { value: null, label: '-' }
     return buildDesenvolvimentoEquipeHeatCell(row.minutos_lancados, row.pct_atingimento)
   })

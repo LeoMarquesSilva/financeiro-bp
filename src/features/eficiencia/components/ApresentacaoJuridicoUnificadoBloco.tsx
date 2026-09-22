@@ -550,6 +550,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
         meta: EFICIENCIA_META_INDICE_INADIMPLENCIA,
         metaLabel: `Meta ${formatPercent(EFICIENCIA_META_INDICE_INADIMPLENCIA)}`,
         yKind: 'pct',
+        yInvertido: true,
         points: cellsToLinePoints(inadCells, monthLabels),
       },
       {

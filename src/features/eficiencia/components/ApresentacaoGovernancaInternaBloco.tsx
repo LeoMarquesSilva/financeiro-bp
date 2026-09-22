@@ -9,8 +9,19 @@ const TABLE_MIN_WIDTH =
   COL_TITLE_WIDTH + MESES_EFICIENCIA.length * COL_MES_WIDTH + COL_ACUM_WIDTH
 
 const META_ENTREGAS = 6
-const ENTREGAS_JULHO = 1
-const PCT_ATINGIMENTO = (ENTREGAS_JULHO / META_ENTREGAS) * 100
+/** Entregas no mês. Julho = 1 (16,67%). Agosto fechou sem entrega (0,00%). */
+const ENTREGAS_POR_MES: Partial<Record<number, number>> = {
+  7: 1,
+  8: 0,
+}
+/** Acum. = única entrega (julho), 1/6 da meta. */
+const PCT_ACUM = (1 / META_ENTREGAS) * 100
+
+function pctMes(mes: number): number | null {
+  const n = ENTREGAS_POR_MES[mes]
+  if (n == null) return null
+  return (n / META_ENTREGAS) * 100
+}
 
 const thBase: CSSProperties = {
   padding: 4,
@@ -117,9 +128,11 @@ export function ApresentacaoGovernancaInternaBloco({ ano }: { ano: number }) {
               </td>
               {MESES_EFICIENCIA.map((_, index) => {
                 const mes = index + 1
-                const entregueEmJulho = mes === 7
+                const pct = pctMes(mes)
                 const futuro = mesFuturo(ano, mes)
-                const label = entregueEmJulho ? formatPercent(PCT_ATINGIMENTO) : '-'
+                const temValor = pct != null && !futuro
+                const bateu = temValor && pct > 0
+                const label = temValor ? formatPercent(pct) : '-'
 
                 return (
                   <td
@@ -128,12 +141,12 @@ export function ApresentacaoGovernancaInternaBloco({ ano }: { ano: number }) {
                       padding: 4,
                       textAlign: 'center',
                       fontSize: 11,
-                      background: entregueEmJulho && !futuro ? '#ECFDF3' : '#FFFFFF',
-                      color: entregueEmJulho && !futuro ? '#059669' : '#6B7280',
-                      fontWeight: entregueEmJulho && !futuro ? 600 : 500,
+                      background: !temValor ? '#FFFFFF' : bateu ? '#ECFDF3' : '#FEE2E2',
+                      color: !temValor ? '#6B7280' : bateu ? '#059669' : '#DC2626',
+                      fontWeight: temValor ? 600 : 500,
                     }}
                   >
-                    {futuro ? '-' : label}
+                    {label}
                   </td>
                 )
               })}
@@ -148,7 +161,7 @@ export function ApresentacaoGovernancaInternaBloco({ ano }: { ano: number }) {
                   fontWeight: 700,
                 }}
               >
-                {formatPercent(PCT_ATINGIMENTO)}
+                {formatPercent(PCT_ACUM)}
               </td>
             </tr>
           </tbody>

@@ -174,9 +174,7 @@ export function buildApresentacaoIniciativas(
         destaque: mes === mesDestaque,
       }
     })
-    .sort((a, b) => {
-      if (a.destaque !== b.destaque) return a.destaque ? -1 : 1
-      return (b.data ?? '').localeCompare(a.data ?? '')
+    .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''))
     })
 
   const total = itensEscopo.length

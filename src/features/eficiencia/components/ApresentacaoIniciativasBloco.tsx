@@ -1,12 +1,8 @@
-import { formatPercent } from '@/shared/utils/format'
 import type { MesFiltroEficiencia } from '../constants'
 import type { ApresentacaoIniciativasData } from '../utils/apresentacaoIniciativas'
 import { MesFilterButtons } from './MesFilterButtons'
 
 const GOLD_DARK = '#C6A361'
-const HIGHLIGHT_BG = '#FEF3C7'
-const HIGHLIGHT_BORDER = '#F59E0B'
-
 type Props = {
   data: ApresentacaoIniciativasData | null
   loading?: boolean
@@ -219,21 +215,11 @@ export function ApresentacaoIniciativasBloco({
                     <tr
                       key={r.mes}
                       style={{
-                        background: r.destaque
-                          ? HIGHLIGHT_BG
-                          : i % 2 === 1
-                            ? '#F8FAFC'
-                            : '#FFF',
-                        boxShadow: r.destaque
-                          ? `inset 3px 0 0 ${HIGHLIGHT_BORDER}`
-                          : undefined,
-                        fontWeight: r.destaque ? 700 : 400,
+                        background: i % 2 === 1 ? '#F8FAFC' : '#FFF',
+                        fontWeight: 400,
                       }}
                     >
-                      <td style={{ padding: '4px 6px', color: '#334155' }}>
-                        {r.mesLabel}
-                        {r.destaque ? ' ★' : ''}
-                      </td>
+                      <td style={{ padding: '4px 6px', color: '#334155' }}>{r.mesLabel}</td>
                       <td
                         style={{
                           padding: '4px 6px',
@@ -301,11 +287,7 @@ export function ApresentacaoIniciativasBloco({
               >
                 Projetos / Melhorias entregues
               </div>
-              <div style={{ fontSize: 10, color: '#64748B', marginBottom: 8 }}>
-                Destacados: entregas de {data.mesDestaqueLabel} ·{' '}
-                {fmt(data.entregas.filter((e) => e.destaque).length)} no mês
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, marginTop: 8 }}>
                 <thead>
                   <tr style={{ background: GOLD_DARK, color: '#fff' }}>
                     <th style={{ textAlign: 'left', padding: '5px 6px', fontWeight: 700 }}>
@@ -334,15 +316,8 @@ export function ApresentacaoIniciativasBloco({
                       <tr
                         key={e.id}
                         style={{
-                          background: e.destaque
-                            ? HIGHLIGHT_BG
-                            : i % 2 === 1
-                              ? '#F8FAFC'
-                              : '#FFF',
-                          boxShadow: e.destaque
-                            ? `inset 3px 0 0 ${HIGHLIGHT_BORDER}`
-                            : undefined,
-                          fontWeight: e.destaque ? 700 : 400,
+                          background: i % 2 === 1 ? '#F8FAFC' : '#FFF',
+                          fontWeight: 400,
                         }}
                       >
                         <td
@@ -377,14 +352,6 @@ export function ApresentacaoIniciativasBloco({
                   )}
                 </tbody>
               </table>
-              {data.entregas.some((e) => e.destaque) ? null : (
-                <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 6 }}>
-                  Sem entregas em {data.mesDestaqueLabel} — % acum. do mês:{' '}
-                  {formatPercent(
-                    data.evolucao.find((m) => m.mes === data.mesDestaque)?.pctYtd ?? 0,
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </>

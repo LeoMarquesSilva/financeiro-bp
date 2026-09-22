@@ -110,6 +110,11 @@ type Props = {
   copyAnualCells?: HeatCell[]
   /** Quando false, omite `data-overview-copy-card` (card só na tela). Default true. */
   includeInCopy?: boolean
+  /**
+   * Desenvolvimento: se o Acum. bate a meta, meses com dado ficam verdes.
+   * O % do mês é fatia da meta anual e ficaria vermelho mesmo com o ano cumprido.
+   */
+  colorirMesesComoAcumulado?: boolean
 }
 
 function mesesDestaqueSet(mesDestaque: number | number[] | null): Set<number> | null {
@@ -126,11 +131,12 @@ function cellStyle(
   meta: number,
   comparacao: MetaComparacaoKpi = 'minimo',
   fontWeight: number = CELL_FONT_MONTH,
+  atingiuForcado = false,
 ): CSSProperties {
   if (cell.value == null) {
     return { background: '#FFFFFF', color: '#6B7280', fontWeight }
   }
-  const atingiu = atingiuMetaKpi(cell.value, meta, comparacao) === true
+  const atingiu = atingiuForcado || atingiuMetaKpi(cell.value, meta, comparacao) === true
   return {
     background: atingiu ? '#ECFDF3' : '#FEE2E2',
     color: atingiu ? '#059669' : '#DC2626',
@@ -233,6 +239,7 @@ export function OverviewKpiHeatCard({
   yearBands = false,
   showAcumulado = true,
   includeInCopy = true,
+  colorirMesesComoAcumulado = false,
 }: OverviewKpiHeatCardProps) {
   const metasDefinidas = (metasPorMes ?? []).filter((m): m is number => m != null)
   const metaFallbackAcum =
@@ -241,6 +248,9 @@ export function OverviewKpiHeatCard({
   const metaTexto = resolveMetaTexto(meta, metaLabel, metasPorMes)
 
   const metaForCell = (index: number) => metasPorMes?.[index] ?? meta
+  const mesesHerdamAcumulado =
+    colorirMesesComoAcumulado &&
+    atingiuMetaKpi(acumulado.value, metaFallbackAcum, metaComparacao) === true
   const destaque = monthLabels ? null : mesesDestaqueSet(mesDestaque)
   const labels = monthLabels ?? MESES_EFICIENCIA
   const colAnoWidth = labels.length * COL_MES_WIDTH
@@ -396,7 +406,8 @@ export function OverviewKpiHeatCard({
                           cell,
                           metaForCell(i),
                           metaComparacao,
-                          span > 1 ? CELL_FONT_ACUM : undefined,
+                          span > 1 ? CELL_FONT_ACUM : CELL_FONT_MONTH,
+                          mesesHerdamAcumulado,
                         ),
                       }}
                     >
@@ -408,7 +419,13 @@ export function OverviewKpiHeatCard({
                 cells.map((cell, i) => {
                   const yearBreak = Boolean(monthLabels) && isYearBreakAt(labels, i)
                   const role = yearBandRole(labels, i)
-                  const st = cellStyle(cell, metaForCell(i), metaComparacao)
+                  const st = cellStyle(
+                    cell,
+                    metaForCell(i),
+                    metaComparacao,
+                    CELL_FONT_MONTH,
+                    mesesHerdamAcumulado,
+                  )
                   const showText = renderHeatCellContent(cell)
                   return (
                     <td
@@ -467,7 +484,13 @@ export function OverviewKpiHeatCard({
                         padding: 4,
                         textAlign: 'center',
                         fontSize: 11,
-                        ...cellStyle(cell, metaForCell(i), metaComparacao),
+                        ...cellStyle(
+                          cell,
+                          metaForCell(i),
+                          metaComparacao,
+                          CELL_FONT_MONTH,
+                          mesesHerdamAcumulado,
+                        ),
                         ...(yearBreak ? YEAR_GAP : null),
                         ...(destaque != null && !destacado ? { opacity: 0.4 } : null),
                         ...(destacado ? { outline: '2px solid #0F172A', outlineOffset: -2 } : null),
