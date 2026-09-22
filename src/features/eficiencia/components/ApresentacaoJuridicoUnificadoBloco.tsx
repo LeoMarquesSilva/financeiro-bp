@@ -27,6 +27,7 @@ import {
 import {
   buildDesenvolvimentoEquipeHeatCell,
   formatMinutosHeatLabel,
+  META_MENSAL_DESENVOLVIMENTO,
 } from '../utils/desenvolvimentoEquipeHeatCell'
 import { metaTreinamentoPeriodoMinutos } from '../utils/treinamentoMetaProporcional'
 import {
@@ -613,7 +614,9 @@ export function ApresentacaoJuridicoUnificadoBloco({
         <OverviewKpiHeatCard
           showAcumulado={false}
           title="Desenvolvimento Equipe"
-          meta={100}
+          meta={META_MENSAL_DESENVOLVIMENTO}
+          metasPorMes={monthLabels.map(() => META_MENSAL_DESENVOLVIMENTO)}
+          metaAcumulado={100}
           metaLabel={formatMetaDesenvolvimentoEquipe(overviewByAno, slots)}
           monthLabels={monthLabels}
           cells={treinoCells}

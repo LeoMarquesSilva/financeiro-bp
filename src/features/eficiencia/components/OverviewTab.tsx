@@ -38,6 +38,7 @@ import { resolveMetaTexto } from '../utils/overviewKpiMeta'
 import {
   buildDesenvolvimentoEquipeHeatCell,
   formatMinutosHeatLabel,
+  META_MENSAL_DESENVOLVIMENTO,
 } from '../utils/desenvolvimentoEquipeHeatCell'
 import { eficienciaService } from '../services/eficienciaService'
 import {
@@ -150,7 +151,6 @@ function formatMinutos(min: number): string {
   return formatMinutosHeatLabel(min)
 }
 
-/** Meta anual de treinamentos — ex.: `Meta: 588:00h (42 x 14h)`. */
 function formatMetaDesenvolvimentoEquipe(
   treinamentos: EficienciaOverview['treinamentos'],
 ): string {
@@ -658,7 +658,9 @@ export function OverviewTab({
         />
         <OverviewKpiHeatRow
           title="Desenvolvimento Equipe"
-          meta={100}
+          meta={META_MENSAL_DESENVOLVIMENTO}
+          metasPorMes={Array.from({ length: 12 }, () => META_MENSAL_DESENVOLVIMENTO)}
+          metaAcumulado={100}
           metaLabel={metaDesenvolvimentoEquipe}
           mesDestaque={mesDestaque}
           cells={treinamentosCells}

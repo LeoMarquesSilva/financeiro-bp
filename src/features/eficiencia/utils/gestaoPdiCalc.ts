@@ -102,12 +102,20 @@ export function agregarGestaoPdiMensal(detalhe: GestaoPdiDetalheRow[]): GestaoPd
     })
 }
 
+/** Mês: aptos/elegíveis e o percentual entre parênteses (ex.: 30/45 (66,67%)). */
+export function formatGestaoPdiContagem(aptas: number, elegiveis: number, pct: number): string {
+  return `${aptas}/${elegiveis} (${formatPercent(pct)})`
+}
+
 export function buildGestaoPdiCells(mensal: GestaoPdiMesRow[]): HeatCell[] {
   const porMes = new Map(mensal.map((r) => [r.mes, r]))
   return Array.from({ length: 12 }, (_, i) => {
     const row = porMes.get(i + 1)
-    if (!row || row.pct_aptas == null) return { value: null, label: '-' }
-    return { value: row.pct_aptas, label: formatPercent(row.pct_aptas) }
+    if (!row || row.elegiveis <= 0 || row.pct_aptas == null) return { value: null, label: '-' }
+    return {
+      value: row.pct_aptas,
+      label: formatGestaoPdiContagem(row.aptas, row.elegiveis, row.pct_aptas),
+    }
   })
 }
 

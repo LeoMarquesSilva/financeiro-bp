@@ -1,6 +1,9 @@
 import { formatPercent } from '@/shared/utils/format'
 import type { HeatCell } from '../components/OverviewKpiHeatRow'
 
+/** Fatia mensal da meta anual: 100% ÷ 12. */
+export const META_MENSAL_DESENVOLVIMENTO = 100 / 12
+
 /** Horas:minutos para células do heat map (ex.: 25:00). */
 export function formatMinutosHeatLabel(min: number): string {
   const h = Math.floor(min / 60)

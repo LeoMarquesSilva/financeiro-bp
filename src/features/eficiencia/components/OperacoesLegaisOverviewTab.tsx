@@ -45,7 +45,7 @@ import {
   type UnificadoLinhaSerie,
 } from './ApresentacaoUnificadoLinhasGrid'
 import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
-import { formatMinutosHeatLabel } from '../utils/desenvolvimentoEquipeHeatCell'
+import { formatMinutosHeatLabel, META_MENSAL_DESENVOLVIMENTO } from '../utils/desenvolvimentoEquipeHeatCell'
 import { RacionalSheet } from './RacionalSheet'
 import {
   useInstagramMarketing,
@@ -711,9 +711,10 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
         />
         <OverviewKpiHeatRow
           title="Desenvolvimento Contínuo"
-          meta={100}
+          meta={META_MENSAL_DESENVOLVIMENTO}
+          metasPorMes={Array.from({ length: 12 }, () => META_MENSAL_DESENVOLVIMENTO)}
+          metaAcumulado={100}
           metaLabel={metaTreinoLabel}
-          colorirMesesComoAcumulado
           mesDestaque={mesDestaque}
           cells={
             loadingTreino || loadingTreinoMensal
