@@ -143,22 +143,6 @@ export function labelPeriodoBonus(mesInicio: number, mesFim: number, ano: number
   return `${nome(a)}–${nome(b)}/${String(ano).slice(2)}`
 }
 
-/** Atingimento 0–1 vs meta, capado em 100% (texto da tabela). */
-function atingimentoCapado(
-  resultado: number | null,
-  meta: number,
-  direcao: BonusDirecao,
-): number | null {
-  if (resultado == null || !Number.isFinite(resultado) || !Number.isFinite(meta)) {
-    return null
-  }
-  if (direcao === 'menor') {
-    return resultado <= meta ? 1 : 0
-  }
-  if (meta <= 0) return resultado > 0 ? 1 : 0
-  return Math.min(1, resultado / meta)
-}
-
 function rowFromValue(
   id: BonusIndicadorId,
   label: string,
@@ -169,8 +153,8 @@ function rowFromValue(
   const peso = BONUS_PESOS[id]
   const comparacao = direcao === 'menor' ? 'maximo' : 'minimo'
   const bateu = atingiuMetaKpi(resultado, meta, comparacao)
-  const at = atingimentoCapado(resultado, meta, direcao)
-  const contribuicao = at == null ? 0 : Math.round(peso * at * 100) / 100
+  /** Bateu → contribuição = peso; senão 0,00% (sem rateio pelo % atingido). */
+  const contribuicao = bateu ? peso : 0
   return {
     id,
     label,

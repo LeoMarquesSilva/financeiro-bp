@@ -290,8 +290,7 @@ function IndicadoresTable({
             INDICADORES — PESOS, RESULTADOS E CONTRIBUIÇÃO
           </div>
           <div style={{ marginTop: 3, fontSize: 10, color: '#CBD5E1', lineHeight: 1.35 }}>
-            Atingimento capado em 100% por indicador. Contribuição = peso × atingimento
-            capado.
+            Contribuição = peso do indicador se bateu a meta; senão 0,00%.
           </div>
         </div>
       </div>
@@ -335,10 +334,17 @@ function IndicadoresTable({
         <tbody>
           {rows.map((r) => {
             const st = statusLabel(r.bateu)
+            const pendente = Boolean(r.fixo)
             const resColor =
               r.bateu == null ? '#64748B' : r.bateu ? GREEN : RED
             return (
-              <tr key={r.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+              <tr
+                key={r.id}
+                style={{
+                  borderBottom: '1px solid #F1F5F9',
+                  background: pendente ? '#F1F5F9' : undefined,
+                }}
+              >
                 <td
                   style={{
                     padding: '8px 10px',
@@ -348,6 +354,7 @@ function IndicadoresTable({
                   }}
                 >
                   {r.label}
+                  {pendente ? '*' : ''}
                 </td>
                 <td
                   style={{
@@ -397,7 +404,7 @@ function IndicadoresTable({
                     textAlign: 'center',
                     fontWeight: 700,
                     color: r.bateu ? GREEN : '#334155',
-                    background: r.bateu ? '#F0FDF4' : 'transparent',
+                    background: pendente ? 'transparent' : r.bateu ? '#F0FDF4' : 'transparent',
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -474,6 +481,19 @@ function IndicadoresTable({
           </tr>
         </tbody>
       </table>
+      <div
+        style={{
+          padding: '8px 12px 10px',
+          fontSize: 10,
+          fontWeight: 600,
+          color: '#64748B',
+          lineHeight: 1.4,
+          borderTop: '1px solid #E2E8F0',
+          background: '#F8FAFC',
+        }}
+      >
+        * Os 3 últimos indicadores ainda estão pendentes de aplicação
+      </div>
     </div>
   )
 }
