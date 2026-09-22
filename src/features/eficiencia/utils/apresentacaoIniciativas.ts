@@ -175,7 +175,6 @@ export function buildApresentacaoIniciativas(
       }
     })
     .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''))
-    })
 
   const total = itensEscopo.length
   const projetos = itensEscopo.filter((i) => tipoItem(i.tags) === 'Projetos').length
