@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, Wallet } from 'lucide-react'
+import { Download, Loader2, RefreshCw, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useOpexDashboard } from '../hooks/useOpexDashboard'
@@ -14,6 +14,7 @@ import { OpexOrcamentoSection } from '../components/OpexOrcamentoSection'
 import { OpexDeParaSection } from '../components/OpexDeParaSection'
 import { OpexPeriodoSelector } from '../components/OpexPeriodoSelector'
 import { OpexPlanoContasFiltro } from '../components/OpexPlanoContasFiltro'
+import { exportOpexLancamentosExcel } from '../utils/opexLancamentosExport'
 import { formatPeriodoOpex, mesesComparacaoYoY, temFiltroMeses } from '../utils/opexPeriodo'
 import { loadOpexPlanoFiltro, type OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 
@@ -24,6 +25,8 @@ export function OpexPage() {
   const [mesesFiltro, setMesesFiltro] = useState<number[]>([])
   const [soFixas, setSoFixas] = useState(false)
   const [planoFiltro, setPlanoFiltro] = useState<OpexPlanoFiltroState>(() => loadOpexPlanoFiltro(ano))
+  const [exportando, setExportando] = useState(false)
+  const [erroExport, setErroExport] = useState<string | null>(null)
   const { data, isLoading, error, refetch, isFetching } = useOpexDashboard(ano, mesesFiltro, planoFiltro)
   const mesAtual = data?.mes_atual ?? (new Date().getFullYear() === ano ? new Date().getMonth() + 1 : 12)
   const mesesYoY = mesesComparacaoYoY(mesesFiltro, mesAtual)
@@ -41,6 +44,24 @@ export function OpexPage() {
   const handleAnoChange = (y: number) => {
     setAno(y)
     setMesesFiltro([])
+  }
+
+  const handleExportar = async () => {
+    setExportando(true)
+    setErroExport(null)
+    try {
+      await exportOpexLancamentosExcel({
+        ano,
+        mesesFiltro,
+        mesAtual,
+        planoFiltro,
+        periodoLabel: formatPeriodoOpex(mesesFiltro, mesAtual, ano),
+      })
+    } catch (e) {
+      setErroExport(e instanceof Error ? e.message : 'Erro ao exportar a planilha.')
+    } finally {
+      setExportando(false)
+    }
   }
 
   return (
@@ -78,6 +99,21 @@ export function OpexPage() {
               variant="outline"
               size="sm"
               className="gap-2"
+              onClick={() => void handleExportar()}
+              disabled={exportando}
+            >
+              {exportando ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Download className="h-4 w-4" aria-hidden />
+              )}
+              Exportar Excel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
               onClick={() => void refetch()}
               disabled={isFetching}
             >
@@ -85,6 +121,11 @@ export function OpexPage() {
               Atualizar
             </Button>
           </div>
+          {erroExport && (
+            <p className="max-w-sm text-right text-xs text-red-600" role="alert">
+              {erroExport}
+            </p>
+          )}
           <OpexPeriodoSelector
             mesesFiltro={mesesFiltro}
             mesAtual={data?.mes_atual ?? mesAtual}

@@ -88,6 +88,27 @@ export type OpexMesGrupoRow = {
   variacao: number
 }
 
+/** Uma linha de lançamento VIOS no recorte do painel (exportação Excel). */
+export type OpexLancamentoRow = {
+  mes_vencimento: number | null
+  mes_pagamento: number | null
+  grupo_conta: string
+  plano_contas: string
+  conta_numero: string
+  fixo: boolean
+  ci_item: number
+  ci_titulo: number
+  nro_titulo: string
+  descricao: string
+  fornecedor: string
+  departamento: string
+  situacao_titulo: string
+  data_vencimento: string | null
+  data_pagamento: string | null
+  valor_previsto_vios: number
+  valor_realizado: number
+}
+
 export type OpexMesItemRow = {
   grupo_conta: string
   plano_contas: string

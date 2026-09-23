@@ -38,6 +38,15 @@ export function formatPeriodoOpex(meses: number[], mesAtual: number, ano: number
   return sorted.map((m) => MESES_CURTOS[m - 1]).join(', ') + ` / ${ano}`
 }
 
+/**
+ * Mesmo recorte de `opex_mes_no_kpi`: meses escolhidos no painel, ou o ano até
+ * `mesAtual`. `mesAtual = 0` (ano futuro) inclui os 12 meses.
+ */
+export function mesNoPainelOpex(mes: number, mesesFiltro: number[], mesAtual: number): boolean {
+  if (mesesFiltro.length) return mesesFiltro.includes(mes)
+  return mesAtual === 0 || mes <= mesAtual
+}
+
 export function mesesYtd(mesAtual: number): number[] {
   if (mesAtual <= 0) return []
   return Array.from({ length: mesAtual }, (_, i) => i + 1)

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { collectPaginatedRows } from '@/lib/supabasePaginate'
 import { MESES_CURTOS } from '../constants'
 import type {
   OpexDashboard,
@@ -6,6 +7,7 @@ import type {
   OpexDepartamentoMesRow,
   OpexDepartamentoPlanoRow,
   OpexDepartamentoRow,
+  OpexLancamentoRow,
   OpexMesGrupoRow,
   OpexMesItemRow,
   OpexPlanoRow,
@@ -148,6 +150,45 @@ export const opexService = {
       previsto_vios: Number(row.previsto_vios) || 0,
       realizado: Number(row.realizado) || 0,
       variacao: Number(row.variacao) || 0,
+    }))
+  },
+
+  async fetchLancamentosPeriodo(
+    ano: number,
+    meses?: number[] | null,
+    planoFiltro?: { gruposExcluidos: string[]; planosExcluidos: string[] } | null,
+  ): Promise<OpexLancamentoRow[]> {
+    const rows = await collectPaginatedRows<Record<string, unknown>>(async (from, to) =>
+      supabase
+        .rpc(
+          'opex_lancamentos_periodo' as never,
+          {
+            p_ano: ano,
+            p_meses: rpcMeses(meses),
+            ...rpcPlanoFiltro(planoFiltro),
+          } as never,
+        )
+        .order('ci_item', { ascending: true })
+        .range(from, to),
+    )
+    return rows.map((row) => ({
+      mes_vencimento: row.mes_vencimento == null ? null : Number(row.mes_vencimento) || null,
+      mes_pagamento: row.mes_pagamento == null ? null : Number(row.mes_pagamento) || null,
+      grupo_conta: String(row.grupo_conta ?? ''),
+      plano_contas: String(row.plano_contas ?? ''),
+      conta_numero: String(row.conta_numero ?? ''),
+      fixo: Boolean(row.fixo),
+      ci_item: Number(row.ci_item) || 0,
+      ci_titulo: Number(row.ci_titulo) || 0,
+      nro_titulo: String(row.nro_titulo ?? ''),
+      descricao: String(row.descricao ?? ''),
+      fornecedor: String(row.fornecedor ?? ''),
+      departamento: String(row.departamento ?? ''),
+      situacao_titulo: String(row.situacao_titulo ?? ''),
+      data_vencimento: row.data_vencimento ? String(row.data_vencimento) : null,
+      data_pagamento: row.data_pagamento ? String(row.data_pagamento) : null,
+      valor_previsto_vios: Number(row.valor_previsto_vios) || 0,
+      valor_realizado: Number(row.valor_realizado) || 0,
     }))
   },
 
