@@ -26,6 +26,7 @@ export const JUSTIFICATIVAS_EXCLUDENTES = [
   'Atraso No Envio De Documentação Pelo Cliente',
   'EXCLUDENTE DE FATAL - VALIDADO POR OPS. LEGAIS',
   'Atraso No Pagamento De Guia Pelo Cliente',
+  'PRAZO NÃO PEREMPTÓRIO - ESTRATÉGIA PROCESSUAL',
 ]
 
 /** Match case-insensitive — SharePoint costuma gravar a justificativa em UPPERCASE. */
