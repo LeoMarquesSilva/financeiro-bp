@@ -105,7 +105,9 @@ function cellsToLinePoints(
       rotulo:
         cell?.value == null || cell.label === '-' || cell.label === '…'
           ? undefined
-          : cell.label,
+          : cell.subLabel
+            ? `${cell.label} ${cell.subLabel}`
+            : cell.label,
     }
   })
 }

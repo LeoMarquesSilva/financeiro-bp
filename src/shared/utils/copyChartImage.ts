@@ -2399,7 +2399,7 @@ function bumpApresentacaoExportFonts(
   })
 }
 
-/** Células Desenvolvimento Equipe (horas + %): export PPT precisa de quebra de linha explícita. */
+/** Células em duas linhas (horas + % ou aptos/elegíveis + %): export PPT precisa de quebra explícita. */
 function isStackedHeatCell(el: HTMLElement): boolean {
   return (
     el.hasAttribute('data-heat-cell-stacked') ||
@@ -2464,7 +2464,20 @@ function applyStackedHeatCellExportStyles(cell: HTMLElement, cellFs: number): vo
   stacked.style.setProperty('width', '100%', 'important')
   stacked.style.setProperty('margin', '0 auto', 'important')
   stacked.style.setProperty('height', `${contentHeight}px`, 'important')
-  stacked.style.setProperty('overflow', 'visible', 'important')
+  stacked.style.setProperty('overflow', 'hidden', 'important')
+  fitStackedHeatFont(stacked, primaryFs)
+}
+
+/** Encolhe as duas linhas quando a % (ex.: (100,00%)) não cabe na coluna do mês. */
+function fitStackedHeatFont(stacked: HTMLElement, fontPx: number): void {
+  const available = stacked.clientWidth
+  const needed = stacked.scrollWidth
+  if (available <= 8 || needed <= available) return
+  const fitted = Math.max(9, Math.floor(fontPx * (available / needed) * 0.96 * 10) / 10)
+  const lineH = Math.ceil(fitted * 1.05)
+  stacked.style.setProperty('font-size', `${fitted}px`, 'important')
+  stacked.style.setProperty('line-height', `${lineH}px`, 'important')
+  stacked.style.setProperty('height', `${lineH * 2}px`, 'important')
 }
 
 /** Reduz textos de tabela somente quando ultrapassam a largura real da célula. */
@@ -3147,18 +3160,18 @@ function applyApresentacaoFillSlideLayout(
     36 * bodyN,
     slideH - padY * 2 - headerBlock - footerBlock - gap * Math.max(0, bodyN - 1),
   )
-  const desenvolvimentoCard = bodyCards.find(
-    (card) =>
-      card.getAttribute('data-overview-kpi-title') === 'Desenvolvimento Equipe',
+  const stackedHeatCards = bodyCards.filter(
+    (card) => card.querySelector('[data-heat-cell-stacked]') != null,
   )
-  // Desenvolvimento possui meta longa e valores em duas linhas. Reserva uma
-  // linha mais alta no PPT; o espaço é descontado igualmente dos demais cards.
-  const desenvolvimentoExtraH = desenvolvimentoCard ? 28 : 0
+  // Desenvolvimento (meta longa + horas/%) e Gestão de PDI (nº + %).
+  // Reserva uma linha mais alta no PPT; o espaço sai dos demais cards.
+  const stackedExtraH = 28
+  const stackedExtraTotal = stackedHeatCards.length * stackedExtraH
   const bodyCardH = Math.max(
     36,
-    Math.floor((bodyAvail - desenvolvimentoExtraH) / bodyN),
+    Math.floor((bodyAvail - stackedExtraTotal) / bodyN),
   )
-  const desenvolvimentoCardH = bodyCardH + desenvolvimentoExtraH
+  const stackedCardH = bodyCardH + stackedExtraH
   const cardW = slideW - padX * 2
 
   // Tipografia única em todos os cards do Jurídico Unificado. Evita que textos
@@ -3231,10 +3244,8 @@ function applyApresentacaoFillSlideLayout(
     placeCard(card, headerH, { overflowVisible: true, transparentBg: true })
   })
   bodyCards.forEach((card) => {
-    placeCard(
-      card,
-      card === desenvolvimentoCard ? desenvolvimentoCardH : bodyCardH,
-    )
+    const stacked = card.querySelector('[data-heat-cell-stacked]') != null
+    placeCard(card, stacked ? stackedCardH : bodyCardH)
   })
   footerCards.forEach((card) => {
     placeCard(card, footerH)

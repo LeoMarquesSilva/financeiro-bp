@@ -204,12 +204,15 @@ function renderHeatCellContent(cell: HeatCell): ReactNode {
       data-heat-cell-stacked="1"
       style={{ display: 'block', lineHeight: 1.15, textAlign: 'center' }}
     >
-      <span data-heat-cell-stacked-primary="1" style={{ display: 'block' }}>
+      <span
+        data-heat-cell-stacked-primary="1"
+        style={{ display: 'block', whiteSpace: 'nowrap' }}
+      >
         {cell.label}
       </span>
       <span
         data-heat-cell-stacked-secondary="1"
-        style={{ display: 'block', fontSize: '0.88em' }}
+        style={{ display: 'block', fontSize: '0.88em', whiteSpace: 'nowrap' }}
       >
         {cell.subLabel}
       </span>
