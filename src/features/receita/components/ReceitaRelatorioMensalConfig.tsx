@@ -252,7 +252,7 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
           <Label htmlFor="relatorio-enabled" className="font-medium">
             Envio automático ativo
           </Label>
-          <p className="text-xs text-slate-500">Cron horário verifica o horário configurado</p>
+          <p className="text-xs text-slate-500">Cron horário · dias úteis (seg–sex)</p>
         </div>
         <Checkbox
           id="relatorio-enabled"
@@ -358,7 +358,7 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
           <span className={ultimoLog.status === 'sucesso' ? 'text-emerald-700' : 'text-red-700'}>
             {ultimoLog.status}
           </span>
-          {ultimoLog.erro ? ` (${ultimoLog.erro.slice(0, 80)})` : ''}
+          {ultimoLog.erro ? ` (${ultimoLog.erro.slice(0, 200)})` : ''}
         </p>
       )}
 
@@ -534,13 +534,16 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
                   <th className="px-2 py-1">Quando</th>
                   <th className="px-2 py-1">E-mail</th>
                   <th className="px-2 py-1">Status</th>
+                  <th className="px-2 py-1">Detalhe</th>
                 </tr>
               </thead>
               <tbody>
                 {log.slice(0, 15).map((entry: RelatorioMensalLogEntry) => (
                   <tr key={entry.id} className="border-t border-slate-50">
                     <td className="px-2 py-1 whitespace-nowrap">{formatDate(entry.enviado_em)}</td>
-                    <td className="px-2 py-1 truncate max-w-[140px]">{entry.email}</td>
+                    <td className="px-2 py-1 truncate max-w-[140px]" title={entry.email}>
+                      {entry.email}
+                    </td>
                     <td className="px-2 py-1">
                       <span
                         className={
@@ -549,6 +552,9 @@ export function ReceitaRelatorioMensalConfig({ enabled = true }: Props) {
                       >
                         {entry.status}
                       </span>
+                    </td>
+                    <td className="px-2 py-1 truncate max-w-[220px] text-slate-500" title={entry.erro ?? ''}>
+                      {entry.erro ?? '—'}
                     </td>
                   </tr>
                 ))}

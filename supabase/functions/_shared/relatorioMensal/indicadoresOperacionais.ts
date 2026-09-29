@@ -9,6 +9,7 @@ import {
 const GREEN_SOFT = '#E8F5E9'
 const RED_SOFT = '#FFEBEE'
 const BRAND_SOFT = '#D6EAF5'
+const WHITE = '#FFFFFF'
 const BRAND = '#156082'
 const BORDER = '#CBD5E1'
 const TEXT = '#1F2937'
@@ -49,6 +50,8 @@ export type IndicadoresOperacionaisInput = {
     saidas_voluntarias: number
     meta_pct_retencao_minima: number
   } | null
+  /** false na área Trabalhista (sem SLA Vistagem Normal). */
+  includeVistagemNormal?: boolean
 }
 
 function pctLabel(num: number, den: number): string {
@@ -77,7 +80,7 @@ function buildGestaoPdiRow(
       indicador: 'Gestão de PDI',
       resultado: 'Ciclo não fechado',
       detalhe: '',
-      bgColor: BRAND_SOFT,
+      bgColor: WHITE,
     }
   }
 
@@ -86,7 +89,7 @@ function buildGestaoPdiRow(
       indicador: 'Gestão de PDI',
       resultado: formatPercent(gp.pct_aptas),
       detalhe: `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`,
-      bgColor: gp.pct_aptas >= 100 ? GREEN_SOFT : RED_SOFT,
+      bgColor: WHITE,
       racionalSlug: 'gestao_pdi',
     }
   }
@@ -97,7 +100,7 @@ function buildGestaoPdiRow(
       indicador: 'Gestão de PDI',
       resultado: formatPercent(pct),
       detalhe: `${gp.aptas} aptas · ${gp.desvios} desvios · ${gp.elegiveis} elegíveis`,
-      bgColor: pct >= 100 ? GREEN_SOFT : RED_SOFT,
+      bgColor: WHITE,
       racionalSlug: 'gestao_pdi',
     }
   }
@@ -106,7 +109,7 @@ function buildGestaoPdiRow(
     indicador: 'Gestão de PDI',
     resultado: '—',
     detalhe: 'Baixar racional (Excel)',
-    bgColor: BRAND_SOFT,
+    bgColor: WHITE,
     racionalSlug: 'gestao_pdi',
   }
 }
@@ -116,60 +119,64 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresOperacionaisIn
   const r = data.slaProtocolo
   const e = data.eficienciaProtocolo
 
-  if (r) {
-    const den = r.qtd_d1 + r.qtd_fatal
+  {
+    const den = r ? r.qtd_d1 + r.qtd_fatal : 0
     rows.push({
       indicador: 'SLA Protocolo (D-1)',
-      resultado: pctLabel(r.qtd_d1, den),
-      detalhe: `${r.qtd_d1} D-1 · ${r.qtd_fatal} FATAL · ${r.qtd_excludente} excludentes`,
-      bgColor: den > 0 && r.qtd_d1 / den >= 0.9 ? GREEN_SOFT : RED_SOFT,
+      resultado: r ? pctLabel(r.qtd_d1, den) : '—',
+      detalhe: r
+        ? `${r.qtd_d1} D-1 · ${r.qtd_fatal} FATAL · ${r.qtd_excludente} excludentes`
+        : 'Sem movimento no recorte — última posição indisponível',
+      bgColor: r && den > 0 && r.qtd_d1 / den >= 0.85 ? GREEN_SOFT : r ? RED_SOFT : BRAND_SOFT,
       racionalSlug: 'sla_protocolo',
     })
   }
 
-  if (e) {
-    const den = e.qtd_eficiencia + e.qtd_inconsistencia
+  {
+    const den = e ? e.qtd_eficiencia + e.qtd_inconsistencia : 0
     rows.push({
       indicador: 'Eficiência Protocolo',
-      resultado: pctLabel(e.qtd_eficiencia, den),
-      detalhe: `${e.qtd_eficiencia} eficiência · ${e.qtd_inconsistencia} inconsistência`,
-      bgColor: den > 0 && e.qtd_eficiencia / den >= 0.95 ? GREEN_SOFT : RED_SOFT,
+      resultado: e ? pctLabel(e.qtd_eficiencia, den) : '—',
+      detalhe: e
+        ? `${e.qtd_eficiencia} eficiência · ${e.qtd_inconsistencia} inconsistência`
+        : 'Sem movimento no recorte — última posição indisponível',
+      bgColor: e && den > 0 && e.qtd_eficiencia / den >= 0.95 ? GREEN_SOFT : e ? RED_SOFT : BRAND_SOFT,
       racionalSlug: 'eficiencia_protocolo',
     })
   }
 
   const ag = data.agendamento
-  if (ag) {
-    const denAg = ag.dentro + ag.fora
+  {
+    const denAg = ag ? ag.dentro + ag.fora : 0
     rows.push({
       indicador: 'SLA Ciência Agendamentos',
-      resultado: denAg ? pctLabel(ag.dentro, denAg) : '—',
-      detalhe: `${ag.dentro} dentro · ${ag.fora} fora`,
-      bgColor: denAg && ag.dentro / denAg >= 0.95 ? GREEN_SOFT : RED_SOFT,
+      resultado: ag && denAg ? pctLabel(ag.dentro, denAg) : '—',
+      detalhe: ag ? `${ag.dentro} dentro · ${ag.fora} fora` : 'Sem movimento no recorte — última posição indisponível',
+      bgColor: ag && denAg && ag.dentro / denAg >= 0.95 ? GREEN_SOFT : ag ? RED_SOFT : BRAND_SOFT,
       racionalSlug: 'sla_ciencia_agendamentos',
     })
   }
 
   const vr = data.vistagemRisco
-  if (vr) {
-    const denVr = vr.sim + vr.nao
+  {
+    const denVr = vr ? vr.sim + vr.nao : 0
     rows.push({
       indicador: 'SLA Vistagem Risco',
-      resultado: denVr ? pctLabel(vr.sim, denVr) : '—',
-      detalhe: `${vr.sim} Sim · ${vr.nao} Não`,
-      bgColor: denVr && vr.sim / denVr >= 0.98 ? GREEN_SOFT : RED_SOFT,
+      resultado: vr && denVr ? pctLabel(vr.sim, denVr) : '—',
+      detalhe: vr ? `${vr.sim} Sim · ${vr.nao} Não` : 'Sem movimento no recorte — última posição indisponível',
+      bgColor: vr && denVr && vr.sim / denVr >= 0.98 ? GREEN_SOFT : vr ? RED_SOFT : BRAND_SOFT,
       racionalSlug: 'sla_vistagem_risco',
     })
   }
 
   const vn = data.vistagemNormal
-  if (vn) {
-    const denVn = vn.sim + vn.nao
+  if (data.includeVistagemNormal !== false) {
+    const denVn = vn ? vn.sim + vn.nao : 0
     rows.push({
       indicador: 'SLA Vistagem Normal',
-      resultado: denVn ? pctLabel(vn.sim, denVn) : '—',
-      detalhe: `${vn.sim} Sim · ${vn.nao} Não`,
-      bgColor: denVn && vn.sim / denVn >= 0.98 ? GREEN_SOFT : RED_SOFT,
+      resultado: vn && denVn ? pctLabel(vn.sim, denVn) : '—',
+      detalhe: vn ? `${vn.sim} Sim · ${vn.nao} Não` : 'Sem movimento no recorte — última posição indisponível',
+      bgColor: vn && denVn && vn.sim / denVn >= 0.98 ? GREEN_SOFT : vn ? RED_SOFT : BRAND_SOFT,
       racionalSlug: 'sla_vistagem_normal',
     })
   }
@@ -200,29 +207,29 @@ export function buildIndicadoresOperacionaisRows(data: IndicadoresOperacionaisIn
   rows.push(buildGestaoPdiRow(data.gestaoPdi, data.ano, data.mes))
 
   const rb = data.receitaBruta
-  if (rb?.pct_meta != null) {
+  if (rb) {
     rows.push({
       indicador: 'Receita Bruta',
-      resultado: formatPercent(rb.pct_meta),
+      resultado: rb.pct_meta != null ? formatPercent(rb.pct_meta) : '—',
       detalhe:
         rb.recebido != null && rb.meta != null
           ? `${formatCurrency(rb.recebido)} recebido · meta ${formatCurrency(rb.meta)}`
           : 'Baixar racional (Excel)',
-      bgColor: rb.pct_meta >= 100 ? GREEN_SOFT : RED_SOFT,
+      bgColor: rb.pct_meta != null ? (rb.pct_meta >= 100 ? GREEN_SOFT : RED_SOFT) : BRAND_SOFT,
       racionalSlug: 'receita_bruta',
     })
   }
 
   const inad = data.indiceInadimplencia
-  if (inad?.pct != null) {
+  if (inad) {
     rows.push({
       indicador: 'Índice de Inadimplência',
-      resultado: formatPercent(inad.pct),
+      resultado: inad.pct != null ? formatPercent(inad.pct) : '—',
       detalhe:
         inad.inadimplencia != null && inad.previsto != null
           ? `${formatCurrency(inad.inadimplencia)} inad. · previsto ${formatCurrency(inad.previsto)}`
           : 'Baixar racional (Excel)',
-      bgColor: inad.pct <= 14 ? GREEN_SOFT : RED_SOFT,
+      bgColor: inad.pct != null ? (inad.pct <= 14 ? GREEN_SOFT : RED_SOFT) : BRAND_SOFT,
       racionalSlug: 'indice_inadimplencia',
     })
   }

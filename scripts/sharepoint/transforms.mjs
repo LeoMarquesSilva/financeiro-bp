@@ -268,7 +268,10 @@ export function computeAdesaoSem18(status, dataPrazo, dataConclusao, feriados) {
   return conclusaoData <= proximo ? 'Dentro do prazo' : 'Fora do prazo'
 }
 
-/** Fuso dos CSVs de eficiência (SharePoint / BI) — corte das 18h é horário de Brasília. */
+/** Corte SLA Protocolo (Adesão após 18): até 18:05:00 inclusive = D-1; depois = Fatal (BRT). */
+export const SLA_PROTOCOLO_FATAL_CORTE_SEGUNDOS_BRT = 18 * 3600 + 5 * 60
+
+/** Fuso dos CSVs de eficiência (SharePoint / BI) — corte acima é horário de Brasília. */
 export const EFICIENCIA_TZ = 'America/Sao_Paulo'
 
 /** BRT = UTC−3 (sem horário de verão desde 2019). */
@@ -356,7 +359,7 @@ export function computeConclusaoCompleta(dataConclusao, horaConclusaoStr) {
  * Coluna "Adesão Apos 18" (tabela Nova): compara o DIA da conclusão com o dia do prazo,
  * e a hora da conclusão com o corte das 18h quando concluído no mesmo dia do prazo.
  *   - Concluiu depois do dia do prazo -> "Fatal Quebra"
- *   - Concluiu no mesmo dia do prazo, até 18h -> "D-1"; após 18h -> "Fatal"
+ *   - Concluiu no mesmo dia do prazo, até 18:05 -> "D-1"; após 18:05 -> "Fatal"
  *   - Concluiu antes do dia do prazo -> "D-1"
  * @param {string} status
  * @param {Date|null} dataPrazo
@@ -374,8 +377,8 @@ export function computeAdesaoApos18(status, dataPrazo, conclusaoCompleta) {
   if (diaConclusao < diaPrazo) return 'D-1'
   const { hour, minute, second } = getDatePartsBrt(conclusaoCompleta)
   const segundos = hour * 3600 + minute * 60 + second
-  // Até 18:00:00 inclusive = D-1; 18:00:01+ = Fatal (BI considera segundos após o corte).
-  return segundos <= 18 * 3600 ? 'D-1' : 'Fatal'
+  // Até 18:05:00 inclusive = D-1; 18:05:01+ = Fatal.
+  return segundos <= SLA_PROTOCOLO_FATAL_CORTE_SEGUNDOS_BRT ? 'D-1' : 'Fatal'
 }
 
 /**

@@ -190,9 +190,9 @@ export function ReceitaGestaoAVistaSection({
                 <strong className="font-medium text-slate-600">Recebido</strong> para abrir a visão
                 do mês
                 {areaKey ? ` (${areaSelecionada?.label})` : ''}. Acima do tracejado (jan–mai) é
-                informativo — o Total soma só a partir de jun. No mês corrente, o previsto do
-                Total usa só títulos já vencidos; Inad. e Inad. % mostram o valor parcial ao
-                vivo até o congelamento.
+                informativo — o Total soma a partir de jun. Previsto no Total é a soma de todas
+                as linhas da coluna (jun–dez, inclusive meses futuros). Recebido e Inad. só nos
+                meses já decorridos. Inad. e Inad. % podem ser parciais até o congelamento.
               </p>
             </div>
           </div>

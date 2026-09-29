@@ -50,11 +50,12 @@ O agente deve adotar a mentalidade de um **gestor financeiro** em um escritório
 
 | Camada | Regra |
 |--------|--------|
-| Grupo cadastrado | `max(0, Σ faturado − Σ recebido)` das empresas (ex. CDA) |
+| Grupo cadastrado | `max(0, Σ faturado − Σ recebido)`; faturado já abate desconto de título PAGO |
 | Sem grupo | Cada razão social isolada (ex. Engforce) |
 | Evolução mensal | Snapshots congelados = histórico |
 | Card Resultado R$ | Saldo líquido ao vivo (`grupos_periodo`): só vencidos + baixa se pagou depois; **≠** evolução congelada |
 | Por área meta | Departamento VIOS do item, sem rateio |
+| Desconto concedido | Título PAGO com pago menor que o faturado e sem título novo (ex. Brasloop R$ 1.000) não é inadimplência. Pago a menor gera outro título |
 
 ### Tabelas principais
 

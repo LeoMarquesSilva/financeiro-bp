@@ -667,7 +667,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                     data-chart-export-ignore
                   >
                     {!filtroAreaAtivo &&
-                      'Saldo ao vivo do período (faturado vencido − recebido, com baixa se o título foi pago depois) — a evolução permanece no snapshot congelado'}
+                      'Saldo ao vivo do período (faturado vencido − recebido, com baixa se o título foi pago depois). Desconto em título quitado não entra. A evolução permanece no snapshot congelado'}
                     {dashboard.clientes_ajustado && (
                       <span className="block text-amber-700/90">Total ajustado pela seleção de grupos</span>
                     )}

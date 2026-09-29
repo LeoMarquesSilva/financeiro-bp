@@ -5,6 +5,10 @@ import {
   META_AREAS,
   type RelatorioSecoes,
 } from './constants.ts'
+import {
+  createRelatorioRpcCache,
+  type RelatorioRpcCache,
+} from './rpcCache.ts'
 import type { IndicadoresOperacionaisInput } from './indicadoresOperacionais.ts'
 import { fetchTopGruposInadComVencimento } from './inadGruposTop.ts'
 import {
@@ -47,8 +51,10 @@ export type RelatorioDadosBase = {
   mes: number
   /** Dia incluso no recorte parcial (gestão à vista). */
   diaReferencia: number
-  /** ISO YYYY-MM-DD — data de corte (ontem no fuso para mês parcial). */
+  /** ISO YYYY-MM-DD — data de corte do caixa/recebido. */
   corteIso: string
+  /** ISO YYYY-MM-DD — corte de inadimplência (ontem; hoje ainda não é vencido). */
+  corteInadIso: string
   periodoLabel: string
   periodoCurto: string
   parcial: boolean
@@ -69,7 +75,17 @@ type MetasConfig = {
 }
 
 function rowMes<T extends { mes: number }>(rows: T[], mes: number): T | undefined {
-  return rows.find((r) => r.mes === mes)
+  return rows.find((r) => Number(r.mes) === mes)
+}
+
+/** Se o mês ainda não tem movimento, usa a última posição já apurada (não omite o indicador). */
+function rowMesOuUltimo<T extends { mes: number }>(rows: T[], mes: number): T | undefined {
+  const exact = rowMes(rows, mes)
+  if (exact) return exact
+  const anteriores = rows
+    .filter((r) => Number(r.mes) >= 1 && Number(r.mes) <= mes)
+    .sort((a, b) => Number(b.mes) - Number(a.mes))
+  return anteriores[0]
 }
 
 function pctInad(inad: number, previsto: number): number | null {
@@ -108,7 +124,7 @@ async function fetchMetas(supabase: SupabaseClient): Promise<MetasConfig> {
 }
 
 async function fetchIndicadores(
-  supabase: SupabaseClient,
+  rpc: RelatorioRpcCache,
   ano: number,
   mes: number,
   areaKey: string | null,
@@ -126,16 +142,16 @@ async function fetchIndicadores(
     retRows,
     devRows,
   ] = await Promise.all([
-    supabase.rpc('eficiencia_sla_protocolo_mensal', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_protocolo_mensal', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_agendamento_mensal', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: true, p_area: area }),
+    rpc.rpc('eficiencia_sla_protocolo_mensal', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_protocolo_mensal', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_agendamento_mensal', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: true, p_area: area }),
     areaKey === 'trabalhista'
       ? Promise.resolve({ data: [], error: null })
-      : supabase.rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: false, p_area: area }),
-    supabase.rpc('eficiencia_gestao_pdi_mensal', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_turnover_anual', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_treinamentos_acumulado_ate', {
+      : rpc.rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: false, p_area: area }),
+    rpc.rpc('eficiencia_gestao_pdi_mensal', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_turnover_anual', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_treinamentos_acumulado_ate', {
       p_ano: ano,
       p_data_corte: corteIso,
       p_area: area,
@@ -151,12 +167,12 @@ async function fetchIndicadores(
   if (retRows.error) rpcError('eficiencia_turnover_anual', retRows.error)
   if (devRows.error) rpcError('eficiencia_treinamentos_acumulado_ate', devRows.error)
 
-  const sla = rowMes((slaRows.data ?? []) as Array<Record<string, unknown>>, mes)
-  const ef = rowMes((efRows.data ?? []) as Array<Record<string, unknown>>, mes)
-  const ag = rowMes((agRows.data ?? []) as Array<Record<string, unknown>>, mes)
-  const vr = rowMes((vrRows.data ?? []) as Array<Record<string, unknown>>, mes)
-  const vn = rowMes((vnRows.data ?? []) as Array<Record<string, unknown>>, mes)
-  const pdi = rowMes((pdiRows.data ?? []) as Array<Record<string, unknown>>, mes)
+  const sla = rowMesOuUltimo((slaRows.data ?? []) as Array<Record<string, unknown> & { mes: number }>, mes)
+  const ef = rowMesOuUltimo((efRows.data ?? []) as Array<Record<string, unknown> & { mes: number }>, mes)
+  const ag = rowMesOuUltimo((agRows.data ?? []) as Array<Record<string, unknown> & { mes: number }>, mes)
+  const vr = rowMesOuUltimo((vrRows.data ?? []) as Array<Record<string, unknown> & { mes: number }>, mes)
+  const vn = rowMesOuUltimo((vnRows.data ?? []) as Array<Record<string, unknown> & { mes: number }>, mes)
+  const pdi = rowMesOuUltimo((pdiRows.data ?? []) as Array<Record<string, unknown> & { mes: number }>, mes)
   const ret = ((retRows.data ?? []) as Array<Record<string, unknown>>)[0]
 
   const efTotal = Number(ef?.total) || 0
@@ -212,17 +228,21 @@ async function fetchIndicadores(
         meta_pct_retencao_minima: Number(ret.meta_pct_retencao_minima) || 90,
       }
       : null,
+    receitaBruta: null,
+    indiceInadimplencia: null,
+    includeVistagemNormal: areaKey !== 'trabalhista',
   }
 }
 
 async function fetchFechamentoPorArea(
-  supabase: SupabaseClient,
+  rpc: RelatorioRpcCache,
   ano: number,
   mes: number,
   areaKey: string | null,
   ref = new Date(),
   corteIso?: string,
   parcial = false,
+  corteInadIso?: string,
 ): Promise<ReceitaFechamentoMes> {
   type PrevistoRow = {
     ci_item: number
@@ -243,7 +263,7 @@ async function fetchFechamentoPorArea(
 
   if (!areaKey) {
     if (!parcial) {
-      const { data, error } = await supabase.rpc('receita_previsto_fechamento_mes', {
+      const { data, error } = await rpc.rpc('receita_previsto_fechamento_mes', {
         p_ano: ano,
         p_mes: mes,
       })
@@ -252,8 +272,8 @@ async function fetchFechamentoPorArea(
     }
 
     const [{ data: prevMesAll, error: e1 }, { data: classAll, error: e2 }] = await Promise.all([
-      supabase.rpc('receita_previsto_mes_itens', { p_ano: ano, p_mes: mes }),
-      supabase.rpc('receita_recebido_classificacao_mes', { p_ano: ano, p_mes: mes }),
+      rpc.rpc('receita_previsto_mes_itens', { p_ano: ano, p_mes: mes }),
+      rpc.rpc('receita_recebido_classificacao_mes', { p_ano: ano, p_mes: mes }),
     ])
     if (e1) rpcError('receita_previsto_mes_itens consolidado', e1)
     if (e2) rpcError('receita_recebido_classificacao_mes consolidado', e2)
@@ -265,19 +285,20 @@ async function fetchFechamentoPorArea(
       mes,
       ref,
       corteIso,
+      corteInadIso,
     )
   }
 
   const [{ data: prevMesAll, error: e1 }, { data: prevArea, error: e2 }, { data: classAll, error: e3 }] =
     await Promise.all([
-      supabase.rpc('receita_previsto_mes_itens', { p_ano: ano, p_mes: mes }),
-      supabase.rpc('receita_previsto_itens_area', {
+      rpc.rpc('receita_previsto_mes_itens', { p_ano: ano, p_mes: mes }),
+      rpc.rpc('receita_previsto_itens_area', {
         p_ano: ano,
         p_mes: mes,
         p_area_key: areaKey,
         p_incluir_inativos: true,
       }),
-      supabase.rpc('receita_recebido_classificacao_mes', { p_ano: ano, p_mes: mes }),
+      rpc.rpc('receita_recebido_classificacao_mes', { p_ano: ano, p_mes: mes }),
     ])
   if (e1) rpcError('receita_previsto_mes_itens area', e1)
   if (e2) rpcError('receita_previsto_itens_area', e2)
@@ -299,6 +320,7 @@ async function fetchFechamentoPorArea(
     mes,
     ref,
     corteIso,
+    corteInadIso,
   )
 }
 
@@ -314,15 +336,15 @@ async function fetchTopGruposInad(
 }
 
 async function fetchResumoMensal(
-  supabase: SupabaseClient,
+  rpc: RelatorioRpcCache,
   ano: number,
   mesRef: number,
   metaMensal: number,
   mesesMeta: number[],
 ): Promise<ReceitaMesResumo[]> {
-  const { data, error } = await supabase.rpc('receita_totais_mensais', { p_ano: ano })
+  const { data, error } = await rpc.rpc('receita_totais_mensais', { p_ano: ano })
   if (error) rpcError('receita_totais_mensais', error)
-  const { data: inadDash, error: e2 } = await supabase.rpc('receita_inadimplencia_dashboard', {
+  const { data: inadDash, error: e2 } = await rpc.rpc('receita_inadimplencia_dashboard', {
     p_ano: ano,
     p_mes_inicio: 1,
     p_mes_fim: 12,
@@ -351,7 +373,7 @@ async function fetchResumoMensal(
 }
 
 async function fetchOverviewHeatRows(
-  supabase: SupabaseClient,
+  rpc: RelatorioRpcCache,
   ano: number,
   mesRef: number,
   areaKey: string | null,
@@ -370,16 +392,16 @@ async function fetchOverviewHeatRows(
     retRows,
     treRows,
   ] = await Promise.all([
-    supabase.rpc('eficiencia_sla_protocolo_mensal', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_protocolo_mensal', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_agendamento_mensal', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: true, p_area: area }),
+    rpc.rpc('eficiencia_sla_protocolo_mensal', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_protocolo_mensal', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_agendamento_mensal', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: true, p_area: area }),
     areaKey === 'trabalhista'
       ? Promise.resolve({ data: [], error: null })
-      : supabase.rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: false, p_area: area }),
-    supabase.rpc('eficiencia_gestao_pdi_mensal', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_turnover_anual', { p_ano: ano, p_area: area }),
-    supabase.rpc('eficiencia_treinamentos_mensal', { p_ano: ano, p_area: area }),
+      : rpc.rpc('eficiencia_sla_vistagem_mensal', { p_ano: ano, p_risco: false, p_area: area }),
+    rpc.rpc('eficiencia_gestao_pdi_mensal', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_turnover_anual', { p_ano: ano, p_area: area }),
+    rpc.rpc('eficiencia_treinamentos_mensal', { p_ano: ano, p_area: area }),
   ])
 
   if (slaRows.error) rpcError('eficiencia_sla_protocolo_mensal overview', slaRows.error)
@@ -568,9 +590,11 @@ export async function fetchRelatorioDados(
   areaKey: string | null,
   periodo: Pick<
     RelatorioDadosBase,
-    'diaReferencia' | 'periodoLabel' | 'periodoCurto' | 'parcial' | 'corteIso'
+    'diaReferencia' | 'periodoLabel' | 'periodoCurto' | 'parcial' | 'corteIso' | 'corteInadIso'
   >,
+  rpcCache?: RelatorioRpcCache,
 ): Promise<RelatorioDadosBase> {
+  const rpc = rpcCache ?? createRelatorioRpcCache(supabase)
   const metas = await fetchMetas(supabase)
   const mesesMeta = metas.meses_meta ?? [6, 7, 8, 9, 10, 11, 12]
   let metaMes = mesesMeta.includes(mes) ? metas.meta : 0
@@ -580,12 +604,22 @@ export async function fetchRelatorioDados(
   }
 
   const refCorte = new Date(`${periodo.corteIso}T12:00:00`)
+  const refInad = new Date(`${periodo.corteInadIso}T12:00:00`)
 
   const [indicadores, fechamento, topGruposInad, resumoMensal] = await Promise.all([
-    fetchIndicadores(supabase, ano, mes, areaKey, periodo.corteIso),
-    fetchFechamentoPorArea(supabase, ano, mes, areaKey, refCorte, periodo.corteIso, periodo.parcial),
-    fetchTopGruposInad(supabase, ano, mes, areaKey, refCorte, periodo.corteIso),
-    fetchResumoMensal(supabase, ano, mes, metas.meta, mesesMeta),
+    fetchIndicadores(rpc, ano, mes, areaKey, periodo.corteIso),
+    fetchFechamentoPorArea(
+      rpc,
+      ano,
+      mes,
+      areaKey,
+      refCorte,
+      periodo.corteIso,
+      periodo.parcial,
+      periodo.corteInadIso,
+    ),
+    fetchTopGruposInad(supabase, ano, mes, areaKey, refInad, periodo.corteInadIso),
+    fetchResumoMensal(rpc, ano, mes, metas.meta, mesesMeta),
   ])
 
   if (!areaKey) {
@@ -612,13 +646,14 @@ export async function fetchRelatorioDados(
 
   const inadMes = fechamento.inadimplencia_kpi
   const inadPct = pctInad(inadMes, fechamento.previsto)
-  const overviewHeatRows = await fetchOverviewHeatRows(supabase, ano, mes, areaKey, resumoMensal)
+  const overviewHeatRows = await fetchOverviewHeatRows(rpc, ano, mes, areaKey, resumoMensal)
 
   return {
     ano,
     mes,
     diaReferencia: periodo.diaReferencia,
     corteIso: periodo.corteIso,
+    corteInadIso: periodo.corteInadIso,
     periodoLabel: periodo.periodoLabel,
     periodoCurto: periodo.periodoCurto,
     parcial: periodo.parcial,
@@ -676,4 +711,18 @@ export function horaConfigMatches(horaLocal: string, timezone: string, ref = new
   const atual = horaLocalAtual(timezone, ref)
   const cfg = horaLocal.slice(0, 5)
   return atual === cfg
+}
+
+/** Envio automático: segunda a sexta no fuso configurado (sem feriados). */
+export function isDiaUtilSegSex(timezone: string, ref = new Date()): boolean {
+  try {
+    const weekday = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'short',
+    }).format(ref)
+    return weekday !== 'Sat' && weekday !== 'Sun'
+  } catch {
+    const day = ref.getDay()
+    return day >= 1 && day <= 5
+  }
 }

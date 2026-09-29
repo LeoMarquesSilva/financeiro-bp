@@ -323,7 +323,8 @@ export async function exportGruposMesSelecionadosExcel(
   ws.mergeCells(noteRow, 1, noteRow, 6)
   const note = ws.getCell(noteRow, 1)
   note.value =
-    'Critérios: inadimplência = max(0, faturado vencido − recebido) consolidado por grupo. ' +
+    'Critérios: inadimplência = max(0, faturado vencido − recebido − desconto concedido) consolidado por grupo. ' +
+    'Desconto é a diferença de título quitado sem título residual. ' +
     'Títulos com vencimento hoje ou futuro não entram. Meses encerrados usam o último dia do mês como corte.'
   note.font = { name: 'Calibri', size: 9, italic: true, color: { argb: `FF${MUTED}` } }
   note.alignment = { wrapText: true, vertical: 'top' }
@@ -352,7 +353,8 @@ export async function exportGruposMesSelecionadosExcel(
     ['População', `${selecionados.length} grupo(s) marcado(s) no painel do mês`],
     ['Faturado', 'Somente títulos com data de vencimento até o corte (ontem no mês corrente)'],
     ['Recebido', 'Caixa do mês no grupo (netting entre razões sociais do mesmo grupo)'],
-    ['Inadimplência', 'max(0, Σ faturado − Σ recebido) do grupo'],
+    ['Inadimplência', 'max(0, Σ faturado − Σ recebido − desconto concedido) do grupo'],
+    ['Desconto concedido', 'Título PAGO com valor pago menor e sem título novo. Não é inadimplência'],
     ['Vencimento = hoje', 'Não entra — o dia do vencimento ainda não é inadimplência'],
     ['Gerado em', geradoLabel],
   ]

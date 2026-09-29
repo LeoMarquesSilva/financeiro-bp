@@ -1038,7 +1038,7 @@ function applyFullScrollExportLayout(root: HTMLElement, fixedWidth: number): voi
   root.style.setProperty('flex', 'none', 'important')
   root.style.setProperty('align-items', 'stretch', 'important')
 
-  root.querySelectorAll<HTMLElement>('.overflow-y-auto, .overflow-x-auto, .overflow-hidden').forEach(
+  root.querySelectorAll<HTMLElement>('.overflow-auto, .overflow-y-auto, .overflow-x-auto, .overflow-hidden').forEach(
     (el) => {
       el.style.setProperty('overflow', 'visible', 'important')
       el.style.setProperty('max-height', 'none', 'important')
@@ -1066,6 +1066,17 @@ function measureFullScrollHeight(prepared: HTMLElement): number {
   prepared.style.overflow = 'visible'
 
   document.body.appendChild(prepared)
+  // foreignObject não estica `height: auto` de painel com scroll: o conteúdo
+  // vaza e cobre o bloco seguinte. Trava a altura já expandida em px.
+  prepared
+    .querySelectorAll<HTMLElement>('.overflow-auto, .overflow-y-auto, .overflow-x-auto')
+    .forEach((el) => {
+      const full = Math.ceil(Math.max(el.scrollHeight, el.offsetHeight))
+      el.style.setProperty('height', `${full}px`, 'important')
+      el.style.setProperty('min-height', `${full}px`, 'important')
+      el.style.setProperty('max-height', 'none', 'important')
+      el.style.setProperty('overflow', 'hidden', 'important')
+    })
   const height = Math.ceil(prepared.scrollHeight)
   document.body.removeChild(prepared)
 
@@ -1630,7 +1641,7 @@ async function htmlElementToPngBlob(
   if (fullScroll) {
     const prepared = prepareFullScrollExportElement(element, options)
     const width = Math.max(1, Math.ceil(element.getBoundingClientRect().width))
-    const height = measureFullScrollHeight(prepared.cloneNode(true) as HTMLElement)
+    const height = measureFullScrollHeight(prepared)
     if (width === 0 || height === 0) {
       throw new Error('Conteúdo ainda não renderizado')
     }

@@ -414,17 +414,23 @@ export function buildGestaoVistaTotalYtd(
   recebidoAtingimentoKpi?: number,
   previstoCortePorMes?: ReadonlyMap<number, number>,
 ): GestaoVistaMesRow {
+  const inicioMeta = mesInicioMetaNaSerie(meses)
   const metaSet = new Set(mesesMetaPeriodo)
   const somaSet = metaSet.size > 0 ? metaSet : new Set(mesesPeriodo)
-  const noPeriodo = meses.filter((m) => somaSet.has(m.mes))
+  const noPeriodo = meses.filter((m) => {
+    if (!somaSet.has(m.mes)) return false
+    if (inicioMeta != null && m.mes < inicioMeta) return false
+    return true
+  })
 
   const metaYtd = noPeriodo.reduce((s, m) => s + (m.meta ?? 0), 0)
   const meta =
     metaAnualKpi != null && metaAnualKpi > 0 ? metaAnualKpi : metaYtd
-  const previsto = noPeriodo.reduce(
-    (s, m) => s + previstoAcumuloComCorte(m.mes, m.previsto, previstoCortePorMes),
-    0,
+  // Previsto no Total = soma da coluna a partir de jun, incluindo meses futuros (out–dez).
+  const noPeriodoPrevisto = meses.filter(
+    (m) => inicioMeta == null || m.mes >= inicioMeta,
   )
+  const previsto = noPeriodoPrevisto.reduce((s, m) => s + m.previsto, 0)
   const recebidoVals = noPeriodo.map((m) => m.recebido).filter((v): v is number => v != null)
   const recebido = recebidoVals.length > 0 ? recebidoVals.reduce((s, v) => s + v, 0) : null
 

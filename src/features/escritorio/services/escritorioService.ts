@@ -166,9 +166,16 @@ function normalizeContagemRow(row: Record<string, unknown>): ContagemCiPorGrupoR
 
 /** Resumo por grupo (uma linha por grupo): leve para filtros, ordenação e totais. View escritorio_grupos_resumo. */
 export const CATEGORIA_CLIENTE_INATIVO = 'Cliente inativo'
+export const CATEGORIA_CLIENTE_ATIVO = 'Cliente ativo'
 
 export function isClienteInativo(categoria: string | null | undefined): boolean {
   return (categoria ?? '').trim() === CATEGORIA_CLIENTE_INATIVO
+}
+
+export function isClienteAtivo(categoria: string | null | undefined): boolean {
+  return (categoria ?? '')
+    .split(',')
+    .some((parte) => parte.trim().toLowerCase() === 'cliente ativo')
 }
 
 export interface GrupoResumoRow {

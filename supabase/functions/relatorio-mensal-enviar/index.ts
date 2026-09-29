@@ -4,11 +4,13 @@ import { buildDigestEmail, variantesParaDestinatario } from '../_shared/relatori
 import {
   fetchRelatorioDados,
   horaConfigMatches,
+  isDiaUtilSegSex,
   type RelatorioDestinatario,
   type RelatorioMensalConfig,
 } from '../_shared/relatorioMensal/fetchData.ts'
+import { createRelatorioRpcCache } from '../_shared/relatorioMensal/rpcCache.ts'
 import { resolverPeriodoGestaoVista } from '../_shared/relatorioMensal/periodoGestaoVista.ts'
-import { getGraphToken, sendGraphMail } from '../_shared/relatorioMensal/graphMail.ts'
+import { getGraphToken, recallGestaoVistaEmails, sendGraphMail } from '../_shared/relatorioMensal/graphMail.ts'
 import {
   groupDestinatariosForEnvio,
   uniqueEmailsFromGrupo,
@@ -30,7 +32,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 type Payload = {
-  modo?: 'cron' | 'manual' | 'teste'
+  modo?: 'cron' | 'manual' | 'teste' | 'recall'
   ano?: number
   mes?: number
   email_teste?: string
@@ -88,6 +90,11 @@ async function assertAdminOrCron(
 }
 
 Deno.serve(async (req: Request) => {
+  let admin: ReturnType<typeof createClient> | null = null
+  let modo: 'cron' | 'manual' | 'teste' = 'manual'
+  let payload: Payload = {}
+  let configTimezone = 'America/Sao_Paulo'
+
   try {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -97,18 +104,39 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   if (!url || !anonKey || !serviceKey) return json({ error: 'Supabase não configurado.' }, 500)
 
-  const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
+  admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
   const auth = await assertAdminOrCron(req, admin, anonKey)
   if (!auth.ok) return auth.response
 
-  let payload: Payload = {}
   try {
     payload = await req.json()
   } catch {
     payload = {}
   }
 
-  const modo: 'cron' | 'manual' | 'teste' = auth.cron
+  if (payload.modo === 'recall') {
+    const MS_TENANT_ID = Deno.env.get('MS_TENANT_ID')
+    const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID')
+    const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET')
+    const MS_SENDER = Deno.env.get('MS_SENDER')
+    if (!MS_TENANT_ID || !MS_CLIENT_ID || !MS_CLIENT_SECRET || !MS_SENDER) {
+      return json({ error: 'Microsoft Graph não configurado (secrets ausentes).' }, 500)
+    }
+    const { data: destRows } = await admin
+      .from('relatorio_mensal_destinatarios')
+      .select('email')
+      .eq('ativo', true)
+    const extraEmails = (destRows ?? []).map((r: { email?: string }) => String(r.email ?? ''))
+    try {
+      const token = await getGraphToken(MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET)
+      const result = await recallGestaoVistaEmails(token, MS_SENDER, extraEmails)
+      return json(result)
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500)
+    }
+  }
+
+  modo = auth.cron
     ? (payload.modo === 'manual' || payload.modo === 'teste' ? payload.modo : 'cron')
     : (payload.modo === 'teste' ? 'teste' : 'manual')
 
@@ -121,17 +149,21 @@ Deno.serve(async (req: Request) => {
 
   const config = (cfgRow ?? {}) as RelatorioMensalConfig & { hora_local?: string; timezone?: string; mes_referencia?: string; secoes?: Record<string, unknown> }
   const secoesConfig = parseSecoesConfig(config.secoes)
+  configTimezone = config.timezone ?? 'America/Sao_Paulo'
 
   if (modo === 'cron') {
     if (!config.enabled) return json({ skipped: true, reason: 'Envio automático desativado.' })
     const hora = String(config.hora_local ?? '08:00:00').slice(0, 5)
     const tz = config.timezone ?? 'America/Sao_Paulo'
+    if (!isDiaUtilSegSex(tz)) {
+      return json({ skipped: true, reason: 'Envio automático apenas em dias úteis (seg–sex).' })
+    }
     if (!horaConfigMatches(hora, tz)) {
       return json({ skipped: true, reason: 'Fora do horário configurado.', hora_config: hora })
     }
   }
 
-  const timezone = config.timezone ?? 'America/Sao_Paulo'
+  const timezone = configTimezone
   const periodo = resolverPeriodoGestaoVista(timezone, new Date(), {
     ano: payload.ano,
     mes: payload.mes,
@@ -185,14 +217,32 @@ Deno.serve(async (req: Request) => {
   }
 
   const dadosMap = new Map<string | null, Awaited<ReturnType<typeof fetchRelatorioDados>>>()
+  const rpcCache = createRelatorioRpcCache(admin)
+  const periodoFetch = {
+    diaReferencia: periodo.dia,
+    corteIso: periodo.corteIso,
+    corteInadIso: periodo.corteInadIso,
+    periodoLabel: periodo.periodoLabel,
+    periodoCurto: periodo.periodoCurto,
+    parcial: periodo.parcial,
+  }
+  const fetchErrors: string[] = []
   for (const key of allVariantKeys) {
-    dadosMap.set(key, await fetchRelatorioDados(admin, ano, mes, key, {
-      diaReferencia: periodo.dia,
-      corteIso: periodo.corteIso,
-      periodoLabel: periodo.periodoLabel,
-      periodoCurto: periodo.periodoCurto,
-      parcial: periodo.parcial,
-    }))
+    try {
+      dadosMap.set(
+        key,
+        await fetchRelatorioDados(admin, ano, mes, key, periodoFetch, rpcCache),
+      )
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      fetchErrors.push(`${key ?? 'escritorio'}: ${msg}`)
+      console.error('relatorio-mensal-enviar fetch', key, msg)
+    }
+  }
+  if (!dadosMap.has(null)) {
+    throw new Error(
+      fetchErrors[0] ?? 'Falha ao montar o recorte consolidado do relatório.',
+    )
   }
 
   let token: string
@@ -226,6 +276,21 @@ Deno.serve(async (req: Request) => {
     if (validos.length === 0) continue
 
     const variantKeys = variantesParaDestinatario(grupo.area_key)
+    const missing = variantKeys.filter((k) => !dadosMap.has(k))
+    if (missing.length > 0) {
+      const erro = `Falha ao montar dados (${missing.map((k) => k ?? 'escritorio').join(', ')}). ${fetchErrors.join(' | ')}`.slice(0, 1000)
+      await admin.from('relatorio_mensal_log').insert({
+        ano,
+        mes,
+        email: validos.join(', '),
+        status: 'erro',
+        erro,
+        trigger: modo,
+        destinatario_id: null,
+      })
+      results.push({ email: validos.join(', '), ok: false, erro, area_key: grupo.area_key })
+      continue
+    }
     const assunto = `SIOE — Gestão à vista · ${String(mes).padStart(2, '0')}/${ano} (${periodo.periodoCurto})${grupo.area_key ? ` · ${areaLabel(grupo.area_key)}` : ''}`
     const corpo = buildDigestEmail(dadosMap, periodo, variantKeys, secoesConfig, grupo.area_key)
     const emailLogLabel = validos.join(', ')
@@ -266,6 +331,25 @@ Deno.serve(async (req: Request) => {
           ? String((e as { message: unknown }).message)
           : JSON.stringify(e)
     console.error('relatorio-mensal-enviar', msg)
+    try {
+      const periodoErr = resolverPeriodoGestaoVista(configTimezone, new Date(), {
+        ano: payload.ano,
+        mes: payload.mes,
+      })
+      if (modo === 'cron' && admin) {
+        await admin.from('relatorio_mensal_log').insert({
+          ano: periodoErr.ano,
+          mes: periodoErr.mes,
+          email: '(cron — falha na montagem)',
+          status: 'erro',
+          erro: msg.slice(0, 1000),
+          trigger: 'cron',
+          destinatario_id: null,
+        })
+      }
+    } catch (logErr) {
+      console.error('relatorio-mensal-enviar log', logErr)
+    }
     return json({ error: msg.slice(0, 2000) }, 500)
   }
 })

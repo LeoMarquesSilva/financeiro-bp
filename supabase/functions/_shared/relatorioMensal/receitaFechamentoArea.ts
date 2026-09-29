@@ -139,6 +139,7 @@ export function buildFechamentoPorAreaItens(
   mes: number,
   ref = new Date(),
   corteIso?: string,
+  corteInadIso?: string,
 ): ReceitaFechamentoMes {
   const classificacaoCorte = filtrarClassificacaoAteCorte(classificacaoItens, corteIso)
   const mesInicio = new Date(ano, mes - 1, 1)
@@ -184,7 +185,13 @@ export function buildFechamentoPorAreaItens(
 
   let inadimplencia_kpi = 0
   for (const item of previstoItens) {
-    inadimplencia_kpi += inadimplenciaItemMesFaturadoNaoPago(item, ano, mes, ref, corteIso)
+    inadimplencia_kpi += inadimplenciaItemMesFaturadoNaoPago(
+      item,
+      ano,
+      mes,
+      ref,
+      corteInadIso ?? corteIso,
+    )
   }
 
   return {

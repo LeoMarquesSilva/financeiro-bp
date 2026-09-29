@@ -1,6 +1,9 @@
+import { useRef } from 'react'
 import { formatCurrency } from '@/shared/utils/format'
+import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import { cn } from '@/lib/utils'
 import { useSaldoDevedor } from '../hooks/useSaldoDevedor'
+import { SaldoDevedorCopySlide } from './SaldoDevedorCopySlide'
 import {
   buildLeituraSaldoDevedor,
   formatSaldoDevedorInt,
@@ -43,22 +46,26 @@ function KpiCard({
   )
 }
 
-function GeradoCell({ valor }: { valor: number }) {
-  if (Math.abs(valor) < 0.5) {
-    return <span className="tabular-nums text-slate-400">{formatSaldoDevedorInt(0)}</span>
-  }
-  if (valor > 0) {
+function GeradoCell({ cliente }: { cliente: ClienteSaldoDevedor }) {
+  const queda = cliente.saldoAnterior - cliente.acumulado
+  if (queda > 0.5) {
     return (
-      <span className="tabular-nums text-red-600">
-        ▲ {formatSaldoDevedorInt(valor)}
+      <span
+        className="tabular-nums text-emerald-600"
+        title="Saldo devedor menor que o fechamento anterior"
+      >
+        ▼ {formatSaldoDevedorInt(queda)}
       </span>
     )
   }
-  return (
-    <span className="tabular-nums text-emerald-600">
-      ▼ {formatSaldoDevedorInt(valor)}
-    </span>
-  )
+  if (cliente.geradoAno > 0.5) {
+    return (
+      <span className="tabular-nums text-red-600" title="Títulos do ano ainda em aberto">
+        ▲ {formatSaldoDevedorInt(cliente.geradoAno)}
+      </span>
+    )
+  }
+  return <span className="tabular-nums text-slate-400">{formatSaldoDevedorInt(0)}</span>
 }
 
 function TabelaClientes({
@@ -73,31 +80,31 @@ function TabelaClientes({
   anoAnterior: number
 }) {
   return (
-    <table className="w-full table-fixed text-left text-[12px]">
+    <table className="w-full text-left text-[12px]">
       <colgroup>
-        <col className="w-[46%]" />
-        <col />
-        <col />
-        <col />
+        <col className="w-[1%]" />
+        <col className="w-[33%]" />
+        <col className="w-[34%]" />
+        <col className="w-[32%]" />
       </colgroup>
       <thead>
         <tr className="text-[10px] uppercase tracking-wide text-slate-500">
-          <th className="pb-2 pr-2 font-medium">Cliente</th>
+          <th className="whitespace-nowrap pb-2 pr-6 font-medium">Cliente</th>
           <th
-            className="pb-2 pr-2 text-right font-medium"
+            className="whitespace-nowrap pb-2 pl-6 text-right font-medium"
             title={`Posição de fechamento de ${anoAnterior}, sem baixa de pagamentos de ${ano}`}
           >
             Saldo {anoAnterior}
           </th>
           <th
-            className="pb-2 pr-2 text-right font-medium"
-            title={`Títulos com vencimento em ${ano} ainda em aberto`}
+            className="whitespace-nowrap pb-2 pl-6 text-right font-medium"
+            title={`▲ dívida de ${ano} ainda em aberto. ▼ quanto o saldo caiu em relação a ${anoAnterior}.`}
           >
             Gerado {ano}
           </th>
           <th
-            className="pb-2 text-right font-medium"
-            title="Saldo em aberto agora: faturado − pago. Não é a soma das colunas anteriores."
+            className="whitespace-nowrap pb-2 pl-6 text-right font-medium"
+            title="Saldo em aberto agora. Desconto em título quitado não entra. Não é a soma das colunas anteriores."
           >
             Acumulado
           </th>
@@ -110,14 +117,14 @@ function TabelaClientes({
           const nomeLongo = nome.length > 28
           return (
             <tr key={c.grupoNorm} className="border-t border-slate-100">
-              <td className="py-1.5 pr-2 align-top">
-                <span className="flex min-w-0 items-start gap-2">
+              <td className="whitespace-nowrap py-1.5 pr-6 align-top">
+                <span className="flex items-start gap-2">
                   <span className="mt-px w-5 shrink-0 text-right tabular-nums text-slate-400">
                     {rank}
                   </span>
                   <span
                     className={cn(
-                      'min-w-0 break-words font-medium leading-snug text-slate-800',
+                      'font-medium leading-snug text-slate-800',
                       nomeLongo && 'text-[11px]',
                     )}
                     title={c.nome}
@@ -126,13 +133,13 @@ function TabelaClientes({
                   </span>
                 </span>
               </td>
-              <td className="py-1.5 pr-2 text-right align-top tabular-nums text-slate-600">
+              <td className="whitespace-nowrap py-1.5 pl-6 text-right align-top tabular-nums text-slate-600">
                 {formatSaldoDevedorInt(c.saldoAnterior)}
               </td>
-              <td className="py-1.5 pr-2 text-right align-top">
-                <GeradoCell valor={c.geradoAno} />
+              <td className="whitespace-nowrap py-1.5 pl-6 text-right align-top">
+                <GeradoCell cliente={c} />
               </td>
-              <td className="py-1.5 text-right align-top font-medium tabular-nums text-slate-900">
+              <td className="whitespace-nowrap py-1.5 pl-6 text-right align-top font-medium tabular-nums text-slate-900">
                 {formatSaldoDevedorInt(c.acumulado)}
               </td>
             </tr>
@@ -144,6 +151,7 @@ function TabelaClientes({
 }
 
 function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
+  const exportRef = useRef<HTMLDivElement>(null)
   const { totais, ano, anoAnterior, mesInicio, mesFim, clientes } = data
   const [colA, colB] = splitColunas(clientes)
   const leitura = buildLeituraSaldoDevedor(data)
@@ -152,22 +160,47 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h2 className="text-lg font-semibold text-slate-800">
-          Evolução do saldo devedor por cliente
-        </h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Base de clientes ativos inadimplentes · do maior para o menor saldo acumulado · posição
-          de {posicao}. Saldo {anoAnterior} é o fechamento daquele ano, mesmo se pago em {ano}.
-          Acumulado é o saldo em aberto agora (faturado − pago), não a soma das duas colunas.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-slate-800">
+            Evolução do saldo devedor por cliente
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Base de clientes ativos inadimplentes · do maior para o menor saldo acumulado · posição
+            de {posicao}. Saldo {anoAnterior} é o fechamento daquele ano, mesmo se pago em {ano}.
+            Acumulado é o saldo em aberto agora, não a soma das duas colunas. Desconto em
+            título quitado não entra: o VIOS não gera outro título nesse caso.
+          </p>
+        </div>
+        <ElementCopyButton
+          containerRef={exportRef}
+          label="Copiar"
+          className="mt-0.5 shrink-0"
+        />
       </header>
 
+      <div
+        ref={exportRef}
+        aria-hidden
+        data-chart-export-full-scroll
+        style={{
+          position: 'fixed',
+          left: -10000,
+          top: 0,
+          width: 1280,
+          background: 'transparent',
+          pointerEvents: 'none',
+        }}
+      >
+        <SaldoDevedorCopySlide data={data} />
+      </div>
+
+      <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard
           title="Saldo devedor acumulado"
           value={formatCurrency(totais.acumulado)}
-          hint={`${totais.qtd} cliente${totais.qtd === 1 ? '' : 's'} · faturado − pago`}
+          hint={`${totais.qtd} cliente${totais.qtd === 1 ? '' : 's'} · em aberto, sem desconto concedido`}
           accent="blue"
         />
         <KpiCard
@@ -205,15 +238,19 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
       ) : (
         <>
           <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <TabelaClientes clientes={colA} offset={0} ano={ano} anoAnterior={anoAnterior} />
+            <div className="grid items-stretch lg:grid-cols-2 lg:divide-x lg:divide-slate-300">
+              <div className="min-w-0 lg:pr-8">
+                <TabelaClientes clientes={colA} offset={0} ano={ano} anoAnterior={anoAnterior} />
+              </div>
               {colB.length > 0 ? (
-                <TabelaClientes
-                  clientes={colB}
-                  offset={colA.length}
-                  ano={ano}
-                  anoAnterior={anoAnterior}
-                />
+                <div className="mt-6 min-w-0 border-t border-slate-300 pt-6 lg:mt-0 lg:border-t-0 lg:pl-8 lg:pt-0">
+                  <TabelaClientes
+                    clientes={colB}
+                    offset={colA.length}
+                    ano={ano}
+                    anoAnterior={anoAnterior}
+                  />
+                </div>
               ) : null}
             </div>
           </div>
@@ -237,6 +274,7 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
           </div>
         </>
       )}
+      </div>
 
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Leitura</p>

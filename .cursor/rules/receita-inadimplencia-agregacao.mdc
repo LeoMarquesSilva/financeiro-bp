@@ -39,6 +39,8 @@ Funções SQL: `receita_inadimplencia_grupo_mes`, `receita_inadimplencia_grupos_
 inadimplência = max(0, Σ faturado − Σ recebido)
 ```
 
+`faturado` aqui já abate desconto concedido em título quitado (`PAGO`, sem título residual).
+
 - Fonte: `receita_inadimplencia_periodo_net_clientes` + `receita_inadimplencia_chave_grupo`.
 - Compensa pagamento de uma razão social contra faturamento de outra **no mesmo grupo**
   (troca de cadastro VIOS).
@@ -54,6 +56,15 @@ inadimplência = max(0, Σ faturado − Σ recebido)
 - **Evolução / `grupo_mes`:** snapshot do mês, **sem** baixa posterior; **com**
   antecipado (título do mês pago antes do mês, até o corte). Ex.: Extrutech CI 11995
   (venc. 05/08, pago 30/07) **não** é inadimplente em ago.
+- **Desconto concedido não é inadimplência.** Título com `situacao_titulo = 'PAGO'`
+  e valor pago menor que o item: o VIOS **não** gera título novo. A diferença é
+  desconto (ex.: Brasloop CI 10995, R$ 2.500 − R$ 1.500 = R$ 1.000). Saldo do item
+  na data da quitação = 0. Use `receita_item_saldo_inadimplencia` /
+  `receita_item_desconto_concedido`.
+- **Pago a menor** gera outro título. A dívida fica nesse título se ele continuar
+  `ABERTO`. Não zerar um título em aberto só porque o valor pago é menor.
+- O desconto só vale **a partir de `data_pagamento`**. No fechamento anterior à
+  quitação, o título ainda entra pelo valor cheio.
 
 **Proibido:**
 
@@ -115,6 +126,7 @@ Frontend (`receitaInadimplenciaCalc.ts`):
 | `20260814180000_receita_inadimplencia_baixa_posterior_periodo.sql` | Card ao vivo: baixa título pago depois do mês |
 | `20260825140000_receita_inadimplencia_recebido_antecipado_periodo.sql` | Recebido: título do período pago adiantado (antes do mês) |
 | `20260825150000_receita_previsto_fechamento_corte_ontem.sql` | Fechamento previsto (`inadimplencia_kpi`): mesmo corte (ontem) |
+| `20260928113942_inadimplencia_desconto_concedido.sql` | Título PAGO com diferença sem título novo = desconto, não inadimplência |
 
 Nova migração nesse domínio: **estender ou chamar** estas funções — não reimplementar.
 
@@ -133,6 +145,7 @@ Nova migração nesse domínio: **estender ou chamar** estas funções — não 
 | AGO/26 em 14/ago | Só AGO | KPI **≠** faturado do mês inteiro; exclui vencimento ≥ hoje |
 | JUN/26 card vs evolução | Só JUN | Evolução congelada **R$ 241.711,99**; card ao vivo **menor** (baixa jul/ago) |
 | Grupo Extrutech | Ago/26 | **R$ 0** (CI 11995 venc. 05/08, pago 30/07 — antecipado) |
+| Brasloop | Painel saldo devedor / jan–set 2026 | **R$ 0** (CI 10995 venc. 30/05, pago 08/06: R$ 1.500 de R$ 2.500 — desconto, sem título residual) |
 
 ---
 
