@@ -63,7 +63,9 @@ supabase secrets set \
   MS_TENANT_ID="<tenant-id>" \
   MS_CLIENT_ID="<application-id>" \
   MS_CLIENT_SECRET="<client-secret>" \
-  MS_SENDER="financeiro@bismarchipires.com.br" \
+  MS_SENDER="<upn-da-caixa-compartilhada-ou-servico>" \
+  MS_FROM_ADDRESS="financeiro@bismarchipires.com.br" \
+  MS_FROM_NAME="Financeiro — Bismarchi Pires" \
   WHATSAPP_WEBHOOK_SECRET="<string-aleatoria-forte>"
 ```
 
@@ -76,7 +78,12 @@ supabase secrets set \
 3. Clique em **Grant admin consent**.
 4. Em **Certificates & secrets** > New client secret (copie o valor → `MS_CLIENT_SECRET`).
 5. Copie **Directory (tenant) ID** → `MS_TENANT_ID` e **Application (client) ID** → `MS_CLIENT_ID`.
-6. `MS_SENDER` = a caixa remetente (`financeiro@bismarchipires.com.br`). App recomendado: **VIOS-OUTLOOK-FINANCEIRO** com permissão `Mail.Send`.
+6. **`MS_SENDER`** = conta que o Graph usa em `/users/{MS_SENDER}/sendMail`: **caixa compartilhada** (objeto “usuário” no Entra) ou **usuário** com licença Exchange. **Não** use alias SMTP nem **grupo de distribuição / Microsoft 365 Group** — o Graph retorna `ErrorInvalidUser`.
+7. **`MS_FROM_ADDRESS`** (opcional) = endereço que o cliente vê (`financeiro@…`), quando for alias ou grupo. Só funciona se a mailbox `MS_SENDER` tiver **Enviar como** (`Send As`) para esse endereço no Exchange.
+8. **`MS_FROM_NAME`** (opcional) = nome exibido junto ao `From`.
+9. App recomendado: **VIOS-OUTLOOK-FINANCEIRO** com permissão aplicativo **`Mail.Send`** + consentimento admin.
+
+**Exemplo típico:** `financeiro@bismarchipires.com.br` é alias/grupo → `MS_FROM_ADDRESS=financeiro@bismarchipires.com.br` e `MS_SENDER=` UPN de uma caixa compartilhada real (ex.: `financeiro.shared@bpplaw.com.br`) ou conta de serviço autorizada a enviar como financeiro.
 
 ## Evolution API – Webhook
 

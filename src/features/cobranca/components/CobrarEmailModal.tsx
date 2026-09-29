@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/AuthContext'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/shared/utils/format'
 import { buildAssuntoEmailCobranca, buildCorpoEmailCobranca } from '../utils/emailCobranca'
+import { formatGraphMailErrorForUser } from '../utils/graphMailError'
 import { cobrancaService } from '../services/cobrancaService'
 import { EmailHtmlEditor } from './EmailHtmlEditor'
 import type { CobrancaPainelRow } from '@/lib/database.types'
@@ -77,7 +78,7 @@ export function CobrarEmailModal({ open, rows, onClose, onSent }: Props) {
         onClose()
       } else {
         const erro = result.results.find((r) => !r.ok)?.erro
-        toast.error(erro ?? 'Não foi possível enviar o e-mail.')
+        toast.error(formatGraphMailErrorForUser(erro), { duration: 10_000 })
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erro ao enviar e-mail'
@@ -115,9 +116,9 @@ export function CobrarEmailModal({ open, rows, onClose, onSent }: Props) {
         <div className="flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs text-blue-800">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            Remetente: <strong>financeiro@bismarchipires.com.br</strong> via Microsoft Graph.
-            Este envio é complementar e <strong>não contabiliza</strong> nos indicadores de
-            efetividade D+1.
+            Remetente visível: <strong>financeiro@bismarchipires.com.br</strong> (alias/grupo),
+            enviado por caixa compartilhada configurada no Microsoft 365.
+            Este envio é complementar e <strong>não contabiliza</strong> nos indicadores D+1.
           </span>
         </div>
 

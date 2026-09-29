@@ -174,6 +174,8 @@ Deno.serve(async (req: Request) => {
   const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID')
   const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET')
   const MS_SENDER = Deno.env.get('MS_SENDER')
+  const MS_FROM_ADDRESS = Deno.env.get('MS_FROM_ADDRESS')
+  const MS_FROM_NAME = Deno.env.get('MS_FROM_NAME')
   if (!MS_TENANT_ID || !MS_CLIENT_ID || !MS_CLIENT_SECRET || !MS_SENDER) {
     return json({ error: 'Microsoft Graph não configurado (secrets ausentes).' }, 500)
   }
@@ -296,7 +298,10 @@ Deno.serve(async (req: Request) => {
     const emailLogLabel = validos.join(', ')
 
     try {
-      await sendGraphMail(token, MS_SENDER, validos, assunto, corpo)
+      await sendGraphMail(token, MS_SENDER, validos, assunto, corpo, {
+        fromAddress: MS_FROM_ADDRESS,
+        fromName: MS_FROM_NAME,
+      })
       await admin.from('relatorio_mensal_log').insert({
         ano,
         mes,

@@ -1,5 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { formatGraphSendMailError } from '../_shared/graphSendMailError.ts'
+import { buildGraphSendMailBody } from '../_shared/graphSendMailPayload.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -57,6 +59,9 @@ Deno.serve(async (req: Request) => {
   const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID')
   const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET')
   const MS_SENDER = Deno.env.get('MS_SENDER')
+  /** Remetente visível (alias/grupo SMTP). Opcional; exige Send As na mailbox MS_SENDER. */
+  const MS_FROM_ADDRESS = Deno.env.get('MS_FROM_ADDRESS')
+  const MS_FROM_NAME = Deno.env.get('MS_FROM_NAME')
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
   const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
@@ -110,29 +115,26 @@ Deno.serve(async (req: Request) => {
     }
 
     try {
-      const isHtml = /<[a-z][\s\S]*>/i.test(item.corpo)
       const resp = await fetch(
         `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(MS_SENDER)}/sendMail`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: {
+          body: JSON.stringify(
+            buildGraphSendMailBody({
               subject: item.assunto,
-              body: {
-                contentType: isHtml ? 'HTML' : 'Text',
-                content: item.corpo,
-              },
-              toRecipients: [{ emailAddress: { address: destino } }],
-            },
-            saveToSentItems: true,
-          }),
+              body: item.corpo,
+              to: destino,
+              fromAddress: MS_FROM_ADDRESS,
+              fromName: MS_FROM_NAME,
+            }),
+          ),
         },
       )
 
       if (!resp.ok && resp.status !== 202) {
         const data = await resp.json().catch(() => ({}))
-        const erro = JSON.stringify(data)
+        const erro = formatGraphSendMailError(JSON.stringify(data), MS_SENDER)
         if (registrarEvento) {
           await supabase.from('cobranca_eventos').insert({
             parcela_id: item.parcela_id,

@@ -6,7 +6,6 @@ import {
   montarTotaisSaldoDevedor,
   nomeExibicaoGrupo,
   periodoAbrevLabel,
-  periodoPosicaoLabel,
   type ClienteSaldoDevedor,
   type EvolucaoSaldoDevedorData,
 } from '../utils/saldoDevedor'
@@ -14,7 +13,6 @@ import {
 /** No PowerPoint entram só os maiores saldos. O painel continua com a lista inteira. */
 export const SALDO_DEVEDOR_COPY_LIMITE = 30
 
-const TITLE = '#0369a1'
 const MUTED = '#64748b'
 const TEXT = '#0f172a'
 const LINE = 'rgba(15, 23, 42, 0.12)'
@@ -228,14 +226,9 @@ export function SaldoDevedorCopySlide({ data }: { data: EvolucaoSaldoDevedorData
   const totais = montarTotaisSaldoDevedor(lista)
   const [colA, colB] = splitColunas(lista)
   const abrev = periodoAbrevLabel(mesInicio, mesFim)
-  const posicao = periodoPosicaoLabel(ano, mesInicio, mesFim)
   const leitura = buildLeituraSaldoDevedor({ ...data, clientes: lista, totais })
   const pctEstoque = totais.acumulado > 0 ? (totais.saldoAnterior / totais.acumulado) * 100 : 0
   const pctGerado = totais.saldoAnterior > 0 ? (totais.geradoAno / totais.saldoAnterior) * 100 : 0
-  const recorte =
-    clientes.length > lista.length
-      ? `Os ${lista.length} maiores saldos acumulados`
-      : 'Base completa de clientes em acompanhamento'
 
   return (
     <div
@@ -244,32 +237,16 @@ export function SaldoDevedorCopySlide({ data }: { data: EvolucaoSaldoDevedorData
         boxSizing: 'border-box',
         backgroundColor: 'transparent',
         color: TEXT,
-        padding: '18px 20px 16px',
+        padding: '8px 20px 16px',
         fontFamily: '"Segoe UI", system-ui, sans-serif',
       }}
     >
       <div
         style={{
-          fontSize: 22,
-          fontWeight: 800,
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          color: TITLE,
-          lineHeight: 1.1,
-        }}
-      >
-        Evolução do saldo devedor por cliente
-      </div>
-      <div style={{ marginTop: 4, fontSize: 12, color: MUTED }}>
-        {recorte} · do maior para o menor saldo acumulado · posição de {posicao}
-      </div>
-
-      <div
-        style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
           gap: 8,
-          marginTop: 12,
+          marginTop: 0,
         }}
       >
         <SlideCard

@@ -13,13 +13,13 @@ export type NavAccessItem = {
 export const NAV_ACCESS_ITEMS: NavAccessItem[] = [
   {
     to: '/financeiro/inadimplencia/dashboard',
-    label: 'Dashboard',
+    label: 'Painel de Inadimplência',
     roles: ['admin', 'financeiro', 'comite'],
     moduleKey: 'inadimplencia',
   },
   {
     to: '/financeiro/inadimplencia',
-    label: 'Inadimplência',
+    label: 'Comitê Inadimplência',
     roles: ['admin', 'financeiro', 'comite'],
     moduleKey: 'inadimplencia',
     end: true,

@@ -1,3 +1,5 @@
+import { buildGraphSendMailBody } from '../graphSendMailPayload.ts'
+
 export async function getGraphToken(
   tenant: string,
   clientId: string,
@@ -27,6 +29,7 @@ export async function sendGraphMail(
   destinos: string | string[],
   assunto: string,
   corpoHtml: string,
+  options?: { fromAddress?: string | null; fromName?: string | null },
 ): Promise<void> {
   const toList = (Array.isArray(destinos) ? destinos : [destinos])
     .map((d) => d.trim())
@@ -40,14 +43,15 @@ export async function sendGraphMail(
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: {
+      body: JSON.stringify(
+        buildGraphSendMailBody({
           subject: assunto,
-          body: { contentType: 'HTML', content: corpoHtml },
-          toRecipients: toList.map((address) => ({ emailAddress: { address } })),
-        },
-        saveToSentItems: true,
-      }),
+          body: corpoHtml,
+          to: toList,
+          fromAddress: options?.fromAddress,
+          fromName: options?.fromName,
+        }),
+      ),
     },
   )
   if (!resp.ok && resp.status !== 202) {

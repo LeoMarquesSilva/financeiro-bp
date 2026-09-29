@@ -1,9 +1,10 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { formatCurrency } from '@/shared/utils/format'
 import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import { cn } from '@/lib/utils'
 import { useSaldoDevedor } from '../hooks/useSaldoDevedor'
 import { SaldoDevedorCopySlide } from './SaldoDevedorCopySlide'
+import { SaldoDevedorTitulosSheet } from './SaldoDevedorTitulosSheet'
 import {
   buildLeituraSaldoDevedor,
   formatSaldoDevedorInt,
@@ -73,11 +74,13 @@ function TabelaClientes({
   offset,
   ano,
   anoAnterior,
+  onVerTitulos,
 }: {
   clientes: ClienteSaldoDevedor[]
   offset: number
   ano: number
   anoAnterior: number
+  onVerTitulos: (grupoNome: string) => void
 }) {
   return (
     <table className="w-full text-left text-[12px]">
@@ -122,15 +125,17 @@ function TabelaClientes({
                   <span className="mt-px w-5 shrink-0 text-right tabular-nums text-slate-400">
                     {rank}
                   </span>
-                  <span
+                  <button
+                    type="button"
+                    onClick={() => onVerTitulos(c.nome)}
                     className={cn(
-                      'font-medium leading-snug text-slate-800',
+                      'text-left font-medium leading-snug text-slate-800 underline-offset-2 hover:text-sky-800 hover:underline',
                       nomeLongo && 'text-[11px]',
                     )}
-                    title={c.nome}
+                    title={`Ver títulos no saldo — ${c.nome}`}
                   >
                     {nome}
-                  </span>
+                  </button>
                 </span>
               </td>
               <td className="whitespace-nowrap py-1.5 pl-6 text-right align-top tabular-nums text-slate-600">
@@ -152,6 +157,7 @@ function TabelaClientes({
 
 function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
   const exportRef = useRef<HTMLDivElement>(null)
+  const [titulosGrupo, setTitulosGrupo] = useState<string | null>(null)
   const { totais, ano, anoAnterior, mesInicio, mesFim, clientes } = data
   const [colA, colB] = splitColunas(clientes)
   const leitura = buildLeituraSaldoDevedor(data)
@@ -240,7 +246,13 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
           <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="grid items-stretch lg:grid-cols-2 lg:divide-x lg:divide-slate-300">
               <div className="min-w-0 lg:pr-8">
-                <TabelaClientes clientes={colA} offset={0} ano={ano} anoAnterior={anoAnterior} />
+                <TabelaClientes
+                  clientes={colA}
+                  offset={0}
+                  ano={ano}
+                  anoAnterior={anoAnterior}
+                  onVerTitulos={setTitulosGrupo}
+                />
               </div>
               {colB.length > 0 ? (
                 <div className="mt-6 min-w-0 border-t border-slate-300 pt-6 lg:mt-0 lg:border-t-0 lg:pl-8 lg:pt-0">
@@ -249,6 +261,7 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
                     offset={colA.length}
                     ano={ano}
                     anoAnterior={anoAnterior}
+                    onVerTitulos={setTitulosGrupo}
                   />
                 </div>
               ) : null}
@@ -275,6 +288,16 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
         </>
       )}
       </div>
+
+      <SaldoDevedorTitulosSheet
+        open={titulosGrupo != null}
+        onOpenChange={(o) => {
+          if (!o) setTitulosGrupo(null)
+        }}
+        grupoNome={titulosGrupo}
+        ano={ano}
+        mesFim={mesFim}
+      />
 
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Leitura</p>
