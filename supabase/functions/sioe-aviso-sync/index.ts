@@ -2,13 +2,15 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 /**
- * Aviso no WhatsApp do grupo de T.I. (mesmo destino da automação do Node/VIOS).
+ * Aviso no WhatsApp do grupo da automação VIOS (notify-error.js, instância RESPONSUM - BP).
  * - modo resultado: a carga do SharePoint acabou (atualizou ou falhou).
  * - modo checar: o pg_cron confirma se a janela das 8h17, 12h17, 14h17 ou 17h17
  *   passou sem registro. Se passou, avisa que não atualizou.
  */
 
-const GRUPO = '120363419650505387@g.us'
+/** Mesmo destino de notify-error.js (EVOLUTION_NOTIFY_GROUP + instância RESPONSUM - BP). */
+const GRUPO = '120363410106016262@g.us'
+const INSTANCIA_AVISO = 'RESPONSUM - BP'
 const RESPONSAVEIS = ['5517991863161', '553592366669', '553588754584']
 const SLOTS_BRT = [8, 12, 14, 17]
 
@@ -130,7 +132,7 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   const evolutionUrl = Deno.env.get('EVOLUTION_API_URL')?.replace(/\/+$/, '')
   const evolutionKey = Deno.env.get('EVOLUTION_API_KEY')
-  const evolutionInstance = Deno.env.get('EVOLUTION_INSTANCE')
+  const evolutionInstance = INSTANCIA_AVISO
   if (!supabaseUrl || !serviceKey || !evolutionUrl || !evolutionKey || !evolutionInstance) {
     return json({ error: 'Secrets ausentes.' }, 500)
   }
