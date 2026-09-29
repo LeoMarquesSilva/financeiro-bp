@@ -2,15 +2,13 @@ name: Sync SharePoint (Eficiência)
 
 on:
   schedule:
-    # Horário de Brasília (IANA — sem conversão manual UTC)
-    - cron: '0 8 * * *'
-      timezone: America/Sao_Paulo
-    - cron: '0 12 * * *'
-      timezone: America/Sao_Paulo
-    - cron: '0 14 * * *'
-      timezone: America/Sao_Paulo
-    - cron: '0 17 * * *'
-      timezone: America/Sao_Paulo
+    # O GitHub só agenda em UTC e ignora fuso. Brasília é UTC−3, sem horário de verão.
+    # Minuto 17 foge da fila do minuto 0, que empurrava a carga da manhã para a tarde.
+    # 11:17 UTC = 08:17 BRT, 15:17 = 12:17, 17:17 = 14:17, 20:17 = 17:17.
+    - cron: '17 11 * * *'
+    - cron: '17 15 * * *'
+    - cron: '17 17 * * *'
+    - cron: '17 20 * * *'
   workflow_dispatch:
     inputs:
       only:
