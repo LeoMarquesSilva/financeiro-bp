@@ -1428,6 +1428,35 @@ function dumpFields(items) {
   return { upserted: 0, deleted: 0 }
 }
 
+/** Avisa o grupo de T.I. (o mesmo da automação do Node). Falha aqui não derruba a carga. */
+async function avisarWhatsappSioe(payload) {
+  const base = process.env.VITE_SUPABASE_URL?.replace(/\/+$/, '')
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!base || !key) {
+    console.error('[Sync SharePoint] aviso WhatsApp ignorado: sem URL ou service role')
+    return
+  }
+  try {
+    const resp = await fetch(`${base}/functions/v1/sioe-aviso-sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`,
+        apikey: key,
+      },
+      body: JSON.stringify(payload),
+    })
+    if (!resp.ok) {
+      const text = await resp.text()
+      console.error(`[Sync SharePoint] aviso WhatsApp falhou: ${resp.status} ${text.slice(0, 300)}`)
+      return
+    }
+    console.log('[Sync SharePoint] aviso WhatsApp enviado')
+  } catch (err) {
+    console.error(`[Sync SharePoint] aviso WhatsApp falhou: ${err.message}`)
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const onlyArg = args.includes('--only') ? args[args.indexOf('--only') + 1] : null
@@ -1442,6 +1471,7 @@ async function main() {
   }
 
   let hadError = false
+  const resultados = []
   for (const nome of fontes) {
     const fonte = FONTES[nome]
     if (!fonte) {
@@ -1461,9 +1491,11 @@ async function main() {
           deleted,
           errors: 0,
         })
+        resultados.push({ fonte: nome, upserted, deleted, errors: 0 })
       }
     } catch (err) {
       hadError = true
+      const erro = String(err.message).slice(0, 300)
       console.error(`[Sync SharePoint] ${nome} FALHOU: ${err.message}`)
       await supabase.from('sharepoint_sync_log').insert({
         fonte: nome,
@@ -1472,6 +1504,7 @@ async function main() {
         errors: 1,
         detalhes: { erro: String(err.message).slice(0, 1000) },
       })
+      resultados.push({ fonte: nome, upserted: 0, deleted: 0, errors: 1, erro })
     }
   }
 
@@ -1483,6 +1516,11 @@ async function main() {
       hadError = true
       console.error(`[Sync SharePoint] heartbeat do SIOE FALHOU: ${error.message}`)
     }
+    await avisarWhatsappSioe({
+      modo: 'resultado',
+      atualizou: !hadError,
+      fontes: resultados,
+    })
   }
 
   if (hadError) process.exitCode = 1
