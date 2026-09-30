@@ -4,6 +4,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 /**
  * Aviso no WhatsApp do grupo da automação VIOS (notify-error.js, instância RESPONSUM - BP).
  * - modo resultado: a carga do SharePoint acabou (atualizou ou falhou).
+ * - modo disparar: o pg_cron pede a carga no GitHub. O agendamento do Actions atrasa.
  * - modo checar: o pg_cron confirma se a janela das 8h17, 12h17, 14h17 ou 17h17
  *   passou sem registro. Se passou, avisa que não atualizou.
  */
@@ -155,8 +156,40 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Body inválido.' }, 400)
   }
 
-  const modo = body.modo === 'checar' ? 'checar' : 'resultado'
+  const modo = body.modo === 'checar' ? 'checar' : body.modo === 'disparar' ? 'disparar' : 'resultado'
   if (modo === 'resultado' && !serviceOk) return json({ error: 'Não autorizado.' }, 403)
+
+  if (modo === 'disparar') {
+    const desde = new Date(Date.now() - 40 * 60 * 1000).toISOString()
+    const { data: recente } = await admin
+      .from('sharepoint_sync_log')
+      .select('executado_em')
+      .gte('executado_em', desde)
+      .limit(1)
+    if (recente && recente.length > 0) return json({ ok: true, disparado: false, motivo: 'ja atualizou' })
+
+    const githubToken = Deno.env.get('GITHUB_DISPATCH_TOKEN')?.trim()
+    if (!githubToken) return json({ error: 'Token do GitHub ausente.' }, 500)
+    const disparo = await fetch(
+      'https://api.github.com/repos/LeoMarquesSilva/financeiro-bp/actions/workflows/sync-sharepoint.yml/dispatches',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({ ref: 'main' }),
+        signal: AbortSignal.timeout(20000),
+      },
+    )
+    if (!disparo.ok) {
+      const detalhe = (await disparo.text()).slice(0, 300)
+      return json({ error: 'Falha ao disparar a carga.', detalhe }, 502)
+    }
+    return json({ ok: true, disparado: true })
+  }
 
   let atualizou = Boolean(body.atualizou)
   let fontes = Array.isArray(body.fontes) ? body.fontes : []
