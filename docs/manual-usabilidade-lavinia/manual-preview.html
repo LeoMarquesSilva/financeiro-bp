@@ -1,0 +1,107 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Manual Resultado Metas (preview)</title><style>
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color:#0f172a; background:#f8fafc; line-height:1.55; }
+  .wrap { max-width:780px; margin:0 auto; padding:24px 16px 64px; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px 22px; margin:16px 0; }
+  h1 { font-size:22px; margin:0 0 8px; }
+  h2 { font-size:17px; margin:0 0 10px; border-bottom:1px solid #e2e8f0; padding-bottom:8px; }
+  h3 { font-size:15px; margin:18px 0 8px; }
+  p, li { font-size:14px; color:#334155; }
+  .muted { color:#64748b; font-size:13px; }
+  .step { background:#f1f5f9; border-radius:8px; padding:10px 12px; margin:8px 0; font-size:14px; }
+  img.print { width:100%; height:auto; border:1px solid #e2e8f0; border-radius:8px; margin:12px 0; display:block; }
+  table.ind { width:100%; border-collapse:collapse; font-size:13px; margin:10px 0; }
+  table.ind th, table.ind td { border:1px solid #e2e8f0; padding:8px 10px; text-align:left; vertical-align:top; }
+  table.ind th { background:#f8fafc; }
+  .ok { background:#ECFDF3; color:#059669; padding:2px 8px; border-radius:4px; font-weight:600; font-size:12px; }
+  .nok { background:#FEE2E2; color:#DC2626; padding:2px 8px; border-radius:4px; font-weight:600; font-size:12px; }
+  .pill { display:inline-block; background:#0f172a; color:#fff; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; }
+  .assunto { background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:13px; }
+</style></head><body>
+<div class="wrap">
+  <div class="assunto">
+    <strong>Assunto sugerido:</strong> Manual rápido — Resultado Metas Bismarchi Pires (como usar o SIOE)<br/><br/>
+    <span class="muted">Para disparar: abra este arquivo no Chrome → Cmd+A → Cmd+C → cole no corpo do Gmail/Outlook. Imagens vão embutidas.</span>
+  </div>
+
+  <div class="card">
+    <h1>Manual de usabilidade — Resultado Metas</h1>
+    <p class="muted">Para: Lavínia Ferraz Crispim · Coordenadora · Reestruturação</p>
+    <p>Olá, Lavínia! Este guia mostra <strong>onde clicar</strong> e <strong>o que cada indicador significa</strong> na tela <em>Resultado Metas Bismarchi Pires</em>.</p>
+  </div>
+
+  <div class="card">
+    <h2>1. Entrar no sistema</h2>
+    <div class="step"><strong>1.</strong> Abra o link do SIOE.</div>
+    <div class="step"><strong>2.</strong> E-mail: <strong>lavinia.ferraz@bismarchipires.com.br</strong> + senha recebida.</div>
+    <div class="step"><strong>3.</strong> Clique em <strong>Entrar</strong>.</div>
+    <img class="print" src="prints/01-login.png" alt="Login SIOE" />
+    <p>No primeiro acesso, use o aviso amarelo <span class="pill">Alterar senha →</span> para trocar a senha padrão.</p>
+  </div>
+
+  <div class="card">
+    <h2>2. Overview (visão consolidada)</h2>
+    <p>Você cai direto nesta tela. Cada linha é um indicador; as colunas são os meses + <strong>Acum.</strong></p>
+    <img class="print" src="prints/03-overview-topo.png" alt="Overview topo" />
+    <h3>Onde clicar</h3>
+    <ul>
+      <li><strong>2026 / 2025</strong> — ano de referência.</li>
+      <li><strong>Abas</strong> — Overview = consolidado; demais = detalhe do KPI (na sua conta, o detalhe vem filtrado em <strong>Reestruturação</strong>).</li>
+      <li><strong>Todos os meses / Resultado / Jan…Dez</strong> — período.</li>
+      <li><strong>COPIAR</strong> — copia a grade para PowerPoint/e-mail.</li>
+      <li><strong>Racional</strong> — lista das linhas que formam o %.</li>
+    </ul>
+    <p><span class="ok">Verde</span> = meta atingida &nbsp; <span class="nok">Vermelho</span> = abaixo da meta &nbsp; “-” = sem dado</p>
+    <img class="print" src="prints/04-overview-completo.png" alt="Overview completo" />
+  </div>
+
+  <div class="card">
+    <h2>3. Filtrar um mês</h2>
+    <div class="step">Clique em <strong>Jun</strong> (ou outro mês). A célula fica destacada e o Acum. reflete o filtro.</div>
+    <div class="step"><strong>Resultado</strong> = período oficial da campanha (a partir de junho até o último mês fechado).</div>
+    <img class="print" src="prints/05-filtro-mes-jun.png" alt="Filtro Jun" />
+  </div>
+
+  <div class="card">
+    <h2>4. Racional (abrir o detalhe)</h2>
+    <div class="step">Na linha do indicador → <strong>Racional</strong> → confira Meta × Resultado e a tabela → <strong>Excel</strong> para exportar tudo → feche com X.</div>
+    <img class="print" src="prints/06-racional-aberto.png" alt="Racional SLA Protocolo" />
+  </div>
+
+  <div class="card">
+    <h2>5. Aba de detalhe (ex.: SLA Protocolo)</h2>
+    <p>Clique na aba <strong>SLA Protocolo</strong>. Aparecem cards, gráfico D-1 vs FATAL, justificativas e ranking de responsáveis. Use <strong>Racional</strong> / <strong>Copiar gráfico</strong> em cada bloco.</p>
+    <img class="print" src="prints/07-aba-sla-protocolo.png" alt="Aba SLA Protocolo" />
+    <p>Outro exemplo — <strong>Desenvolvimento Equipe</strong>:</p>
+    <img class="print" src="prints/08-aba-desenvolvimento.png" alt="Aba Desenvolvimento" />
+  </div>
+
+  <div class="card">
+    <h2>6. Indicadores</h2>
+    <table class="ind">
+      <thead><tr><th>Indicador</th><th>Meta</th><th>Significado</th></tr></thead>
+      <tbody>
+        <tr><td><strong>SLA Protocolo</strong></td><td>85%</td><td>% de protocolos no prazo (D-1 / FATAL), sem excludentes.</td></tr>
+        <tr><td><strong>Eficiência Protocolo</strong></td><td>95%</td><td>Eficiência do fluxo de protocolo (meta mais exigente).</td></tr>
+        <tr><td><strong>SLA Ciência Agendamentos</strong></td><td>95%</td><td>% de ciências de agendamento no prazo.</td></tr>
+        <tr><td><strong>SLA Vistagem Risco</strong></td><td>98%</td><td>% de publicações de risco vistadas no prazo (com vistador).</td></tr>
+        <tr><td><strong>SLA Vistagem Normal</strong></td><td>98%</td><td>% de publicações normais vistadas no prazo. No consolidado, Trabalhista fica fora.</td></tr>
+        <tr><td><strong>Desenvolvimento Equipe</strong></td><td>100%</td><td>Minutos de treinamento lançados vs. meta.</td></tr>
+        <tr><td><strong>Retenção de Talentos</strong></td><td>90%</td><td>Indicador anual de retenção.</td></tr>
+        <tr><td><strong>Gestão de PDI</strong></td><td>100%</td><td>Acompanhamento dos PDIs da equipe.</td></tr>
+        <tr><td><strong>Receita Bruta</strong></td><td>100%</td><td>% de atingimento da meta de receita.</td></tr>
+        <tr><td><strong>Índice de Inadimplência**</strong></td><td>Meta x</td><td>Acompanhamento financeiro (série no Overview).</td></tr>
+        <tr><td><strong>NPS** / Reputação** / Êxito**</strong></td><td>—</td><td>Reservados no BI; ainda sem série no Overview.</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Overview = consolidado de todas as áreas. Nas abas de detalhe, sua visão fica em Reestruturação.</p>
+  </div>
+
+  <div class="card">
+    <h2>7. Barra lateral</h2>
+    <ul>
+      <li><strong>Velocímetro</strong> — Resultado Metas (esta tela).</li>
+      <li><strong>Pasta</strong> — Operações Legais.</li>
+      <li><strong>Avatar / Sair</strong> — perfil e logout.</li>
+    </ul>
+  </div>
+</div></body></html>

@@ -1,0 +1,16 @@
+{
+  "email": "lavinia.ferraz@bismarchipires.com.br",
+  "base": "http://localhost:3000",
+  "files": [
+    "01-login",
+    "02-login-preenchido",
+    "03-overview-topo",
+    "04-overview-completo",
+    "05-filtro-mes-jun",
+    "06-racional-aberto",
+    "07-aba-sla-protocolo",
+    "08-aba-desenvolvimento",
+    "09-sidebar-e-header"
+  ],
+  "capturedAt": "2026-08-10T19:38:32.205Z"
+}
