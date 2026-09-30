@@ -20,6 +20,7 @@ type Props = {
 function KpiCard({
   title,
   value,
+  metrics,
   hint,
   icon: Icon,
   accentClass,
@@ -27,7 +28,8 @@ function KpiCard({
   loading,
 }: {
   title: string
-  value: string
+  value?: string
+  metrics?: { label: string; value: string }[]
   hint?: string
   icon: typeof Newspaper
   accentClass: string
@@ -56,6 +58,17 @@ function KpiCard({
       {loading ? (
         <div className="mt-1 flex h-8 items-center">
           <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+        </div>
+      ) : metrics?.length ? (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {metrics.map((metric) => (
+            <div key={metric.label}>
+              <p className="text-xl font-bold tracking-tight text-slate-900 tabular-nums">
+                {metric.value}
+              </p>
+              <p className="text-[11px] font-medium text-slate-500">{metric.label}</p>
+            </div>
+          ))}
         </div>
       ) : (
         <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{value}</p>
@@ -101,8 +114,17 @@ export function LevantamentoKpiCards({ resumo, loading, onRacional }: Props) {
       />
       <KpiCard
         title="Tarefas VIOS"
-        value={(resumo?.tarefas_total ?? 0).toLocaleString('pt-BR')}
-        hint="Concluídas no período"
+        metrics={[
+          {
+            label: 'Prazos',
+            value: (resumo?.tarefas_prazos ?? 0).toLocaleString('pt-BR'),
+          },
+          {
+            label: 'Providências',
+            value: (resumo?.tarefas_providencias ?? 0).toLocaleString('pt-BR'),
+          },
+        ]}
+        hint="Concluídas no período · prazo é a tarefa Enviar, sem revisar, protocolar e validar protocolo"
         icon={ClipboardList}
         accentClass="bg-rose-100 text-rose-700"
         loading={loading}

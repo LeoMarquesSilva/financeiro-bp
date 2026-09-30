@@ -56,6 +56,8 @@ export type LevantamentoResumo = {
   agendamento_total: number
   agendamento_por_tipo: LevantamentoTipoRow[]
   tarefas_total: number
+  tarefas_prazos: number
+  tarefas_providencias: number
   timesheet_data_max: string | null
   data_inicio: string
   data_fim: string
@@ -121,6 +123,8 @@ function parseResumo(raw: unknown): LevantamentoResumo {
       ? (o.agendamento_por_tipo as LevantamentoTipoRow[])
       : [],
     tarefas_total: Number(o.tarefas_total ?? 0),
+    tarefas_prazos: Number(o.tarefas_prazos ?? 0),
+    tarefas_providencias: Number(o.tarefas_providencias ?? 0),
     timesheet_data_max: o.timesheet_data_max ? String(o.timesheet_data_max).slice(0, 10) : null,
     data_inicio: String(o.data_inicio ?? ''),
     data_fim: String(o.data_fim ?? ''),

@@ -338,9 +338,8 @@ function addAbaResumo(
     ['Timesheet — horas (decimal)', resumo.timesheet_horas, 'decimal'],
     ['Timesheet — apontamentos', resumo.timesheet_apontamentos, 'inteiro'],
     ['Processos (estoque)', resumo.processos_total, 'inteiro'],
-    ['Tarefas VIOS', resumo.tarefas_total, 'inteiro'],
-    ['Data início', isoDateToExcel(filtros.dataInicio), 'data'],
-    ['Data fim', isoDateToExcel(filtros.dataFim), 'data'],
+    ['Prazos', resumo.tarefas_prazos, 'inteiro'],
+    ['Providências', resumo.tarefas_providencias, 'inteiro'],
   ]
   const indicadoresFim = addTabela(ws, {
     nome: 'indicadores',
