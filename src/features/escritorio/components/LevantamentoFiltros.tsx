@@ -27,25 +27,37 @@ type Props = {
   }) => void
 }
 
+/** Só calendário: sem campo de texto, a data nunca é digitada. */
 function DateBrField({
   id,
   label,
   valueIso,
   onChangeIso,
+  minIso,
+  maxIso,
 }: {
   id: string
   label: string
   valueIso: string
   onChangeIso: (iso: string) => void
+  minIso?: string
+  maxIso?: string
 }) {
+  const [open, setOpen] = useState(false)
   const selected = parseDateAsLocal(valueIso) ?? undefined
+  const min = minIso ? (parseDateAsLocal(minIso) ?? undefined) : undefined
+  const max = maxIso ? (parseDateAsLocal(maxIso) ?? undefined) : undefined
+  const disabled = [
+    ...(min ? [{ before: min }] : []),
+    ...(max ? [{ after: max }] : []),
+  ]
 
   return (
     <div className="flex w-[10.5rem] shrink-0 flex-col gap-1.5">
       <Label htmlFor={id} className="text-xs font-medium text-slate-600">
         {label}
       </Label>
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             id={id}
@@ -66,9 +78,12 @@ function DateBrField({
           <Calendar
             mode="single"
             selected={selected}
+            defaultMonth={selected}
+            disabled={disabled}
             onSelect={(d) => {
               if (!d) return
               onChangeIso(format(d, 'yyyy-MM-dd'))
+              setOpen(false)
             }}
             locale={ptBR}
           />
@@ -228,13 +243,19 @@ export function LevantamentoFiltros({
           id="lev-data-inicio"
           label="Data início"
           valueIso={dataInicio}
-          onChangeIso={(iso) => onChange({ dataInicio: iso })}
+          maxIso={dataFim || undefined}
+          onChangeIso={(iso) =>
+            onChange(dataFim && iso > dataFim ? { dataInicio: iso, dataFim: iso } : { dataInicio: iso })
+          }
         />
         <DateBrField
           id="lev-data-fim"
           label="Data fim"
           valueIso={dataFim}
-          onChangeIso={(iso) => onChange({ dataFim: iso })}
+          minIso={dataInicio || undefined}
+          onChangeIso={(iso) =>
+            onChange(dataInicio && iso < dataInicio ? { dataInicio: iso, dataFim: iso } : { dataFim: iso })
+          }
         />
       </div>
       <MultiGrupoCombobox

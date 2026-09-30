@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Building2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/shared/utils/format'
+import { formatCurrency, formatDate } from '@/shared/utils/format'
 import type { LevantamentoFiltros } from '../services/escritorioLevantamentoService'
 import type { RentabilidadeContratos } from '../services/escritorioRentabilidadeService'
 import {
@@ -23,6 +23,33 @@ function iniciaisCliente(nome: string): string {
   if (parts.length === 0) return '?'
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase()
+}
+
+function HoraProdutivaCell({
+  valorHora,
+  resultado,
+}: {
+  valorHora: number | null
+  resultado: number | null
+}) {
+  const positivo = resultadoHoraPositivo(resultado)
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span className="tabular-nums text-slate-800">{formatValorHoraRecebido(valorHora)}</span>
+      <span
+        className={cn(
+          'inline-flex items-center justify-end gap-1 text-xs tabular-nums font-medium',
+          positivo === true && 'text-emerald-700',
+          positivo === false && 'text-rose-700',
+          positivo == null && 'text-slate-400',
+        )}
+      >
+        {positivo === true ? <ArrowUp className="h-3 w-3 shrink-0" aria-hidden /> : null}
+        {positivo === false ? <ArrowDown className="h-3 w-3 shrink-0" aria-hidden /> : null}
+        {formatResultadoHora(resultado)}
+      </span>
+    </div>
+  )
 }
 
 export function RentabilidadeContratosSection({ filtros, data, loading, error }: Props) {
@@ -62,7 +89,8 @@ export function RentabilidadeContratosSection({ filtros, data, loading, error }:
             Período de referência | {periodoLabel}
           </p>
           <p className="mt-1 text-xs text-slate-400">
-            Comparativo entre valor recebido, custo da hora e cenário atual por razão social.
+            Comparativo por grupo cliente (sem grupo = razão social) entre valor recebido,
+            inadimplência e custo da hora. Honorários nos mesmos planos de contas da Receita.
           </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
@@ -82,6 +110,10 @@ export function RentabilidadeContratosSection({ filtros, data, loading, error }:
             <p className="text-xs text-slate-500">
               Médias calculadas sobre {data.meses_periodo}{' '}
               {data.meses_periodo === 1 ? 'mês' : 'meses'}
+              {data.inadimplencia_corte
+                ? ` · Inadimplência: saldo do período com vencimento até ${formatDate(data.inadimplencia_corte)}`
+                : ''}
+              {data.inadimplencia_multi_ano ? ' (somada por ano)' : ''}
             </p>
           ) : null}
         </div>
@@ -93,23 +125,39 @@ export function RentabilidadeContratosSection({ filtros, data, loading, error }:
           </div>
         ) : !data?.linhas.length ? (
           <p className="px-4 py-12 text-center text-sm text-slate-500">
-            Nenhum dado de recebido ou timesheet no período para o grupo e área selecionados.
+            Nenhum dado de recebido ou inadimplência no período para o grupo e área selecionados.
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-3">Clientes</th>
-                  <th className="px-4 py-3 text-right">Valor do Contrato</th>
-                  <th className="px-4 py-3 text-right">Média horas/mês</th>
-                  <th className="px-4 py-3 text-right">Valor-hora recebido</th>
-                  <th className="px-4 py-3 text-right">Resultado</th>
+                <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th rowSpan={2} className="border-b border-slate-100 px-4 py-3 align-bottom">
+                    Grupo cliente
+                  </th>
+                  <th rowSpan={2} className="border-b border-slate-100 px-4 py-3 text-right align-bottom">
+                    Valor do contrato
+                    <span className="block font-normal normal-case text-slate-400">pago/mês</span>
+                  </th>
+                  <th rowSpan={2} className="border-b border-slate-100 px-4 py-3 text-right align-bottom">
+                    Inadimplente
+                    <span className="block font-normal normal-case text-slate-400">no período</span>
+                  </th>
+                  <th rowSpan={2} className="border-b border-slate-100 px-4 py-3 text-right align-bottom">
+                    Média horas/mês
+                  </th>
+                  <th colSpan={2} className="px-4 pt-3 pb-1 text-center">
+                    Hora produtiva
+                  </th>
+                </tr>
+                <tr className="border-b border-slate-100 text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th className="px-4 pb-3 text-right">Base: valor pago</th>
+                  <th className="px-4 pb-3 text-right">Base: pago + inadimplente</th>
                 </tr>
               </thead>
               <tbody>
                 {data.linhas.map((linha) => {
-                  const positivo = resultadoHoraPositivo(linha.resultado_hora)
+                  const temInadimplencia = linha.inadimplencia_periodo > 0
                   return (
                     <tr
                       key={linha.cliente}
@@ -120,37 +168,47 @@ export function RentabilidadeContratosSection({ filtros, data, loading, error }:
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
                             {iniciaisCliente(linha.cliente)}
                           </div>
-                          <span className="max-w-[14rem] truncate font-medium text-slate-900">
-                            {linha.cliente}
-                          </span>
+                          <div className="min-w-0">
+                            <span className="block max-w-[14rem] truncate font-medium text-slate-900">
+                              {linha.cliente}
+                            </span>
+                            {linha.razoes_sociais.length > 1 ? (
+                              <span
+                                className="block text-xs text-slate-500"
+                                title={linha.razoes_sociais.join('\n')}
+                              >
+                                {linha.razoes_sociais.length} razões sociais
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-800">
                         {formatCurrency(linha.valor_contrato_mensal)}
                       </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {temInadimplencia ? (
+                          <span className="font-medium text-rose-700">
+                            {formatCurrency(linha.inadimplencia_periodo)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">Sem inadimplência</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-800">
                         {formatMediaHorasMes(linha.media_horas_mes_minutos)}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-800">
-                        {formatValorHoraRecebido(linha.valor_hora_recebido)}
+                      <td className="px-4 py-3 text-right">
+                        <HoraProdutivaCell
+                          valorHora={linha.valor_hora_recebido}
+                          resultado={linha.resultado_hora}
+                        />
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span
-                          className={cn(
-                            'inline-flex items-center justify-end gap-1 tabular-nums font-medium',
-                            positivo === true && 'text-emerald-700',
-                            positivo === false && 'text-rose-700',
-                            positivo == null && 'text-slate-400',
-                          )}
-                        >
-                          {positivo === true ? (
-                            <ArrowUp className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                          ) : null}
-                          {positivo === false ? (
-                            <ArrowDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                          ) : null}
-                          {formatResultadoHora(linha.resultado_hora)}
-                        </span>
+                        <HoraProdutivaCell
+                          valorHora={linha.valor_hora_com_inadimplencia}
+                          resultado={linha.resultado_hora_com_inadimplencia}
+                        />
                       </td>
                     </tr>
                   )

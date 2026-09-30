@@ -22,8 +22,26 @@ export type LevantamentoTipoRow = {
   qtd: number
 }
 
-export type LevantamentoSituacaoRow = {
+/** Quebra Principal × Recurso × Incidente (escritorio_processo_tipo_vinculo). */
+export type LevantamentoTipoVinculoQtd = {
+  principal: number
+  recurso: number
+  incidente: number
+  nao_classificado: number
+}
+
+export type LevantamentoSituacaoRow = LevantamentoTipoVinculoQtd & {
   situacao: string
+  qtd: number
+}
+
+export type LevantamentoDepartamentoRow = LevantamentoTipoVinculoQtd & {
+  departamento: string
+  qtd: number
+}
+
+export type LevantamentoTipoProcessoRow = {
+  tipo: string
   qtd: number
 }
 
@@ -33,6 +51,8 @@ export type LevantamentoResumo = {
   timesheet_horas: number
   processos_total: number
   processos_por_situacao: LevantamentoSituacaoRow[]
+  processos_por_tipo: LevantamentoTipoProcessoRow[]
+  processos_por_departamento: LevantamentoDepartamentoRow[]
   agendamento_total: number
   agendamento_por_tipo: LevantamentoTipoRow[]
   tarefas_total: number
@@ -62,6 +82,19 @@ function asStringArray(value: unknown): string[] {
   return value.filter((v): v is string => typeof v === 'string' && v.trim() !== '')
 }
 
+function parseTipoVinculoQtd(o: Record<string, unknown>): LevantamentoTipoVinculoQtd {
+  return {
+    principal: Number(o.principal ?? 0),
+    recurso: Number(o.recurso ?? 0),
+    incidente: Number(o.incidente ?? 0),
+    nao_classificado: Number(o.nao_classificado ?? 0),
+  }
+}
+
+function asRecordArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? (value as Array<Record<string, unknown>>) : []
+}
+
 function parseResumo(raw: unknown): LevantamentoResumo {
   const o = (raw ?? {}) as Record<string, unknown>
   return {
@@ -69,9 +102,20 @@ function parseResumo(raw: unknown): LevantamentoResumo {
     timesheet_apontamentos: Number(o.timesheet_apontamentos ?? 0),
     timesheet_horas: Number(o.timesheet_horas ?? 0),
     processos_total: Number(o.processos_total ?? 0),
-    processos_por_situacao: Array.isArray(o.processos_por_situacao)
-      ? (o.processos_por_situacao as LevantamentoSituacaoRow[])
-      : [],
+    processos_por_situacao: asRecordArray(o.processos_por_situacao).map((s) => ({
+      situacao: String(s.situacao ?? ''),
+      qtd: Number(s.qtd ?? 0),
+      ...parseTipoVinculoQtd(s),
+    })),
+    processos_por_tipo: asRecordArray(o.processos_por_tipo).map((t) => ({
+      tipo: String(t.tipo ?? ''),
+      qtd: Number(t.qtd ?? 0),
+    })),
+    processos_por_departamento: asRecordArray(o.processos_por_departamento).map((d) => ({
+      departamento: String(d.departamento ?? ''),
+      qtd: Number(d.qtd ?? 0),
+      ...parseTipoVinculoQtd(d),
+    })),
     agendamento_total: Number(o.agendamento_total ?? 0),
     agendamento_por_tipo: Array.isArray(o.agendamento_por_tipo)
       ? (o.agendamento_por_tipo as LevantamentoTipoRow[])

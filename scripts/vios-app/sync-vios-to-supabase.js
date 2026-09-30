@@ -392,6 +392,17 @@ function buildProcessosCompletoColumnIndexes(headerRow) {
     }
     return -1;
   };
+  const findExact = (aliases) => {
+    for (const a of aliases) {
+      const i = norm.indexOf(a);
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+  const findExactThenIncludes = (exact, includes) => {
+    const i = findExact(exact);
+    return i >= 0 ? i : find(includes);
+  };
   return {
     ci: find(['ci']),
     grupo_cliente: findProcessosGrupoClienteIndex(norm),
@@ -400,9 +411,19 @@ function buildProcessosCompletoColumnIndexes(headerRow) {
     advogado_responsavel: find(['advogado responsável', 'advogado responsavel']),
     cliente: findProcessosClienteIndex(norm),
     acao: find(['ação', 'acao']),
-    acao_data_cadastro: find(['ação data do cadastro', 'acao data do cadastro', 'ação data cadastro']),
+    acao_data_cadastro: find([
+      'ação data do cadastro',
+      'acao data do cadastro',
+      'ação data cadastro',
+      'ação - data do cadastro',
+      'acao - data do cadastro',
+    ]),
     data_cadastro: find(['data do cadastro', 'data cadastro']),
-    fase_processual: find(['fase processual']),
+    fase_processual: findExactThenIncludes(
+      ['fase processual', 'fase', 'fase do processo', 'fase atual'],
+      ['fase processual', 'fase do processo', 'fase'],
+    ),
+    vinculo: findExact(['vínculo', 'vinculo', 'tipo de vínculo', 'tipo de vinculo']),
     nro_cnj: find(['n.° cnj', 'n. cnj', 'nro cnj', 'numero cnj']),
     processo_encerrado: find(['processo encerrado']),
     situacao_processo: find(['situação do processo', 'situacao do processo']),
@@ -429,6 +450,7 @@ function rowToProcessosCompletoRecord(row, idx) {
     acao_data_cadastro: trim(idx.acao_data_cadastro),
     data_cadastro: dataCadastro,
     fase_processual: trim(idx.fase_processual),
+    vinculo: trim(idx.vinculo),
     nro_cnj: trim(idx.nro_cnj),
     processo_encerrado: trim(idx.processo_encerrado),
     situacao_processo: trim(idx.situacao_processo),
@@ -471,6 +493,11 @@ export async function runSync(filePath) {
   const indexes = buildProcessosCompletoColumnIndexes(headerRow);
   if (indexes.cliente < 0) {
     throw new Error('Coluna Cliente não encontrada no ProcessoCompleto.');
+  }
+  for (const [campo, label] of [['fase_processual', 'Fase Processual'], ['vinculo', 'Vínculo']]) {
+    if (indexes[campo] < 0) {
+      console.warn(`[Sync Supabase] processos_completo: coluna "${label}" ausente no relatório VIOS — ${campo} ficará vazio.`);
+    }
   }
 
   const rows = [];

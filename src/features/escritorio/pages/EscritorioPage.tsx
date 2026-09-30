@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LevantamentoFiltros } from '../components/LevantamentoFiltros'
 import { LevantamentoKpiCards } from '../components/LevantamentoKpiCards'
+import { LevantamentoProcessosDetalhe } from '../components/LevantamentoProcessosDetalhe'
 import { LevantamentoRacionalSheet } from '../components/LevantamentoRacionalSheet'
 import { RentabilidadeContratosSection } from '../components/RentabilidadeContratosSection'
 import {
@@ -17,7 +18,6 @@ import {
   defaultMesCorrente,
   type LevantamentoBloco,
   type LevantamentoFiltros as Filtros,
-  type LevantamentoSituacaoRow,
 } from '../services/escritorioLevantamentoService'
 import { mesContainingIso } from '../utils/levantamentoAreas'
 import { LEVANTAMENTO_AREA_OPCOES } from '../utils/levantamentoAreaFiltro'
@@ -164,22 +164,7 @@ export function EscritorioPage() {
           />
 
           {resumo?.processos_por_situacao?.length ? (
-            <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
-              <h2 className="mb-3 text-sm font-semibold text-slate-900">Processos por situação</h2>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                {resumo.processos_por_situacao.map((s: LevantamentoSituacaoRow) => (
-                  <div
-                    key={s.situacao}
-                    className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
-                  >
-                    <p className="truncate text-xs text-slate-500">{s.situacao}</p>
-                    <p className="text-lg font-semibold tabular-nums text-slate-900">
-                      {s.qtd.toLocaleString('pt-BR')}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <LevantamentoProcessosDetalhe resumo={resumo} />
           ) : null}
         </TabsContent>
 
