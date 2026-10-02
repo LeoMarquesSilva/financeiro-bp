@@ -13,11 +13,10 @@ export function useRentabilidadeContratos(
       'contratos',
       filtros.dataInicio,
       filtros.dataFim,
-      [...filtros.grupos].sort().join('\0'),
       filtros.area,
     ],
     queryFn: () => escritorioRentabilidadeService.fetchContratos(filtros),
-    enabled: enabled && filtros.grupos.length > 0,
+    enabled: enabled && Boolean(filtros.dataInicio && filtros.dataFim),
     staleTime: 2 * 60_000,
   })
 }

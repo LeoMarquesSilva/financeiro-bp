@@ -91,7 +91,7 @@ export function EscritorioPage() {
             Escritório
           </h1>
           <p className="mt-0.5 text-sm text-slate-500">
-            Levantamento operacional e rentabilidade de contratos por grupo cliente
+            Levantamento operacional e rentabilidade do escritório por hora
             {timesheetAteLabel ? ` · timesheet até ${timesheetAteLabel}` : null}
           </p>
         </div>

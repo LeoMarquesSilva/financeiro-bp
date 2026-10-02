@@ -6,31 +6,26 @@ export type RentabilidadeContratoLinha = {
   cliente: string
   razoes_sociais: string[]
   recebido_periodo: number
-  /** Saldo líquido do período (`receita_inadimplencia_grupos_periodo`), só vencidos até o corte. */
-  inadimplencia_periodo: number
-  valor_contrato_mensal: number
-  valor_contrato_mensal_com_inadimplencia: number
-  media_horas_mes_minutos: number
-  valor_hora_recebido: number | null
-  resultado_hora: number | null
-  valor_hora_com_inadimplencia: number | null
-  resultado_hora_com_inadimplencia: number | null
+  previsto_periodo: number
+  horas_minutos: number
+  /** Recebido do grupo ÷ horas do grupo. Nulo sem horas. */
+  valor_hora_efetivo: number | null
+  /** Previsto/faturado do grupo ÷ horas do grupo. Não usa inadimplência. Nulo sem horas. */
+  valor_hora_previsto: number | null
 }
 
 export type RentabilidadeContratos = {
-  custo_hora_produtiva: number | null
-  meses_periodo: number
+  horas_minutos: number
+  recebido_escritorio: number
+  previsto_escritorio: number
+  /** Recebido do escritório ÷ todas as horas do timesheet no período. */
+  valor_hora_efetivo_escritorio: number | null
+  /** Previsto/faturado do escritório ÷ as mesmas horas. Não usa inadimplência. */
+  valor_hora_previsto_escritorio: number | null
   linhas: RentabilidadeContratoLinha[]
-  requer_grupo: boolean
   data_inicio: string
   data_fim: string
   area: string | null
-  inadimplencia_corte: string | null
-  inadimplencia_multi_ano: boolean
-}
-
-function rpcGrupos(filtros: LevantamentoFiltros): string[] | null {
-  return filtros.grupos.length > 0 ? filtros.grupos : null
 }
 
 function numOrNull(v: unknown): number | null {
@@ -41,32 +36,26 @@ function parseRentabilidade(raw: unknown): RentabilidadeContratos {
   const o = (raw ?? {}) as Record<string, unknown>
   const linhas = Array.isArray(o.linhas) ? o.linhas : []
   return {
-    custo_hora_produtiva: numOrNull(o.custo_hora_produtiva),
-    meses_periodo: Number(o.meses_periodo ?? 0),
+    horas_minutos: Number(o.horas_minutos ?? 0),
+    recebido_escritorio: Number(o.recebido_escritorio ?? 0),
+    previsto_escritorio: Number(o.previsto_escritorio ?? 0),
+    valor_hora_efetivo_escritorio: numOrNull(o.valor_hora_efetivo_escritorio),
+    valor_hora_previsto_escritorio: numOrNull(o.valor_hora_previsto_escritorio),
     linhas: linhas.map((row) => {
       const r = row as Record<string, unknown>
       return {
         cliente: String(r.cliente ?? ''),
         razoes_sociais: Array.isArray(r.razoes_sociais) ? r.razoes_sociais.map(String) : [],
         recebido_periodo: Number(r.recebido_periodo ?? 0),
-        inadimplencia_periodo: Number(r.inadimplencia_periodo ?? 0),
-        valor_contrato_mensal: Number(r.valor_contrato_mensal ?? 0),
-        valor_contrato_mensal_com_inadimplencia: Number(
-          r.valor_contrato_mensal_com_inadimplencia ?? r.valor_contrato_mensal ?? 0,
-        ),
-        media_horas_mes_minutos: Number(r.media_horas_mes_minutos ?? 0),
-        valor_hora_recebido: numOrNull(r.valor_hora_recebido),
-        resultado_hora: numOrNull(r.resultado_hora),
-        valor_hora_com_inadimplencia: numOrNull(r.valor_hora_com_inadimplencia),
-        resultado_hora_com_inadimplencia: numOrNull(r.resultado_hora_com_inadimplencia),
+        previsto_periodo: Number(r.previsto_periodo ?? 0),
+        horas_minutos: Number(r.horas_minutos ?? 0),
+        valor_hora_efetivo: numOrNull(r.valor_hora_efetivo),
+        valor_hora_previsto: numOrNull(r.valor_hora_previsto),
       }
     }),
-    requer_grupo: Boolean(o.requer_grupo),
     data_inicio: String(o.data_inicio ?? ''),
     data_fim: String(o.data_fim ?? ''),
     area: (o.area as string | null) ?? null,
-    inadimplencia_corte: o.inadimplencia_corte != null ? String(o.inadimplencia_corte) : null,
-    inadimplencia_multi_ano: Boolean(o.inadimplencia_multi_ano),
   }
 }
 
@@ -77,7 +66,7 @@ export const escritorioRentabilidadeService = {
       {
         p_data_inicio: filtros.dataInicio,
         p_data_fim: filtros.dataFim,
-        p_grupos: rpcGrupos(filtros),
+        p_grupos: null,
         p_area: filtros.area,
       } as never,
     )
