@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Building2, Download, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -16,18 +16,17 @@ import {
 import { useRentabilidadeContratos } from '../hooks/useEscritorioRentabilidade'
 import {
   defaultMesCorrente,
+  ESCRITORIO_DATA_INICIO_PADRAO,
   type LevantamentoBloco,
   type LevantamentoFiltros as Filtros,
 } from '../services/escritorioLevantamentoService'
-import { mesContainingIso } from '../utils/levantamentoAreas'
 import { LEVANTAMENTO_AREA_OPCOES } from '../utils/levantamentoAreaFiltro'
 import { exportLevantamentoRelatorioCompleto } from '../utils/levantamentoExport'
 
 export function EscritorioPage() {
   const mes = defaultMesCorrente()
-  const [dataInicio, setDataInicio] = useState(mes.dataInicio)
+  const [dataInicio, setDataInicio] = useState(ESCRITORIO_DATA_INICIO_PADRAO)
   const [dataFim, setDataFim] = useState(mes.dataFim)
-  const [periodoInicializado, setPeriodoInicializado] = useState(false)
   const [gruposSelecionados, setGruposSelecionados] = useState<string[]>([])
   const [area, setArea] = useState<string | null>(null)
   const [exportando, setExportando] = useState(false)
@@ -50,16 +49,6 @@ export function EscritorioPage() {
     isLoading: loadingRentabilidade,
     error: errorRentabilidade,
   } = useRentabilidadeContratos(filtros, aba === 'rentabilidade')
-
-  useEffect(() => {
-    if (periodoInicializado || !opcoes?.timesheetDataMax) return
-    if (mes.dataInicio > opcoes.timesheetDataMax) {
-      const periodo = mesContainingIso(opcoes.timesheetDataMax)
-      setDataInicio(periodo.dataInicio)
-      setDataFim(periodo.dataFim)
-    }
-    setPeriodoInicializado(true)
-  }, [opcoes?.timesheetDataMax, periodoInicializado, mes.dataInicio])
 
   async function handleBaixarRelatorio() {
     if (!resumo || exportando) return

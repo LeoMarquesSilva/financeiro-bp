@@ -9,7 +9,10 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { formatDate, parseDateAsLocal } from '@/shared/utils/format'
-import { defaultMesCorrente } from '../services/escritorioLevantamentoService'
+import {
+  defaultMesCorrente,
+  ESCRITORIO_DATA_INICIO_PADRAO,
+} from '../services/escritorioLevantamentoService'
 
 type Props = {
   dataInicio: string
@@ -289,14 +292,14 @@ export function LevantamentoFiltros({
         className="h-10 shrink-0"
         onClick={() =>
           onChange({
-            dataInicio: mesCorrente.dataInicio,
+            dataInicio: ESCRITORIO_DATA_INICIO_PADRAO,
             dataFim: mesCorrente.dataFim,
             gruposSelecionados: [],
             area: null,
           })
         }
       >
-        Mês corrente
+        Desde jan/2026
       </Button>
     </div>
   )

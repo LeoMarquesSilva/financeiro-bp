@@ -19,20 +19,20 @@ function Calendar({
     <DayPicker
       locale={ptBR}
       showOutsideDays={showOutsideDays}
-      className={cn('rounded-lg border border-slate-200 bg-white p-3', className)}
+      className={cn('w-[17.25rem] rounded-lg border border-slate-200 bg-white p-3', className)}
       classNames={{
-        months: 'flex flex-col gap-4 sm:flex-row',
-        month: 'flex flex-col gap-4',
-        month_caption: 'flex justify-center pt-1 relative items-center h-8',
-        caption_label: 'text-sm font-medium text-slate-900',
-        nav: 'flex items-center gap-1',
+        months: 'relative flex flex-col gap-4 sm:flex-row',
+        month: 'relative flex w-[15.75rem] shrink-0 flex-col gap-3',
+        month_caption: 'flex h-9 w-full min-w-0 items-center justify-center px-9',
+        caption_label: 'min-w-0 truncate text-center text-sm font-medium text-slate-900',
+        nav: 'absolute inset-x-0 top-0 z-10 flex h-9 w-full items-center justify-between px-1',
         button_previous: cn(
           buttonVariants({ variant: 'outline' }),
-          'absolute left-1 h-8 w-8 bg-transparent p-0 opacity-70 hover:opacity-100 border-0'
+          'h-7 w-7 shrink-0 border-slate-200 bg-white p-0 opacity-70 hover:opacity-100'
         ),
         button_next: cn(
           buttonVariants({ variant: 'outline' }),
-          'absolute right-1 h-8 w-8 bg-transparent p-0 opacity-70 hover:opacity-100 border-0'
+          'h-7 w-7 shrink-0 border-slate-200 bg-white p-0 opacity-70 hover:opacity-100'
         ),
         month_grid: 'w-full border-collapse space-x-1',
         weekdays: 'flex',

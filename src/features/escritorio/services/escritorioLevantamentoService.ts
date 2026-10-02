@@ -215,6 +215,9 @@ export const BLOCO_LABELS: Record<LevantamentoBloco, string> = {
   tarefas: 'Tarefas VIOS',
 }
 
+/** Início padrão do painel Escritório. O fim continua no último dia do mês corrente. */
+export const ESCRITORIO_DATA_INICIO_PADRAO = '2026-01-01'
+
 export function defaultMesCorrente(): { dataInicio: string; dataFim: string } {
   const now = new Date()
   const y = now.getFullYear()

@@ -1,8 +1,12 @@
-import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
 import type { LevantamentoFiltros } from '../services/escritorioLevantamentoService'
-import type { RentabilidadeContratos } from '../services/escritorioRentabilidadeService'
+import type {
+  RentabilidadeContratoLinha,
+  RentabilidadeContratos,
+} from '../services/escritorioRentabilidadeService'
 import {
   formatMediaHorasMes,
   formatResultadoHora,
@@ -54,6 +58,81 @@ function TaxaCell({
   )
 }
 
+type SortKey = keyof Pick<
+  RentabilidadeContratoLinha,
+  | 'cliente'
+  | 'recebido_periodo'
+  | 'previsto_periodo'
+  | 'horas_minutos'
+  | 'valor_hora_efetivo'
+  | 'valor_hora_previsto'
+>
+
+function compareLinhas(
+  a: RentabilidadeContratoLinha,
+  b: RentabilidadeContratoLinha,
+  key: SortKey,
+  dir: 'asc' | 'desc',
+): number {
+  if (key === 'cliente') {
+    const cmp = a.cliente.localeCompare(b.cliente, 'pt-BR', { sensitivity: 'base' })
+    return dir === 'asc' ? cmp : -cmp
+  }
+  const av = a[key]
+  const bv = b[key]
+  const aNull = av == null || !Number.isFinite(av)
+  const bNull = bv == null || !Number.isFinite(bv)
+  if (aNull && bNull) return a.cliente.localeCompare(b.cliente, 'pt-BR')
+  if (aNull) return 1
+  if (bNull) return -1
+  const cmp = av - bv
+  if (cmp === 0) return a.cliente.localeCompare(b.cliente, 'pt-BR')
+  return dir === 'asc' ? cmp : -cmp
+}
+
+function SortHeader({
+  label,
+  hint,
+  column,
+  active,
+  dir,
+  align = 'left',
+  onSort,
+}: {
+  label: string
+  hint?: string
+  column: SortKey
+  active: boolean
+  dir: 'asc' | 'desc'
+  align?: 'left' | 'right'
+  onSort: (column: SortKey) => void
+}) {
+  const Icon = !active ? ArrowUpDown : dir === 'asc' ? ArrowUp : ArrowDown
+  return (
+    <th
+      className={cn('px-4 py-3', align === 'right' && 'text-right')}
+      aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        className={cn(
+          'inline-flex max-w-full items-center gap-1 uppercase tracking-wide hover:text-slate-800',
+          align === 'right' && 'w-full justify-end text-right',
+        )}
+        onClick={() => onSort(column)}
+      >
+        <span>
+          {label}
+          {hint ? (
+            <span className="block font-normal normal-case tracking-normal text-slate-400">{hint}</span>
+          ) : null}
+        </span>
+        <Icon className={cn('h-3.5 w-3.5 shrink-0', !active && 'opacity-40')} aria-hidden />
+      </button>
+    </th>
+  )
+}
+
 function CardMedia({
   titulo,
   valor,
@@ -77,6 +156,22 @@ function CardMedia({
 export function RentabilidadeContratosSection({ filtros, data, loading, error }: Props) {
   const areaLabel = filtros.area ?? 'Todas as áreas'
   const periodoLabel = labelPeriodo(filtros.dataInicio, filtros.dataFim)
+  const [sortKey, setSortKey] = useState<SortKey>('valor_hora_efetivo')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  const linhas = useMemo(() => {
+    const rows = data?.linhas ?? []
+    return [...rows].sort((a, b) => compareLinhas(a, b, sortKey, sortDir))
+  }, [data?.linhas, sortKey, sortDir])
+
+  function alternarOrdem(column: SortKey) {
+    if (sortKey === column) {
+      setSortDir((dir) => (dir === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortKey(column)
+    setSortDir(column === 'cliente' ? 'asc' : 'desc')
+  }
 
   if (error) {
     return (
@@ -155,21 +250,60 @@ export function RentabilidadeContratosSection({ filtros, data, loading, error }:
           <div className="max-h-[70vh] overflow-auto">
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 z-10 bg-white">
-                <tr className="border-b border-slate-100 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-slate-100 text-left text-xs font-medium text-slate-500">
                   <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Grupo cliente</th>
-                  <th className="px-4 py-3 text-right">Recebido</th>
-                  <th className="px-4 py-3 text-right">
-                    Previsto/faturado
-                    <span className="block font-normal normal-case text-slate-400">sem inadimplência</span>
-                  </th>
-                  <th className="px-4 py-3 text-right">Horas</th>
-                  <th className="px-4 py-3 text-right">Valor efetivo da hora</th>
-                  <th className="px-4 py-3 text-right">Valor médio da hora</th>
+                  <SortHeader
+                    label="Grupo cliente"
+                    column="cliente"
+                    active={sortKey === 'cliente'}
+                    dir={sortDir}
+                    onSort={alternarOrdem}
+                  />
+                  <SortHeader
+                    label="Recebido"
+                    column="recebido_periodo"
+                    active={sortKey === 'recebido_periodo'}
+                    dir={sortDir}
+                    align="right"
+                    onSort={alternarOrdem}
+                  />
+                  <SortHeader
+                    label="Previsto/faturado"
+                    hint="sem inadimplência"
+                    column="previsto_periodo"
+                    active={sortKey === 'previsto_periodo'}
+                    dir={sortDir}
+                    align="right"
+                    onSort={alternarOrdem}
+                  />
+                  <SortHeader
+                    label="Horas"
+                    column="horas_minutos"
+                    active={sortKey === 'horas_minutos'}
+                    dir={sortDir}
+                    align="right"
+                    onSort={alternarOrdem}
+                  />
+                  <SortHeader
+                    label="Valor efetivo da hora"
+                    column="valor_hora_efetivo"
+                    active={sortKey === 'valor_hora_efetivo'}
+                    dir={sortDir}
+                    align="right"
+                    onSort={alternarOrdem}
+                  />
+                  <SortHeader
+                    label="Valor médio da hora"
+                    column="valor_hora_previsto"
+                    active={sortKey === 'valor_hora_previsto'}
+                    dir={sortDir}
+                    align="right"
+                    onSort={alternarOrdem}
+                  />
                 </tr>
               </thead>
               <tbody>
-                {data.linhas.map((linha, index) => (
+                {linhas.map((linha, index) => (
                   <tr
                     key={linha.cliente}
                     className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60"
