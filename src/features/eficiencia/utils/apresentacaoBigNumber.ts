@@ -1,6 +1,6 @@
 import { MESES_ABREV } from '@/features/receita/constants'
 import { supabase } from '@/lib/supabaseClient'
-import { formatCurrency, formatHorasHHMMSS, formatPercent } from '@/shared/utils/format'
+import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import {
   isMesesFiltro,
   mesesEfetivosFiltro,
@@ -113,15 +113,25 @@ export function labelPeriodoBigNumber(
   return `${a}-${b}/${yyAnt} × ${a}-${b}/${yy}`
 }
 
-/** KPI: 30.196:03 (horas com milhar + minutos). */
-export function formatHorasBigNumberKpi(horas: number): string {
-  const full = formatHorasHHMMSS(horas)
-  const [h, m] = full.split(':')
-  return `${Number(h).toLocaleString('pt-BR')}:${m}`
+/**
+ * Timesheet da apresentação: o RPC devolve minutos inteiros (já somados linha a linha).
+ * Exibição: horas = minutos DIV 60, minutos = minutos MOD 60 → "41.054:20".
+ */
+export function formatMinutosBigNumber(minutos: number): string {
+  if (!Number.isFinite(minutos) || minutos <= 0) return '0:00'
+  const total = Math.round(minutos)
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return `${h.toLocaleString('pt-BR')}:${String(m).padStart(2, '0')}`
 }
 
-export function formatHorasBigNumberTop(horas: number): string {
-  return formatHorasHHMMSS(horas)
+/** KPI: 41.054:20 (horas com milhar + minutos). Entrada em minutos inteiros. */
+export function formatHorasBigNumberKpi(minutos: number): string {
+  return formatMinutosBigNumber(minutos)
+}
+
+export function formatHorasBigNumberTop(minutos: number): string {
+  return formatMinutosBigNumber(minutos)
 }
 
 export function deltaPct(atual: number, anterior: number): number | null {
