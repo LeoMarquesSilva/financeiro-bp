@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { formatCurrency } from '@/shared/utils/format'
 import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
 import { cn } from '@/lib/utils'
@@ -9,11 +10,51 @@ import {
   buildLeituraSaldoDevedor,
   formatSaldoDevedorInt,
   nomeExibicaoGrupo,
+  compararClientesSaldoDevedor,
   periodoAbrevLabel,
   periodoPosicaoLabel,
   type ClienteSaldoDevedor,
   type EvolucaoSaldoDevedorData,
+  type SaldoDevedorSortKey,
 } from '../utils/saldoDevedor'
+
+type SortDir = 'asc' | 'desc'
+
+function SortableTh({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onSort,
+  title,
+}: {
+  label: string
+  sortKey: SaldoDevedorSortKey
+  activeKey: SaldoDevedorSortKey
+  dir: SortDir
+  onSort: (key: SaldoDevedorSortKey) => void
+  title?: string
+}) {
+  const active = activeKey === sortKey
+  const Icon = active ? (dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown
+
+  return (
+    <th className="whitespace-nowrap pb-2 pl-6 text-right font-medium">
+      <button
+        type="button"
+        title={title}
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          'ml-auto inline-flex items-center gap-1 transition-colors hover:text-slate-800',
+          active ? 'text-slate-800' : 'text-slate-500',
+        )}
+      >
+        {label}
+        <Icon className={cn('h-3.5 w-3.5 shrink-0', !active && 'opacity-40')} />
+      </button>
+    </th>
+  )
+}
 
 function splitColunas(clientes: ClienteSaldoDevedor[]): [ClienteSaldoDevedor[], ClienteSaldoDevedor[]] {
   const mid = Math.ceil(clientes.length / 2)
@@ -74,12 +115,18 @@ function TabelaClientes({
   offset,
   ano,
   anoAnterior,
+  sortKey,
+  sortDir,
+  onSort,
   onVerTitulos,
 }: {
   clientes: ClienteSaldoDevedor[]
   offset: number
   ano: number
   anoAnterior: number
+  sortKey: SaldoDevedorSortKey
+  sortDir: SortDir
+  onSort: (key: SaldoDevedorSortKey) => void
   onVerTitulos: (grupoNome: string) => void
 }) {
   return (
@@ -99,18 +146,22 @@ function TabelaClientes({
           >
             Saldo {anoAnterior}
           </th>
-          <th
-            className="whitespace-nowrap pb-2 pl-6 text-right font-medium"
-            title={`▲ dívida de ${ano} ainda em aberto. ▼ quanto o saldo caiu em relação a ${anoAnterior}.`}
-          >
-            Gerado {ano}
-          </th>
-          <th
-            className="whitespace-nowrap pb-2 pl-6 text-right font-medium"
-            title="Saldo em aberto agora. Desconto em título quitado não entra. Não é a soma das colunas anteriores."
-          >
-            Acumulado
-          </th>
+          <SortableTh
+            label={`Gerado ${ano}`}
+            sortKey="geradoAno"
+            activeKey={sortKey}
+            dir={sortDir}
+            onSort={onSort}
+            title={`▲ dívida de ${ano} ainda em aberto. ▼ quanto o saldo caiu em relação a ${anoAnterior}. Clique para ordenar.`}
+          />
+          <SortableTh
+            label="Acumulado"
+            sortKey="acumulado"
+            activeKey={sortKey}
+            dir={sortDir}
+            onSort={onSort}
+            title="Saldo em aberto agora. Desconto em título quitado não entra. Clique para ordenar."
+          />
         </tr>
       </thead>
       <tbody>
@@ -158,8 +209,27 @@ function TabelaClientes({
 function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
   const exportRef = useRef<HTMLDivElement>(null)
   const [titulosGrupo, setTitulosGrupo] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<SaldoDevedorSortKey>('acumulado')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const { totais, ano, anoAnterior, mesInicio, mesFim, clientes } = data
-  const [colA, colB] = splitColunas(clientes)
+
+  const handleSort = (key: SaldoDevedorSortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  const clientesOrdenados = useMemo(() => {
+    const list = [...clientes]
+    const sign = sortDir === 'asc' ? 1 : -1
+    list.sort((a, b) => sign * compararClientesSaldoDevedor(a, b, sortKey))
+    return list
+  }, [clientes, sortKey, sortDir])
+
+  const [colA, colB] = splitColunas(clientesOrdenados)
   const leitura = buildLeituraSaldoDevedor(data)
   const abrev = periodoAbrevLabel(mesInicio, mesFim)
   const posicao = periodoPosicaoLabel(ano, mesInicio, mesFim)
@@ -172,8 +242,9 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
             Evolução do saldo devedor por cliente
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Base de clientes ativos inadimplentes · do maior para o menor saldo acumulado · posição
-            de {posicao}. Saldo {anoAnterior} é o fechamento daquele ano, mesmo se pago em {ano}.
+            Base de clientes ativos inadimplentes · posição de {posicao}. Clique em Gerado ou
+            Acumulado para reordenar. Saldo {anoAnterior} é o fechamento daquele ano, mesmo se pago
+            em {ano}.
             Acumulado é o saldo em aberto agora, não a soma das duas colunas. Desconto em
             título quitado não entra: o VIOS não gera outro título nesse caso.
           </p>
@@ -198,7 +269,7 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
           pointerEvents: 'none',
         }}
       >
-        <SaldoDevedorCopySlide data={data} />
+        <SaldoDevedorCopySlide data={{ ...data, clientes: clientesOrdenados }} />
       </div>
 
       <div className="space-y-5">
@@ -251,6 +322,9 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
                   offset={0}
                   ano={ano}
                   anoAnterior={anoAnterior}
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
                   onVerTitulos={setTitulosGrupo}
                 />
               </div>
@@ -261,6 +335,9 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
                     offset={colA.length}
                     ano={ano}
                     anoAnterior={anoAnterior}
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
                     onVerTitulos={setTitulosGrupo}
                   />
                 </div>

@@ -258,8 +258,6 @@ export function RentabilidadeContratosSection({
     [data?.linhas, gruposFaturamentoSet],
   )
 
-  const copySubtituloBase = `Faturamento em ${labelUltimos3Meses(dataFim)} · hora efetiva no período ${periodoLabel}`
-
   const linhas = useMemo(() => {
     const rows = data?.linhas ?? []
     return [...rows].sort((a, b) => compareLinhas(a, b, sortKey, sortDir))
@@ -336,18 +334,24 @@ export function RentabilidadeContratosSection({
       <div className="pointer-events-none fixed left-[-9999px] top-0 z-[-1] opacity-0" aria-hidden>
         <div ref={copyTopRef}>
           <RentabilidadeContratosCopySlide
-            titulo="Maior rentabilidade · top 20"
-            subtitulo={copySubtituloBase}
+            titulo={`Maior rentabilidade · top 20 · faturamento ${labelUltimos3Meses(dataFim)} · ${periodoLabel}`}
             linhas={linhasTopCopia}
-            mediaHoraEscritorio={data?.valor_hora_efetivo_escritorio ?? null}
+            mediaValorHoraEscritorio={data?.valor_hora_previsto_escritorio ?? null}
+            mediaEfetivoEscritorio={data?.valor_hora_efetivo_escritorio ?? null}
+            horasEscritorioMinutos={data?.horas_minutos ?? 0}
+            dataInicio={data?.data_inicio ?? filtros.dataInicio}
+            dataFim={data?.data_fim ?? filtros.dataFim}
           />
         </div>
         <div ref={copyBottomRef}>
           <RentabilidadeContratosCopySlide
-            titulo="Menor rentabilidade · top 20"
-            subtitulo={copySubtituloBase}
+            titulo={`Menor rentabilidade · top 20 · faturamento ${labelUltimos3Meses(dataFim)} · ${periodoLabel}`}
             linhas={linhasBottomCopia}
-            mediaHoraEscritorio={data?.valor_hora_efetivo_escritorio ?? null}
+            mediaValorHoraEscritorio={data?.valor_hora_previsto_escritorio ?? null}
+            mediaEfetivoEscritorio={data?.valor_hora_efetivo_escritorio ?? null}
+            horasEscritorioMinutos={data?.horas_minutos ?? 0}
+            dataInicio={data?.data_inicio ?? filtros.dataInicio}
+            dataFim={data?.data_fim ?? filtros.dataFim}
           />
         </div>
       </div>

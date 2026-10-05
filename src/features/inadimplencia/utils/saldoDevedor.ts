@@ -131,6 +131,28 @@ export function classificarSaldoDevedor(input: {
   return 'sem_perspectiva'
 }
 
+export type SaldoDevedorSortKey = 'geradoAno' | 'acumulado'
+
+/** Valor numérico alinhado à coluna Gerado (▲ dívida nova; ▼ queda como negativo). */
+export function valorOrdenacaoColunaGerado(c: ClienteSaldoDevedor): number {
+  const queda = c.saldoAnterior - c.acumulado
+  if (queda > EPS) return -queda
+  if (c.geradoAno > EPS) return c.geradoAno
+  return 0
+}
+
+export function compararClientesSaldoDevedor(
+  a: ClienteSaldoDevedor,
+  b: ClienteSaldoDevedor,
+  key: SaldoDevedorSortKey,
+): number {
+  const va = key === 'acumulado' ? a.acumulado : valorOrdenacaoColunaGerado(a)
+  const vb = key === 'acumulado' ? b.acumulado : valorOrdenacaoColunaGerado(b)
+  if (va !== vb) return va - vb
+  if (a.acumulado !== b.acumulado) return b.acumulado - a.acumulado
+  return a.nome.localeCompare(b.nome, 'pt-BR')
+}
+
 export function montarTotaisSaldoDevedor(clientes: ClienteSaldoDevedor[]) {
   let acumulado = 0
   let saldoAnterior = 0
