@@ -1,11 +1,14 @@
 import type { CSSProperties } from 'react'
-import { formatCurrency, formatPercent } from '@/shared/utils/format'
+import { formatCurrency } from '@/shared/utils/format'
 import {
   buildLeituraSaldoDevedor,
+  clienteDesceuDivida,
+  clienteSubiuDivida,
   formatSaldoDevedorInt,
   montarTotaisSaldoDevedor,
   nomeExibicaoGrupo,
   periodoAbrevLabel,
+  quedaSaldoDevedor,
   type ClienteSaldoDevedor,
   type EvolucaoSaldoDevedorData,
 } from '../utils/saldoDevedor'
@@ -37,12 +40,10 @@ function splitColunas(clientes: ClienteSaldoDevedor[]): [ClienteSaldoDevedor[], 
 function SlideCard({
   title,
   value,
-  hint,
   accent,
 }: {
   title: string
   value: string
-  hint: string
   accent: Accent
 }) {
   const color = ACCENT[accent]
@@ -80,21 +81,20 @@ function SlideCard({
       >
         {value}
       </div>
-      <div style={{ marginTop: 2, fontSize: 10, lineHeight: 1.25, color: '#64748b' }}>{hint}</div>
     </div>
   )
 }
 
 function GeradoValor({ cliente }: { cliente: ClienteSaldoDevedor }) {
-  const queda = cliente.saldoAnterior - cliente.acumulado
-  if (queda > 0.5) {
+  const queda = quedaSaldoDevedor(cliente)
+  if (clienteDesceuDivida(cliente)) {
     return (
       <span style={{ color: GREEN, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
         ▼ {formatSaldoDevedorInt(queda)}
       </span>
     )
   }
-  if (cliente.geradoAno > 0.5) {
+  if (clienteSubiuDivida(cliente)) {
     return (
       <span style={{ color: RED, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
         ▲ {formatSaldoDevedorInt(cliente.geradoAno)}
@@ -227,8 +227,6 @@ export function SaldoDevedorCopySlide({ data }: { data: EvolucaoSaldoDevedorData
   const [colA, colB] = splitColunas(lista)
   const abrev = periodoAbrevLabel(mesInicio, mesFim)
   const leitura = buildLeituraSaldoDevedor({ ...data, clientes: lista, totais })
-  const pctEstoque = totais.acumulado > 0 ? (totais.saldoAnterior / totais.acumulado) * 100 : 0
-  const pctGerado = totais.saldoAnterior > 0 ? (totais.geradoAno / totais.saldoAnterior) * 100 : 0
 
   return (
     <div
@@ -252,39 +250,26 @@ export function SaldoDevedorCopySlide({ data }: { data: EvolucaoSaldoDevedorData
         <SlideCard
           title="Saldo devedor acumulado"
           value={formatCurrency(totais.acumulado)}
-          hint={`${totais.qtd} cliente${totais.qtd === 1 ? '' : 's'} na régua`}
           accent="blue"
         />
         <SlideCard
           title={`Estoque de ${anoAnterior}`}
           value={formatCurrency(totais.saldoAnterior)}
-          hint={`${formatPercent(pctEstoque)} do acumulado`}
           accent="blue"
         />
         <SlideCard
           title={`Gerado em ${ano} (${abrev})`}
           value={formatCurrency(totais.geradoAno)}
-          hint={
-            totais.saldoAnterior > 0
-              ? `${pctGerado >= 0 ? '+' : ''}${formatPercent(pctGerado)} sobre o estoque de ${anoAnterior}`
-              : `Em aberto com vencimento em ${ano}`
-          }
           accent={totais.geradoAno >= 0 ? 'red' : 'green'}
         />
         <SlideCard
           title="Clientes que cresceram"
           value={`${totais.qtdCresceram} de ${totais.qtd}`}
-          hint={`${formatCurrency(totais.dividaNova)} de dívida nova`}
           accent="red"
         />
         <SlideCard
           title="Clientes que reduziram"
           value={`${totais.qtdReduziram} de ${totais.qtd}`}
-          hint={
-            totais.amortizado > 0.5
-              ? `${formatCurrency(totais.amortizado)} amortizados`
-              : 'Sem redução no período'
-          }
           accent="green"
         />
       </div>

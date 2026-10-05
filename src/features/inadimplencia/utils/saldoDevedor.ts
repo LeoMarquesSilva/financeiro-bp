@@ -133,11 +133,32 @@ export function classificarSaldoDevedor(input: {
 
 export type SaldoDevedorSortKey = 'geradoAno' | 'acumulado'
 
+/** Quanto o saldo caiu frente ao fechamento anterior. Positivo = dívida menor. */
+export function quedaSaldoDevedor(c: ClienteSaldoDevedor): number {
+  return c.saldoAnterior - c.acumulado
+}
+
+/**
+ * Saldo menor que o fechamento anterior. É o ▼ da coluna Gerado.
+ * Quem só trocou estoque por dívida nova do mesmo valor não entra aqui.
+ */
+export function clienteDesceuDivida(c: ClienteSaldoDevedor): boolean {
+  return quedaSaldoDevedor(c) > EPS
+}
+
+/**
+ * Há dívida do ano ainda em aberto e o saldo não caiu. É o ▲ da coluna Gerado.
+ * Inclui troca de estoque por dívida nova (saldo estável): a coluna mostra ▲
+ * e o card de quem subiu precisa contar a mesma pessoa.
+ */
+export function clienteSubiuDivida(c: ClienteSaldoDevedor): boolean {
+  return !clienteDesceuDivida(c) && c.geradoAno > EPS
+}
+
 /** Valor numérico alinhado à coluna Gerado (▲ dívida nova; ▼ queda como negativo). */
 export function valorOrdenacaoColunaGerado(c: ClienteSaldoDevedor): number {
-  const queda = c.saldoAnterior - c.acumulado
-  if (queda > EPS) return -queda
-  if (c.geradoAno > EPS) return c.geradoAno
+  if (clienteDesceuDivida(c)) return -quedaSaldoDevedor(c)
+  if (clienteSubiuDivida(c)) return c.geradoAno
   return 0
 }
 
@@ -167,12 +188,12 @@ export function montarTotaisSaldoDevedor(clientes: ClienteSaldoDevedor[]) {
     saldoAnterior += c.saldoAnterior
     geradoAno += c.geradoAno
     const delta = c.acumulado - c.saldoAnterior
-    if (delta > EPS) {
-      qtdCresceram += 1
-      dividaNova += delta
-    } else if (delta < -EPS) {
+    if (clienteDesceuDivida(c)) {
       qtdReduziram += 1
       amortizado += Math.abs(delta)
+    } else if (clienteSubiuDivida(c)) {
+      qtdCresceram += 1
+      if (delta > EPS) dividaNova += delta
     }
   }
 
@@ -197,7 +218,7 @@ export function buildLeituraSaldoDevedor(data: EvolucaoSaldoDevedorData): string
     totais.saldoAnterior > 0 ? (variacao / totais.saldoAnterior) * 100 : 0
 
   const nomesReduziram = clientes
-    .filter((c) => c.acumulado - c.saldoAnterior < -EPS)
+    .filter((c) => clienteDesceuDivida(c))
     .sort((a, b) => a.acumulado - a.saldoAnterior - (b.acumulado - b.saldoAnterior))
     .slice(0, 8)
     .map((c) => nomeExibicaoGrupo(c.nome))

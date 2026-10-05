@@ -8,11 +8,14 @@ import { SaldoDevedorCopySlide } from './SaldoDevedorCopySlide'
 import { SaldoDevedorTitulosSheet } from './SaldoDevedorTitulosSheet'
 import {
   buildLeituraSaldoDevedor,
+  clienteDesceuDivida,
+  clienteSubiuDivida,
+  compararClientesSaldoDevedor,
   formatSaldoDevedorInt,
   nomeExibicaoGrupo,
-  compararClientesSaldoDevedor,
   periodoAbrevLabel,
   periodoPosicaoLabel,
+  quedaSaldoDevedor,
   type ClienteSaldoDevedor,
   type EvolucaoSaldoDevedorData,
   type SaldoDevedorSortKey,
@@ -89,8 +92,8 @@ function KpiCard({
 }
 
 function GeradoCell({ cliente }: { cliente: ClienteSaldoDevedor }) {
-  const queda = cliente.saldoAnterior - cliente.acumulado
-  if (queda > 0.5) {
+  const queda = quedaSaldoDevedor(cliente)
+  if (clienteDesceuDivida(cliente)) {
     return (
       <span
         className="tabular-nums text-emerald-600"
@@ -100,7 +103,7 @@ function GeradoCell({ cliente }: { cliente: ClienteSaldoDevedor }) {
       </span>
     )
   }
-  if (cliente.geradoAno > 0.5) {
+  if (clienteSubiuDivida(cliente)) {
     return (
       <span className="tabular-nums text-red-600" title="Títulos do ano ainda em aberto">
         ▲ {formatSaldoDevedorInt(cliente.geradoAno)}
