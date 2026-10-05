@@ -60,6 +60,23 @@ function parseRentabilidade(raw: unknown): RentabilidadeContratos {
 }
 
 export const escritorioRentabilidadeService = {
+  async fetchGruposComFaturamento(
+    dataInicio: string,
+    dataFim: string,
+    area: string | null,
+  ): Promise<string[]> {
+    const { data, error } = await supabase.rpc(
+      'escritorio_rentabilidade_grupos_com_faturamento' as never,
+      {
+        p_data_inicio: dataInicio,
+        p_data_fim: dataFim,
+        p_area: area,
+      } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as unknown[]).map(String)
+  },
+
   async fetchContratos(filtros: LevantamentoFiltros): Promise<RentabilidadeContratos> {
     const { data, error } = await supabase.rpc(
       'escritorio_rentabilidade_contratos' as never,

@@ -224,7 +224,27 @@ export function defaultMesCorrente(): { dataInicio: string; dataFim: string } {
   const m = now.getMonth()
   const inicio = new Date(y, m, 1)
   const fim = new Date(y, m + 1, 0)
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  return { dataInicio: iso(inicio), dataFim: iso(fim) }
+  return { dataInicio: isoDateLocal(inicio), dataFim: isoDateLocal(fim) }
+}
+
+function isoDateLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Último dia do mês anterior ao corrente (horário local) — mês fechado para rentabilidade. */
+export function ultimoDiaMesAnteriorFechado(ref = new Date()): string {
+  const fim = new Date(ref.getFullYear(), ref.getMonth(), 0)
+  return isoDateLocal(fim)
+}
+
+/** Rentabilidade não usa mês corrente em aberto: limita o fim (e o início, se necessário). */
+export function capFiltrosRentabilidadeMesFechado(
+  filtros: LevantamentoFiltros,
+  ref = new Date(),
+): LevantamentoFiltros {
+  const dataFimMax = ultimoDiaMesAnteriorFechado(ref)
+  let dataFim = filtros.dataFim > dataFimMax ? dataFimMax : filtros.dataFim
+  let dataInicio = filtros.dataInicio
+  if (dataInicio > dataFim) dataInicio = dataFim
+  return { ...filtros, dataInicio, dataFim }
 }

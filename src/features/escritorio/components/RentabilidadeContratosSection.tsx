@@ -1,7 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
+import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
+import { RentabilidadeContratosCopySlide } from './RentabilidadeContratosCopySlide'
+import { escritorioRentabilidadeService } from '../services/escritorioRentabilidadeService'
+import {
+  buildGruposComFaturamentoSet,
+  inicioUltimos3Meses,
+  labelUltimos3Meses,
+  rankingRentabilidadeParaCopia,
+} from '../utils/rentabilidadeCopy'
 import type { LevantamentoFiltros } from '../services/escritorioLevantamentoService'
 import type {
   RentabilidadeContratoLinha,
@@ -20,6 +30,49 @@ type Props = {
   data: RentabilidadeContratos | undefined
   loading: boolean
   error: Error | null
+  areas: readonly string[]
+  onAreaChange: (area: string | null) => void
+  /** Filtro global ia além do mês anterior fechado. */
+  periodoRecortadoMesFechado?: boolean
+}
+
+function AreaChips({
+  areas,
+  value,
+  onChange,
+}: {
+  areas: readonly string[]
+  value: string | null
+  onChange: (area: string | null) => void
+}) {
+  const opcoes: { key: string | null; label: string }[] = [
+    { key: null, label: 'Todas as áreas' },
+    ...areas.map((a) => ({ key: a, label: a })),
+  ]
+  return (
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtrar por área">
+      <span className="mr-1 text-xs font-medium uppercase tracking-wide text-slate-500">Área</span>
+      {opcoes.map((o) => {
+        const ativo = value === o.key
+        return (
+          <button
+            key={o.label}
+            type="button"
+            aria-pressed={ativo}
+            onClick={() => onChange(o.key)}
+            className={cn(
+              'h-8 rounded-full border px-3 text-xs font-medium transition-colors',
+              ativo
+                ? 'border-slate-900 bg-slate-900 text-white'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+            )}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 function iniciaisCliente(nome: string): string {
@@ -153,11 +206,59 @@ function CardMedia({
   )
 }
 
-export function RentabilidadeContratosSection({ filtros, data, loading, error }: Props) {
+export function RentabilidadeContratosSection({
+  filtros,
+  data,
+  loading,
+  error,
+  areas,
+  onAreaChange,
+  periodoRecortadoMesFechado = false,
+}: Props) {
   const areaLabel = filtros.area ?? 'Todas as áreas'
   const periodoLabel = labelPeriodo(filtros.dataInicio, filtros.dataFim)
   const [sortKey, setSortKey] = useState<SortKey>('valor_hora_efetivo')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  const dataFim = data?.data_fim ?? filtros.dataFim
+  const inicioFaturamento3m = useMemo(() => inicioUltimos3Meses(dataFim), [dataFim])
+
+  const { data: gruposFaturamento3m } = useQuery({
+    queryKey: [
+      'escritorio',
+      'rentabilidade-faturamento-3m',
+      inicioFaturamento3m,
+      dataFim,
+      filtros.area,
+    ] as const,
+    queryFn: () =>
+      escritorioRentabilidadeService.fetchGruposComFaturamento(
+        inicioFaturamento3m,
+        dataFim,
+        filtros.area,
+      ),
+    enabled: Boolean(data?.linhas.length),
+    staleTime: 60_000,
+  })
+
+  const gruposFaturamentoSet = useMemo(
+    () => buildGruposComFaturamentoSet(gruposFaturamento3m),
+    [gruposFaturamento3m],
+  )
+
+  const copyTopRef = useRef<HTMLDivElement>(null)
+  const copyBottomRef = useRef<HTMLDivElement>(null)
+
+  const linhasTopCopia = useMemo(
+    () => rankingRentabilidadeParaCopia(data?.linhas ?? [], gruposFaturamentoSet, 'desc'),
+    [data?.linhas, gruposFaturamentoSet],
+  )
+  const linhasBottomCopia = useMemo(
+    () => rankingRentabilidadeParaCopia(data?.linhas ?? [], gruposFaturamentoSet, 'asc'),
+    [data?.linhas, gruposFaturamentoSet],
+  )
+
+  const copySubtituloBase = `Faturamento em ${labelUltimos3Meses(dataFim)} · hora efetiva no período ${periodoLabel}`
 
   const linhas = useMemo(() => {
     const rows = data?.linhas ?? []
@@ -190,6 +291,11 @@ export function RentabilidadeContratosSection({ filtros, data, loading, error }:
         </h2>
         <p className="mt-0.5 text-sm text-slate-500">Período de referência | {periodoLabel}</p>
         <p className="mt-1 text-xs text-slate-400">
+          Dados até o mês anterior fechado{' '}
+          (sem o mês corrente em aberto).
+          {periodoRecortadoMesFechado
+            ? ' O intervalo do filtro acima foi limitado automaticamente.'
+            : null}{' '}
           Escritório inteiro, sem filtro de grupo. A hora efetiva divide o recebido pelas horas do
           timesheet. A hora prevista/faturada divide o valor do item (vencimento no período) pelas
           mesmas horas e não considera inadimplência. Os mesmos planos de contas da Receita.
@@ -225,16 +331,55 @@ export function RentabilidadeContratosSection({ filtros, data, loading, error }:
         />
       </div>
 
+      <AreaChips areas={areas} value={filtros.area} onChange={onAreaChange} />
+
+      <div className="pointer-events-none fixed left-[-9999px] top-0 z-[-1] opacity-0" aria-hidden>
+        <div ref={copyTopRef}>
+          <RentabilidadeContratosCopySlide
+            titulo="Maior rentabilidade · top 20"
+            subtitulo={copySubtituloBase}
+            linhas={linhasTopCopia}
+            mediaHoraEscritorio={data?.valor_hora_efetivo_escritorio ?? null}
+          />
+        </div>
+        <div ref={copyBottomRef}>
+          <RentabilidadeContratosCopySlide
+            titulo="Menor rentabilidade · top 20"
+            subtitulo={copySubtituloBase}
+            linhas={linhasBottomCopia}
+            mediaHoraEscritorio={data?.valor_hora_efetivo_escritorio ?? null}
+          />
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-2.5">
-          <p className="text-sm font-semibold text-slate-800">
-            Ranking por grupo cliente
-          </p>
-          <p className="text-xs text-slate-500">
-            Do mais rentável ao menos rentável, pela hora efetiva. Sem horas no período, a taxa
-            fica em branco e a linha vai para o fim.
-            {data?.linhas.length ? ` · ${data.linhas.length.toLocaleString('pt-BR')} grupos` : ''}
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-800">Ranking por grupo cliente</p>
+              <p className="text-xs text-slate-500">
+                Do mais rentável ao menos rentável, pela hora efetiva. Sem horas no período, a taxa
+                fica em branco e a linha vai para o fim.
+                {data?.linhas.length ? ` · ${data.linhas.length.toLocaleString('pt-BR')} grupos` : ''}
+              </p>
+            </div>
+            {data?.linhas.length ? (
+              <div className="pointer-events-auto flex flex-wrap gap-2">
+                <ElementCopyButton
+                  containerRef={copyTopRef}
+                  label="Copiar top 20 rentáveis"
+                  preserveBackground
+                  className="bg-white"
+                />
+                <ElementCopyButton
+                  containerRef={copyBottomRef}
+                  label="Copiar top 20 menos rentáveis"
+                  preserveBackground
+                  className="bg-white"
+                />
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {loading ? (

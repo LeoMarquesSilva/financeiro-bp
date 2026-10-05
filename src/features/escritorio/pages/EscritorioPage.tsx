@@ -15,6 +15,7 @@ import {
 } from '../hooks/useEscritorioLevantamento'
 import { useRentabilidadeContratos } from '../hooks/useEscritorioRentabilidade'
 import {
+  capFiltrosRentabilidadeMesFechado,
   defaultMesCorrente,
   ESCRITORIO_DATA_INICIO_PADRAO,
   type LevantamentoBloco,
@@ -38,6 +39,14 @@ export function EscritorioPage() {
     [dataInicio, dataFim, gruposSelecionados, area],
   )
 
+  const filtrosRentabilidade = useMemo(
+    () => capFiltrosRentabilidadeMesFechado(filtros),
+    [filtros],
+  )
+  const rentabilidadeRecortada =
+    filtrosRentabilidade.dataFim !== filtros.dataFim ||
+    filtrosRentabilidade.dataInicio !== filtros.dataInicio
+
   const { data: opcoes } = useLevantamentoFiltrosOpcoes()
   const { data: grupos = [], isLoading: loadingGrupos } = useLevantamentoGruposPeriodo(
     dataInicio,
@@ -48,7 +57,7 @@ export function EscritorioPage() {
     data: rentabilidade,
     isLoading: loadingRentabilidade,
     error: errorRentabilidade,
-  } = useRentabilidadeContratos(filtros, aba === 'rentabilidade')
+  } = useRentabilidadeContratos(filtrosRentabilidade, aba === 'rentabilidade')
 
   async function handleBaixarRelatorio() {
     if (!resumo || exportando) return
@@ -159,10 +168,13 @@ export function EscritorioPage() {
 
         <TabsContent value="rentabilidade" className="mt-0">
           <RentabilidadeContratosSection
-            filtros={filtros}
+            filtros={filtrosRentabilidade}
             data={rentabilidade}
             loading={loadingRentabilidade}
             error={errorRentabilidade instanceof Error ? errorRentabilidade : null}
+            areas={LEVANTAMENTO_AREA_OPCOES}
+            onAreaChange={setArea}
+            periodoRecortadoMesFechado={rentabilidadeRecortada}
           />
         </TabsContent>
       </Tabs>
