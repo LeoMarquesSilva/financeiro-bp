@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { responsumScore, responsumTicketPresentation, type ResponsumCategory, type ResponsumMessage, type ResponsumSubcategory, type ResponsumTag, type ResponsumTicket } from '../_shared/opsLegaisResponsum.ts'
 
 /**
  * Agrega KPIs Responsum para a aba Ops Legais → Tarefas (tickets, NPS, ranking).
@@ -19,24 +20,15 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-type Ticket = {
-  id: string
-  status: string | null
-  service_score: number | string | null
-  assigned_to_name: string | null
-  title: string | null
-  created_at: string | null
-  resolved_at: string | null
-}
+type Ticket = ResponsumTicket
+type TicketItem = ReturnType<typeof responsumTicketPresentation>
 
 function isSlaFatal(title: string | null | undefined): boolean {
   return (title ?? '').toLocaleUpperCase('pt-BR').includes('EVIDÊNCIA SLA FATAL')
 }
 
 function scoreNum(v: number | string | null | undefined): number | null {
-  if (v == null || v === '') return null
-  const n = typeof v === 'number' ? v : Number(v)
-  return Number.isFinite(n) ? n : null
+  return responsumScore(v)
 }
 
 function inPeriod(iso: string | null, inicio: string, fim: string): boolean {
@@ -55,8 +47,9 @@ async function fetchAllTickets(
   while (true) {
     const { data, error } = await client
       .from('app_c009c0e4f1_tickets')
-      .select('id,status,service_score,assigned_to_name,title,created_at,resolved_at')
+      .select('id,status,service_score,assigned_to,assigned_to_name,created_by,created_by_name,title,created_at,updated_at,started_at,reopened_at,assigned_at,resolved_at,category,subcategory,priority,comment,feedback_submitted_at,request_fulfilled,not_fulfilled_reason,evidencia_enviada')
       .order('created_at', { ascending: false })
+      .order('id')
       .range(from, from + pageSize - 1)
     if (error) throw error
     const rows = (data ?? []) as Ticket[]
@@ -65,6 +58,36 @@ async function fetchAllTickets(
     from += pageSize
   }
   return out
+}
+
+async function fetchLatestMessages(client: ReturnType<typeof createClient>, ids: string[]) {
+  const latest = new Map<string, ResponsumMessage>()
+  for (let start = 0; start < ids.length; start += 100) {
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await client.from('app_c009c0e4f1_chat_messages')
+        .select('id,ticket_id,user_id,created_at,is_system')
+        .in('ticket_id', ids.slice(start, start + 100))
+        .or('is_system.is.null,is_system.eq.false')
+        .order('created_at', { ascending: false }).order('id')
+        .range(from, from + 999)
+      if (error) throw error
+      const messages = (data ?? []) as ResponsumMessage[]
+      for (const message of messages) if (!latest.has(message.ticket_id)) latest.set(message.ticket_id, message)
+      if (messages.length < 1000) break
+    }
+  }
+  return latest
+}
+
+async function fetchCatalog<T>(client: ReturnType<typeof createClient>, table: string, columns: string): Promise<T[]> {
+  const rows: T[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await client.from(table).select(columns).order('id').range(from, from + 999)
+    if (error) throw error
+    const page = (data ?? []) as T[]
+    rows.push(...page)
+    if (page.length < 1000) return rows
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -97,6 +120,14 @@ Deno.serve(async (req: Request) => {
 
     const responsum = createClient(RESPONSUM_URL, RESPONSUM_KEY)
     const all = await fetchAllTickets(responsum)
+    const pendingIds = all.filter(t => t.status === 'open' || t.status === 'in_progress').map(t => t.id)
+    const [messages, categories, subcategories, tags] = await Promise.all([
+      fetchLatestMessages(responsum, pendingIds),
+      fetchCatalog<ResponsumCategory>(responsum, 'app_c009c0e4f1_categories', 'id,key,label,tag_id'),
+      fetchCatalog<ResponsumSubcategory>(responsum, 'app_c009c0e4f1_subcategories', 'id,category_id,key,label'),
+      fetchCatalog<ResponsumTag>(responsum, 'app_c009c0e4f1_tags', 'id,label'),
+    ])
+    const present = (t: Ticket) => responsumTicketPresentation(t, messages.get(t.id), categories, subcategories, tags)
     const noPeriodo = all.filter((t) => inPeriod(t.created_at, inicio, fim))
 
     const total = noPeriodo.length
@@ -167,27 +198,23 @@ Deno.serve(async (req: Request) => {
       qtd_aberto: number
       qtd_andamento: number
       is_sla_fatal: boolean
-      tickets: Array<{ title: string; status: string; created_at: string | null }>
+      tickets: TicketItem[]
       pessoas_sla?: Array<{
         nome: string
         qtd: number
-        tickets: Array<{ title: string; status: string; created_at: string | null }>
+        tickets: TicketItem[]
       }>
     }
 
     const pendMap = new Map<string, PendItem>()
-    const slaFatalTickets: Array<{
-      title: string
-      status: string
-      created_at: string | null
-      assigned: string
-    }> = []
+    const slaFatalTickets: Array<TicketItem & { assigned: string }> = []
 
     for (const t of all) {
       if (t.status !== 'open' && t.status !== 'in_progress') continue
       const title = t.title ?? ''
       if (isSlaFatal(title)) {
         slaFatalTickets.push({
+          ...present(t),
           title: title.replace(/\[EVIDÊNCIA SLA FATAL\]\s*/i, ''),
           status: t.status ?? 'open',
           created_at: t.created_at,
@@ -195,8 +222,7 @@ Deno.serve(async (req: Request) => {
         })
         continue
       }
-      const nome = (t.assigned_to_name ?? '').trim()
-      if (!nome) continue
+      const nome = (t.assigned_to_name ?? '').trim() || 'Sem responsável'
       let row = pendMap.get(nome)
       if (!row) {
         row = {
@@ -210,11 +236,7 @@ Deno.serve(async (req: Request) => {
       }
       if (t.status === 'open') row.qtd_aberto += 1
       else row.qtd_andamento += 1
-      row.tickets.push({
-        title,
-        status: t.status ?? 'open',
-        created_at: t.created_at,
-      })
+      row.tickets.push(present(t))
     }
 
     const pendentes: PendItem[] = []
@@ -235,11 +257,7 @@ Deno.serve(async (req: Request) => {
           .map(([nome, tickets]) => ({
             nome,
             qtd: tickets.length,
-            tickets: tickets.map((t) => ({
-              title: t.title,
-              status: t.status,
-              created_at: t.created_at,
-            })),
+            tickets: tickets.map(({ assigned: _assigned, ...ticket }) => ticket),
           }))
           .sort((a, b) => b.qtd - a.qtd),
       })
@@ -273,6 +291,15 @@ Deno.serve(async (req: Request) => {
       },
       concluidos,
       pendentes,
+      atualizado_em: new Date().toISOString(),
+      avaliacoes_atencao: all.flatMap(t => {
+        const score = scoreNum(t.service_score)
+        return (score != null && score <= 8) || t.request_fulfilled === false ? [{
+          ...present(t), score, feedback_at: t.feedback_submitted_at, comment: t.comment?.trim() || null,
+          request_fulfilled: t.request_fulfilled ?? null,
+          not_fulfilled_reason: t.not_fulfilled_reason?.trim() || null,
+        }] : []
+      }).sort((a, b) => (b.feedback_at ?? '').localeCompare(a.feedback_at ?? '') || a.score - b.score),
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

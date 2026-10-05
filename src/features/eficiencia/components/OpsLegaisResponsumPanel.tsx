@@ -1,7 +1,5 @@
-import { useState } from 'react'
 import {
   CheckCircle2,
-  CircleDot,
   Clock3,
   Star,
   ThumbsUp,
@@ -10,11 +8,12 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/shared/components/Avatar'
-import { formatDate, formatPercent } from '@/shared/utils/format'
+import { formatPercent } from '@/shared/utils/format'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
+import { OpsLegaisResponsumAvaliacoes, OpsLegaisResponsumPendentes } from './OpsLegaisResponsumDetalhes'
 import type { OpsLegaisResponsumDashboard } from '../types/eficiencia.types'
 
 type Props = {
@@ -51,7 +50,6 @@ export function OpsLegaisResponsumPanel({
 }: Props) {
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
-  const [openPend, setOpenPend] = useState<string | null>(null)
 
   if (loading) {
     return <div className="h-64 animate-pulse rounded-xl bg-slate-100" />
@@ -75,6 +73,16 @@ export function OpsLegaisResponsumPanel({
   const zona = zonaStyles(nps.zona)
   const totalNps = Math.max(1, nps.total_avaliacoes)
   const dashOffset = 125.6 * (1 - Math.min(10, Math.max(0, nps.media_score)) / 10)
+  const resolvePersonName = (name: string) => resolvePessoaDisplayNome(name, teamMembers, avatarCatalog)
+  const renderPerson = (name: string) => {
+    const displayName = resolvePersonName(name)
+    return (
+      <span className="inline-flex min-w-0 items-center gap-2.5 font-medium text-slate-700">
+        <Avatar src={resolvePessoaAvatarUrl(name, teamMembers, avatarCatalog)} fullName={displayName} size="md" className="h-8 w-8 shrink-0" />
+        <span className="min-w-0 break-words text-sm xl:text-base">{displayName}</span>
+      </span>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -162,7 +170,7 @@ export function OpsLegaisResponsumPanel({
           {(
             [
               ['Promotores (9–10)', nps.promotores, 'bg-emerald-500', 'text-emerald-700'],
-              ['Neutros (7–8)', nps.neutros, 'bg-amber-500', 'text-amber-700'],
+              ['Neutros (7–8)', nps.neutros, 'bg-blue-500', 'text-blue-700'],
               ['Detratores (0–6)', nps.detratores, 'bg-red-500', 'text-red-700'],
             ] as const
           ).map(([label, qtd, bar, text]) => (
@@ -235,7 +243,7 @@ export function OpsLegaisResponsumPanel({
               [
                 ['Excelente', nps.excelente, 'bg-emerald-50 text-emerald-700'],
                 ['Bom', nps.bom, 'bg-blue-50 text-blue-700'],
-                ['Regular', nps.regular, 'bg-amber-50 text-amber-700'],
+                ['Regular', nps.regular, 'bg-yellow-50 text-yellow-700'],
                 ['Ruim', nps.ruim, 'bg-red-50 text-red-700'],
               ] as const
             ).map(([label, qtd, cls]) => (
@@ -248,8 +256,11 @@ export function OpsLegaisResponsumPanel({
         </section>
       </div>
 
+      <OpsLegaisResponsumAvaliacoes key={`${data.periodo.inicio}-${data.periodo.fim}-${data.atualizado_em ?? ""}`} items={data.avaliacoes_atencao} compact={!showListas} renderPerson={renderPerson} />
+
       {showListas ? (
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="space-y-4">
+        <OpsLegaisResponsumPendentes groups={pendentes} updatedAt={data.atualizado_em} renderPerson={renderPerson} resolvePersonName={resolvePersonName} />
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden />
@@ -258,7 +269,7 @@ export function OpsLegaisResponsumPanel({
               <p className="text-[11px] text-slate-400">Tickets resolvidos no filtro de data</p>
             </div>
           </div>
-          <div className="max-h-[360px] space-y-1 overflow-y-auto">
+          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">
             {concluidos.length === 0 && (
               <p className="py-4 text-center text-xs text-slate-400">Nenhum resolvido no período.</p>
             )}
@@ -293,119 +304,8 @@ export function OpsLegaisResponsumPanel({
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center gap-2">
-            <CircleDot className="h-4 w-4 text-amber-600" aria-hidden />
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Pendentes</h3>
-              <p className="text-[11px] text-slate-400">
-                Clique no nome para ver os chamados — total geral
-              </p>
-            </div>
-          </div>
-          <div className="max-h-[360px] space-y-1 overflow-y-auto">
-            {pendentes.length === 0 && (
-              <p className="py-4 text-center text-xs text-slate-400">Nenhum pendente.</p>
-            )}
-            {pendentes.map((p) => {
-              const key = `${p.nome}-${p.is_sla_fatal}`
-              const open = openPend === key
-              const nome = p.is_sla_fatal
-                ? p.nome
-                : resolvePessoaDisplayNome(p.nome, teamMembers, avatarCatalog)
-              const avatar = p.is_sla_fatal
-                ? null
-                : resolvePessoaAvatarUrl(p.nome, teamMembers, avatarCatalog)
-              return (
-                <div key={key} className="border-b border-slate-50 last:border-0">
-                  <button
-                    type="button"
-                    onClick={() => setOpenPend(open ? null : key)}
-                    className={cn(
-                      'flex w-full items-center gap-2.5 py-2 text-left',
-                      open && 'rounded-lg bg-slate-50 px-1',
-                    )}
-                  >
-                    {p.is_sla_fatal ? (
-                      <div className="flex h-11 w-11 items-center justify-center rounded-full border border-red-200 bg-red-50 text-lg">
-                        🚨
-                      </div>
-                    ) : (
-                      <Avatar src={avatar} fullName={nome} size="md" className="h-11 w-11" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
-                      {nome}
-                    </span>
-                    <div className="flex gap-1.5">
-                      {p.qtd_aberto > 0 && (
-                        <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-700">
-                          Aberto {formatInt(p.qtd_aberto)}
-                        </span>
-                      )}
-                      {p.qtd_andamento > 0 && (
-                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">
-                          Em andamento {formatInt(p.qtd_andamento)}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                  {open && (
-                    <div className="mb-2 ml-12 space-y-2">
-                      {p.is_sla_fatal &&
-                        p.pessoas_sla?.map((ps) => (
-                          <div key={ps.nome}>
-                            <div className="text-[11px] font-bold text-slate-900">
-                              {resolvePessoaDisplayNome(ps.nome, teamMembers, avatarCatalog)}{' '}
-                              <span className="font-medium text-slate-400">
-                                ({formatInt(ps.qtd)})
-                              </span>
-                            </div>
-                            <ul className="mt-1 space-y-1">
-                              {ps.tickets.map((t, i) => (
-                                <TicketRow key={`${ps.nome}-${i}`} {...t} />
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      {!p.is_sla_fatal &&
-                        p.tickets.map((t, i) => <TicketRow key={`${p.nome}-${i}`} {...t} />)}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </section>
       </div>
       ) : null}
     </div>
-  )
-}
-
-function TicketRow({
-  title,
-  status,
-  created_at,
-}: {
-  title: string
-  status: string
-  created_at: string | null
-}) {
-  const aberto = status === 'open'
-  return (
-    <li className="flex items-center gap-2 text-xs">
-      <span className="min-w-0 flex-1 text-slate-600">
-        {created_at ? `${formatDate(created_at.slice(0, 10))} — ` : ''}
-        {title}
-      </span>
-      <span
-        className={cn(
-          'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold',
-          aberto ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700',
-        )}
-      >
-        {aberto ? 'Aberto' : 'Em andamento'}
-      </span>
-    </li>
   )
 }

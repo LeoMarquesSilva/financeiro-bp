@@ -299,9 +299,29 @@ export interface OpsLegaisResponsumNps {
 }
 
 export interface OpsLegaisResponsumTicketItem {
+  id?: string
   title: string
   status: string
   created_at: string | null
+  assigned_to_name?: string | null
+  created_by_name?: string | null
+  category?: string | null
+  subcategory?: string | null
+  frente?: string | null
+  priority?: string | null
+  last_activity_at?: string | null
+  waiting_since?: string | null
+  waiting_for?: 'equipe' | 'solicitante' | 'indefinido'
+  waiting_reason?: string
+  is_sla_fatal?: boolean
+}
+
+export interface OpsLegaisResponsumAvaliacao extends OpsLegaisResponsumTicketItem {
+  score: number | null
+  feedback_at: string | null
+  comment: string | null
+  request_fulfilled?: boolean | null
+  not_fulfilled_reason?: string | null
 }
 
 export interface OpsLegaisResponsumConcluido {
@@ -329,6 +349,9 @@ export interface OpsLegaisResponsumDashboard {
   nps: OpsLegaisResponsumNps
   concluidos: OpsLegaisResponsumConcluido[]
   pendentes: OpsLegaisResponsumPendente[]
+  /** Notas até 8 e solicitações não atendidas, independentemente do período. */
+  avaliacoes_atencao?: OpsLegaisResponsumAvaliacao[]
+  atualizado_em?: string
 }
 
 export interface TurnoverAnualRow {
