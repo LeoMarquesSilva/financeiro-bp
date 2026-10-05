@@ -4,7 +4,10 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
 import { ElementCopyButton } from '@/shared/components/ElementCopyButton'
-import { RentabilidadeContratosCopySlide } from './RentabilidadeContratosCopySlide'
+import {
+  RentabilidadeContratosCopySlide,
+  RENTABILIDADE_COPY_SLIDE_WIDTH,
+} from './RentabilidadeContratosCopySlide'
 import { escritorioRentabilidadeService } from '../services/escritorioRentabilidadeService'
 import {
   buildGruposComFaturamentoSet,
@@ -335,7 +338,7 @@ export function RentabilidadeContratosSection({
         aria-hidden
         data-chart-export-full-scroll
       >
-        <div ref={copyTopRef} style={{ width: 1280 }}>
+        <div ref={copyTopRef} style={{ width: RENTABILIDADE_COPY_SLIDE_WIDTH }}>
           <RentabilidadeContratosCopySlide
             variant="top"
             linhas={linhasTopCopia}
@@ -347,7 +350,7 @@ export function RentabilidadeContratosSection({
             dataFim={data?.data_fim ?? filtros.dataFim}
           />
         </div>
-        <div ref={copyBottomRef} style={{ width: 1280 }}>
+        <div ref={copyBottomRef} style={{ width: RENTABILIDADE_COPY_SLIDE_WIDTH }}>
           <RentabilidadeContratosCopySlide
             variant="bottom"
             linhas={linhasBottomCopia}

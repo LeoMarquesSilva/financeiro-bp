@@ -16,8 +16,8 @@ import {
   type RentabilidadeCopiaVariant,
 } from '../utils/rentabilidadeCopy'
 
-/** Largura alinhada a slides 16:9 (copiar/colar no PowerPoint). */
-export const RENTABILIDADE_COPY_SLIDE_WIDTH = 1280
+/** Largura total do export (16:9 em 1920px — usa a faixa útil do slide). */
+export const RENTABILIDADE_COPY_SLIDE_WIDTH = 1920
 
 const TEXT = '#1e293b'
 const MUTED = '#64748b'
@@ -165,7 +165,7 @@ function TabelaRentabilidadeCopia({
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
     color: '#475569',
-    padding: '12px 10px 10px',
+    padding: '12px 14px 10px',
     whiteSpace: 'normal',
     borderBottom: `3px solid ${TOP_RULE}`,
     lineHeight: 1.25,
@@ -173,7 +173,7 @@ function TabelaRentabilidadeCopia({
   }
 
   const tdBase: CSSProperties = {
-    padding: '11px 10px',
+    padding: '11px 14px',
     fontSize: 16,
     verticalAlign: 'top',
     borderBottom: `1px solid ${LINE}`,
@@ -194,13 +194,13 @@ function TabelaRentabilidadeCopia({
       }}
     >
       <colgroup>
-        <col style={{ width: '26%' }} />
-        <col style={{ width: '11%' }} />
-        <col style={{ width: '16%' }} />
+        <col style={{ width: '34%' }} />
+        <col style={{ width: '9%' }} />
         <col style={{ width: '14%' }} />
-        <col style={{ width: '11%' }} />
-        <col style={{ width: '14%' }} />
-        <col style={{ width: '28%' }} />
+        <col style={{ width: '12%' }} />
+        <col style={{ width: '10%' }} />
+        <col style={{ width: '12%' }} />
+        <col style={{ width: '19%' }} />
       </colgroup>
       <thead>
         <tr>
@@ -242,12 +242,15 @@ function TabelaRentabilidadeCopia({
               <td
                 style={{
                   ...tdBase,
-                  paddingLeft: 12,
+                  paddingLeft: 14,
                   fontSize: 17,
                   fontWeight: 800,
                   color: TEXT,
-                  wordBreak: 'break-word',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
+                title={nome}
               >
                 {nome}
               </td>
@@ -338,13 +341,13 @@ function RodapeEscritorioCopia({
       }}
     >
       <colgroup>
-        <col style={{ width: '26%' }} />
-        <col style={{ width: '11%' }} />
-        <col style={{ width: '16%' }} />
+        <col style={{ width: '34%' }} />
+        <col style={{ width: '9%' }} />
         <col style={{ width: '14%' }} />
-        <col style={{ width: '11%' }} />
-        <col style={{ width: '14%' }} />
-        <col style={{ width: '28%' }} />
+        <col style={{ width: '12%' }} />
+        <col style={{ width: '10%' }} />
+        <col style={{ width: '12%' }} />
+        <col style={{ width: '19%' }} />
       </colgroup>
       <tbody>
         <tr>
@@ -416,7 +419,7 @@ export function RentabilidadeContratosCopySlide({
         boxSizing: 'border-box',
         backgroundColor: RENTABILIDADE_COPY_CARD_BG,
         color: TEXT,
-        padding: '24px 28px 28px',
+        padding: '20px 16px 24px',
         fontFamily: '"Segoe UI", "Helvetica Neue", system-ui, sans-serif',
       }}
     >
@@ -443,7 +446,7 @@ export function RentabilidadeContratosCopySlide({
             style={{
               display: 'grid',
               gridTemplateColumns: colB.length > 0 ? '1fr 1fr' : '1fr',
-              gap: 20,
+              gap: 24,
               alignItems: 'start',
             }}
           >
