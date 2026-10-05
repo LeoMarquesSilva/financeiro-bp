@@ -4,7 +4,8 @@ import type { RentabilidadeContratoLinha } from '../services/escritorioRentabili
 
 export const RENTABILIDADE_COPY_LIMITE = 20
 
-export const RENTABILIDADE_COPY_CARD_BG = '#FBFAF6'
+/** Fundo do slide de cópia — transparente para colar no PowerPoint com fundo próprio. */
+export const RENTABILIDADE_COPY_CARD_BG = 'transparent'
 
 export function mesesCalendarioNoPeriodo(dataInicio: string, dataFim: string): number {
   const [yi, mi] = dataInicio.split('-').map(Number)
