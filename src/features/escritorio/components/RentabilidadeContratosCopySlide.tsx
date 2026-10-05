@@ -16,10 +16,26 @@ import {
   type RentabilidadeCopiaVariant,
 } from '../utils/rentabilidadeCopy'
 
-/** Largura total do export — ocupa slide widescreen ao colar em escala. */
-export const RENTABILIDADE_COPY_SLIDE_WIDTH = 2560
+/**
+ * Largura lógica do export (scale 1 no PNG). ~1920px ≈ slide 16:9 ao colar em largura total.
+ * Tipografia grande para leitura em apresentação.
+ */
+export const RENTABILIDADE_COPY_SLIDE_WIDTH = 1920
 
 const TABLE_COL_WIDTHS = ['32%', '9%', '15%', '18%', '13%', '13%'] as const
+
+const F = {
+  insightHeadline: 40,
+  insightBody: 19,
+  th: 14,
+  td: 21,
+  client: 24,
+  leitura: 16,
+  cellLg: 23,
+  cellMd: 21,
+  footerTitle: 24,
+  footerSub: 15,
+} as const
 
 const TEXT = '#1e293b'
 const MUTED = '#64748b'
@@ -69,7 +85,7 @@ function CelulaValor({
       style={{
         color: TOM_COR[tom],
         fontWeight: bold ? 800 : tom === 'neutro' ? 600 : 700,
-        fontSize: size === 'lg' ? 16 : 15,
+        fontSize: size === 'lg' ? F.cellLg : F.cellMd,
         whiteSpace: 'nowrap',
         fontVariantNumeric: 'tabular-nums',
         letterSpacing: '-0.01em',
@@ -87,9 +103,9 @@ function InsightCardSlide({ card }: { card: RentabilidadeCopiaInsightCard }) {
         backgroundColor: INSIGHT_CARD_BG,
         borderRadius: 10,
         border: `1px solid ${LINE}`,
-        borderTop: `4px solid ${card.accent}`,
-        padding: '16px 18px 18px',
-        minHeight: 132,
+        borderTop: `5px solid ${card.accent}`,
+        padding: '20px 22px 22px',
+        minHeight: 160,
         boxSizing: 'border-box',
         boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
       }}
@@ -97,7 +113,7 @@ function InsightCardSlide({ card }: { card: RentabilidadeCopiaInsightCard }) {
       <div style={{ lineHeight: 1.25 }}>
         <span
           style={{
-            fontSize: 24,
+            fontSize: F.insightHeadline,
             fontWeight: 800,
             color: card.accent,
             letterSpacing: '-0.02em',
@@ -106,13 +122,15 @@ function InsightCardSlide({ card }: { card: RentabilidadeCopiaInsightCard }) {
           {card.headlineMetric}
         </span>
         {card.headlineRest ? (
-          <span style={{ fontSize: 24, fontWeight: 800, color: TEXT }}>{card.headlineRest}</span>
+          <span style={{ fontSize: F.insightHeadline, fontWeight: 800, color: TEXT }}>
+            {card.headlineRest}
+          </span>
         ) : null}
       </div>
       <p
         style={{
-          margin: '12px 0 0',
-          fontSize: 14,
+          margin: '14px 0 0',
+          fontSize: F.insightBody,
           lineHeight: 1.45,
           color: '#475569',
         }}
@@ -122,8 +140,8 @@ function InsightCardSlide({ card }: { card: RentabilidadeCopiaInsightCard }) {
       {card.footerBold ? (
         <p
           style={{
-            margin: '12px 0 0',
-            fontSize: 14,
+            margin: '14px 0 0',
+            fontSize: F.insightBody,
             lineHeight: 1.4,
             fontWeight: 800,
             color: TEXT,
@@ -163,21 +181,21 @@ function TabelaRentabilidadeCopia({
 }) {
   const th: CSSProperties = {
     textAlign: 'right',
-    fontSize: 11,
+    fontSize: F.th,
     fontWeight: 700,
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
     color: '#475569',
-    padding: '12px 20px 10px',
+    padding: '14px 18px 12px',
     whiteSpace: 'normal',
-    borderBottom: `3px solid ${TOP_RULE}`,
+    borderBottom: `4px solid ${TOP_RULE}`,
     lineHeight: 1.25,
     verticalAlign: 'bottom',
   }
 
   const tdBase: CSSProperties = {
-    padding: '12px 20px',
-    fontSize: 16,
+    padding: '14px 18px',
+    fontSize: F.td,
     verticalAlign: 'top',
     borderBottom: `1px solid ${LINE}`,
     lineHeight: 1.4,
@@ -238,7 +256,7 @@ function TabelaRentabilidadeCopia({
               <td style={{ ...tdBase, paddingLeft: 16 }}>
                 <div
                   style={{
-                    fontSize: 17,
+                    fontSize: F.client,
                     fontWeight: 800,
                     color: TEXT,
                     whiteSpace: 'nowrap',
@@ -251,8 +269,8 @@ function TabelaRentabilidadeCopia({
                 </div>
                 <div
                   style={{
-                    marginTop: 5,
-                    fontSize: 12,
+                    marginTop: 6,
+                    fontSize: F.leitura,
                     fontWeight: 500,
                     lineHeight: 1.35,
                     color: '#475569',
@@ -266,7 +284,7 @@ function TabelaRentabilidadeCopia({
                   ...tdBase,
                   textAlign: 'right',
                   fontWeight: 600,
-                  fontSize: 16,
+                  fontSize: F.td,
                   fontVariantNumeric: 'tabular-nums',
                   whiteSpace: 'nowrap',
                 }}
@@ -278,7 +296,7 @@ function TabelaRentabilidadeCopia({
                   ...tdBase,
                   textAlign: 'right',
                   fontWeight: 600,
-                  fontSize: 15,
+                  fontSize: F.td - 1,
                   fontVariantNumeric: 'tabular-nums',
                 }}
               >
@@ -320,8 +338,8 @@ function RodapeEscritorioCopia({
   mediaEfetivoEscritorio: number | null
 }) {
   const tdBase: CSSProperties = {
-    padding: '14px 10px',
-    fontSize: 16,
+    padding: '16px 18px',
+    fontSize: F.td,
     verticalAlign: 'middle',
     lineHeight: 1.35,
   }
@@ -345,9 +363,18 @@ function RodapeEscritorioCopia({
       </colgroup>
       <tbody>
         <tr>
-          <td style={{ ...tdBase, paddingLeft: 16, fontSize: 17, fontWeight: 800 }}>
-            <div>Escritório</div>
-            <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, color: '#475569' }}>Média</div>
+          <td style={{ ...tdBase, paddingLeft: 16, fontWeight: 800 }}>
+            <div style={{ fontSize: F.footerTitle }}>Escritório</div>
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: F.footerSub,
+                fontWeight: 600,
+                color: '#475569',
+              }}
+            >
+              Média
+            </div>
           </td>
           <td
             style={{
@@ -406,7 +433,7 @@ export function RentabilidadeContratosCopySlide({
         boxSizing: 'border-box',
         backgroundColor: RENTABILIDADE_COPY_CARD_BG,
         color: TEXT,
-        padding: '16px 10px 20px',
+        padding: '12px 8px 16px',
         fontFamily: '"Segoe UI", "Helvetica Neue", system-ui, sans-serif',
       }}
     >
@@ -414,8 +441,8 @@ export function RentabilidadeContratosCopySlide({
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: 16,
-          marginBottom: 20,
+          gap: 18,
+          marginBottom: 18,
         }}
       >
         {insightCards.map((card, i) => (
@@ -424,7 +451,7 @@ export function RentabilidadeContratosCopySlide({
       </div>
 
       {linhas.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 16, color: MUTED }}>
+        <p style={{ margin: 0, fontSize: F.td, color: MUTED }}>
           Nenhum contrato elegível (faturamento nos últimos 3 meses e hora efetiva calculada).
         </p>
       ) : (

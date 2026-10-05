@@ -381,12 +381,14 @@ export function RentabilidadeContratosSection({
                   containerRef={copyTopRef}
                   label="Copiar top 20 rentáveis"
                   preserveBackground
+                  exportScale={1}
                   className="bg-white"
                 />
                 <ElementCopyButton
                   containerRef={copyBottomRef}
                   label="Copiar top 20 menos rentáveis"
                   preserveBackground
+                  exportScale={1}
                   className="bg-white"
                 />
               </div>

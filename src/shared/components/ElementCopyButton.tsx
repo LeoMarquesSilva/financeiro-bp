@@ -16,6 +16,8 @@ type Props = {
   className?: string
   label?: string
   preserveBackground?: boolean
+  /** Padrão 2 (retina). Use 1 em slides largos para o PPT não encolher demais ao colar. */
+  exportScale?: number
 }
 
 export function ElementCopyButton({
@@ -23,6 +25,7 @@ export function ElementCopyButton({
   className,
   label = 'Copiar',
   preserveBackground = false,
+  exportScale,
 }: Props) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done'>('idle')
 
@@ -35,7 +38,7 @@ export function ElementCopyButton({
 
     setStatus('loading')
     try {
-      await copyElementImageToClipboard(container, undefined, { preserveBackground })
+      await copyElementImageToClipboard(container, exportScale, { preserveBackground })
       setStatus('done')
       toast.success('Conteúdo copiado — cole no PowerPoint com Ctrl+V')
       window.setTimeout(() => setStatus('idle'), 2000)
