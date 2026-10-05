@@ -338,7 +338,11 @@ export function RentabilidadeContratosSection({
         aria-hidden
         data-chart-export-full-scroll
       >
-        <div ref={copyTopRef} style={{ width: RENTABILIDADE_COPY_SLIDE_WIDTH }}>
+        <div
+          ref={copyTopRef}
+          style={{ width: RENTABILIDADE_COPY_SLIDE_WIDTH, overflow: 'visible' }}
+          data-chart-export-fit-content
+        >
           <RentabilidadeContratosCopySlide
             variant="top"
             linhas={linhasTopCopia}
@@ -350,7 +354,11 @@ export function RentabilidadeContratosSection({
             dataFim={data?.data_fim ?? filtros.dataFim}
           />
         </div>
-        <div ref={copyBottomRef} style={{ width: RENTABILIDADE_COPY_SLIDE_WIDTH }}>
+        <div
+          ref={copyBottomRef}
+          style={{ width: RENTABILIDADE_COPY_SLIDE_WIDTH, overflow: 'visible' }}
+          data-chart-export-fit-content
+        >
           <RentabilidadeContratosCopySlide
             variant="bottom"
             linhas={linhasBottomCopia}

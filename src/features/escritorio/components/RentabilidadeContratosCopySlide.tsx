@@ -22,7 +22,8 @@ import {
  */
 export const RENTABILIDADE_COPY_SLIDE_WIDTH = 1920
 
-const TABLE_COL_WIDTHS = ['32%', '9%', '15%', '18%', '13%', '13%'] as const
+/** Colunas numéricas mais largas — evita cortar R$/h e % no meio da célula. */
+const TABLE_COL_WIDTHS = ['28%', '8%', '13%', '16%', '12%', '23%'] as const
 
 const F = {
   insightHeadline: 40,
@@ -46,6 +47,12 @@ const GREEN = '#1a6b42'
 const ORANGE = '#b45309'
 const FOOTER_BG = 'rgba(163, 132, 84, 0.18)'
 const INSIGHT_CARD_BG = '#ffffff'
+
+const TABLE_SHELL: CSSProperties = {
+  borderRadius: 8,
+  overflow: 'visible',
+  backgroundColor: INSIGHT_CARD_BG,
+}
 
 const TOM_COR: Record<RentabilidadeCopiaTom, string> = {
   alto: GREEN,
@@ -204,14 +211,14 @@ function TabelaRentabilidadeCopia({
   if (linhas.length === 0) return null
 
   return (
+    <div style={TABLE_SHELL}>
     <table
       style={{
         width: '100%',
         borderCollapse: 'collapse',
         tableLayout: 'fixed',
         backgroundColor: INSIGHT_CARD_BG,
-        borderRadius: 8,
-        overflow: 'hidden',
+        overflow: 'visible',
       }}
     >
       <colgroup>
@@ -260,8 +267,6 @@ function TabelaRentabilidadeCopia({
                     fontWeight: 800,
                     color: TEXT,
                     whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
                   }}
                   title={nome}
                 >
@@ -302,12 +307,28 @@ function TabelaRentabilidadeCopia({
               >
                 {formatHonorarioMensalCopia(linha.previsto_periodo, meses)}
               </td>
-              <td style={{ ...tdBase, textAlign: 'right', paddingLeft: 24, paddingRight: 24 }}>
+              <td
+                style={{
+                  ...tdBase,
+                  textAlign: 'right',
+                  whiteSpace: 'nowrap',
+                  overflow: 'visible',
+                  minWidth: 132,
+                }}
+              >
                 <CelulaValor tom={tomValorHora} size="lg">
                   {formatValorHoraCopiaExport(linha.valor_hora_previsto)}
                 </CelulaValor>
               </td>
-              <td style={{ ...tdBase, textAlign: 'right', paddingLeft: 20, paddingRight: 20 }}>
+              <td
+                style={{
+                  ...tdBase,
+                  textAlign: 'right',
+                  whiteSpace: 'nowrap',
+                  overflow: 'visible',
+                  minWidth: 108,
+                }}
+              >
                 <CelulaValor tom={tomValorHora}>
                   {formatVsMediaPercentualCopiaExport(
                     linha.valor_hora_previsto,
@@ -315,7 +336,16 @@ function TabelaRentabilidadeCopia({
                   )}
                 </CelulaValor>
               </td>
-              <td style={{ ...tdBase, textAlign: 'right', paddingRight: 16 }}>
+              <td
+                style={{
+                  ...tdBase,
+                  textAlign: 'right',
+                  paddingRight: 16,
+                  whiteSpace: 'nowrap',
+                  overflow: 'visible',
+                  minWidth: 132,
+                }}
+              >
                 <CelulaValor tom={tomEfetivo} size="lg">
                   {formatValorHoraCopiaExport(linha.valor_hora_efetivo)}
                 </CelulaValor>
@@ -325,6 +355,7 @@ function TabelaRentabilidadeCopia({
         })}
       </tbody>
     </table>
+    </div>
   )
 }
 
@@ -345,15 +376,14 @@ function RodapeEscritorioCopia({
   }
 
   return (
+    <div style={{ ...TABLE_SHELL, backgroundColor: FOOTER_BG, marginTop: 16 }}>
     <table
       style={{
         width: '100%',
-        marginTop: 16,
         borderCollapse: 'collapse',
         tableLayout: 'fixed',
         backgroundColor: FOOTER_BG,
-        borderRadius: 8,
-        overflow: 'hidden',
+        overflow: 'visible',
       }}
     >
       <colgroup>
@@ -401,6 +431,7 @@ function RodapeEscritorioCopia({
         </tr>
       </tbody>
     </table>
+    </div>
   )
 }
 
@@ -430,17 +461,21 @@ export function RentabilidadeContratosCopySlide({
     <div
       style={{
         width: RENTABILIDADE_COPY_SLIDE_WIDTH,
+        minWidth: RENTABILIDADE_COPY_SLIDE_WIDTH,
+        maxWidth: 'none',
         boxSizing: 'border-box',
         backgroundColor: RENTABILIDADE_COPY_CARD_BG,
         color: TEXT,
-        padding: '12px 8px 16px',
+        padding: '12px 10px 16px',
+        overflow: 'visible',
         fontFamily: '"Segoe UI", "Helvetica Neue", system-ui, sans-serif',
       }}
+      data-chart-export-fit-content
     >
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gridTemplateColumns: 'repeat(3, 1fr)',
           gap: 18,
           marginBottom: 18,
         }}
@@ -458,27 +493,33 @@ export function RentabilidadeContratosCopySlide({
         <>
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: colB.length > 0 ? '1fr 1fr' : '1fr',
-              gap: 20,
-              alignItems: 'start',
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              gap: 28,
+              width: '100%',
+              overflow: 'visible',
             }}
           >
-            <TabelaRentabilidadeCopia
-              linhas={colA}
-              meses={meses}
-              mediaValorHoraEscritorio={mediaValorHoraEscritorio}
-              mediaEfetivoEscritorio={mediaEfetivoEscritorio}
-              rowOffset={0}
-            />
-            {colB.length > 0 ? (
+            <div style={{ flex: '0 0 calc(50% - 14px)', width: 'calc(50% - 14px)', overflow: 'visible' }}>
               <TabelaRentabilidadeCopia
-                linhas={colB}
+                linhas={colA}
                 meses={meses}
                 mediaValorHoraEscritorio={mediaValorHoraEscritorio}
                 mediaEfetivoEscritorio={mediaEfetivoEscritorio}
-                rowOffset={colA.length}
+                rowOffset={0}
               />
+            </div>
+            {colB.length > 0 ? (
+              <div style={{ flex: '0 0 calc(50% - 14px)', width: 'calc(50% - 14px)', overflow: 'visible' }}>
+                <TabelaRentabilidadeCopia
+                  linhas={colB}
+                  meses={meses}
+                  mediaValorHoraEscritorio={mediaValorHoraEscritorio}
+                  mediaEfetivoEscritorio={mediaEfetivoEscritorio}
+                  rowOffset={colA.length}
+                />
+              </div>
             ) : null}
           </div>
           <RodapeEscritorioCopia
