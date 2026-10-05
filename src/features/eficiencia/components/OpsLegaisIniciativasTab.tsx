@@ -1,10 +1,12 @@
-import { Fragment, useMemo, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
+import { useMemo, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+  ArrowUpRight,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  FolderCheck,
   Lightbulb,
   LineChart,
   RefreshCw,
@@ -12,6 +14,8 @@ import {
   Timer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { IniciativasPessoasProvider, IniciativasResponsaveis, IniciativasResumoResponsaveis, ProjetoCategoriaBadge, ProjetoTipoIcon, useIniciativasPessoaNome } from './OpsLegaisIniciativasPresentation'
+import { filtrarSubtarefasPorResponsavel, formatIniciativasBi, subtarefasRealizadasDaVisao } from '../utils/opsLegaisProjetoPresentation'
 import { formatPercent } from '@/shared/utils/format'
 import {
   isDiaFiltro,
@@ -52,10 +56,6 @@ function formatDataBr(iso: string | null | undefined): string {
   return `${d}/${m}/${y}`
 }
 
-function respLabel(v: string | null | undefined): string {
-  return v?.trim() ? v : 'sem responsável'
-}
-
 function TituloLink({
   nome,
   url,
@@ -74,13 +74,14 @@ function TituloLink({
         target="_blank"
         rel="noreferrer"
         onClick={onClick}
-        className={cn('font-semibold text-slate-900 hover:underline', className)}
+        className={cn('group font-semibold text-slate-900 decoration-emerald-600/40 underline-offset-4 hover:underline', className)}
       >
-        {nome}
+        {formatIniciativasBi(nome)}
+        <ArrowUpRight className="ml-1 inline-block h-3.5 w-3.5 align-middle text-slate-300 transition-colors group-hover:text-emerald-600" aria-hidden />
       </a>
     )
   }
-  return <span className={cn('font-semibold text-slate-900', className)}>{nome}</span>
+  return <span className={cn('font-semibold text-slate-900', className)}>{formatIniciativasBi(nome)}</span>
 }
 
 function statusSubtarefaLabel(status: string): string {
@@ -105,51 +106,70 @@ function ExpandChevron({ open, visible }: { open: boolean; visible: boolean }) {
   )
 }
 
-function SubtarefaNestedRows({
+function PainelEmptyState({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <FolderCheck className="h-5 w-5" aria-hidden />
+      </span>
+      <p className="max-w-sm text-sm leading-relaxed text-slate-500">{children}</p>
+    </div>
+  )
+}
+
+function TipoBadge({ tipo }: { tipo: string }) {
+  return tipo ? (
+    <span
+      className={cn(
+        'inline-flex max-w-full rounded-md px-2.5 py-1 text-xs font-medium leading-relaxed',
+        tipo === 'Projetos' || tipo === 'Projeto'
+          ? 'bg-sky-50 text-sky-700'
+          : tipo === 'Melhorias'
+            ? 'bg-emerald-50 text-emerald-700'
+            : 'bg-slate-100 text-slate-600',
+      )}
+    >
+      {tipo}
+    </span>
+  ) : <span className="text-slate-300">—</span>
+}
+
+function SubtarefasList({
   items,
   mode,
+  title,
 }: {
-  items: OpsLegaisIniciativasSubtarefa[]
+  items: (OpsLegaisIniciativasSubtarefa & { url?: string | null; paiTitulo?: string })[]
   mode: 'concluidos' | 'andamento'
+  title?: string
 }) {
-  return items.map((s) => {
-    const dot = STATUS_DOT[s.status] ?? '#9CA3AF'
-    const ultimaCol =
-      mode === 'andamento'
-        ? statusSubtarefaLabel(s.status)
-        : s.data
-          ? formatDataBr(s.data)
-          : 'em andamento'
-    return (
-      <tr key={s.id} className="bg-slate-50/70">
-        <td className="px-1.5 py-1 align-top">
-          <div className="flex items-start gap-2 border-l-2 border-slate-200 pl-3 ml-6">
-            <span
-              className="mt-1 h-2 w-2 shrink-0 rounded-full"
-              style={{ background: dot }}
-              aria-hidden
-            />
-            <span className="min-w-0 text-[10px] font-medium leading-snug text-slate-700">
-              {s.nome}
-            </span>
-          </div>
-        </td>
-        <td className="px-1.5 py-1 text-center align-top text-[10px] text-slate-400">Subtarefa</td>
-        <td className="px-1.5 py-1 text-center align-top text-[10px] text-slate-300">—</td>
-        <td className="px-1.5 py-1 text-center align-top text-[10px] text-slate-600">
-          <span className="line-clamp-2 break-words">{respLabel(s.responsavel)}</span>
-        </td>
-        <td
-          className={cn(
-            'px-1.5 py-1 text-center align-top text-[10px] whitespace-nowrap',
-            mode === 'andamento' ? 'font-medium text-slate-600' : 'text-slate-500',
-          )}
-        >
-          {ultimaCol}
-        </td>
-      </tr>
-    )
-  })
+  return (
+    <section aria-label="Subtarefas do projeto" className="rounded-xl border border-slate-200/70 bg-slate-50/70 px-4 sm:px-5">
+      <div className="grid gap-4 border-b border-slate-200/70 py-3 text-sm text-slate-500 md:grid-cols-[minmax(0,1fr)_220px_140px]">
+        <h5 className="font-medium text-slate-600">{title ? `${title} · ${items.length}` : `${items.length} subtarefa${items.length === 1 ? '' : 's'}`}</h5>
+        <span className="hidden md:block">Responsável</span>
+        <span className="hidden text-right md:block">{mode === 'andamento' ? 'Status' : 'Conclusão'}</span>
+      </div>
+      <ul className="divide-y divide-slate-200/70">
+        {items.map((s) => {
+          const ultimaCol = mode === 'andamento' ? statusSubtarefaLabel(s.status) : s.data ? formatDataBr(s.data) : 'em andamento'
+          return (
+            <li key={s.id} className="grid items-start gap-x-4 gap-y-3 py-4 md:grid-cols-[minmax(0,1fr)_220px_140px]">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="mt-2.5 h-2 w-2 shrink-0 rounded-full" style={{ background: STATUS_DOT[s.status] ?? '#9CA3AF' }} aria-hidden />
+                <div className="min-w-0">
+                  <TituloLink nome={s.nome} url={s.url ?? null} className="break-words text-lg font-medium leading-relaxed text-slate-700 xl:text-xl" />
+                  {s.paiTitulo ? <p className="mt-1 text-sm text-slate-500">Projeto: {formatIniciativasBi(s.paiTitulo)}</p> : null}
+                </div>
+              </div>
+              <div className="pl-5 md:pl-0"><IniciativasResponsaveis value={s.responsavel} /></div>
+              <p className="pl-5 text-sm font-medium leading-relaxed tabular-nums text-slate-500 md:pl-0 md:text-right">{ultimaCol}</p>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
 }
 
 function KpiShell({
@@ -157,7 +177,9 @@ function KpiShell({
   description,
   value,
   valueStyle,
-  valueClassName,
+  unit,
+  progress,
+  highlight = false,
   footer,
   iconWrapClass,
   icon: Icon,
@@ -167,39 +189,51 @@ function KpiShell({
   description: string
   value: string
   valueStyle?: CSSProperties
-  valueClassName?: string
+  unit?: string
+  progress?: number
+  highlight?: boolean
   footer: ReactNode
   iconWrapClass: string
   icon: typeof Lightbulb
   loading?: boolean
 }) {
   return (
-    <article className="flex min-h-[180px] flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-2">
+    <article aria-label={title} className={cn(
+      'flex min-h-[260px] min-w-0 flex-col rounded-2xl border bg-white p-5 shadow-sm sm:min-h-[300px] sm:p-6',
+      highlight ? 'border-emerald-200' : 'border-slate-200',
+    )}>
+      <div className="flex min-h-10 items-center justify-between gap-3">
+        <h3 className="text-lg font-semibold leading-snug tracking-tight text-slate-900 xl:text-xl">
+          {title}
+        </h3>
         <span
           className={cn(
-            'flex h-7 w-7 items-center justify-center rounded-full',
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
             iconWrapClass,
           )}
         >
-          <Icon className="h-3.5 w-3.5" aria-hidden />
+          <Icon className="h-5 w-5" aria-hidden />
         </span>
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          {title}
-        </h3>
       </div>
-      <p className="mt-2 text-[11px] leading-snug text-slate-500">{description}</p>
+      <p className="mt-3 min-h-10 text-sm leading-5 text-slate-500">{description}</p>
       {loading ? (
-        <div className="mt-3 h-8 w-24 animate-pulse rounded bg-slate-100" />
+        <div className="mt-5 h-12 w-32 animate-pulse rounded-lg bg-slate-100" />
       ) : (
-        <p
-          className={cn('mt-3 text-3xl font-bold tabular-nums text-slate-900', valueClassName)}
-          style={valueStyle}
-        >
-          {value}
-        </p>
+        <div className="mt-5 flex min-w-0 items-baseline gap-2">
+          <p className="min-w-0 break-words text-4xl font-semibold leading-none tracking-tight tabular-nums text-slate-900 xl:text-5xl" style={valueStyle}>{value}</p>
+          {unit ? <span className="text-base font-medium text-slate-400">{unit}</span> : null}
+        </div>
       )}
-      <div className="mt-2 text-xs text-slate-500">{!loading && footer}</div>
+      <div className="mt-auto pt-5">
+        <div className="min-h-[72px] border-t border-slate-100 pt-4 text-sm leading-relaxed text-slate-500">
+          {loading ? <div className="h-4 w-3/4 animate-pulse rounded bg-slate-100" /> : footer}
+          {progress !== undefined && !loading ? (
+            <div role="progressbar" aria-label="Progresso da meta anual" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.max(0, progress))} aria-valuetext={`${value} da meta anual`} className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, Math.max(0, progress))}%`, backgroundColor: valueStyle?.color }} />
+            </div>
+          ) : null}
+        </div>
+      </div>
     </article>
   )
 }
@@ -387,7 +421,7 @@ function PainelResumoLinha({
 
   return (
     <>
-      🔄 <b className="text-slate-700">{qtd}</b> em andamento
+      <b className="text-slate-700">{qtd}</b> em andamento
       {subs > 0 ? (
         <>
           {' '}
@@ -398,16 +432,24 @@ function PainelResumoLinha({
   )
 }
 
-function ProjetosRealizadosPanel({
-  loading,
-  painel,
-  mesFiltroAtivo,
-}: {
+type ProjetosRealizadosPanelProps = {
   loading: boolean
   mesFiltroAtivo: boolean
   painel: OpsLegaisIniciativasPainel | undefined
-}) {
+}
+
+function ProjetosRealizadosPanel(props: ProjetosRealizadosPanelProps) {
+  return <IniciativasPessoasProvider><ProjetosRealizadosContent {...props} /></IniciativasPessoasProvider>
+}
+
+function ProjetosRealizadosContent({
+  loading,
+  painel,
+  mesFiltroAtivo,
+}: ProjetosRealizadosPanelProps) {
   const [view, setView] = useState<PainelView>('concluidos')
+  const [responsavelAtivo, setResponsavelAtivo] = useState<string | null>(null)
+  const resolveNome = useIniciativasPessoaNome()
   const concluidosLista = painel?.concluidos ?? []
   const concluidosResumo = useMemo(() => summarizeConcluidos(concluidosLista), [concluidosLista])
   const qtdConcluidos = concluidosResumo.total
@@ -417,94 +459,147 @@ function ProjetosRealizadosPanel({
   const qtdSemana =
     semanaRows.length > 0 ? semanaRows.length : (painel?.semana.length ?? 0)
 
-  const tabs: { id: PainelView; label: string; icon: typeof CheckCircle2 }[] = [
+  const subtarefasVisao = subtarefasRealizadasDaVisao(painel, view)
+  const subtarefasFiltradas = filtrarSubtarefasPorResponsavel(subtarefasVisao, responsavelAtivo, resolveNome)
+  const subtarefasIds = new Set(subtarefasFiltradas.map((tarefa) => tarefa.id))
+  const filtrarProjetos = (rows: OpsLegaisIniciativasProjeto[]) => responsavelAtivo === null
+    ? rows
+    : rows.map((projeto) => ({ ...projeto, subtarefas: projeto.subtarefas.filter((tarefa) => subtarefasIds.has(tarefa.id)) })).filter((projeto) => projeto.subtarefas.length > 0)
+  const concluidosFiltrados = filtrarProjetos(concluidosLista)
+  const semanaFiltrada = filtrarProjetos(semanaRows)
+  const andamentoFiltrado = filtrarProjetos(painel?.andamento ?? [])
+  const semanaIndividuais = responsavelAtivo === null
+    ? painel?.semana ?? []
+    : (painel?.semana ?? []).filter((tarefa) => tarefa.tipo === 'Subtarefa' && subtarefasIds.has(tarefa.id))
+
+  const tabs: { id: PainelView; label: string; count: number; icon: typeof CheckCircle2 }[] = [
     {
       id: 'concluidos',
-      label: `Concluídos (${loading ? '…' : qtdConcluidos})`,
+      label: 'Concluídos',
+      count: qtdConcluidos,
       icon: CheckCircle2,
     },
     {
       id: 'semana',
-      label: `Semana passada (${loading ? '…' : qtdSemana})`,
+      label: 'Semana passada',
+      count: qtdSemana,
       icon: CalendarDays,
     },
     {
       id: 'andamento',
-      label: `Em andamento (${loading ? '…' : qtdAndamento})`,
+      label: 'Em andamento',
+      count: qtdAndamento,
       icon: RefreshCw,
     },
   ]
 
   return (
-    <div className="flex min-h-[335px] flex-col overflow-hidden rounded-[10px] border border-slate-200 bg-white shadow-sm">
-      <div className="shrink-0 border-b border-slate-200 px-3 pt-2.5 pb-0">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-pink-100 text-[11px]">
-              ✅
-            </span>
-            <h3 className="text-xs font-semibold text-slate-700">Projetos Realizados</h3>
+    <section aria-label="Projetos Realizados" className="flex min-h-[380px] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="shrink-0 px-4 pt-5 sm:px-6 sm:pt-6">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <FolderCheck className="h-5 w-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold tracking-tight text-slate-900">Projetos Realizados</h3>
+            <p className="mt-1 text-sm leading-relaxed text-slate-500">
+              Acompanhe as entregas e a evolução dos projetos e melhorias.
+            </p>
           </div>
-          <p className="text-[10px] text-slate-400">
-            <PainelResumoLinha
-              loading={loading}
-              view={view}
-              painel={painel}
-              mesFiltroAtivo={mesFiltroAtivo}
-              semanaRows={semanaRows}
-            />
-          </p>
         </div>
 
-        <div className="mt-2 flex gap-0 overflow-x-auto" role="tablist" aria-label="Visões do painel">
-          {tabs.map(({ id, label, icon: Icon }) => (
+        <div className="mt-5 flex gap-2 overflow-x-auto" role="tablist" aria-label="Visões do painel">
+          {tabs.map(({ id, label, count, icon: Icon }) => (
             <button
               key={id}
               type="button"
               role="tab"
               aria-selected={view === id}
-              onClick={() => setView(id)}
+              onClick={() => {
+                setView(id)
+                setResponsavelAtivo(null)
+              }}
               className={cn(
-                'inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-[11px] font-medium transition-colors -mb-px',
+                'inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600',
                 view === id
-                  ? 'border-violet-600 text-violet-700'
-                  : 'border-transparent text-slate-500 hover:border-slate-200 hover:text-slate-700',
+                  ? 'border-emerald-600 text-emerald-700'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-900',
               )}
             >
-              <Icon className="h-3.5 w-3.5" aria-hidden />
+              <Icon className="h-4 w-4" aria-hidden />
               {label}
+              <span className={cn(
+                'rounded-md px-2 py-0.5 text-xs tabular-nums',
+                view === id ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500',
+              )}>
+                {loading ? '…' : count}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
+      <div className="border-y border-slate-200 bg-slate-50/70 px-4 py-3 sm:px-6">
+        <p className="text-xs leading-relaxed text-slate-500" aria-live="polite">
+          <PainelResumoLinha
+            loading={loading}
+            view={view}
+            painel={painel}
+            mesFiltroAtivo={mesFiltroAtivo}
+            semanaRows={semanaRows}
+          />
+        </p>
+      </div>
+
+      <IniciativasResumoResponsaveis
+        subtarefas={subtarefasVisao}
+        loading={loading}
+        responsavelAtivo={responsavelAtivo}
+        onResponsavelChange={setResponsavelAtivo}
+      />
+
       <div className="min-h-0 flex-1 overflow-auto">
         {loading ? (
-          <div className="space-y-2 p-3">
-            <div className="h-8 animate-pulse rounded bg-slate-100" />
-            <div className="h-8 animate-pulse rounded bg-slate-100" />
-            <div className="h-8 animate-pulse rounded bg-slate-100" />
+          <div className="space-y-4 p-6" role="status" aria-label="Carregando projetos">
+            {[0, 1, 2].map((row) => (
+              <div key={row} className="flex animate-pulse items-center gap-6 border-b border-slate-100 pb-4" aria-hidden>
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-3/4 rounded bg-slate-100" />
+                  <div className="h-3 w-1/3 rounded bg-slate-100" />
+                </div>
+                <div className="h-6 w-20 rounded-md bg-slate-100" />
+                <div className="hidden h-4 w-24 rounded bg-slate-100 sm:block" />
+              </div>
+            ))}
           </div>
+        ) : responsavelAtivo !== null && subtarefasFiltradas.length === 0 ? (
+          <PainelEmptyState>Nenhuma subtarefa concluída para essa pessoa nesta visão.</PainelEmptyState>
         ) : view === 'concluidos' ? (
           <TabelaConcluidos
-            rows={concluidosLista}
+            key={responsavelAtivo}
+            rows={concluidosFiltrados}
+            expandAll={responsavelAtivo !== null}
             emptyLabel="Nenhum projeto ou melhoria baixado no período."
           />
         ) : view === 'semana' ? (
-          semanaRows.length > 0 ? (
+          responsavelAtivo !== null && semanaIndividuais.length > 0 ? (
+            <TabelaSemana rows={semanaIndividuais} />
+          ) : semanaFiltrada.length > 0 ? (
             <TabelaConcluidos
-              rows={semanaRows}
-              resumoParcial={summarizeSemana(semanaRows).parcial}
+              key={responsavelAtivo}
+              rows={semanaFiltrada}
+              expandAll={responsavelAtivo !== null}
+              resumoParcial={summarizeSemana(semanaFiltrada).parcial}
               emptyLabel="Nenhuma realização na semana passada."
             />
           ) : (
-            <TabelaSemana rows={painel?.semana ?? []} />
+            <TabelaSemana rows={semanaIndividuais} />
           )
         ) : (
-          <TabelaAndamento rows={painel?.andamento ?? []} />
+          <TabelaAndamento key={responsavelAtivo} rows={andamentoFiltrado} expandAll={responsavelAtivo !== null} />
         )}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -515,294 +610,100 @@ function conclusaoProjetoLabel(r: OpsLegaisIniciativasProjeto): string {
   return r.data ? formatDataBr(r.data) : '—'
 }
 
-function TabelaConcluidos({
-  rows,
-  resumoParcial = 0,
-  emptyLabel = 'Nenhum projeto ou melhoria baixado no período.',
-}: {
+function ListaProjetos({ rows, mode, expandAll = false }: {
   rows: OpsLegaisIniciativasProjeto[]
+  mode: 'concluidos' | 'andamento'
+  expandAll?: boolean
+}) {
+  const [abertoId, setAbertoId] = useState<string | null>(null)
+  return (
+    <div className="divide-y divide-slate-200">
+      {rows.map((r) => {
+        const subtarefas = mode === 'concluidos' ? r.subtarefas.filter((s) => s.status === 'concluido') : r.subtarefas
+        const temSubs = subtarefas.length > 0
+        const aberto = expandAll || abertoId === r.id
+        const toggle = () => {
+          if (temSubs && !expandAll) setAbertoId(aberto ? null : r.id)
+        }
+        return (
+          <article key={r.id} aria-label={formatIniciativasBi(r.nome)} className="px-4 py-5 sm:px-6 sm:py-6">
+            <div onClick={toggle} className={cn('flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6', temSubs && !expandAll && 'cursor-pointer')}>
+              <div className="flex min-w-0 flex-1 items-start gap-3.5">
+                <ProjetoTipoIcon tipo={r.extensao} />
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xl font-semibold leading-snug tracking-tight text-slate-900 xl:text-2xl">
+                    <TituloLink nome={r.nome} url={r.url} onClick={(e) => e.stopPropagation()} className="break-words transition-colors hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2" />
+                  </h4>
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3">
+                    <TipoBadge tipo={r.tipo} />
+                    <ProjetoCategoriaBadge tipo={r.extensao} />
+                    <div aria-label="Responsável do projeto"><IniciativasResponsaveis value={r.responsavel} /></div>
+                    {temSubs ? <span className="text-sm text-slate-500">{subtarefas.length} subtarefa{subtarefas.length === 1 ? '' : 's'}</span> : null}
+                  </div>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-start justify-between gap-5 pl-[3.375rem] lg:pl-0">
+                {mode === 'andamento' ? (
+                  <div className="w-44 space-y-2">
+                    <p className="text-sm text-slate-500">Progresso do projeto</p>
+                    <p className="text-base font-semibold tabular-nums text-slate-700">{r.total_sub ? `${r.sub_concluidas}/${r.total_sub} concluídas` : 'Sem subtarefas'}</p>
+                    {r.total_sub > 0 ? (
+                      <div role="progressbar" aria-label={'Subtarefas concluídas de ' + formatIniciativasBi(r.nome)} aria-valuemin={0} aria-valuemax={r.total_sub} aria-valuenow={r.sub_concluidas} className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, Math.max(0, r.sub_concluidas / r.total_sub * 100))}%` }} />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <p className="text-sm text-slate-500">Conclusão</p>
+                    <p className={cn('inline-flex items-center gap-2 text-base font-medium tabular-nums', projetoConcluido(r) ? 'text-slate-700' : 'text-amber-700')}>
+                      {projetoConcluido(r) ? <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden /> : <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden />}
+                      {conclusaoProjetoLabel(r)}
+                    </p>
+                  </div>
+                )}
+                {temSubs && !expandAll ? (
+                  <button type="button" aria-expanded={aberto} aria-label={(aberto ? 'Recolher subtarefas de ' : 'Expandir subtarefas de ') + formatIniciativasBi(r.nome)} onClick={(e) => { e.stopPropagation(); toggle() }} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+                    <ExpandChevron open={aberto} visible />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            {aberto && temSubs ? <div className="mt-5"><SubtarefasList items={subtarefas} mode={mode} /></div> : null}
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function TabelaConcluidos({ rows, expandAll = false, resumoParcial = 0, emptyLabel = 'Nenhum projeto ou melhoria baixado no período.' }: {
+  rows: OpsLegaisIniciativasProjeto[]
+  expandAll?: boolean
   resumoParcial?: number
   emptyLabel?: string
 }) {
-  const [abertoId, setAbertoId] = useState<string | null>(null)
-
-  const rowsOrdenadas = useMemo(
-    () =>
-      [...rows].sort(
-        (a, b) =>
-          Number(projetoConcluido(b)) - Number(projetoConcluido(a)) ||
-          a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }),
-      ),
-    [rows],
-  )
-
-  if (!rows.length) {
-    return (
-      <p className="px-4 py-8 text-center text-[11px] text-slate-400">
-        {emptyLabel}
-      </p>
-    )
-  }
+  const rowsOrdenadas = useMemo(() => [...rows].sort((a, b) => Number(projetoConcluido(b)) - Number(projetoConcluido(a)) || a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })), [rows])
+  if (!rows.length) return <PainelEmptyState>{emptyLabel}</PainelEmptyState>
   return (
-    <div className="space-y-0">
-      {resumoParcial > 0 ? (
-        <p className="border-b border-amber-100 bg-amber-50/80 px-3 py-2 text-[10px] leading-relaxed text-amber-900">
-          <strong>Pendente</strong> = projeto ainda aberto; a linha entrou porque houve subtarefa
-          concluída na semana. Expanda para ver as datas.
-        </p>
-      ) : null}
-      <table className="w-full table-fixed border-collapse text-[11px]">
-      <colgroup>
-        <col className="w-[32%]" />
-        <col className="w-[14%]" />
-        <col className="w-[16%]" />
-        <col className="w-[22%]" />
-        <col className="w-[16%]" />
-      </colgroup>
-      <thead className="sticky top-0 z-[1]">
-        <tr className="bg-slate-50 text-slate-600">
-          <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold">Tarefa</th>
-          <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold">Tipo</th>
-          <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold">
-            Extensão
-          </th>
-          <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold">
-            Responsável
-          </th>
-          <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold">
-            Conclusão
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rowsOrdenadas.map((r) => {
-          const subsConcluidas = r.subtarefas.filter((s) => s.status === 'concluido')
-          const aberto = abertoId === r.id
-          const temSubs = subsConcluidas.length > 0
-          const paiConcluido = projetoConcluido(r)
-          return (
-            <Fragment key={r.id}>
-              <tr
-                className={cn(
-                  'border-b border-slate-100',
-                  temSubs && 'cursor-pointer hover:bg-slate-50/80',
-                  aberto && temSubs && 'bg-white',
-                )}
-                onClick={() => {
-                  if (!temSubs) return
-                  setAbertoId(aberto ? null : r.id)
-                }}
-              >
-                <td className="px-2 py-2 align-top">
-                  <div className="flex items-start gap-1.5">
-                    <ExpandChevron open={aberto} visible={temSubs} />
-                    <div className="min-w-0">
-                      <TituloLink
-                        nome={r.nome}
-                        url={r.url}
-                        className="text-[11px]"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      {temSubs ? (
-                        <p className="mt-0.5 text-[9px] text-slate-400">
-                          {subsConcluidas.length} subtarefa
-                          {subsConcluidas.length === 1 ? '' : 's'} concluída
-                          {subsConcluidas.length === 1 ? '' : 's'}
-                          {!paiConcluido ? ' · projeto pendente' : null}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-2 py-2 text-center align-top whitespace-nowrap text-blue-700">
-                  {r.tipo || '—'}
-                </td>
-                <td className="px-2 py-2 text-center align-top whitespace-nowrap text-emerald-600">
-                  {r.extensao || '—'}
-                </td>
-                <td className="px-2 py-2 text-center align-top text-slate-900">
-                  <span className="line-clamp-2 break-words">{respLabel(r.responsavel)}</span>
-                </td>
-                <td
-                  className={cn(
-                    'px-2 py-2 text-center align-top whitespace-nowrap',
-                    paiConcluido ? 'text-slate-500' : 'font-medium text-amber-600',
-                  )}
-                >
-                  {conclusaoProjetoLabel(r)}
-                </td>
-              </tr>
-              {aberto && temSubs ? (
-                <SubtarefaNestedRows items={subsConcluidas} mode="concluidos" />
-              ) : null}
-            </Fragment>
-          )
-        })}
-      </tbody>
-    </table>
+    <div>
+      {resumoParcial > 0 ? <p className="border-b border-amber-100 bg-amber-50/80 px-6 py-3 text-sm leading-relaxed text-amber-900"><strong>Pendente</strong> = projeto ainda aberto com subtarefa concluída na semana. Expanda para ver as entregas.</p> : null}
+      <ListaProjetos rows={rowsOrdenadas} mode="concluidos" expandAll={expandAll} />
     </div>
   )
 }
 
 function TabelaSemana({ rows }: { rows: OpsLegaisIniciativasItemSemana[] }) {
-  if (!rows.length) {
-    return (
-      <p className="px-4 py-8 text-center text-[11px] text-slate-400">
-        Nenhuma tarefa concluída na semana passada.
-      </p>
-    )
-  }
-  return (
-    <table className="w-full table-fixed border-collapse text-[11px]">
-      <colgroup>
-        <col className="w-[46%]" />
-        <col className="w-[14%]" />
-        <col className="w-[24%]" />
-        <col className="w-[16%]" />
-      </colgroup>
-      <thead className="sticky top-0 z-[1]">
-        <tr className="bg-slate-50 text-slate-600">
-          <th className="border-b border-slate-200 px-1.5 py-1.5 text-left font-semibold">
-            Título
-          </th>
-          <th className="border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold">
-            Tipo
-          </th>
-          <th className="border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold">
-            Responsável
-          </th>
-          <th className="border-b border-slate-200 px-1.5 py-1.5 text-center font-semibold">
-            Conclusão
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id}>
-            <td className="px-1.5 py-1.5 align-top">
-              <TituloLink nome={r.nome} url={r.url} className="text-[11px]" />
-              {r.pai_titulo ? (
-                <div className="text-[9px] font-normal text-slate-400">
-                  ↳ subtarefa de {r.pai_titulo}
-                </div>
-              ) : null}
-            </td>
-            <td
-              className={cn(
-                'px-1.5 py-1.5 text-center align-top',
-                r.tipo === 'Projeto' ? 'text-blue-700' : 'text-slate-500',
-              )}
-            >
-              {r.tipo}
-            </td>
-            <td className="px-1.5 py-1.5 text-center align-top text-slate-900">
-              {respLabel(r.responsavel)}
-            </td>
-            <td className="px-1.5 py-1.5 text-center align-top text-slate-500">
-              {formatDataBr(r.data)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
+  if (!rows.length) return <PainelEmptyState>Nenhuma tarefa concluída na semana passada.</PainelEmptyState>
+  const items = rows.map((r) => ({ ...r, status: 'concluido', paiTitulo: r.pai_titulo }))
+  return <div className="p-4 sm:p-6"><SubtarefasList items={items} mode="concluidos" title="Entregas na semana" /></div>
 }
 
-function TabelaAndamento({ rows }: { rows: OpsLegaisIniciativasProjeto[] }) {
-  const [abertoId, setAbertoId] = useState<string | null>(null)
-
-  if (!rows.length) {
-    return (
-      <p className="px-4 py-8 text-center text-[11px] text-slate-400">
-        Nenhum projeto em andamento no momento.
-      </p>
-    )
-  }
-  return (
-    <table className="w-full table-fixed border-collapse text-[11px]">
-      <colgroup>
-        <col className="w-[28%]" />
-        <col className="w-[14%]" />
-        <col className="w-[16%]" />
-        <col className="w-[24%]" />
-        <col className="w-[18%]" />
-      </colgroup>
-      <thead className="sticky top-0 z-[1]">
-        <tr className="bg-slate-50 text-slate-600">
-          <th className="border-b border-slate-200 px-2 py-2 text-left font-semibold">Título</th>
-          <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold">Tipo</th>
-          <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold">
-            Extensão
-          </th>
-          <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold">
-            Responsável
-          </th>
-          <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold">
-            Progresso
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => {
-          const progresso =
-            r.total_sub === 0
-              ? 'sem subtarefas'
-              : `${r.sub_concluidas}/${r.total_sub} concluídas`
-          const temSubs = r.subtarefas.length > 0
-          const aberto = abertoId === r.id
-          return (
-            <Fragment key={r.id}>
-              <tr
-                className={cn(
-                  'border-b border-slate-100',
-                  temSubs && 'cursor-pointer hover:bg-slate-50/80',
-                )}
-                onClick={() => {
-                  if (!temSubs) return
-                  setAbertoId(aberto ? null : r.id)
-                }}
-              >
-                <td className="px-2 py-2 align-top">
-                  <div className="flex items-start gap-1.5">
-                    <ExpandChevron open={aberto} visible={temSubs} />
-                    <div className="min-w-0">
-                      <TituloLink
-                        nome={r.nome}
-                        url={r.url}
-                        className="text-[11px]"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      {temSubs ? (
-                        <p className="mt-0.5 text-[9px] text-slate-400">
-                          {r.subtarefas.length} subtarefa{r.subtarefas.length === 1 ? '' : 's'}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-2 py-2 text-center align-top whitespace-nowrap text-blue-700">
-                  {r.tipo || '—'}
-                </td>
-                <td className="px-2 py-2 text-center align-top whitespace-nowrap text-emerald-600">
-                  {r.extensao || '—'}
-                </td>
-                <td className="px-2 py-2 text-center align-top whitespace-nowrap text-slate-900">
-                  {respLabel(r.responsavel)}
-                </td>
-                <td className="px-2 py-2 text-center align-top whitespace-nowrap font-semibold text-amber-600">
-                  {progresso}
-                </td>
-              </tr>
-              {aberto && temSubs ? (
-                <SubtarefaNestedRows items={r.subtarefas} mode="andamento" />
-              ) : null}
-            </Fragment>
-          )
-        })}
-      </tbody>
-    </table>
-  )
+function TabelaAndamento({ rows, expandAll = false }: { rows: OpsLegaisIniciativasProjeto[]; expandAll?: boolean }) {
+  if (!rows.length) return <PainelEmptyState>Nenhum projeto em andamento no momento.</PainelEmptyState>
+  return <ListaProjetos rows={rows} mode="andamento" expandAll={expandAll} />
 }
+
 
 function projetoNoFiltro(
   dataIso: string | null,
@@ -937,75 +838,63 @@ export function OpsLegaisIniciativasTab({ ano, mesFiltro }: Props) {
         </p>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiShell
-          title="Iniciativas Estratégicas"
-          description="Promover o desenvolvimento e a implementação de, no mínimo, 24 projetos ou iniciativas de melhoria ao longo do ano."
+          title="Meta anual"
+          description={`Concluir ${d?.meta_anual ?? 24} projetos e melhorias no ano.`}
           value={d ? formatPercent(d.pct_progresso) : '—'}
           valueStyle={d ? { color: d.cor_progresso } : undefined}
+          progress={d?.pct_progresso}
+          highlight
           icon={Lightbulb}
           iconWrapClass="bg-emerald-50 text-emerald-700"
           loading={loading}
           footer={
-            <div className="flex items-center justify-between">
-              <span>
-                Meta: <b className="text-base text-slate-900">{d?.meta_anual ?? 24}</b>
-              </span>
-              <span>
-                Total:{' '}
-                <b className="text-lg" style={d ? { color: d.cor_progresso } : undefined}>
-                  {d?.projetos_concluidos ?? '—'}
-                </b>
-              </span>
-            </div>
+            <span><b className="text-base font-semibold tabular-nums text-slate-900">{d?.projetos_concluidos ?? '—'}</b> de <b className="font-medium tabular-nums text-slate-700">{d?.meta_anual ?? 24}</b> entregas concluídas</span>
           }
         />
         <KpiShell
           title="Projetos"
-          description="Total de projetos concluídos"
+          description={mesFiltro == null ? 'Projetos concluídos no ano.' : 'Projetos concluídos no período.'}
           value={d ? String(d.projetos_finalizados) : '—'}
-          valueClassName="text-sky-600"
           icon={LineChart}
           iconWrapClass="bg-sky-50 text-sky-700"
           loading={loading}
           footer={
             <span>
-              Contribuição:{' '}
-              <b className="text-slate-900">
+              <b className="text-base font-semibold tabular-nums text-slate-900">
                 {d ? formatPercent(d.pct_contribuicao_projetos) : '—'}
               </b>{' '}
-              do total
+              das entregas concluídas
             </span>
           }
         />
         <KpiShell
           title="Melhorias"
-          description="Total de melhorias concluídas"
+          description={mesFiltro == null ? 'Melhorias concluídas no ano.' : 'Melhorias concluídas no período.'}
           value={d ? String(d.melhorias_finalizadas) : '—'}
-          valueClassName="text-emerald-600"
           icon={Sparkles}
           iconWrapClass="bg-emerald-50 text-emerald-700"
           loading={loading}
           footer={
             <span>
-              Contribuição:{' '}
-              <b className="text-slate-900">
+              <b className="text-base font-semibold tabular-nums text-slate-900">
                 {d ? formatPercent(d.pct_contribuicao_melhorias) : '—'}
               </b>{' '}
-              do total
+              das entregas concluídas
             </span>
           }
         />
         <KpiShell
-          title="Horas Ganhas"
-          description="Total de horas economizadas com projetos e melhorias"
+          title="Horas ganhas"
+          description="Economia com projetos e melhorias concluídos."
           value={d?.horas_formatadas ?? '—'}
-          valueClassName="text-cyan-600"
+          unit="h"
           icon={Timer}
-          iconWrapClass="bg-cyan-50 text-cyan-700"
+          iconWrapClass="bg-slate-100 text-slate-600"
           loading={loading}
           footer={
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1">
               <span>
                 Economia anual:{' '}
                 <b className="text-slate-900">
