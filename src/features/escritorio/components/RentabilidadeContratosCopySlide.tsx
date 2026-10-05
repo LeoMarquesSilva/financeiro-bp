@@ -2,23 +2,32 @@ import type { CSSProperties, ReactNode } from 'react'
 import type { RentabilidadeContratoLinha } from '../services/escritorioRentabilidadeService'
 import {
   RENTABILIDADE_COPY_CARD_BG,
+  buildInsightsRentabilidadeCopia,
   buildLeituraRentabilidadeCopia,
   formatHonorarioMensalCopia,
   formatHorasRentabilidadeCopia,
   formatValorHoraCopia,
   formatVsMediaPercentualCopia,
   mesesCalendarioNoPeriodo,
+  nomeCurtoRentabilidade,
   tomVsMediaCopia,
+  type RentabilidadeCopiaInsightCard,
   type RentabilidadeCopiaTom,
+  type RentabilidadeCopiaVariant,
 } from '../utils/rentabilidadeCopy'
 
-const TEXT = '#0f172a'
+/** Largura alinhada a slides 16:9 (copiar/colar no PowerPoint). */
+export const RENTABILIDADE_COPY_SLIDE_WIDTH = 1280
+
+const TEXT = '#1e293b'
 const MUTED = '#64748b'
-const LINE = 'rgba(15, 23, 42, 0.08)'
+const LINE = 'rgba(163, 132, 84, 0.22)'
+const ROW_ALT = 'rgba(255, 255, 255, 0.55)'
 const TOP_RULE = '#a38454'
-const GREEN = '#2d7a4d'
-const ORANGE = '#c25e00'
-const FOOTER_BG = 'rgba(163, 132, 84, 0.12)'
+const GREEN = '#1a6b42'
+const ORANGE = '#b45309'
+const FOOTER_BG = 'rgba(163, 132, 84, 0.18)'
+const INSIGHT_CARD_BG = '#ffffff'
 
 const TOM_COR: Record<RentabilidadeCopiaTom, string> = {
   alto: GREEN,
@@ -27,11 +36,12 @@ const TOM_COR: Record<RentabilidadeCopiaTom, string> = {
 }
 
 type Props = {
-  titulo: string
+  variant: RentabilidadeCopiaVariant
   linhas: RentabilidadeContratoLinha[]
   mediaValorHoraEscritorio: number | null
   mediaEfetivoEscritorio: number | null
   horasEscritorioMinutos: number
+  recebidoEscritorio: number
   dataInicio: string
   dataFim: string
 }
@@ -40,17 +50,21 @@ function CelulaValor({
   children,
   tom = 'neutro',
   bold = false,
+  size = 'md',
 }: {
   children: ReactNode
   tom?: RentabilidadeCopiaTom
   bold?: boolean
+  size?: 'md' | 'lg'
 }) {
   return (
     <span
       style={{
         color: TOM_COR[tom],
-        fontWeight: bold ? 700 : 500,
+        fontWeight: bold ? 800 : tom === 'neutro' ? 600 : 700,
+        fontSize: size === 'lg' ? 15 : 14,
         fontVariantNumeric: 'tabular-nums',
+        letterSpacing: '-0.01em',
       }}
     >
       {children}
@@ -58,61 +72,133 @@ function CelulaValor({
   )
 }
 
+function InsightCardSlide({ card }: { card: RentabilidadeCopiaInsightCard }) {
+  return (
+    <div
+      style={{
+        backgroundColor: INSIGHT_CARD_BG,
+        borderRadius: 10,
+        border: `1px solid ${LINE}`,
+        borderTop: `4px solid ${card.accent}`,
+        padding: '16px 18px 18px',
+        minHeight: 132,
+        boxSizing: 'border-box',
+        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+      }}
+    >
+      <div style={{ lineHeight: 1.25 }}>
+        <span
+          style={{
+            fontSize: 24,
+            fontWeight: 800,
+            color: card.accent,
+            letterSpacing: '-0.02em',
+          }}
+        >
+          {card.headlineMetric}
+        </span>
+        {card.headlineRest ? (
+          <span style={{ fontSize: 24, fontWeight: 800, color: TEXT }}>{card.headlineRest}</span>
+        ) : null}
+      </div>
+      <p
+        style={{
+          margin: '12px 0 0',
+          fontSize: 13,
+          lineHeight: 1.45,
+          color: '#475569',
+        }}
+      >
+        {card.body}
+      </p>
+      {card.footerBold ? (
+        <p
+          style={{
+            margin: '12px 0 0',
+            fontSize: 13,
+            lineHeight: 1.4,
+            fontWeight: 800,
+            color: TEXT,
+          }}
+        >
+          {card.footerBold}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function RentabilidadeContratosCopySlide({
-  titulo,
+  variant,
   linhas,
   mediaValorHoraEscritorio,
   mediaEfetivoEscritorio,
   horasEscritorioMinutos,
+  recebidoEscritorio,
   dataInicio,
   dataFim,
 }: Props) {
   const meses = mesesCalendarioNoPeriodo(dataInicio, dataFim)
 
+  const insightCards = buildInsightsRentabilidadeCopia({
+    variant,
+    linhas,
+    mediaValorHoraEscritorio,
+    mediaEfetivoEscritorio,
+    horasEscritorioMinutos,
+    recebidoEscritorio,
+  })
+
   const th: CSSProperties = {
     textAlign: 'right',
-    fontSize: 10,
-    fontWeight: 600,
-    color: MUTED,
-    padding: '10px 8px 8px',
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+    color: '#475569',
+    padding: '14px 14px 12px',
     whiteSpace: 'nowrap',
-    borderBottom: `2px solid ${TOP_RULE}`,
+    borderBottom: `3px solid ${TOP_RULE}`,
+    lineHeight: 1.2,
   }
 
-  const td: CSSProperties = {
-    padding: '8px 8px',
-    fontSize: 11,
+  const tdBase: CSSProperties = {
+    padding: '13px 14px',
+    fontSize: 14,
     verticalAlign: 'middle',
     borderBottom: `1px solid ${LINE}`,
+    lineHeight: 1.35,
   }
 
   return (
     <div
       style={{
-        width: 1180,
+        width: RENTABILIDADE_COPY_SLIDE_WIDTH,
         boxSizing: 'border-box',
         backgroundColor: RENTABILIDADE_COPY_CARD_BG,
         color: TEXT,
-        padding: '14px 18px 16px',
-        fontFamily: '"Segoe UI", system-ui, sans-serif',
-        borderRadius: 6,
+        padding: '28px 36px 32px',
+        fontFamily: '"Segoe UI", "Helvetica Neue", system-ui, sans-serif',
+        borderRadius: 10,
+        border: `1px solid ${LINE}`,
+        boxShadow: '0 1px 0 rgba(15, 23, 42, 0.04)',
       }}
     >
       <div
         style={{
-          marginBottom: 10,
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: '0.02em',
-          textTransform: 'uppercase',
-          color: MUTED,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 14,
+          marginBottom: 22,
         }}
       >
-        {titulo}
+        {insightCards.map((card, i) => (
+          <InsightCardSlide key={`${card.headlineMetric}-${i}`} card={card} />
+        ))}
       </div>
 
       {linhas.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 12, color: MUTED }}>
+        <p style={{ margin: 0, fontSize: 15, color: MUTED }}>
           Nenhum contrato elegível (faturamento nos últimos 3 meses e hora efetiva calculada).
         </p>
       ) : (
@@ -121,20 +207,23 @@ export function RentabilidadeContratosCopySlide({
             width: '100%',
             borderCollapse: 'collapse',
             tableLayout: 'fixed',
+            backgroundColor: INSIGHT_CARD_BG,
+            borderRadius: 8,
+            overflow: 'hidden',
           }}
         >
           <colgroup>
-            <col style={{ width: '14%' }} />
+            <col style={{ width: '15%' }} />
             <col style={{ width: '9%' }} />
             <col style={{ width: '14%' }} />
             <col style={{ width: '11%' }} />
             <col style={{ width: '10%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '30%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '28%' }} />
           </colgroup>
           <thead>
             <tr>
-              <th style={{ ...th, textAlign: 'left', paddingLeft: 0 }}>Cliente</th>
+              <th style={{ ...th, textAlign: 'left', paddingLeft: 4 }}>Cliente</th>
               <th style={th}>Horas</th>
               <th style={th}>Honorário mensal</th>
               <th style={th}>Valor da hora</th>
@@ -144,7 +233,7 @@ export function RentabilidadeContratosCopySlide({
             </tr>
           </thead>
           <tbody>
-            {linhas.map((linha) => {
+            {linhas.map((linha, index) => {
               const tomValorHora = tomVsMediaCopia(
                 linha.valor_hora_previsto,
                 mediaValorHoraEscritorio,
@@ -158,24 +247,50 @@ export function RentabilidadeContratosCopySlide({
                 mediaValorHoraEscritorio,
                 mediaEfetivoEscritorio,
               )
-              const nome =
-                linha.cliente.replace(/^Grupo\s+/i, '').trim() || linha.cliente
+              const nome = nomeCurtoRentabilidade(linha.cliente)
+              const rowBg = index % 2 === 1 ? ROW_ALT : 'transparent'
 
               return (
-                <tr key={linha.cliente}>
-                  <td style={{ ...td, paddingLeft: 0, fontWeight: 700, color: TEXT }}>{nome}</td>
-                  <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                <tr key={linha.cliente} style={{ backgroundColor: rowBg }}>
+                  <td
+                    style={{
+                      ...tdBase,
+                      paddingLeft: 4,
+                      fontSize: 15,
+                      fontWeight: 800,
+                      color: TEXT,
+                    }}
+                  >
+                    {nome}
+                  </td>
+                  <td
+                    style={{
+                      ...tdBase,
+                      textAlign: 'right',
+                      fontWeight: 600,
+                      fontSize: 15,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
                     {formatHorasRentabilidadeCopia(linha.horas_minutos)}
                   </td>
-                  <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  <td
+                    style={{
+                      ...tdBase,
+                      textAlign: 'right',
+                      fontWeight: 600,
+                      fontSize: 14,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
                     {formatHonorarioMensalCopia(linha.previsto_periodo, meses)}
                   </td>
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    <CelulaValor tom={tomValorHora}>
+                  <td style={{ ...tdBase, textAlign: 'right' }}>
+                    <CelulaValor tom={tomValorHora} size="lg">
                       {formatValorHoraCopia(linha.valor_hora_previsto)}
                     </CelulaValor>
                   </td>
-                  <td style={{ ...td, textAlign: 'right' }}>
+                  <td style={{ ...tdBase, textAlign: 'right' }}>
                     <CelulaValor tom={tomValorHora}>
                       {formatVsMediaPercentualCopia(
                         linha.valor_hora_previsto,
@@ -183,47 +298,91 @@ export function RentabilidadeContratosCopySlide({
                       )}
                     </CelulaValor>
                   </td>
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    <CelulaValor tom={tomEfetivo}>
+                  <td style={{ ...tdBase, textAlign: 'right' }}>
+                    <CelulaValor tom={tomEfetivo} size="lg">
                       {formatValorHoraCopia(linha.valor_hora_efetivo)}
                     </CelulaValor>
                   </td>
-                  <td style={{ ...td, textAlign: 'left', fontSize: 10, lineHeight: 1.35, color: '#334155' }}>
+                  <td
+                    style={{
+                      ...tdBase,
+                      textAlign: 'left',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: '#334155',
+                    }}
+                  >
                     {leitura}
                   </td>
                 </tr>
               )
             })}
             <tr style={{ backgroundColor: FOOTER_BG }}>
-              <td style={{ ...td, paddingLeft: 0, fontWeight: 800, borderBottom: 'none' }}>
+              <td
+                style={{
+                  ...tdBase,
+                  paddingLeft: 4,
+                  fontSize: 15,
+                  fontWeight: 800,
+                  borderBottom: 'none',
+                  paddingTop: 16,
+                  paddingBottom: 16,
+                }}
+              >
                 Escritório
               </td>
               <td
                 style={{
-                  ...td,
+                  ...tdBase,
                   textAlign: 'right',
-                  fontWeight: 700,
+                  fontWeight: 800,
+                  fontSize: 15,
                   fontVariantNumeric: 'tabular-nums',
                   borderBottom: 'none',
+                  paddingTop: 16,
+                  paddingBottom: 16,
                 }}
               >
                 {formatHorasRentabilidadeCopia(horasEscritorioMinutos)}
               </td>
-              <td style={{ ...td, borderBottom: 'none' }} />
-              <td style={{ ...td, textAlign: 'right', borderBottom: 'none' }}>
-                <CelulaValor bold>{formatValorHoraCopia(mediaValorHoraEscritorio)}</CelulaValor>
+              <td style={{ ...tdBase, borderBottom: 'none', paddingTop: 16, paddingBottom: 16 }} />
+              <td
+                style={{
+                  ...tdBase,
+                  textAlign: 'right',
+                  borderBottom: 'none',
+                  paddingTop: 16,
+                  paddingBottom: 16,
+                }}
+              >
+                <CelulaValor bold size="lg">
+                  {formatValorHoraCopia(mediaValorHoraEscritorio)}
+                </CelulaValor>
               </td>
-              <td style={{ ...td, borderBottom: 'none' }} />
-              <td style={{ ...td, textAlign: 'right', borderBottom: 'none' }}>
-                <CelulaValor bold>{formatValorHoraCopia(mediaEfetivoEscritorio)}</CelulaValor>
+              <td style={{ ...tdBase, borderBottom: 'none', paddingTop: 16, paddingBottom: 16 }} />
+              <td
+                style={{
+                  ...tdBase,
+                  textAlign: 'right',
+                  borderBottom: 'none',
+                  paddingTop: 16,
+                  paddingBottom: 16,
+                }}
+              >
+                <CelulaValor bold size="lg">
+                  {formatValorHoraCopia(mediaEfetivoEscritorio)}
+                </CelulaValor>
               </td>
               <td
                 style={{
-                  ...td,
+                  ...tdBase,
                   textAlign: 'left',
-                  fontWeight: 600,
-                  color: MUTED,
+                  fontWeight: 700,
+                  fontSize: 14,
+                  color: '#475569',
                   borderBottom: 'none',
+                  paddingTop: 16,
+                  paddingBottom: 16,
                 }}
               >
                 Média

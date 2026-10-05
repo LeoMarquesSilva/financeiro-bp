@@ -9,7 +9,6 @@ import { escritorioRentabilidadeService } from '../services/escritorioRentabilid
 import {
   buildGruposComFaturamentoSet,
   inicioUltimos3Meses,
-  labelUltimos3Meses,
   rankingRentabilidadeParaCopia,
 } from '../utils/rentabilidadeCopy'
 import type { LevantamentoFiltros } from '../services/escritorioLevantamentoService'
@@ -331,25 +330,31 @@ export function RentabilidadeContratosSection({
 
       <AreaChips areas={areas} value={filtros.area} onChange={onAreaChange} />
 
-      <div className="pointer-events-none fixed left-[-9999px] top-0 z-[-1] opacity-0" aria-hidden>
-        <div ref={copyTopRef}>
+      <div
+        className="pointer-events-none fixed left-[-9999px] top-0 z-[-1] opacity-0"
+        aria-hidden
+        data-chart-export-full-scroll
+      >
+        <div ref={copyTopRef} style={{ width: 1280 }}>
           <RentabilidadeContratosCopySlide
-            titulo={`Maior rentabilidade · top 20 · faturamento ${labelUltimos3Meses(dataFim)} · ${periodoLabel}`}
+            variant="top"
             linhas={linhasTopCopia}
             mediaValorHoraEscritorio={data?.valor_hora_previsto_escritorio ?? null}
             mediaEfetivoEscritorio={data?.valor_hora_efetivo_escritorio ?? null}
             horasEscritorioMinutos={data?.horas_minutos ?? 0}
+            recebidoEscritorio={data?.recebido_escritorio ?? 0}
             dataInicio={data?.data_inicio ?? filtros.dataInicio}
             dataFim={data?.data_fim ?? filtros.dataFim}
           />
         </div>
-        <div ref={copyBottomRef}>
+        <div ref={copyBottomRef} style={{ width: 1280 }}>
           <RentabilidadeContratosCopySlide
-            titulo={`Menor rentabilidade · top 20 · faturamento ${labelUltimos3Meses(dataFim)} · ${periodoLabel}`}
+            variant="bottom"
             linhas={linhasBottomCopia}
             mediaValorHoraEscritorio={data?.valor_hora_previsto_escritorio ?? null}
             mediaEfetivoEscritorio={data?.valor_hora_efetivo_escritorio ?? null}
             horasEscritorioMinutos={data?.horas_minutos ?? 0}
+            recebidoEscritorio={data?.recebido_escritorio ?? 0}
             dataInicio={data?.data_inicio ?? filtros.dataInicio}
             dataFim={data?.data_fim ?? filtros.dataFim}
           />

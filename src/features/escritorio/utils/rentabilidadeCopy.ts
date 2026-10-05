@@ -1,4 +1,5 @@
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
+import { formatHorasTimesheetHHMM } from './timesheetHorasExcel'
 import type { RentabilidadeContratoLinha } from '../services/escritorioRentabilidadeService'
 
 export const RENTABILIDADE_COPY_LIMITE = 20
@@ -12,11 +13,10 @@ export function mesesCalendarioNoPeriodo(dataInicio: string, dataFim: string): n
   return Math.max(1, (yf - yi) * 12 + (mf - mi) + 1)
 }
 
-/** Horas totais no período, com separador de milhar (ex.: 1.428). */
+/** Horas totais no período — mesmo HH:MM do timesheet (ex.: 1428:00). */
 export function formatHorasRentabilidadeCopia(minutos: number | null | undefined): string {
   if (minutos == null || !Number.isFinite(minutos) || minutos <= 0) return '—'
-  const horas = Math.round(minutos / 60)
-  return horas.toLocaleString('pt-BR')
+  return formatHorasTimesheetHHMM(Math.round(minutos))
 }
 
 export function formatHonorarioMensalCopia(previstoPeriodo: number, meses: number): string {
@@ -160,6 +160,136 @@ export function labelUltimos3Meses(dataFimIso: string): string {
 
 export function normalizarChaveGrupoRentabilidade(nome: string): string {
   return nome.trim().toLowerCase()
+}
+
+export type RentabilidadeCopiaVariant = 'top' | 'bottom'
+
+export type RentabilidadeCopiaInsightCard = {
+  accent: string
+  headlineMetric: string
+  headlineRest: string
+  body: string
+  footerBold?: string
+}
+
+const INSIGHT_ACCENT_NAVY = '#0f2744'
+const INSIGHT_ACCENT_GREEN = '#1a6b42'
+const INSIGHT_ACCENT_ORANGE = '#b45309'
+
+export function nomeCurtoRentabilidade(cliente: string): string {
+  return cliente.replace(/^Grupo\s+/i, '').trim() || cliente
+}
+
+function listaNomesRentabilidadeCurta(linhas: RentabilidadeContratoLinha[], max = 3): string {
+  const nomes = linhas.slice(0, max).map((l) => nomeCurtoRentabilidade(l.cliente))
+  if (nomes.length === 0) return '—'
+  if (nomes.length === 1) return nomes[0]!
+  if (nomes.length === 2) return `${nomes[0]} e ${nomes[1]}`
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`
+}
+
+function cardMediaHoraEscritorio(input: {
+  mediaValorHoraEscritorio: number | null
+  mediaEfetivoEscritorio: number | null
+  horasEscritorioMinutos: number
+  recebidoEscritorio: number
+}): RentabilidadeCopiaInsightCard {
+  const recebidoFmt = formatCurrency(input.recebidoEscritorio).replace(/\s/g, ' ')
+  return {
+    accent: INSIGHT_ACCENT_NAVY,
+    headlineMetric: formatValorHoraCopia(input.mediaEfetivoEscritorio),
+    headlineRest: ' hora efetiva média',
+    body: `Média do escritório no período: hora prevista/faturada ${formatValorHoraCopia(input.mediaValorHoraEscritorio)} · ${formatHorasRentabilidadeCopia(input.horasEscritorioMinutos)} no timesheet · ${recebidoFmt} recebidos.`,
+  }
+}
+
+export function buildInsightsRentabilidadeCopia(input: {
+  variant: RentabilidadeCopiaVariant
+  linhas: RentabilidadeContratoLinha[]
+  mediaValorHoraEscritorio: number | null
+  mediaEfetivoEscritorio: number | null
+  horasEscritorioMinutos: number
+  recebidoEscritorio: number
+}): RentabilidadeCopiaInsightCard[] {
+  const media = cardMediaHoraEscritorio(input)
+  const { linhas, mediaValorHoraEscritorio, mediaEfetivoEscritorio, horasEscritorioMinutos, recebidoEscritorio } =
+    input
+
+  if (linhas.length === 0) return [media]
+
+  if (input.variant === 'top') {
+    const lider = linhas[0]!
+    const pctLider = formatVsMediaPercentualCopia(lider.valor_hora_efetivo, mediaEfetivoEscritorio)
+    const destaque: RentabilidadeCopiaInsightCard = {
+      accent: INSIGHT_ACCENT_GREEN,
+      headlineMetric: pctLider !== '—' ? pctLider : formatValorHoraCopia(lider.valor_hora_efetivo),
+      headlineRest: pctLider !== '—' ? ' vs média · hora efetiva' : ' · melhor hora efetiva',
+      body: `${nomeCurtoRentabilidade(lider.cliente)} lidera o ranking: ${formatValorHoraCopia(lider.valor_hora_efetivo)}/h recebido, hora faturada ${formatValorHoraCopia(lider.valor_hora_previsto)} e ${formatHorasRentabilidadeCopia(lider.horas_minutos)} registradas.`,
+      footerBold: buildLeituraRentabilidadeCopia(
+        lider,
+        mediaValorHoraEscritorio,
+        mediaEfetivoEscritorio,
+      ),
+    }
+
+    const top3 = linhas.slice(0, Math.min(3, linhas.length))
+    const horasTop3 = top3.reduce((s, l) => s + l.horas_minutos, 0)
+    const recebidoTop3 = top3.reduce((s, l) => s + l.recebido_periodo, 0)
+    const pctHoras =
+      horasEscritorioMinutos > 0 ? (horasTop3 / horasEscritorioMinutos) * 100 : 0
+    const pctRecebido =
+      recebidoEscritorio > 0 ? (recebidoTop3 / recebidoEscritorio) * 100 : 0
+
+    const concentracao: RentabilidadeCopiaInsightCard = {
+      accent: INSIGHT_ACCENT_NAVY,
+      headlineMetric: `${top3.length} cliente${top3.length === 1 ? '' : 's'}`,
+      headlineRest: '',
+      body: `${listaNomesRentabilidadeCurta(top3)} concentram ${formatPercent(pctHoras)} das horas e ${formatPercent(pctRecebido)} do recebido do escritório entre os mais rentáveis.`,
+    }
+
+    return [media, destaque, concentracao]
+  }
+
+  const pior = linhas[0]!
+  const piorPct = formatVsMediaPercentualCopia(pior.valor_hora_efetivo, mediaEfetivoEscritorio)
+  const alerta: RentabilidadeCopiaInsightCard = {
+    accent: INSIGHT_ACCENT_ORANGE,
+    headlineMetric: piorPct !== '—' ? piorPct : formatValorHoraCopia(pior.valor_hora_efetivo),
+    headlineRest: piorPct !== '—' ? ' vs média · hora efetiva' : ' · menor hora efetiva',
+    body: `${nomeCurtoRentabilidade(pior.cliente)}: ${formatValorHoraCopia(pior.valor_hora_efetivo)}/h efetivo, hora faturada ${formatValorHoraCopia(pior.valor_hora_previsto)} e ${formatHorasRentabilidadeCopia(pior.horas_minutos)} no período.`,
+    footerBold: buildLeituraRentabilidadeCopia(
+      pior,
+      mediaValorHoraEscritorio,
+      mediaEfetivoEscritorio,
+    ),
+  }
+
+  const abaixoMedia = linhas.filter((l) => {
+    const pct = pctVsMediaValorHora(l.valor_hora_efetivo, mediaEfetivoEscritorio)
+    return pct != null && pct <= -LIMIAR_PCT_DESTAQUE
+  })
+  const recebimentoAbaixo = linhas.filter((l) => {
+    const p = l.valor_hora_previsto
+    const e = l.valor_hora_efetivo
+    return p != null && e != null && p > 0 && e < p * 0.75
+  })
+  const amostra = (recebimentoAbaixo.length > 0 ? recebimentoAbaixo : abaixoMedia).slice(0, 3)
+
+  const pressao: RentabilidadeCopiaInsightCard = {
+    accent: INSIGHT_ACCENT_ORANGE,
+    headlineMetric: `${abaixoMedia.length} contrato${abaixoMedia.length === 1 ? '' : 's'}`,
+    headlineRest: ' abaixo da média',
+    body:
+      amostra.length > 0
+        ? `${listaNomesRentabilidadeCurta(amostra)}${recebimentoAbaixo.length > 0 ? `: recebimento efetivo abaixo de 75% da hora faturada em ${recebimentoAbaixo.length} grupo${recebimentoAbaixo.length === 1 ? '' : 's'}.` : ': hora efetiva abaixo da média do escritório.'}`
+        : 'Nenhum grupo nesta lista ficou materialmente abaixo da média de hora efetiva.',
+    footerBold:
+      recebimentoAbaixo.length > 0
+        ? 'Revisar preço e inadimplência nos contratos com maior esforço de horas.'
+        : 'Priorizar renegociação de honorários nos grupos com preço baixo.',
+  }
+
+  return [media, alerta, pressao]
 }
 
 export function buildGruposComFaturamentoSet(chaves: string[] | undefined): Set<string> {
