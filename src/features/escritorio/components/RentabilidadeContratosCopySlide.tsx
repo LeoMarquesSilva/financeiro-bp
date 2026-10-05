@@ -6,8 +6,8 @@ import {
   buildLeituraRentabilidadeCopia,
   formatHonorarioMensalCopia,
   formatHorasRentabilidadeCopia,
-  formatValorHoraCopia,
-  formatVsMediaPercentualCopia,
+  formatValorHoraCopiaExport,
+  formatVsMediaPercentualCopiaExport,
   mesesCalendarioNoPeriodo,
   nomeCurtoRentabilidade,
   tomVsMediaCopia,
@@ -16,8 +16,10 @@ import {
   type RentabilidadeCopiaVariant,
 } from '../utils/rentabilidadeCopy'
 
-/** Largura total do export (16:9 em 1920px — usa a faixa útil do slide). */
-export const RENTABILIDADE_COPY_SLIDE_WIDTH = 1920
+/** Largura total do export — ocupa slide widescreen ao colar em escala. */
+export const RENTABILIDADE_COPY_SLIDE_WIDTH = 2560
+
+const TABLE_COL_WIDTHS = ['32%', '9%', '15%', '18%', '13%', '13%'] as const
 
 const TEXT = '#1e293b'
 const MUTED = '#64748b'
@@ -67,7 +69,8 @@ function CelulaValor({
       style={{
         color: TOM_COR[tom],
         fontWeight: bold ? 800 : tom === 'neutro' ? 600 : 700,
-        fontSize: size === 'lg' ? 17 : 16,
+        fontSize: size === 'lg' ? 16 : 15,
+        whiteSpace: 'nowrap',
         fontVariantNumeric: 'tabular-nums',
         letterSpacing: '-0.01em',
       }}
@@ -165,7 +168,7 @@ function TabelaRentabilidadeCopia({
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
     color: '#475569',
-    padding: '12px 14px 10px',
+    padding: '12px 20px 10px',
     whiteSpace: 'normal',
     borderBottom: `3px solid ${TOP_RULE}`,
     lineHeight: 1.25,
@@ -173,7 +176,7 @@ function TabelaRentabilidadeCopia({
   }
 
   const tdBase: CSSProperties = {
-    padding: '11px 14px',
+    padding: '12px 20px',
     fontSize: 16,
     verticalAlign: 'top',
     borderBottom: `1px solid ${LINE}`,
@@ -194,17 +197,13 @@ function TabelaRentabilidadeCopia({
       }}
     >
       <colgroup>
-        <col style={{ width: '34%' }} />
-        <col style={{ width: '9%' }} />
-        <col style={{ width: '14%' }} />
-        <col style={{ width: '12%' }} />
-        <col style={{ width: '10%' }} />
-        <col style={{ width: '12%' }} />
-        <col style={{ width: '19%' }} />
+        {TABLE_COL_WIDTHS.map((w) => (
+          <col key={w} style={{ width: w }} />
+        ))}
       </colgroup>
       <thead>
         <tr>
-          <th style={{ ...th, textAlign: 'left', paddingLeft: 12 }}>Cliente</th>
+          <th style={{ ...th, textAlign: 'left', paddingLeft: 16 }}>Cliente</th>
           <th style={th}>
             <ThLabel lines={['Horas']} />
           </th>
@@ -217,11 +216,8 @@ function TabelaRentabilidadeCopia({
           <th style={th}>
             <ThLabel lines={['vs', 'média']} />
           </th>
-          <th style={th}>
+          <th style={{ ...th, paddingRight: 16 }}>
             <ThLabel lines={['Hora', 'efetiva']} />
-          </th>
-          <th style={{ ...th, textAlign: 'left', paddingRight: 12 }}>
-            <ThLabel lines={['Leitura']} />
           </th>
         </tr>
       </thead>
@@ -239,20 +235,31 @@ function TabelaRentabilidadeCopia({
 
           return (
             <tr key={linha.cliente} style={{ backgroundColor: rowBg }}>
-              <td
-                style={{
-                  ...tdBase,
-                  paddingLeft: 14,
-                  fontSize: 17,
-                  fontWeight: 800,
-                  color: TEXT,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-                title={nome}
-              >
-                {nome}
+              <td style={{ ...tdBase, paddingLeft: 16 }}>
+                <div
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 800,
+                    color: TEXT,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                  title={nome}
+                >
+                  {nome}
+                </div>
+                <div
+                  style={{
+                    marginTop: 5,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                    color: '#475569',
+                  }}
+                >
+                  {leitura}
+                </div>
               </td>
               <td
                 style={{
@@ -277,32 +284,23 @@ function TabelaRentabilidadeCopia({
               >
                 {formatHonorarioMensalCopia(linha.previsto_periodo, meses)}
               </td>
-              <td style={{ ...tdBase, textAlign: 'right' }}>
+              <td style={{ ...tdBase, textAlign: 'right', paddingLeft: 24, paddingRight: 24 }}>
                 <CelulaValor tom={tomValorHora} size="lg">
-                  {formatValorHoraCopia(linha.valor_hora_previsto)}
+                  {formatValorHoraCopiaExport(linha.valor_hora_previsto)}
                 </CelulaValor>
               </td>
-              <td style={{ ...tdBase, textAlign: 'right' }}>
+              <td style={{ ...tdBase, textAlign: 'right', paddingLeft: 20, paddingRight: 20 }}>
                 <CelulaValor tom={tomValorHora}>
-                  {formatVsMediaPercentualCopia(linha.valor_hora_previsto, mediaValorHoraEscritorio)}
+                  {formatVsMediaPercentualCopiaExport(
+                    linha.valor_hora_previsto,
+                    mediaValorHoraEscritorio,
+                  )}
                 </CelulaValor>
               </td>
-              <td style={{ ...tdBase, textAlign: 'right' }}>
+              <td style={{ ...tdBase, textAlign: 'right', paddingRight: 16 }}>
                 <CelulaValor tom={tomEfetivo} size="lg">
-                  {formatValorHoraCopia(linha.valor_hora_efetivo)}
+                  {formatValorHoraCopiaExport(linha.valor_hora_efetivo)}
                 </CelulaValor>
-              </td>
-              <td
-                style={{
-                  ...tdBase,
-                  paddingRight: 12,
-                  textAlign: 'left',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  color: '#334155',
-                }}
-              >
-                {leitura}
               </td>
             </tr>
           )
@@ -341,17 +339,16 @@ function RodapeEscritorioCopia({
       }}
     >
       <colgroup>
-        <col style={{ width: '34%' }} />
-        <col style={{ width: '9%' }} />
-        <col style={{ width: '14%' }} />
-        <col style={{ width: '12%' }} />
-        <col style={{ width: '10%' }} />
-        <col style={{ width: '12%' }} />
-        <col style={{ width: '19%' }} />
+        {TABLE_COL_WIDTHS.map((w) => (
+          <col key={`f-${w}`} style={{ width: w }} />
+        ))}
       </colgroup>
       <tbody>
         <tr>
-          <td style={{ ...tdBase, paddingLeft: 12, fontSize: 17, fontWeight: 800 }}>Escritório</td>
+          <td style={{ ...tdBase, paddingLeft: 16, fontSize: 17, fontWeight: 800 }}>
+            <div>Escritório</div>
+            <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, color: '#475569' }}>Média</div>
+          </td>
           <td
             style={{
               ...tdBase,
@@ -363,26 +360,16 @@ function RodapeEscritorioCopia({
             {formatHorasRentabilidadeCopia(horasEscritorioMinutos)}
           </td>
           <td style={tdBase} />
-          <td style={{ ...tdBase, textAlign: 'right' }}>
+          <td style={{ ...tdBase, textAlign: 'right', paddingLeft: 24, paddingRight: 24 }}>
             <CelulaValor bold size="lg">
-              {formatValorHoraCopia(mediaValorHoraEscritorio)}
+              {formatValorHoraCopiaExport(mediaValorHoraEscritorio)}
             </CelulaValor>
           </td>
           <td style={tdBase} />
-          <td style={{ ...tdBase, textAlign: 'right' }}>
+          <td style={{ ...tdBase, textAlign: 'right', paddingRight: 16 }}>
             <CelulaValor bold size="lg">
-              {formatValorHoraCopia(mediaEfetivoEscritorio)}
+              {formatValorHoraCopiaExport(mediaEfetivoEscritorio)}
             </CelulaValor>
-          </td>
-          <td
-            style={{
-              ...tdBase,
-              paddingRight: 12,
-              fontWeight: 700,
-              color: '#475569',
-            }}
-          >
-            Média
           </td>
         </tr>
       </tbody>
@@ -419,7 +406,7 @@ export function RentabilidadeContratosCopySlide({
         boxSizing: 'border-box',
         backgroundColor: RENTABILIDADE_COPY_CARD_BG,
         color: TEXT,
-        padding: '20px 16px 24px',
+        padding: '16px 10px 20px',
         fontFamily: '"Segoe UI", "Helvetica Neue", system-ui, sans-serif',
       }}
     >
@@ -446,7 +433,7 @@ export function RentabilidadeContratosCopySlide({
             style={{
               display: 'grid',
               gridTemplateColumns: colB.length > 0 ? '1fr 1fr' : '1fr',
-              gap: 24,
+              gap: 20,
               alignItems: 'start',
             }}
           >

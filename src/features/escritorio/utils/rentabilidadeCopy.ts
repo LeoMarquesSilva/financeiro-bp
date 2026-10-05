@@ -1,4 +1,4 @@
-import { formatCurrency, formatPercent } from '@/shared/utils/format'
+import { formatCurrency, formatCurrencyCompact, formatPercent } from '@/shared/utils/format'
 import { formatHorasTimesheetHHMM } from './timesheetHorasExcel'
 import type { RentabilidadeContratoLinha } from '../services/escritorioRentabilidadeService'
 
@@ -53,6 +53,34 @@ export function formatVsMediaPercentualCopia(
   if (pct == null) return '—'
   const sinal = pct >= 0 ? '+' : '−'
   return `${sinal}${formatPercent(Math.abs(pct))}`
+}
+
+/** Export PPT: percentuais enormes viram "mil%" para caber na coluna. */
+export function formatVsMediaPercentualCopiaExport(
+  valor: number | null | undefined,
+  media: number | null | undefined,
+): string {
+  const pct = pctVsMediaValorHora(valor, media)
+  if (pct == null) return '—'
+  const abs = Math.abs(pct)
+  const sinal = pct >= 0 ? '+' : '−'
+  if (abs >= 1_000) {
+    const mil = abs / 1_000
+    return `${sinal}${mil.toLocaleString('pt-BR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })} mil%`
+  }
+  return formatVsMediaPercentualCopia(valor, media)
+}
+
+/** Export PPT: valores altos em notação compacta. */
+export function formatValorHoraCopiaExport(valor: number | null | undefined): string {
+  if (valor == null || !Number.isFinite(valor)) return '—'
+  if (Math.abs(valor) >= 10_000) {
+    return `${formatCurrencyCompact(valor).replace(/\s/g, ' ')}/h`
+  }
+  return formatValorHoraCopia(valor)
 }
 
 export type RentabilidadeCopiaTom = 'alto' | 'baixo' | 'neutro'
@@ -220,7 +248,10 @@ export function buildInsightsRentabilidadeCopia(input: {
 
   if (input.variant === 'top') {
     const lider = linhas[0]!
-    const pctLider = formatVsMediaPercentualCopia(lider.valor_hora_efetivo, mediaEfetivoEscritorio)
+    const pctLider = formatVsMediaPercentualCopiaExport(
+      lider.valor_hora_efetivo,
+      mediaEfetivoEscritorio,
+    )
     const destaque: RentabilidadeCopiaInsightCard = {
       accent: INSIGHT_ACCENT_GREEN,
       headlineMetric: pctLider !== '—' ? pctLider : formatValorHoraCopia(lider.valor_hora_efetivo),
@@ -252,7 +283,7 @@ export function buildInsightsRentabilidadeCopia(input: {
   }
 
   const pior = linhas[0]!
-  const piorPct = formatVsMediaPercentualCopia(pior.valor_hora_efetivo, mediaEfetivoEscritorio)
+  const piorPct = formatVsMediaPercentualCopiaExport(pior.valor_hora_efetivo, mediaEfetivoEscritorio)
   const alerta: RentabilidadeCopiaInsightCard = {
     accent: INSIGHT_ACCENT_ORANGE,
     headlineMetric: piorPct !== '—' ? piorPct : formatValorHoraCopia(pior.valor_hora_efetivo),
