@@ -2341,14 +2341,17 @@ function prepareApresentacaoExportElement(source: HTMLElement): HTMLElement {
     el.style.setProperty('overflow', 'visible', 'important')
   })
 
-  // Iniciativas: no PPT, nomes longos devem quebrar em linha em vez de terminar em "...".
+  // Iniciativas: nome longo fica na célula. Quebra no PPT invadia a coluna Tipo.
+  clone.querySelectorAll<HTMLElement>('[data-iniciativas-entregas]').forEach((el) => {
+    el.style.setProperty('table-layout', 'fixed', 'important')
+    el.style.setProperty('width', '100%', 'important')
+  })
   clone.querySelectorAll<HTMLElement>('[data-iniciativas-entrega-nome]').forEach((el) => {
-    el.style.setProperty('max-width', 'none', 'important')
-    el.style.setProperty('overflow', 'visible', 'important')
-    el.style.setProperty('text-overflow', 'clip', 'important')
-    el.style.setProperty('white-space', 'normal', 'important')
-    el.style.setProperty('overflow-wrap', 'break-word', 'important')
-    el.style.setProperty('line-height', '1.2', 'important')
+    el.style.setProperty('overflow', 'hidden', 'important')
+    el.style.setProperty('text-overflow', 'ellipsis', 'important')
+    el.style.setProperty('white-space', 'nowrap', 'important')
+    el.style.setProperty('max-width', '0', 'important')
+    el.style.setProperty('word-break', 'keep-all', 'important')
   })
 
   // Liderança: mantém avatar em coluna fixa e centraliza o nome no espaço
@@ -2370,6 +2373,22 @@ function prepareApresentacaoExportElement(source: HTMLElement): HTMLElement {
     el.style.setProperty('width', '100%', 'important')
     el.style.setProperty('text-align', 'center', 'important')
     el.style.setProperty('line-height', '1.25', 'important')
+  })
+
+  // Iniciativas: título centralizado no card. width 100% + nowrap fazia o PPT cortar pela direita.
+  clone.querySelectorAll<HTMLElement>('[data-iniciativas-faixa-rotulo]').forEach((el) => {
+    el.style.setProperty('display', 'grid', 'important')
+    el.style.setProperty('place-items', 'center', 'important')
+    el.style.setProperty('text-align', 'center', 'important')
+    el.style.setProperty('width', '100%', 'important')
+  })
+  clone.querySelectorAll<HTMLElement>('[data-iniciativas-faixa-titulo]').forEach((el) => {
+    el.style.setProperty('display', 'block', 'important')
+    el.style.setProperty('width', 'auto', 'important')
+    el.style.setProperty('max-width', '100%', 'important')
+    el.style.setProperty('margin', '0 auto', 'important')
+    el.style.setProperty('text-align', 'center', 'important')
+    el.style.setProperty('white-space', 'nowrap', 'important')
   })
 
   return clone

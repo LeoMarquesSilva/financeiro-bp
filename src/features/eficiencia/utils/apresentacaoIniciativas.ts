@@ -8,6 +8,9 @@ import { eficienciaService } from '../services/eficienciaService'
 import type { OpsLegaisIniciativasDashboard, OpsLegaisIniciativasItem } from '../types/eficiencia.types'
 import { formatPercent } from '@/shared/utils/format'
 
+/** Meta de iniciativas estratégicas em cada mês. */
+export const INICIATIVAS_META_MENSAL = 2
+
 export type IniciativasMesEvo = {
   mes: number
   mesLabel: string
@@ -17,6 +20,10 @@ export type IniciativasMesEvo = {
   ytd: number
   pctYtd: number
   pctYtdLabel: string
+  metaMensal: number
+  pctMes: number
+  pctMesLabel: string
+  atingiu: boolean
   destaque: boolean
 }
 
@@ -135,6 +142,8 @@ export function buildApresentacaoIniciativas(
     const mes = i + 1
     ytd += b.total
     const pctYtd = meta > 0 ? (ytd / meta) * 100 : 0
+    const pctMes =
+      INICIATIVAS_META_MENSAL > 0 ? (b.total / INICIATIVAS_META_MENSAL) * 100 : 0
     return {
       mes,
       mesLabel: MESES_NOME[i] ?? String(mes),
@@ -144,6 +153,10 @@ export function buildApresentacaoIniciativas(
       ytd,
       pctYtd,
       pctYtdLabel: formatPercent(pctYtd),
+      metaMensal: INICIATIVAS_META_MENSAL,
+      pctMes,
+      pctMesLabel: formatPercent(pctMes),
+      atingiu: b.total >= INICIATIVAS_META_MENSAL,
       destaque: mes === mesDestaque,
     }
   })
