@@ -179,7 +179,7 @@ export function GestaoPdiTab({
         subtitle={
           responsavel
             ? `% aptas · ${responsavel}`
-            : 'Junho = 100% (baseline). Julho+ = % aptas (3 requisitos).'
+            : 'Junho = 100% (baseline). Julho+ = % só de quem tem evidência, 1:1 e progresso preenchidos.'
         }
         data={chartData}
         color="#059669"
@@ -195,7 +195,7 @@ export function GestaoPdiTab({
               ? formatPercent(acumuladoGestaoVista.value)
               : '—'
           }
-          hint="Aptas ÷ elegíveis (prog.+evid.+1:1) · jun→hoje"
+          hint="Aptas ÷ elegíveis com evidência, 1:1 e progresso preenchidos · jun→hoje"
           icon={Target}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
@@ -203,7 +203,7 @@ export function GestaoPdiTab({
         <EficienciaKpiCard
           title="Gestão de PDI no período selecionado"
           value={pctPeriodo != null ? formatPercent(pctPeriodo) : '—'}
-          hint="Aptas ÷ elegíveis (prog.+evid.+1:1) · meses filtrados"
+          hint="Aptas ÷ elegíveis com evidência, 1:1 e progresso preenchidos · meses filtrados"
           meta="Meta 100%"
           atingiuMeta={pctPeriodo != null ? pctPeriodo >= 100 : null}
           icon={Target}
@@ -221,7 +221,7 @@ export function GestaoPdiTab({
         <EficienciaKpiCard
           title="Desvios"
           value={String(desvios)}
-          hint="Faltou ao menos 1 dos 3 requisitos"
+          hint="Critérios preenchidos e faltou ao menos 1 (progresso, evidência ou 1:1)"
           icon={Target}
           accentClass="bg-rose-100 text-rose-700"
           loading={loadingPeriodo}

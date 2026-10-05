@@ -1,7 +1,12 @@
 import { formatPercent } from '@/shared/utils/format'
 import type { HeatCell } from '../components/OverviewKpiHeatRow'
 import { mesNoFiltro, type MesFiltroEficiencia } from '../constants'
-import type { GestaoPdiDetalheRow, GestaoPdiElegivelRow, GestaoPdiMesRow } from '../types/eficiencia.types'
+import type {
+  GestaoPdiDesvioPlanilhaRow,
+  GestaoPdiDetalheRow,
+  GestaoPdiElegivelRow,
+  GestaoPdiMesRow,
+} from '../types/eficiencia.types'
 import { normalizeResponsavelChave } from './responsavelMatch'
 
 /** Progresso do mês anterior na aba Elegíveis (mesmo colaborador). */
@@ -25,16 +30,73 @@ export function progressoMesAnteriorElegiveis(
 /** Junho = baseline 100% (regra de negócio validada). */
 export const GESTAO_PDI_MES_BASELINE = 6
 
+/** Licença-maternidade: fora do indicador a partir de set/2026. */
+const LICENCA_MATERNIDADE_DESDE = { ano: 2026, mes: 9 } as const
+
+export function gestaoPdiForaPorLicenca(
+  colaborador: string,
+  ano: number,
+  mes: number,
+): boolean {
+  const nome = colaborador
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+  if (!nome.includes('graziane')) return false
+  return (
+    ano > LICENCA_MATERNIDADE_DESDE.ano ||
+    (ano === LICENCA_MATERNIDADE_DESDE.ano && mes >= LICENCA_MATERNIDADE_DESDE.mes)
+  )
+}
+
+function textoPreenchido(v: string | null | undefined): boolean {
+  const s = String(v ?? '')
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+  return s !== '' && s !== '-' && s !== '—' && s !== '–'
+}
+
 function evidenciasOk(v: string | null | undefined): boolean {
   return String(v ?? '')
     .trim()
     .toLocaleLowerCase('pt-BR') === 'sim'
 }
 
+/**
+ * Sem os 3 critérios preenchidos não há resultado: evidência, 1:1 e progresso
+ * (base do desvio). Vazio ou "-" fica de fora do percentual.
+ */
+function criteriosPdiPreenchidos(
+  cur: GestaoPdiElegivelRow,
+  progressoAnterior: number | null,
+): boolean {
+  return (
+    textoPreenchido(cur.evidencias_execucao) &&
+    cur.one_a_one != null &&
+    cur.progresso != null &&
+    progressoAnterior != null
+  )
+}
+
+function desvioPreenchido(
+  desvios: GestaoPdiDesvioPlanilhaRow[],
+  colaborador: string,
+  mes: number,
+): boolean {
+  const key = normalizeResponsavelChave(colaborador)
+  return desvios.some(
+    (d) =>
+      d.mes === mes &&
+      normalizeResponsavelChave(d.colaborador) === key &&
+      textoPreenchido(d.desvio_criterio_apuracao),
+  )
+}
+
 /** Avalia apta/desvio por colaborador × mês (mesma regra da RPC). */
 export function avaliarGestaoPdi(
   rows: GestaoPdiElegivelRow[],
   area: string | null = null,
+  desvios: GestaoPdiDesvioPlanilhaRow[] = [],
 ): GestaoPdiDetalheRow[] {
   const filtrados = area ? rows.filter((r) => r.area === area) : rows
   const porPessoa = new Map<string, GestaoPdiElegivelRow[]>()
@@ -51,6 +113,13 @@ export function avaliarGestaoPdi(
       const cur = ordenada[i]!
       const ant = i > 0 ? ordenada[i - 1]! : null
       const progressoAnterior = ant?.progresso ?? null
+      if (gestaoPdiForaPorLicenca(cur.colaborador, cur.ano, cur.mes)) continue
+      if (
+        cur.mes !== GESTAO_PDI_MES_BASELINE &&
+        !criteriosPdiPreenchidos(cur, progressoAnterior)
+      ) {
+        continue
+      }
       const mudouProgresso =
         progressoAnterior != null && Number(cur.progresso) !== Number(progressoAnterior)
       const temEvidencia = evidenciasOk(cur.evidencias_execucao)
@@ -59,6 +128,13 @@ export function avaliarGestaoPdi(
         cur.mes === GESTAO_PDI_MES_BASELINE
           ? true
           : mudouProgresso && temEvidencia && tem1a1
+      if (
+        cur.mes !== GESTAO_PDI_MES_BASELINE &&
+        !apta &&
+        !desvioPreenchido(desvios, cur.colaborador, cur.mes)
+      ) {
+        continue
+      }
       out.push({
         mes: cur.mes,
         area: cur.area,

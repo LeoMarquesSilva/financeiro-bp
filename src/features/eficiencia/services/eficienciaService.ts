@@ -1483,8 +1483,11 @@ export const eficienciaService = {
         pct_aptas: r.pct_aptas == null ? null : Number(r.pct_aptas),
       }))
     }
-    const elegiveis = await this.fetchGestaoPdiElegiveis(ano)
-    return agregarGestaoPdiMensal(avaliarGestaoPdi(elegiveis, area))
+    const [elegiveis, desviosPlanilha] = await Promise.all([
+      this.fetchGestaoPdiElegiveis(ano),
+      this.fetchGestaoPdiDesviosPlanilha(ano).catch(() => [] as GestaoPdiDesvioPlanilhaRow[]),
+    ])
+    return agregarGestaoPdiMensal(avaliarGestaoPdi(elegiveis, area, desviosPlanilha))
   },
 
   async fetchGestaoPdiDesviosPlanilha(ano: number): Promise<GestaoPdiDesvioPlanilhaRow[]> {
@@ -1520,7 +1523,7 @@ export const eficienciaService = {
       !rpcDetalhe.error && rpcDetalhe.data
         ? (rpcDetalhe.data as GestaoPdiDetalheRow[])
         : (() => {
-            let rows = avaliarGestaoPdi(elegiveis, area)
+            let rows = avaliarGestaoPdi(elegiveis, area, desviosPlanilha)
             if (meses) rows = rows.filter((r) => meses.includes(r.mes))
             return rows
           })()
