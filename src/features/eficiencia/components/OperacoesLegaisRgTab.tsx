@@ -33,6 +33,7 @@ import {
   useTurnover,
 } from '../hooks/useEficiencia'
 import { eficienciaService } from '../services/eficienciaService'
+import { filtrarItensTreinamentoPorFiltro } from '../utils/treinamentoPeriodoFiltro'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEficDesvioCard } from './EficienciaEficDesvioCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
@@ -109,6 +110,14 @@ export function OperacoesLegaisRgTab({
   } = useOpsLegaisTarefas(ano, mesFiltro, secao === 'tarefas')
 
   const { itens, sessoesFuturas, loading: loadingTreino } = useTreinamentos(ano, EFICIENCIA_AREA_OPS_LEGAIS)
+  const itensTreinoPeriodo = useMemo(
+    () => filtrarItensTreinamentoPorFiltro(itens, mesFiltro, ano),
+    [itens, mesFiltro, ano],
+  )
+  const sessoesTreinoPeriodo = useMemo(
+    () => filtrarItensTreinamentoPorFiltro(sessoesFuturas, mesFiltro, ano),
+    [sessoesFuturas, mesFiltro, ano],
+  )
   const { anual: turnAnual, desligamentos, loading: loadingTurn } = useTurnover(
     ano,
     EFICIENCIA_AREA_OPS_LEGAIS,
@@ -580,8 +589,8 @@ export function OperacoesLegaisRgTab({
       {secao === 'treinamentos' && (
         <OpsLegaisTreinamentosSection
           ativos={ativosOps}
-          itens={itens}
-          sessoesFuturas={sessoesFuturas}
+          itens={itensTreinoPeriodo}
+          sessoesFuturas={sessoesTreinoPeriodo}
           ano={ano}
           loading={loadingTreino || loadingAtivosTreino}
           onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}

@@ -19,6 +19,7 @@ import {
   EFICIENCIA_META_PDI,
   filtrarMensalPorMesFiltro,
   isMesesFiltro,
+  isPeriodoCurtoFiltro,
   isResultadoFiltro,
   mesesEfetivosFiltro,
   type MesFiltroEficiencia,
@@ -31,6 +32,7 @@ import {
 } from '../hooks/useEficiencia'
 import { eficienciaService } from '../services/eficienciaService'
 import { buildOpsTreinamentosCategorias } from '../utils/opsTreinamentosCategorias'
+import { filtrarItensTreinamentoPorFiltro, aplicarMinutosTreinamentoPeriodo } from '../utils/treinamentoPeriodoFiltro'
 import { acumuladoGestaoPdi, buildGestaoPdiCells } from '../utils/gestaoPdiCalc'
 import { aplicarCelulasFiltro } from '../utils/overviewFinanceiroKpis'
 import { toPriMaiuscula } from '../utils/textFormat'
@@ -136,7 +138,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     ano,
     EFICIENCIA_AREA_OPS_LEGAIS,
   )
-  const { anual: treinoAnual, itens, loading: loadingTreino } = useTreinamentos(
+  const { anual: treinoAnual, porPessoa: treinoPorPessoa, itens, loading: loadingTreino } = useTreinamentos(
     ano,
     EFICIENCIA_AREA_OPS_LEGAIS,
   )
@@ -266,6 +268,24 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     if (loadingTreino || loadingTreinoMensal) return { value: null, label: '…' }
     // Ano todo: atingimento anual (pessoas × 14h).
     if (mesFiltro == null) return acumTreinoAnual
+    if (isPeriodoCurtoFiltro(mesFiltro)) {
+      const itensPeriodo = filtrarItensTreinamentoPorFiltro(itens, mesFiltro, ano)
+      const minutos = aplicarMinutosTreinamentoPeriodo(treinoPorPessoa, itensPeriodo).reduce(
+        (s, p) => s + Number(p.minutos_lancados ?? 0),
+        0,
+      )
+      const metaAno = Number(treinoAnual?.meta_minutos) || 0
+      if (metaAno <= 0) {
+        return minutos > 0
+          ? { value: null, label: formatMinutosTreino(minutos) }
+          : { value: null, label: '-' }
+      }
+      const pct = (minutos / metaAno) * 100
+      return {
+        value: pct,
+        label: `${formatMinutosTreino(minutos)} (${formatPercent(pct)})`,
+      }
+    }
     const rows = filtrarMensalPorMesFiltro(treinoMensal, mesFiltro, ano)
     if (rows.length === 0) return { value: null, label: '-' }
     const minutos = rows.reduce((s, r) => s + Number(r.minutos_lancados), 0)

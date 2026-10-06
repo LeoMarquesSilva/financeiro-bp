@@ -233,9 +233,8 @@ export async function fetchDesenvolvimentoRacional(
   escopo: RacionalEscopo = 'desenvolvimento_equipe',
   limite: number | null = RACIONAL_LIMITE,
 ): Promise<RacionalResultado> {
-  // Indicador anual: filtro Resultado = ano todo (mesmos minutos/meta do KPI).
-  const mesPeriodo: MesFiltroEficiencia =
-    mes === 'resultado' || mes === 'resultado_ytd' ? null : mes
+  // Jurídico: Resultado (jun+) = ano todo. Ops (resultado_ytd), mês, semana e De/Até recortam.
+  const mesPeriodo: MesFiltroEficiencia = mes === 'resultado' ? null : mes
 
   // Ativo no ano: desligamento nulo ou a partir de 1/jan do ano seguinte (equiv. year > ano).
   const turnoverQuery = supabase
