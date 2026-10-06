@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { mesMaxDisponivelInadimplencia } from '../constants'
+import { useReceitaInadimplencia } from './useReceitaInadimplencia'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
 import { receitaService } from '../services/receitaService'
 import type {
@@ -81,23 +82,14 @@ export function useReceitaGestaoVista(
     data: inadDashboard,
     isLoading: inadDashLoading,
     error: inadDashError,
-  } = useQuery({
-    queryKey: ['receita-inadimplencia', 'gestao-vista-dashboard', ano, mesInicioMeta, mesMax],
-    queryFn: () =>
-      receitaInadimplenciaService.fetchDashboard({
-        ano,
-        mesInicio: mesInicioMeta,
-        mesFim: mesMax,
-      }),
-    enabled: mesMax > 0,
-  })
+  } = useReceitaInadimplencia(mesMax > 0 ? ano : undefined, mesInicioMeta, mesMax > 0 ? mesMax : 1)
 
   const {
     data: inadDeptPorMes,
     isLoading: inadDeptLoading,
     error: inadDeptError,
   } = useQuery({
-    queryKey: ['receita-inadimplencia', 'gestao-vista-dept-mes', ano, meses],
+    queryKey: ['receita-inadimplencia', 'gestao-vista-dept-mes', ano, meses, areaKey],
     queryFn: async () => {
       const entries = await Promise.all(
         meses.map(async (mes) => {
@@ -107,7 +99,7 @@ export function useReceitaGestaoVista(
       )
       return Object.fromEntries(entries) as Record<number, ReceitaInadimplenciaDepartamentoMes[]>
     },
-    enabled: meses.length > 0,
+    enabled: areaKey != null && meses.length > 0,
   })
 
   const {

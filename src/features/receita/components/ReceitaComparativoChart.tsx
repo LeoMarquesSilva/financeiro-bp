@@ -42,6 +42,7 @@ import {
   RECEITA_DEPARTAMENTO_CORES,
   RECEITA_DEPARTAMENTO_LABELS,
   mesAbrev,
+  mesMaxDisponivelInadimplencia,
 } from '../constants'
 import { RECEITA_SECTION_IDS } from '../utils/receitaNav'
 import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
@@ -68,6 +69,7 @@ import {
 } from '../utils/receitaColunasChart'
 import { receitaService } from '../services/receitaService'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
+import { useReceitaInadimplencia } from '../hooks/useReceitaInadimplencia'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import {
   buildReceitaMetaAreaSlices,
@@ -806,13 +808,13 @@ export function ReceitaComparativoChart({
   })
 
   const inadEvolucaoEnabled = !porAreaMode || areaLinhaSelecionada != null
+  const mesMaxInad = mesMaxDisponivelInadimplencia(ano)
 
-  const { data: inadEvolucao } = useQuery({
-    queryKey: ['receita-inadimplencia', 'comparativo-evolucao', ano],
-    queryFn: () =>
-      receitaInadimplenciaService.fetchDashboard({ ano, mesInicio: 1, mesFim: 12 }),
-    enabled: inadEvolucaoEnabled,
-  })
+  const { data: inadEvolucao } = useReceitaInadimplencia(
+    inadEvolucaoEnabled ? ano : undefined,
+    1,
+    mesMaxInad > 0 ? mesMaxInad : 1,
+  )
 
   const { data: inadSelecoesMes } = useQuery({
     queryKey: ['receita-inadimplencia', 'selecoes-mes-chart', ano],
@@ -820,18 +822,26 @@ export function ReceitaComparativoChart({
     enabled: !porAreaMode,
   })
 
+  const mesesGrupoAbertos = useMemo(() => {
+    if (porAreaMode || !inadEvolucao) return []
+    const abertos = new Set(
+      inadEvolucao.evolucao.filter((m) => !m.congelado).map((m) => m.mes),
+    )
+    return (inadSelecoesMes ?? []).map((s) => s.mes).filter((mes) => abertos.has(mes))
+  }, [porAreaMode, inadEvolucao, inadSelecoesMes])
+
   const { data: inadGruposPorMes } = useQuery({
-    queryKey: ['receita-inadimplencia', 'grupos-mes-chart', ano, inadSelecoesMes],
+    queryKey: ['receita-inadimplencia', 'grupos-mes-chart', ano, mesesGrupoAbertos],
     queryFn: async () => {
       const porMes: Record<number, Awaited<ReturnType<typeof receitaInadimplenciaService.fetchGruposMes>>> = {}
       await Promise.all(
-        (inadSelecoesMes ?? []).map(async ({ mes }: { mes: number }) => {
+        mesesGrupoAbertos.map(async (mes) => {
           porMes[mes] = await receitaInadimplenciaService.fetchGruposMes(ano, mes)
         }),
       )
       return porMes
     },
-    enabled: !porAreaMode && (inadSelecoesMes?.length ?? 0) > 0,
+    enabled: mesesGrupoAbertos.length > 0,
   })
 
   const inadMesesCongelados = useMemo(() => {

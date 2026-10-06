@@ -159,12 +159,18 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
         if (selecoesMensais.length > 0) {
           const selecao: SelecaoGruposPorMes = {}
           const porMes: Record<number, ReceitaInadimplenciaGrupoMes[]> = {}
+          const fila = [...selecoesMensais]
+          const workers = Math.min(2, fila.length)
           await Promise.all(
-            selecoesMensais.map(async ({ mes, grupos_incluidos }) => {
-              const grupos = await receitaInadimplenciaService.fetchGruposMes(data.ano, mes)
-              if (cancelled) return
-              porMes[mes] = grupos
-              selecao[mes] = new Set(grupos_incluidos)
+            Array.from({ length: workers }, async () => {
+              while (fila.length > 0 && !cancelled) {
+                const item = fila.shift()
+                if (!item) return
+                const grupos = await receitaInadimplenciaService.fetchGruposMes(data.ano, item.mes)
+                if (cancelled) return
+                porMes[item.mes] = grupos
+                selecao[item.mes] = new Set(item.grupos_incluidos)
+              }
             }),
           )
           if (!cancelled) {
