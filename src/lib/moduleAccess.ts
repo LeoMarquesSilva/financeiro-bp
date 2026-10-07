@@ -12,6 +12,7 @@ export type ModuleKey =
   | 'opex'
   | 'eficiencia'
   | 'operacoes-legais'
+  | 'timesheet'
   | 'gestores'
   | 'configuracoes'
 
@@ -24,6 +25,7 @@ export const MODULE_KEY_OPTIONS: { value: ModuleKey; label: string }[] = [
   { value: 'eficiencia', label: 'Resultado Metas Bismarchi Pires' },
   /** Sidebar/rota `/financeiro/operacoes-legais` (não filtra mais o Overview de Eficiência). */
   { value: 'operacoes-legais', label: 'Operações Legais' },
+  { value: 'timesheet', label: 'Timesheet' },
   { value: 'gestores', label: 'Usuários' },
   { value: 'configuracoes', label: 'Configurações' },
 ]

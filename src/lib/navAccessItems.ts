@@ -67,6 +67,13 @@ export const NAV_ACCESS_ITEMS: NavAccessItem[] = [
     moduleKey: 'eficiencia',
   },
   {
+    to: '/financeiro/timesheet',
+    label: 'Timesheet',
+    // Admin vê todas as áreas. Coordenador entra pelo perfil e fica na área dele.
+    roles: ['admin'],
+    moduleKey: 'timesheet',
+  },
+  {
     to: '/financeiro/operacoes-legais',
     label: 'Operações Legais',
     // Só admin no perfil. Coordenador de Ops Legais entra via checkbox do módulo

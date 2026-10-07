@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
-import { AlertTriangle, BarChart3, Briefcase, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock, Scale, Gauge } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock, Scale, Gauge, Timer } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -35,9 +35,10 @@ const navItems: NavItem[] = [
   { ...NAV_ACCESS_ITEMS[6], icon: TrendingUp },
   { ...NAV_ACCESS_ITEMS[7], icon: Wallet },
   { ...NAV_ACCESS_ITEMS[8], icon: Gauge },
-  { ...NAV_ACCESS_ITEMS[9], icon: Briefcase },
-  { ...NAV_ACCESS_ITEMS[10], icon: Users },
-  { ...NAV_ACCESS_ITEMS[11], icon: Settings },
+  { ...NAV_ACCESS_ITEMS[9], icon: Timer },
+  { ...NAV_ACCESS_ITEMS[10], icon: Briefcase },
+  { ...NAV_ACCESS_ITEMS[11], icon: Users },
+  { ...NAV_ACCESS_ITEMS[12], icon: Settings },
 ]
 
 function getInitials(name: string | null): string {

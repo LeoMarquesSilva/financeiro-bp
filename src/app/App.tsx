@@ -22,6 +22,7 @@ import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
 import { RacionalExportPage } from '@/features/eficiencia/pages/RacionalExportPage'
 import { OperacoesLegaisPage } from '@/features/operacoes-legais/pages/OperacoesLegaisPage'
+import { TimesheetPage } from '@/features/timesheet/pages/TimesheetPage'
 import { readRacionalExportParams } from '@/features/eficiencia/utils/racionalExportParams'
 import { RACIONAL_EXPORT_PATH } from '@/features/eficiencia/utils/racionalExportUrl'
 
@@ -177,6 +178,14 @@ function AppRoutes() {
           }
         />
         <Route path="eficiencia" element={<EficienciaEntryRoute />} />
+        <Route
+          path="timesheet"
+          element={
+            <ProtectedRoute routePath="/financeiro/timesheet" moduleKey="timesheet">
+              <TimesheetPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="operacoes-legais"
           element={
