@@ -4,7 +4,10 @@ import { useAuth } from '@/lib/AuthContext'
 import { cn } from '@/lib/utils'
 import { AreaFilterButtons } from '@/features/eficiencia/components/AreaFilterButtons'
 import { MesFilterButtons } from '@/features/eficiencia/components/MesFilterButtons'
+import { ResponsavelFilter } from '@/features/eficiencia/components/ResponsavelFilter'
 import { isMesesFiltro, MESES_EFICIENCIA, type MesFiltroEficiencia } from '@/features/eficiencia/constants'
+import { normalizeResponsavelChave } from '@/features/eficiencia/utils/responsavelMatch'
+import type { ResponsavelOption } from '@/features/eficiencia/hooks/useResponsaveisOptions'
 import { TIMESHEET_AREAS_JURIDICO_VIOS, timesheetAreasDaPessoa } from '../constants'
 import { useTimesheetVisao } from '../hooks/useTimesheetVisao'
 import { resolveTimesheetAccess } from '../utils/timesheetAccess'
@@ -81,6 +84,7 @@ export function TimesheetPage() {
   const [ano, setAno] = useState(ANO_PADRAO)
   const [areaFiltro, setAreaFiltro] = useState<string | null>(null)
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
+  const [responsavel, setResponsavel] = useState<string | null>(null)
 
   const semVinculo = !access.canFilterAreas && access.lockedAreas?.length === 0
   const mesesConsulta = isMesesFiltro(mesFiltro) ? mesFiltro : null
@@ -92,6 +96,7 @@ export function TimesheetPage() {
     ano,
     areasConsulta,
     mesesConsulta,
+    responsavel,
     !semVinculo,
   )
   const loading = isLoading && !semVinculo
@@ -102,6 +107,15 @@ export function TimesheetPage() {
     mesesConsulta == null
       ? null
       : mesesConsulta.map((mes) => MESES_EFICIENCIA[mes - 1] ?? String(mes)).join(', ')
+  const responsavelOptions = useMemo<ResponsavelOption[]>(
+    () =>
+      (data?.responsaveis ?? []).map((nome) => ({
+        nome,
+        area: null,
+        nomeChave: normalizeResponsavelChave(nome),
+      })),
+    [data?.responsaveis],
+  )
 
   return (
     <div className="space-y-6">
@@ -115,6 +129,7 @@ export function TimesheetPage() {
             Horas apontadas no VIOS
             {recorteLabel ? ` · ${recorteLabel}` : ''}
             {mesesLabel ? ` · ${mesesLabel}` : ''}
+            {responsavel ? ` · ${responsavel}` : ''}
           </p>
         </div>
         <div className="flex items-center gap-1.5" role="group" aria-label="Ano">
@@ -143,6 +158,16 @@ export function TimesheetPage() {
         showResultado={false}
         showDiaPicker={false}
         ano={ano}
+      />
+
+      <ResponsavelFilter
+        ano={ano}
+        area={access.canFilterAreas ? areaFiltro : access.areaLabel}
+        value={responsavel}
+        onChange={setResponsavel}
+        enabled={!semVinculo}
+        options={responsavelOptions}
+        optionsLoading={isLoading && responsavelOptions.length === 0}
       />
 
       {semVinculo ? (

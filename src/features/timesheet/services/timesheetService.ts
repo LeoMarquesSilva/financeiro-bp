@@ -23,6 +23,7 @@ export type TimesheetVisao = {
   por_tipo_tarefa: TimesheetFatia[]
   por_grupo: TimesheetFatia[]
   por_area: TimesheetFatia[]
+  responsaveis: string[]
 }
 
 const VAZIO: TimesheetVisao = {
@@ -36,6 +37,7 @@ const VAZIO: TimesheetVisao = {
   por_tipo_tarefa: [],
   por_grupo: [],
   por_area: [],
+  responsaveis: [],
 }
 
 function asFatia(raw: unknown): TimesheetFatia[] {
@@ -54,11 +56,13 @@ export async function fetchTimesheetVisao(
   ano: number,
   areas: string[] | null,
   meses: number[] | null,
+  colaborador: string | null,
 ): Promise<TimesheetVisao> {
   const { data, error } = await supabase.rpc('timesheet_visao' as never, {
     p_ano: ano,
     p_areas: areas,
     p_meses: meses,
+    p_colaborador: colaborador,
   } as never)
   if (error) throw error
   const row = (data ?? VAZIO) as Record<string, unknown>
@@ -82,5 +86,8 @@ export async function fetchTimesheetVisao(
     por_tipo_tarefa: asFatia(row.por_tipo_tarefa),
     por_grupo: asFatia(row.por_grupo),
     por_area: asFatia(row.por_area),
+    responsaveis: Array.isArray(row.responsaveis)
+      ? row.responsaveis.map((nome) => String(nome ?? '').trim()).filter(Boolean)
+      : [],
   }
 }
