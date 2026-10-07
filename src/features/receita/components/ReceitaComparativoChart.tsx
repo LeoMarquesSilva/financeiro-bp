@@ -33,7 +33,10 @@ import type {
   ReceitaMesRow,
   ReceitaRecebidoDepartamentoRow,
 } from '../types/receita.types'
-import type { ReceitaInadimplenciaDepartamentoMes } from '../types/receitaInadimplencia.types'
+import type {
+  ReceitaInadimplenciaDepartamentoMes,
+  ReceitaInadimplenciaEvolucaoMes,
+} from '../types/receitaInadimplencia.types'
 import {
   RECEITA_CHART_AXIS,
   RECEITA_CHART_LABEL,
@@ -823,11 +826,13 @@ export function ReceitaComparativoChart({
   })
 
   const mesesGrupoAbertos = useMemo(() => {
-    if (porAreaMode || !inadEvolucao) return []
+    if (porAreaMode || !inadEvolucao) return [] as number[]
+    const evolucao = inadEvolucao.evolucao as ReceitaInadimplenciaEvolucaoMes[]
     const abertos = new Set(
-      inadEvolucao.evolucao.filter((m) => !m.congelado).map((m) => m.mes),
+      evolucao.filter((m) => !m.congelado).map((m) => m.mes),
     )
-    return (inadSelecoesMes ?? []).map((s) => s.mes).filter((mes) => abertos.has(mes))
+    const selecoes = (inadSelecoesMes ?? []) as Array<{ mes: number }>
+    return selecoes.map((s) => s.mes).filter((mes) => abertos.has(mes))
   }, [porAreaMode, inadEvolucao, inadSelecoesMes])
 
   const { data: inadGruposPorMes } = useQuery({
