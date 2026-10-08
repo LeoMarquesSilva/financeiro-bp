@@ -109,7 +109,7 @@ export function TimesheetPage() {
       : mesesConsulta.map((mes) => MESES_EFICIENCIA[mes - 1] ?? String(mes)).join(', ')
   const responsavelOptions = useMemo<ResponsavelOption[]>(
     () =>
-      (data?.responsaveis ?? []).map((nome) => ({
+      (data?.responsaveis ?? []).map((nome: string) => ({
         nome,
         area: null,
         nomeChave: normalizeResponsavelChave(nome),
