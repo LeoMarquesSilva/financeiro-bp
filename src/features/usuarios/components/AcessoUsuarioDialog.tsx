@@ -22,7 +22,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { MODULE_KEY_OPTIONS, type ModuleKey } from '@/lib/moduleAccess'
+import {
+  EFICIENCIA_PROTOCOLOS_MODULE,
+  MODULE_KEY_OPTIONS,
+  type ModuleKey,
+} from '@/lib/moduleAccess'
 import type { AppRole, TeamMember } from '@/lib/database.types'
 import {
   teamMembersService,
@@ -109,12 +113,16 @@ export function AcessoUsuarioDialog({
       await teamMembersService.updateRole(member.id, role || null)
       await teamMembersService.updateActive(member.id, loginAtivo)
 
-      // Coordenador sempre precisa do módulo Eficiência (visão Overview da área).
+      // Coordenador vê o módulo inteiro, salvo quando a subcategoria de protocolos está marcada.
       const next = new Set(modules)
-      if (role === 'coordenador') next.add('eficiencia')
+      if (role === 'coordenador' && !next.has(EFICIENCIA_PROTOCOLOS_MODULE)) {
+        next.add('eficiencia')
+      }
+      if (next.has(EFICIENCIA_PROTOCOLOS_MODULE)) next.delete('eficiencia')
 
       const current = new Set(grantedModules)
-      for (const key of MODULE_KEY_OPTIONS.map((m) => m.value)) {
+      const keys = [...MODULE_KEY_OPTIONS.map((m) => m.value), EFICIENCIA_PROTOCOLOS_MODULE]
+      for (const key of keys) {
         const was = current.has(key)
         const now = next.has(key)
         if (was && !now) await teamMemberModuleAccessService.revoke(member.id, key)
@@ -177,8 +185,32 @@ export function AcessoUsuarioDialog({
   const toggleModule = (key: ModuleKey, grant: boolean) => {
     setModules((prev) => {
       const next = new Set(prev)
+      if (key === 'eficiencia') {
+        if (grant) {
+          next.add('eficiencia')
+          next.delete(EFICIENCIA_PROTOCOLOS_MODULE)
+        } else {
+          next.delete('eficiencia')
+          next.delete(EFICIENCIA_PROTOCOLOS_MODULE)
+        }
+        return next
+      }
       if (grant) next.add(key)
       else next.delete(key)
+      return next
+    })
+  }
+
+  const setEscopoEficiencia = (somenteProtocolos: boolean) => {
+    setModules((prev) => {
+      const next = new Set(prev)
+      if (somenteProtocolos) {
+        next.delete('eficiencia')
+        next.add(EFICIENCIA_PROTOCOLOS_MODULE)
+      } else {
+        next.add('eficiencia')
+        next.delete(EFICIENCIA_PROTOCOLOS_MODULE)
+      }
       return next
     })
   }
@@ -413,39 +445,89 @@ export function AcessoUsuarioDialog({
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {MODULE_KEY_OPTIONS.map((m) => {
-                  const checked = modules.has(m.value)
+                  const checked =
+                    m.value === 'eficiencia'
+                      ? modules.has('eficiencia') || modules.has(EFICIENCIA_PROTOCOLOS_MODULE)
+                      : modules.has(m.value)
+                  const somenteProtocolos =
+                    modules.has(EFICIENCIA_PROTOCOLOS_MODULE) && !modules.has('eficiencia')
                   return (
                     <div
                       key={m.value}
-                      role="checkbox"
-                      aria-checked={checked}
-                      aria-disabled={pending || undefined}
-                      tabIndex={pending ? -1 : 0}
-                      onClick={() => {
-                        if (!pending) toggleModule(m.value, !checked)
-                      }}
-                      onKeyDown={(e) => {
-                        if (pending) return
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          toggleModule(m.value, !checked)
-                        }
-                      }}
-                      className={cn(
-                        'flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm transition-colors',
-                        pending && 'pointer-events-none cursor-not-allowed opacity-50',
-                        checked
-                          ? 'border-teal-300 bg-teal-50/70 text-slate-800 shadow-sm'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
-                      )}
+                      className={cn(m.value === 'eficiencia' && checked && 'sm:col-span-2')}
                     >
-                      <Checkbox
-                        checked={checked}
-                        tabIndex={-1}
-                        className="pointer-events-none"
-                        aria-hidden
-                      />
-                      <span className="leading-snug">{m.label}</span>
+                      <div
+                        role="checkbox"
+                        aria-checked={checked}
+                        aria-disabled={pending || undefined}
+                        tabIndex={pending ? -1 : 0}
+                        onClick={() => {
+                          if (!pending) toggleModule(m.value, !checked)
+                        }}
+                        onKeyDown={(e) => {
+                          if (pending) return
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleModule(m.value, !checked)
+                          }
+                        }}
+                        className={cn(
+                          'flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm transition-colors',
+                          pending && 'pointer-events-none cursor-not-allowed opacity-50',
+                          checked
+                            ? 'border-teal-300 bg-teal-50/70 text-slate-800 shadow-sm'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+                        )}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          tabIndex={-1}
+                          className="pointer-events-none"
+                          aria-hidden
+                        />
+                        <span className="leading-snug">{m.label}</span>
+                      </div>
+                      {m.value === 'eficiencia' && checked ? (
+                        <div
+                          className="mt-2 grid gap-2 sm:grid-cols-2"
+                          role="radiogroup"
+                          aria-label="Recorte de Resultado Metas"
+                        >
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={!somenteProtocolos}
+                            disabled={pending}
+                            onClick={() => setEscopoEficiencia(false)}
+                            className={cn(
+                              'rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors',
+                              !somenteProtocolos
+                                ? 'border-teal-300 bg-white text-slate-800 shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                            )}
+                          >
+                            Visão completa
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={somenteProtocolos}
+                            disabled={pending}
+                            onClick={() => setEscopoEficiencia(true)}
+                            className={cn(
+                              'rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors',
+                              somenteProtocolos
+                                ? 'border-teal-300 bg-white text-slate-800 shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                            )}
+                          >
+                            <span className="block font-medium">Somente protocolos</span>
+                            <span className="mt-0.5 block text-xs leading-snug text-slate-500">
+                              SLA Protocolo, Eficiência Protocolo e SLA Ciência de Agendamentos
+                            </span>
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   )
                 })}

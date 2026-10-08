@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Award, Trophy } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useAuth } from '@/lib/AuthContext'
+import { isEficienciaSomenteProtocolos } from '@/lib/moduleAccess'
 import { useEficienciaOverview } from '../hooks/useEficiencia'
 import { useEficienciaAccess } from '../hooks/useEficienciaAccess'
 import {
@@ -140,10 +141,13 @@ function TabTrigger({ tab }: { tab: EficienciaTabDef }) {
 }
 
 export function EficienciaPage() {
-  const { loading: authLoading } = useAuth()
+  const { loading: authLoading, role, moduleAccess } = useAuth()
+  const somenteProtocolos = isEficienciaSomenteProtocolos(role, moduleAccess)
   const access = useEficienciaAccess()
   const [ano, setAno] = useState(ANO_PADRAO)
-  const [tab, setTab] = useState<EficienciaTabId>('overview')
+  const [tab, setTab] = useState<EficienciaTabId>(
+    somenteProtocolos ? 'sla-protocolo' : 'overview',
+  )
   const [areaOverview, setAreaOverview] = useState<string | null>(null)
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
   const [responsavel, setResponsavel] = useState<string | null>(null)
@@ -162,11 +166,23 @@ export function EficienciaPage() {
     areaOverview !== access.lockedArea
       ? null
       : areaOverview
-  const tabsVisiveis = visibleEficienciaTabs(areaOverviewData)
+  const tabsVisiveis = visibleEficienciaTabs(areaOverviewData, somenteProtocolos)
   const { data: overview, loading: loadingOverview } = useEficienciaOverview(
     ano,
     areaOverviewData,
+    !somenteProtocolos,
   )
+
+  useEffect(() => {
+    if (!somenteProtocolos) return
+    if (
+      tab !== 'sla-protocolo' &&
+      tab !== 'eficiencia-protocolo' &&
+      tab !== 'sla-ciencia-agendamentos'
+    ) {
+      setTab('sla-protocolo')
+    }
+  }, [somenteProtocolos, tab])
 
   // Jurídico não usa filtro de semana — limpa se vier de outro contexto.
   // Overview não usa filtro por dia.
@@ -208,10 +224,12 @@ export function EficienciaPage() {
         anos={[...ANOS_COMPARATIVO]}
         onAnoChange={setAno}
         ultimaAtualizacao={overview?.ultimaAtualizacao}
-        canEditOnboarding={access.canUseIndicadoresAdmin}
+        canEditOnboarding={access.canUseIndicadoresAdmin && !somenteProtocolos}
       />
 
-      {access.canUseIndicadoresAdmin ? <IndicadoresResultadoActions ano={ano} /> : null}
+      {access.canUseIndicadoresAdmin && !somenteProtocolos ? (
+        <IndicadoresResultadoActions ano={ano} />
+      ) : null}
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as EficienciaTabId)}>
         <div className="flex justify-center overflow-x-auto pb-1">
@@ -264,19 +282,21 @@ export function EficienciaPage() {
           />
         </div>
 
-        <TabsContent value="overview" className="mt-5">
-          <OverviewTab
-            ano={ano}
-            data={overview}
-            loading={loadingOverview}
-            area={areaOverviewData}
-            onAreaChange={handleAreaChange}
-            mesFiltro={mesFiltro}
-            showAreaFilter={showOverviewAreaFilter}
-            allowTodasAreas
-            allowedAreas={overviewAllowedAreas}
-          />
-        </TabsContent>
+        {somenteProtocolos ? null : (
+          <TabsContent value="overview" className="mt-5">
+            <OverviewTab
+              ano={ano}
+              data={overview}
+              loading={loadingOverview}
+              area={areaOverviewData}
+              onAreaChange={handleAreaChange}
+              mesFiltro={mesFiltro}
+              showAreaFilter={showOverviewAreaFilter}
+              allowTodasAreas
+              allowedAreas={overviewAllowedAreas}
+            />
+          </TabsContent>
+        )}
 
         {tabsVisiveis
           .filter((t) => t.id !== 'overview')

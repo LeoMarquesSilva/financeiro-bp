@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
+import { useAuth } from '@/lib/AuthContext'
+import { isEficienciaSomenteProtocolos } from '@/lib/moduleAccess'
+import { EFICIENCIA_INDICADORES_PROTOCOLOS } from '../config/eficienciaTabs'
 import { eficienciaService } from '../services/eficienciaService'
 import { exportRacionalExcel } from '../utils/racionalExport'
 import { formatRacionalPeriodoLabel } from '../utils/racionalQuery'
@@ -44,6 +47,8 @@ function stripRacionalExportFromUrl(): void {
  */
 export function useRacionalExportFromUrl(authReady: boolean): void {
   const started = useRef(false)
+  const { role, moduleAccess } = useAuth()
+  const somenteProtocolos = isEficienciaSomenteProtocolos(role, moduleAccess)
 
   useEffect(() => {
     if (!authReady || started.current) return
@@ -55,6 +60,16 @@ export function useRacionalExportFromUrl(authReady: boolean): void {
     started.current = true
     stripRacionalExportFromUrl()
     clearPersistedRacionalExport()
+
+    if (
+      somenteProtocolos &&
+      !EFICIENCIA_INDICADORES_PROTOCOLOS.includes(
+        parsed.indicador as (typeof EFICIENCIA_INDICADORES_PROTOCOLOS)[number],
+      )
+    ) {
+      toast.error('Este racional não está liberado para o seu acesso.')
+      return
+    }
 
     const { indicador, ano, mes, areaKey } = parsed
     const mesFiltro = mesFiltroForIndicador(indicador, mes)
@@ -89,7 +104,7 @@ export function useRacionalExportFromUrl(authReady: boolean): void {
         toast.error('Não foi possível baixar o racional. Tente pelo SIOE.', { id: toastId })
       }
     })()
-  }, [authReady])
+  }, [authReady, somenteProtocolos])
 }
 
 /** Compat — captura antecipada está em main.tsx; mantido para chamadas legadas. */

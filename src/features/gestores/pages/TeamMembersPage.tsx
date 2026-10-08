@@ -11,7 +11,11 @@ import { getTeamMember, getAreaTags } from '@/lib/teamAvatars'
 import { useOfficialPhotos } from '@/lib/OfficialPhotosProvider'
 import { colaboradoresService } from '@/features/colaboradores/services/colaboradoresService'
 import type { Colaborador } from '@/features/colaboradores/types'
-import { MODULE_KEY_OPTIONS, type ModuleKey } from '@/lib/moduleAccess'
+import {
+  EFICIENCIA_PROTOCOLOS_MODULE,
+  MODULE_KEY_OPTIONS,
+  type ModuleKey,
+} from '@/lib/moduleAccess'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -96,26 +100,62 @@ function ModuleAccessPopover({
           {grantedModules.size > 0 ? `${grantedModules.size} módulo(s)` : 'Liberar módulo'}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-64">
+      <PopoverContent align="start" className="w-80">
         <p className="mb-3 text-xs font-medium text-slate-500">
           Módulos extras para <span className="text-slate-700">{teamMember.full_name}</span>, além da
           permissão selecionada.
         </p>
         <div className="space-y-2">
           {MODULE_KEY_OPTIONS.map((m) => {
-            const checked = grantedModules.has(m.value)
+            const checked =
+              m.value === 'eficiencia'
+                ? grantedModules.has('eficiencia') ||
+                  grantedModules.has(EFICIENCIA_PROTOCOLOS_MODULE)
+                : grantedModules.has(m.value)
+            const somenteProtocolos = grantedModules.has(EFICIENCIA_PROTOCOLOS_MODULE)
             return (
-              <label
-                key={m.value}
-                className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"
-              >
-                <Checkbox
-                  checked={checked}
-                  disabled={pending}
-                  onCheckedChange={(next) => onToggle(m.value, next)}
-                />
-                {m.label}
-              </label>
+              <div key={m.value} className="space-y-1.5">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                  <Checkbox
+                    checked={checked}
+                    disabled={pending}
+                    onCheckedChange={(next) => {
+                      const on = next === true
+                      if (m.value !== 'eficiencia') {
+                        onToggle(m.value, on)
+                        return
+                      }
+                      if (!on) {
+                        onToggle('eficiencia', false)
+                        onToggle(EFICIENCIA_PROTOCOLOS_MODULE, false)
+                        return
+                      }
+                      onToggle('eficiencia', true)
+                      onToggle(EFICIENCIA_PROTOCOLOS_MODULE, false)
+                    }}
+                  />
+                  {m.label}
+                </label>
+                {m.value === 'eficiencia' && checked ? (
+                  <label className="ml-6 flex cursor-pointer items-start gap-2 text-xs text-slate-600">
+                    <Checkbox
+                      checked={somenteProtocolos && !grantedModules.has('eficiencia')}
+                      disabled={pending}
+                      onCheckedChange={(next) => {
+                        const on = next === true
+                        onToggle(EFICIENCIA_PROTOCOLOS_MODULE, on)
+                        onToggle('eficiencia', !on)
+                      }}
+                    />
+                    <span>
+                      Somente protocolos
+                      <span className="mt-0.5 block text-[11px] leading-snug text-slate-400">
+                        SLA Protocolo, Eficiência Protocolo e SLA Ciência de Agendamentos
+                      </span>
+                    </span>
+                  </label>
+                ) : null}
+              </div>
             )
           })}
         </div>

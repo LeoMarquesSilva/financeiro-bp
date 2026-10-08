@@ -11,6 +11,8 @@ export type ModuleKey =
   | 'receita'
   | 'opex'
   | 'eficiencia'
+  /** Recorte de Eficiência: só SLA Protocolo, Eficiência Protocolo e SLA Ciência de Agendamentos. */
+  | 'eficiencia-protocolos'
   | 'operacoes-legais'
   | 'timesheet'
   | 'gestores'
@@ -30,6 +32,26 @@ export const MODULE_KEY_OPTIONS: { value: ModuleKey; label: string }[] = [
   { value: 'configuracoes', label: 'Configurações' },
 ]
 
+/** Não entra na grade principal: é subcategoria de Resultado Metas. */
+export const EFICIENCIA_PROTOCOLOS_MODULE = 'eficiencia-protocolos' as const
+
 export function moduleKeyLabel(key: ModuleKey): string {
+  if (key === EFICIENCIA_PROTOCOLOS_MODULE) return 'Somente protocolos'
   return MODULE_KEY_OPTIONS.find((m) => m.value === key)?.label ?? key
+}
+
+/**
+ * Visão restrita de Resultado Metas.
+ * Admin continua vendo o módulo inteiro. Os demais, só quando têm a subcategoria
+ * e não têm o módulo completo.
+ */
+export function isEficienciaSomenteProtocolos(
+  role: string | null | undefined,
+  moduleAccess: readonly string[],
+): boolean {
+  if (role === 'admin') return false
+  return (
+    moduleAccess.includes(EFICIENCIA_PROTOCOLOS_MODULE) &&
+    !moduleAccess.includes('eficiencia')
+  )
 }

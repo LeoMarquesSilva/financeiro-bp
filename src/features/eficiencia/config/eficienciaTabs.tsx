@@ -57,7 +57,24 @@ export const EFICIENCIA_TABS: EficienciaTabDef[] = [
   { id: 'exito', label: 'Êxito', icon: Trophy },
 ]
 
+/** Recorte “somente protocolos”: sem Overview e sem os outros indicadores. */
+export const EFICIENCIA_TABS_PROTOCOLOS: readonly EficienciaTabId[] = [
+  'sla-protocolo',
+  'eficiencia-protocolo',
+  'sla-ciencia-agendamentos',
+]
+
+export const EFICIENCIA_INDICADORES_PROTOCOLOS = [
+  'sla_protocolo',
+  'eficiencia_protocolo',
+  'sla_ciencia_agendamentos',
+] as const
+
 /** Abas visíveis conforme área efetiva do dashboard. */
-export function visibleEficienciaTabs(_area: string | null): EficienciaTabDef[] {
-  return EFICIENCIA_TABS
+export function visibleEficienciaTabs(
+  _area: string | null,
+  somenteProtocolos = false,
+): EficienciaTabDef[] {
+  if (!somenteProtocolos) return EFICIENCIA_TABS
+  return EFICIENCIA_TABS.filter((tab) => EFICIENCIA_TABS_PROTOCOLOS.includes(tab.id))
 }
