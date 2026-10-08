@@ -1,5 +1,6 @@
 import type { AppRole } from '@/lib/database.types'
 import type { ColaboradorNivelHierarquico } from '@/features/colaboradores/types'
+import { isEficienciaSomenteProtocolos } from '@/lib/moduleAccess'
 import { AREAS_EFICIENCIA, EFICIENCIA_AREA_OPS_LEGAIS } from '../constants'
 
 export type EficienciaAccessProfile = 'admin' | 'socio_area' | 'coordenador'
@@ -22,6 +23,7 @@ type ResolveInput = {
   teamMemberArea: string | null | undefined
   nivelHierarquico: ColaboradorNivelHierarquico | null | undefined
   colaboradorArea: string | null | undefined
+  moduleAccess?: readonly string[]
 }
 
 /**
@@ -98,8 +100,21 @@ export function isCoordenadorUsuario(input: {
  * - Sócio de área (sócio/gerente RH): todas as abas e áreas; sem ações admin.
  * - Coordenador: Overview com “Todas as áreas” + área dele; abas de detalhe
  *   só da própria área; sem ações admin.
+ * - Somente protocolos: indicadores de protocolo, travados na área da pessoa.
  */
 export function resolveEficienciaAccess(input: ResolveInput): EficienciaAccess {
+  if (
+    isEficienciaSomenteProtocolos(input.role, input.moduleAccess ?? [])
+  ) {
+    return {
+      profile: 'coordenador',
+      canUseIndicadoresAdmin: false,
+      canSeeAllTabs: false,
+      canFilterAreas: false,
+      lockedArea: resolveLockedArea(input),
+    }
+  }
+
   if (input.role === 'admin') {
     return {
       profile: 'admin',
