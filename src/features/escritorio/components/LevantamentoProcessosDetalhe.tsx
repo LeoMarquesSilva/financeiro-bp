@@ -56,7 +56,7 @@ export function LevantamentoProcessosDetalhe({ resumo }: { resumo: LevantamentoR
       <div>
         <h2 className="text-sm font-semibold text-slate-900">Processos por situação</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          Estoque atual · {qtd(total)} processos · Principal × Recurso × Incidente pelo vínculo
+          Somente ativos · {qtd(total)} processos · Principal × Recurso × Incidente pelo vínculo
           VIOS ou, na falta dele, pelo tipo de ação
         </p>
       </div>

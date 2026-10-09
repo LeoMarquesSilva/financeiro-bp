@@ -337,7 +337,7 @@ function addAbaResumo(
     ['Timesheet — horas (HH:MM)', resumo.timesheet_horas / 24, 'duracao'],
     ['Timesheet — horas (decimal)', resumo.timesheet_horas, 'decimal'],
     ['Timesheet — apontamentos', resumo.timesheet_apontamentos, 'inteiro'],
-    ['Processos (estoque)', resumo.processos_total, 'inteiro'],
+    ['Processos (ativos)', resumo.processos_total, 'inteiro'],
     ['Prazos', resumo.tarefas_prazos, 'inteiro'],
     ['Providências', resumo.tarefas_providencias, 'inteiro'],
   ]

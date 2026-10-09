@@ -106,7 +106,7 @@ export function LevantamentoKpiCards({ resumo, loading, onRacional }: Props) {
       <KpiCard
         title="Processos"
         value={(resumo?.processos_total ?? 0).toLocaleString('pt-BR')}
-        hint="Estoque atual (ignora data)"
+        hint="Somente ativos (ignora data)"
         icon={FolderKanban}
         accentClass="bg-amber-100 text-amber-800"
         loading={loading}
