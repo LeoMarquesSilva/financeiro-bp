@@ -52,6 +52,8 @@ const TIPO_POR_CHAVE: Record<string, TipoColuna> = {
   ci: 'id',
   data: 'data',
   data_publicacao: 'data',
+  data_divulgacao: 'data',
+  data_recebimento_kurier: 'data',
   data_cadastro: 'data',
   data_encerramento: 'data',
   data_conclusao: 'data',
@@ -59,6 +61,7 @@ const TIPO_POR_CHAVE: Record<string, TipoColuna> = {
   solicitado_em: 'data',
   criado: 'dataHora',
   disponibilizado_vistagem: 'dataHora',
+  vistado_em: 'dataHora',
 }
 
 function safeFilenamePart(value: string): string {

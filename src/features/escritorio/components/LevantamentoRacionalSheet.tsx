@@ -124,11 +124,18 @@ export function LevantamentoRacionalSheet({ bloco, filtros, onClose }: Props) {
               <tbody>
                 {data.linhas.map((row: Record<string, unknown>, i: number) => (
                   <tr key={i} className="border-t border-slate-100 odd:bg-white even:bg-slate-50/40">
-                    {data.colunas.map((c: LevantamentoColuna) => (
-                      <td key={c.key} className="max-w-[16rem] truncate px-3 py-1.5 text-slate-800">
-                        {formatRacionalCell(row[c.key], bloco ?? undefined, c.key)}
-                      </td>
-                    ))}
+                    {data.colunas.map((c: LevantamentoColuna) => {
+                      const texto = formatRacionalCell(row[c.key], bloco ?? undefined, c.key)
+                      return (
+                        <td
+                          key={c.key}
+                          title={texto}
+                          className="max-w-[16rem] truncate px-3 py-1.5 text-slate-800"
+                        >
+                          {texto}
+                        </td>
+                      )
+                    })}
                   </tr>
                 ))}
               </tbody>

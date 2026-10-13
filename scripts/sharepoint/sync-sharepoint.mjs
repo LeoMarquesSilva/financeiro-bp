@@ -171,6 +171,9 @@ const PUBLICACOES_FIELD_SELECT = [
   'DATARECEBIMENTOKURIER',
   'INCONSIST_x00ca_NCIAS_x002d_TIPO',
   'INCONSIST_x00ca_NCIA_x002d_SUBTI',
+  // INCONSISTÊNCIAS JURÍDICO / INCONSISTÊNCIA - JURÍDICO - DESCRIÇÃO (nomes internos truncados)
+  'INCONSIST_x00ca_NCIASJUR_x00cd_D',
+  'INCONSIST_x00ca_NCIA_x002d_JUR_x',
   // CHECK (displayName) — nome interno opaco confirmado via Graph /columns
   'field_13',
 ].join(',')
@@ -663,6 +666,18 @@ function parseDate(v) {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
+/**
+ * Data em coluna de texto do SharePoint (ex.: DATA DE DIVULGAÇÃO). Às vezes vem o número
+ * de série do Excel ("45814"), que `new Date` lia como ano 45814.
+ */
+function parseDateTexto(v) {
+  const s = v == null ? '' : String(v).trim()
+  if (/^\d{5}(\.\d+)?$/.test(s)) {
+    return new Date(Date.UTC(1899, 11, 30) + Math.floor(Number(s)) * 86400000)
+  }
+  return parseDate(v)
+}
+
 // ============================================================
 // Fontes
 // ============================================================
@@ -910,8 +925,8 @@ const FONTES = {
           return {
             sp_id: Number(pick(f, ['ID', 'id'])),
             criado: toIsoDateTime(parseDate(pick(f, ['Criado', 'Created']))),
-            data_publicacao: toIsoDate(parseDate(pick(f, ['DATA DE PUBLICAÇÃO', 'DATADEPUBLICACAO', 'field_3']))),
-            data_divulgacao: toIsoDate(parseDate(pick(f, ['DATA DE DIVULGAÇÃO', 'DATADEDIVULGACAO', 'field_2']))),
+            data_publicacao: toIsoDate(parseDateTexto(pick(f, ['DATA DE PUBLICAÇÃO', 'DATADEPUBLICACAO', 'field_3']))),
+            data_divulgacao: toIsoDate(parseDateTexto(pick(f, ['DATA DE DIVULGAÇÃO', 'DATADEDIVULGACAO', 'field_2']))),
             data_recebimento_kurier: toIsoDateBrt(dataRecebimentoKurier),
             numero_processo: pick(f, ['NÚMERO DO PROCESSO', 'NUMERODOPROCESSO', 'field_6']),
             pasta: pick(f, ['Pasta', 'field_5']),
@@ -946,6 +961,15 @@ const FONTES = {
             acao: pick(f, ['Ação', 'Acao', 'field_19']),
             inconsistencias_tipo: String(inconsistenciasTipo).trim() || null,
             inconsistencia_subtipo: String(inconsistenciaSubtipo).trim() || null,
+            inconsistencias_juridico: strOrNull(
+              pick(f, ['INCONSISTÊNCIAS JURÍDICO', 'INCONSIST_x00ca_NCIASJUR_x00cd_D']),
+            ),
+            inconsistencia_juridico_descricao: strOrNull(
+              pick(f, [
+                'INCONSISTÊNCIA - JURÍDICO - DESCRIÇÃO',
+                'INCONSIST_x00ca_NCIA_x002d_JUR_x',
+              ]),
+            ),
             check_pub: strOrNull(pick(f, ['CHECK', 'field_13'])),
             // Coluna calculada do BI (não existe no SharePoint)
             eficiencia: computeEficienciaPublicacao(inconsistenciasTipo, inconsistenciaSubtipo),
