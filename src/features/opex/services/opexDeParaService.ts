@@ -23,6 +23,17 @@ export const opexDeParaService = {
     return ((data ?? []) as Array<Record<string, unknown>>).map(mapRow)
   },
 
+  /** Todos os De × Para que partem de um ano, qualquer que seja o destino. */
+  async listPorOrigem(anoOrigem: number): Promise<OpexGrupoDePara[]> {
+    const { data, error } = await supabase
+      .from('opex_grupo_de_para' as never)
+      .select('id, ano_origem, nome_origem, ano_destino, nome_destino')
+      .eq('ano_origem' as never, anoOrigem)
+      .order('ano_destino' as never, { ascending: false })
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map(mapRow)
+  },
+
   async upsert(input: {
     id?: string
     anoOrigem: number
