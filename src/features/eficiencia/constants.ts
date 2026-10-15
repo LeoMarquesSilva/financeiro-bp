@@ -27,20 +27,33 @@ export const AREAS_EFICIENCIA_JURIDICO = [
 export const EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL = 'Trabalhista' as const
 
 /**
- * Responsável no card Inconsistências — Análise (Ops Legais), conforme a Área.
+ * Responsável no card Inconsistências — Análise (Ops Legais), conforme a Área e a data
+ * (DATA RECEBIMENTO KURIER). Trabalhista → Isadora; demais áreas → Gustavo até a saída
+ * dele (09/04/2026, inclusive) e Giovanna depois.
  * Agendamento continua usando AGENDADO POR.
  */
 export const OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA = {
   trabalhista: 'Isadora Godoy Conte',
-  demais: 'Giovanna Pereira de Souza',
+  /** Em ordem cronológica; `ate` = último dia (YYYY-MM-DD), null = vigente. */
+  demais: [
+    { ate: '2026-04-09', nome: 'Gustavo Ribeiro de Siqueira' },
+    { ate: null, nome: 'Giovanna Pereira de Souza' },
+  ],
 } as const
 
-export function resolveOpsLegaisPubResponsavel(area: string | null | undefined): string {
+export function resolveOpsLegaisPubResponsavel(
+  area: string | null | undefined,
+  data: string | null | undefined,
+): string {
   const a = (area ?? '').trim()
   if (a === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) {
     return OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA.trabalhista
   }
-  return OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA.demais
+  const dia = (data ?? '').slice(0, 10)
+  const periodos = OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA.demais
+  // Sem data → responsável vigente.
+  const periodo = dia ? periodos.find((p) => p.ate == null || dia <= p.ate) : undefined
+  return (periodo ?? periodos[periodos.length - 1]).nome
 }
 
 /**
