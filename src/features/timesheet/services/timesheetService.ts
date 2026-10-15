@@ -52,6 +52,49 @@ function asFatia(raw: unknown): TimesheetFatia[] {
   })
 }
 
+export type TimesheetRacionalLinha = {
+  data: string | null
+  area: string | null
+  colaborador: string | null
+  tipo_apontamento: string | null
+  tipo_tarefa: string | null
+  grupo_cliente: string | null
+  cliente: string | null
+  ci: string | number | null
+  nro_processo: string | null
+  parte_contraria: string | null
+  descricao: string | null
+  hora_inicial: string | null
+  hora_final: string | null
+  minutos: number
+}
+
+const RACIONAL_PAGINA = 10000
+
+/** Todos os lançamentos do recorte, em páginas (o RPC devolve no máximo 10 mil por chamada). */
+export async function fetchTimesheetRacional(
+  ano: number,
+  areas: string[] | null,
+  meses: number[] | null,
+  colaborador: string | null,
+): Promise<TimesheetRacionalLinha[]> {
+  const linhas: TimesheetRacionalLinha[] = []
+  for (let offset = 0; ; offset += RACIONAL_PAGINA) {
+    const { data, error } = await supabase.rpc('timesheet_racional' as never, {
+      p_ano: ano,
+      p_areas: areas,
+      p_meses: meses,
+      p_colaborador: colaborador,
+      p_offset: offset,
+      p_limit: RACIONAL_PAGINA,
+    } as never)
+    if (error) throw error
+    const pagina = Array.isArray(data) ? (data as TimesheetRacionalLinha[]) : []
+    linhas.push(...pagina)
+    if (pagina.length < RACIONAL_PAGINA) return linhas
+  }
+}
+
 export async function fetchTimesheetVisao(
   ano: number,
   areas: string[] | null,

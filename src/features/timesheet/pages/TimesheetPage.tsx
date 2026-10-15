@@ -1,5 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Clock3, Layers, Timer, Users, UsersRound } from 'lucide-react'
+import { Clock3, Download, Layers, Loader2, Timer, Users, UsersRound } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/AuthContext'
 import { cn } from '@/lib/utils'
 import { AreaFilterButtons } from '@/features/eficiencia/components/AreaFilterButtons'
@@ -10,8 +12,10 @@ import { normalizeResponsavelChave } from '@/features/eficiencia/utils/responsav
 import type { ResponsavelOption } from '@/features/eficiencia/hooks/useResponsaveisOptions'
 import { TIMESHEET_AREAS_JURIDICO_VIOS, timesheetAreasDaPessoa } from '../constants'
 import { useTimesheetVisao } from '../hooks/useTimesheetVisao'
+import { fetchTimesheetRacional } from '../services/timesheetService'
 import { resolveTimesheetAccess } from '../utils/timesheetAccess'
 import { formatTimesheetHoras } from '../utils/formatTimesheetHoras'
+import { exportTimesheetRacionalExcel } from '../utils/timesheetRacionalExport'
 import { TimesheetMesChart } from '../components/TimesheetMesChart'
 import { TimesheetRanking } from '../components/TimesheetRanking'
 
@@ -116,6 +120,29 @@ export function TimesheetPage() {
       })),
     [data?.responsaveis],
   )
+  const [exportando, setExportando] = useState(false)
+
+  async function handleExportarRacional() {
+    if (exportando || semVinculo) return
+    setExportando(true)
+    try {
+      const linhas = await fetchTimesheetRacional(ano, areasConsulta, mesesConsulta, responsavel)
+      if (linhas.length === 0) {
+        toast.info('Nenhum lançamento neste recorte.')
+        return
+      }
+      await exportTimesheetRacionalExcel(linhas, {
+        ano,
+        areaLabel: recorteLabel ?? 'Todas as áreas',
+        mesesLabel,
+        responsavel,
+      })
+    } catch {
+      toast.error('Não foi possível gerar o racional. Tente de novo em instantes.')
+    } finally {
+      setExportando(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -132,18 +159,36 @@ export function TimesheetPage() {
             {responsavel ? ` · ${responsavel}` : ''}
           </p>
         </div>
-        <div className="flex items-center gap-1.5" role="group" aria-label="Ano">
-          {ANOS.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setAno(item)}
-              className={cn(BTN, 'min-w-[4.5rem]', ano === item ? BTN_ON : BTN_OFF)}
-              aria-pressed={ano === item}
-            >
-              {item}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 rounded-full text-xs"
+            disabled={semVinculo || loading || exportando || (data?.lancamentos ?? 0) === 0}
+            onClick={() => void handleExportarRacional()}
+            title="Baixa em Excel os lançamentos do recorte atual"
+          >
+            {exportando ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            {exportando ? 'Gerando racional…' : 'Racional (Excel)'}
+          </Button>
+          <div className="flex items-center gap-1.5" role="group" aria-label="Ano">
+            {ANOS.map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setAno(item)}
+                className={cn(BTN, 'min-w-[4.5rem]', ano === item ? BTN_ON : BTN_OFF)}
+                aria-pressed={ano === item}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -247,15 +292,11 @@ export function TimesheetPage() {
                 loading={loading}
               />
             </RankingBloco>
-            <RankingBloco titulo="Por tipo">
-              <TimesheetRanking
-                rows={data?.por_tipo_apontamento ?? []}
-                totalMinutos={totalMinutos}
-                loading={loading}
-              />
-            </RankingBloco>
             {access.canFilterAreas ? (
-              <RankingBloco titulo="Por área">
+              <RankingBloco
+                titulo="Por área"
+                className="xl:col-span-2 xl:w-[calc(50%-0.5rem)] xl:justify-self-center"
+              >
                 <TimesheetRanking
                   rows={data?.por_area ?? []}
                   totalMinutos={totalMinutos}
