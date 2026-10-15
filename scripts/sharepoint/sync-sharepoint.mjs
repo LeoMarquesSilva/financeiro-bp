@@ -140,6 +140,7 @@ const PROTOCOLOS_FIELD_SELECT = [
   'INCONSIST_x00ca_NCIA_x002d_CONTR0',
   'INCONSIST_x00ca_NCIA_x002d_JUR_x',
   'INCONSIST_x00ca_NCIA_x002d_JUR_x0',
+  'OBSERVA_x00c7__x00d5_ES_x002f_QU',
   'URGENTE_x003f_',
 ].join(',')
 const LISTA_PUBLICACOES = '91e8ba11-8248-4a20-9fd9-b66466144ad1'
@@ -1081,6 +1082,10 @@ const FONTES = {
             ]),
             inconsistencia_controladoria: inconsistenciaControladoria || null,
             inconsistencia_controladoria_motivo: inconsistenciaControladoriaMotivo || null,
+            // Nome interno truncado no meio do escape (_x002f_QU) — confirmado via Graph /columns.
+            observacoes: strOrNull(
+              pick(f, ['OBSERVAÇÕES / QUALIFICAÇÃO / ASSUNTOS', 'OBSERVA_x00c7__x00d5_ES_x002f_QU']),
+            ),
             status_inconsistencia: inconsistencia.trim() === '' ? 'EFICIÊNCIA' : 'INCONSISTÊNCIA',
             urgente: pick(f, ['URGENTE?', 'URGENTE']),
           }

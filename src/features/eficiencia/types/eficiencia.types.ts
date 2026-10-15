@@ -552,6 +552,8 @@ export interface RacionalColuna {
   format?: 'percentual' | 'duracao_minutos'
   /** Preenchida no client (não existe na tabela). */
   virtual?: boolean
+  /** Texto livre longo: na tela corta com reticências (texto inteiro no tooltip e no Excel). */
+  textoLongo?: boolean
 }
 
 export interface RacionalResumo {

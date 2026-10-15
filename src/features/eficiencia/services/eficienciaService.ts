@@ -246,6 +246,7 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'protocolo_nos_autos', label: 'Nº do Processo' },
       { key: 'area', label: 'Área' },
       { key: 'criado_por', label: 'Criado por' },
+      { key: 'protocolado_por', label: 'Protocolado por' },
       { key: 'cliente', label: 'Cliente' },
       { key: 'tipo_protocolo', label: 'Tipo de Protocolo' },
       // data_criada = base do KPI/RPC mensal (obrigatória também p/ série por responsável)
@@ -253,7 +254,8 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'protocolado_em', label: 'Protocolado em' },
       { key: 'status_inconsistencia', label: 'Status' },
       { key: 'inconsistencia_juridico', label: 'Inconsistência - Jurídico' },
-      { key: 'inconsistencia_juridico_motivo', label: 'Motivo Inconsistência' },
+      { key: 'inconsistencia_juridico_motivo', label: 'Motivo Inconsistência', textoLongo: true },
+      { key: 'observacoes', label: 'Observações', textoLongo: true },
       { key: 'excludente', label: 'Excludente', virtual: true },
     ],
   },
