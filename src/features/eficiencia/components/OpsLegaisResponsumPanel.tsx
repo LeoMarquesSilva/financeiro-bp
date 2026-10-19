@@ -20,7 +20,7 @@ type Props = {
   data: OpsLegaisResponsumDashboard | null
   loading?: boolean
   error?: Error | null
-  /** Listas Concluídos / Pendentes (default true). Desligar na Apresentação. */
+  /** Avaliações, Pendentes e Concluídos (default true). Desligar na Apresentação. */
   showListas?: boolean
 }
 
@@ -256,10 +256,9 @@ export function OpsLegaisResponsumPanel({
         </section>
       </div>
 
-      <OpsLegaisResponsumAvaliacoes key={`${data.periodo.inicio}-${data.periodo.fim}-${data.atualizado_em ?? ""}`} items={data.avaliacoes_atencao} compact={!showListas} renderPerson={renderPerson} />
-
       {showListas ? (
       <div className="space-y-4">
+        <OpsLegaisResponsumAvaliacoes key={`${data.periodo.inicio}-${data.periodo.fim}-${data.atualizado_em ?? ""}`} items={data.avaliacoes_atencao} renderPerson={renderPerson} />
         <OpsLegaisResponsumPendentes groups={pendentes} updatedAt={data.atualizado_em} renderPerson={renderPerson} resolvePersonName={resolvePersonName} />
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center gap-2">

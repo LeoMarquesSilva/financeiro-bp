@@ -156,7 +156,7 @@ function AvaliacaoRow({ ticket, renderPerson }: { ticket: OpsLegaisResponsumAval
   </li>
 }
 
-export function OpsLegaisResponsumAvaliacoes({ items, compact = false, renderPerson }: { items: OpsLegaisResponsumAvaliacao[] | undefined; compact?: boolean; renderPerson: (name: string) => ReactNode }) {
+export function OpsLegaisResponsumAvaliacoes({ items, renderPerson }: { items: OpsLegaisResponsumAvaliacao[] | undefined; renderPerson: (name: string) => ReactNode }) {
   const [limit, setLimit] = useState(4)
   const [filters, setFilters] = useState<ResponsumAvaliacaoFilters>(defaultResponsumAvaliacaoFilters)
   const fieldId = useId()
@@ -199,7 +199,7 @@ export function OpsLegaisResponsumAvaliacoes({ items, compact = false, renderPer
       {invalidDates ? <p id={`${fieldId}-dates`} role="alert" className="mt-3 text-sm text-red-700">A data inicial deve ser anterior ou igual à data final.</p> : null}
     </div>
     <div className="flex items-center justify-between gap-3 bg-slate-50/60 px-4 py-3 text-sm text-slate-500 sm:px-6" aria-live="polite"><span>{filtered.length} de {relevant.length} {relevant.length === 1 ? 'avaliação' : 'avaliações'}</span>{hasFilters ? <button type="button" className={cn('rounded px-1 font-medium underline underline-offset-4', focus)} onClick={() => { setFilters(defaultResponsumAvaliacaoFilters); setLimit(4) }}>Limpar filtros</button> : null}</div>
-    <ul className={cn('grid [&>li]:border-b [&>li]:border-slate-200 lg:grid-cols-2 lg:[&>li:nth-child(even)]:border-l', compact && 'max-h-72 overflow-y-auto')}>{filtered.slice(0, limit).map(t => <AvaliacaoRow key={`${filtersKey}-${t.id ?? t.title}-${t.feedback_at}`} ticket={t} renderPerson={renderPerson} />)}</ul>
+    <ul className="grid [&>li]:border-b [&>li]:border-slate-200 lg:grid-cols-2 lg:[&>li:nth-child(even)]:border-l">{filtered.slice(0, limit).map(t => <AvaliacaoRow key={`${filtersKey}-${t.id ?? t.title}-${t.feedback_at}`} ticket={t} renderPerson={renderPerson} />)}</ul>
     {!filtered.length && !invalidDates ? <p className="px-6 py-8 text-center text-sm text-slate-500">{items === undefined ? 'Os detalhes das avaliações ainda não estão disponíveis.' : relevant.length ? 'Nenhuma avaliação corresponde aos filtros.' : 'Nenhuma avaliação com nota de 8 ou menos ou solicitação não atendida.'}</p> : null}
     {filtered.length > limit ? <div className="border-t border-slate-200 px-6 py-3 text-center"><button type="button" onClick={() => setLimit(n => n + 4)} className={cn('rounded-lg px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50', focus)}>Mostrar mais avaliações ({filtered.length - limit})</button></div> : null}
   </section>
