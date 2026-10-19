@@ -38,6 +38,8 @@ const LABEL_FAR_SHIFT = 40
 const LABEL_SEARCH_DX = [0, 8, -8, 16, -16, 24, -24, 32, -32] as const
 /** Raio do ponto que o rótulo não deve cobrir. */
 const POINT_CLEARANCE = 5
+/** Pontos quase na mesma altura não contam como "pulados" pelo rótulo. */
+const POINT_ORDER_TOLERANCE = 3
 
 function boxesOverlap(a: LabelBox, b: LabelBox, gap = 0) {
   return (
@@ -49,7 +51,7 @@ function boxesOverlap(a: LabelBox, b: LabelBox, gap = 0) {
 }
 
 type Segment = { key: string; x1: number; y1: number; x2: number; y2: number }
-type Point = { key: string; x: number; y: number }
+type Point = { key: string; index: number; x: number; y: number }
 
 /** Liang–Barsky: o trecho da linha passa por dentro da caixa do rótulo? */
 function segmentHitsBox(s: Segment, b: LabelBox): boolean {
@@ -191,6 +193,15 @@ export function ReceitaClusteredChartLabels<T>({
       xScale(category)
     if (rawX == null || !Number.isFinite(rawX)) return []
 
+    // Recebido costuma ficar logo abaixo do previsto: o rótulo do de cima vai acima
+    // do ponto e o do de baixo, abaixo. Quando as linhas se cruzam, os lados trocam.
+    const valorDe = (key: string) => series.find((s) => s.key === key)?.getValue(row) ?? null
+    const previsto = valorDe('previsto')
+    const recebido = valorDe('recebido')
+    const recebidoAcima = previsto != null && recebido != null && recebido > previsto
+    const abaixo = (key: string) =>
+      key === 'recebido' ? !recebidoAcima : key === 'previsto' ? recebidoAcima : false
+
     const cluster = series.flatMap((s) => {
       const value = s.getValue(row)
       if (value == null || !Number.isFinite(value) || value <= 0.005) return []
@@ -206,7 +217,7 @@ export function ReceitaClusteredChartLabels<T>({
           key: s.key,
           value,
           pointY,
-          preferBelow: s.key === 'recebido',
+          preferBelow: abaixo(s.key),
           boxHeight: chartLabelBoxHeight(secondaryText, fontSize),
           text: s.getText?.(row, value) ?? (percentMode ? formatPercent(value) : formatCurrency(value)),
           secondaryText,
@@ -244,14 +255,14 @@ export function ReceitaClusteredChartLabels<T>({
   const points: Point[] = []
   for (const s of series) {
     let prev: { x: number; y: number } | null = null
-    data.forEach((row) => {
+    data.forEach((row, index) => {
       const value = s.getValue(row)
       if (value == null || !Number.isFinite(value)) return
       const category = row[xKey] as string | number
       const x = xScale(category, { position: 'middle' }) ?? xScale(category)
       const y = yScale(value)
       if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) return
-      points.push({ key: s.key, x, y })
+      points.push({ key: s.key, index, x, y })
       if (prev) segments.push({ key: s.key, x1: prev.x, y1: prev.y, x2: x, y2: y })
       prev = { x, y }
     })
@@ -272,9 +283,20 @@ export function ReceitaClusteredChartLabels<T>({
     const rotulos = outros.filter((p) => boxesOverlap(box, p, LABEL_BOX_GAP)).length
     const linhas = segments.filter((s) => s.key !== item.key && segmentHitsBox(s, box)).length
     const pontos = points.filter((pt) => pointHitsBox(pt, box)).length
+    // Rótulo do outro lado do ponto de outra série (ex.: azul acima da linha roxa)
+    // parece pertencer à linha errada.
+    const fundo = top + item.boxHeight
+    const pulados = points.filter(
+      (pt) =>
+        pt.index === item.monthIndex &&
+        pt.key !== item.key &&
+        ((fundo <= item.pointY && pt.y > fundo && pt.y < item.pointY - POINT_ORDER_TOLERANCE) ||
+          (top >= item.pointY && pt.y < top && pt.y > item.pointY + POINT_ORDER_TOLERANCE)),
+    ).length
     const base = origem.get(item)!
     return (
       rotulos * 1000 +
+      pulados * 150 +
       (linhas + pontos) * 100 +
       distancia(Math.abs(top - base.top), boxX - base.boxX)
     )
