@@ -13,8 +13,8 @@ import {
 } from '../constants'
 import type { EficienciaOverview } from '../types/eficiencia.types'
 import { cellApresentacaoKpi, cellApresentacaoNps } from './apresentacaoMatrix'
+import { calcularAtingimentoMetaKpi } from '@/features/receita/utils/receitaAcumuladoChart'
 import {
-  cellApresentacaoCrescimentoReceita,
   cellApresentacaoIndiceInadimplencia,
   type ApresentacaoFinanceiroBundle,
 } from './apresentacaoFinanceiro'
@@ -168,6 +168,20 @@ function rowFromValue(
 }
 
 /**
+ * Receita do bônus: recebido dos meses do período ÷ meta anual (R$ 10 mi, Jun–Dez).
+ * Mesmo KPI "Atingimento da meta" da Receita — não a soma das metas só dos meses filtrados.
+ */
+function receitaBonusPct(
+  financeiro: ApresentacaoFinanceiroBundle | null | undefined,
+  ano: number,
+  meses: number[],
+): number | null {
+  if (!financeiro?.rows.length) return null
+  const atingimento = calcularAtingimentoMetaKpi(ano, financeiro.rows, new Date(), new Set(meses))
+  return atingimento.metaAnual > 0 ? atingimento.pct : null
+}
+
+/**
  * Monta o Programa de Bônus consolidado no período (visão escritório).
  * NPS vem da pesquisa única do OrqestrAI (não tem série mensal).
  */
@@ -183,12 +197,7 @@ export function buildApresentacaoBonus(
   const mesFiltro: MesFiltroEficiencia = meses
   const periodoLabel = labelPeriodoBonus(mesInicio, mesFim, ano)
 
-  const receitaCell = cellApresentacaoCrescimentoReceita(
-    '__consolidado__',
-    financeiro,
-    mesFiltro,
-    ano,
-  )
+  const receitaPct = receitaBonusPct(financeiro, ano, meses)
   const inadCell = cellApresentacaoIndiceInadimplencia(
     '__consolidado__',
     financeiro,
@@ -204,7 +213,7 @@ export function buildApresentacaoBonus(
       'receita',
       'Receita',
       EFICIENCIA_META_RECEITA_BRUTA,
-      receitaCell.value,
+      receitaPct,
       'maior',
     ),
     rowFromValue(
@@ -278,7 +287,6 @@ export function buildApresentacaoBonus(
     Math.round(indicadores.reduce((s, r) => s + r.contribuicao, 0) * 100) / 100
   const pesoTotal = Math.round(indicadores.reduce((s, r) => s + r.peso, 0) * 10) / 10
 
-  const receitaPct = receitaCell.value
   const portaAberta =
     receitaPct != null && receitaPct >= BONUS_GATILHO_RECEITA_PCT
 
