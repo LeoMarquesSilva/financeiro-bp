@@ -9,11 +9,12 @@ const TABLE_MIN_WIDTH =
   COL_TITLE_WIDTH + MESES_EFICIENCIA.length * COL_MES_WIDTH + COL_ACUM_WIDTH
 
 const META_ENTREGAS = 6
-/** Entregas no mês. Julho = 1 (16,67%). Junho e agosto fecharam sem entrega (0,00%). */
+/** Entregas no mês. Julho = 1 (16,67%). Junho, agosto e setembro fecharam sem entrega (0,00%). */
 const ENTREGAS_POR_MES: Partial<Record<number, number>> = {
   6: 0,
   7: 1,
   8: 0,
+  9: 0,
 }
 /** Acum. = única entrega (julho), 1/6 da meta. */
 const PCT_ACUM = (1 / META_ENTREGAS) * 100
