@@ -236,6 +236,15 @@ export interface OpsLegaisIniciativasProjeto {
   data: string | null
   /** Tarefa pai concluída no FORJAI (payload edge `ops-legais-iniciativas`). */
   concluido?: boolean
+  /** Estágio no FORJAI (ex.: Em desenvolvimento). */
+  etapa?: string
+  /** Classe da avaliação atual (urgent, high, normal, low, backlog); null = sem avaliação. */
+  prioridade?: string | null
+  score?: number | null
+  /** Posição no ranking de prioridade do FORJAI. */
+  rank_prioridade?: number | null
+  /** Prazo planejado (target_date). */
+  prazo?: string | null
   subtarefas: OpsLegaisIniciativasSubtarefa[]
   total_sub: number
   sub_concluidas: number

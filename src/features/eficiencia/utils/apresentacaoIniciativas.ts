@@ -5,7 +5,11 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
-import type { OpsLegaisIniciativasDashboard, OpsLegaisIniciativasItem } from '../types/eficiencia.types'
+import type {
+  OpsLegaisIniciativasDashboard,
+  OpsLegaisIniciativasItem,
+  OpsLegaisIniciativasProjeto,
+} from '../types/eficiencia.types'
 import { formatPercent } from '@/shared/utils/format'
 
 /** Meta de iniciativas estratégicas em cada mês. */
@@ -40,6 +44,20 @@ export type IniciativasEntrega = {
   destaque: boolean
 }
 
+/** Classe de prioridade do FORJAI; `null` = projeto sem avaliação. */
+export type IniciativaPrioridade = 'urgent' | 'high' | 'normal' | 'low' | 'backlog'
+
+export type IniciativaAndamento = {
+  id: string
+  nome: string
+  etapa: string
+  prioridade: IniciativaPrioridade | null
+  score: number | null
+  responsavel: string
+  prazo: string | null
+  prazoLabel: string
+}
+
 export type ApresentacaoIniciativasData = {
   ano: number
   meta: number
@@ -49,6 +67,8 @@ export type ApresentacaoIniciativasData = {
   /** Meses com movimento (ou até o destaque). */
   evolucaoAtiva: IniciativasMesEvo[]
   entregas: IniciativasEntrega[]
+  /** Projetos em andamento no FORJAI, na ordem do ranking de prioridade. */
+  andamento: IniciativaAndamento[]
   totais: {
     total: number
     projetos: number
@@ -79,6 +99,36 @@ function formatDataBr(iso: string | null): string {
   const [y, m, d] = iso.split('-')
   if (!y || !m || !d) return iso
   return `${d}/${m}/${y}`
+}
+
+const PRIORIDADES: readonly IniciativaPrioridade[] = ['urgent', 'high', 'normal', 'low', 'backlog']
+
+function prioridadeOuNull(v: string | null | undefined): IniciativaPrioridade | null {
+  return PRIORIDADES.includes(v as IniciativaPrioridade) ? (v as IniciativaPrioridade) : null
+}
+
+/** Ranking do FORJAI primeiro (score); sem avaliação no fim, por nome. */
+function buildAndamento(projetos: OpsLegaisIniciativasProjeto[]): IniciativaAndamento[] {
+  return [...projetos]
+    .sort((a, b) => {
+      const ra = a.rank_prioridade ?? Number.POSITIVE_INFINITY
+      const rb = b.rank_prioridade ?? Number.POSITIVE_INFINITY
+      if (ra !== rb) return ra - rb
+      const sa = a.score ?? Number.NEGATIVE_INFINITY
+      const sb = b.score ?? Number.NEGATIVE_INFINITY
+      if (sa !== sb) return sb - sa
+      return a.nome.localeCompare(b.nome, 'pt-BR')
+    })
+    .map((p) => ({
+      id: p.id,
+      nome: p.nome,
+      etapa: p.etapa ?? '',
+      prioridade: prioridadeOuNull(p.prioridade),
+      score: p.score ?? null,
+      responsavel: p.responsavel,
+      prazo: p.prazo ?? null,
+      prazoLabel: p.prazo ? formatDataBr(p.prazo) : '',
+    }))
 }
 
 /** Último mês do filtro (ou mês corrente / dez se ano passado). */
@@ -202,6 +252,7 @@ export function buildApresentacaoIniciativas(
     evolucao,
     evolucaoAtiva: evolucaoAtiva.length > 0 ? evolucaoAtiva : evolucao.slice(0, mesDestaque),
     entregas,
+    andamento: buildAndamento(dash.painel?.andamento ?? []),
     totais: {
       total,
       projetos,

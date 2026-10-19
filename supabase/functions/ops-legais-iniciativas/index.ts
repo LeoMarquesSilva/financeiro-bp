@@ -42,9 +42,17 @@ type ProjectRow = {
   project_type: string | null
   completed_at: string | null
   production_date: string | null
+  target_date: string | null
   owner_user_id: string | null
   stage_id: string | null
   archived_at: string | null
+}
+
+type PriorityRow = {
+  project_id: string
+  score_total: number | null
+  priority_class: string | null
+  rank: number | null
 }
 
 type TaskRow = {
@@ -79,6 +87,15 @@ type ProjetoOut = {
   responsavel: string
   data: string | null
   concluido: boolean
+  /** Nome do estágio no FORJAI (ex.: Em desenvolvimento). */
+  etapa: string
+  /** Classe da avaliação atual (urgent, high, normal, low, backlog); null = sem avaliação. */
+  prioridade: string | null
+  score: number | null
+  /** Posição no ranking de prioridade do FORJAI (v_project_priority_current). */
+  rank_prioridade: number | null
+  /** Prazo planejado (target_date). */
+  prazo: string | null
   subtarefas: SubtarefaOut[]
   total_sub: number
   sub_concluidas: number
@@ -216,12 +233,13 @@ Deno.serve(async (req) => {
       { data: profiles, error: profilesErr },
       { data: assignees, error: assigneesErr },
       { data: times, error: timesErr },
+      { data: priorities, error: prioritiesErr },
     ] = await Promise.all([
       forjai.from('project_stages').select('id,slug,name,counts_as_delivery,is_terminal'),
       forjai
         .from('projects')
         .select(
-          'id,name,slug,project_type,completed_at,production_date,owner_user_id,stage_id,archived_at',
+          'id,name,slug,project_type,completed_at,production_date,target_date,owner_user_id,stage_id,archived_at',
         )
         .is('archived_at', null),
       forjai
@@ -231,11 +249,17 @@ Deno.serve(async (req) => {
       forjai.from('profiles').select('id,full_name,email'),
       forjai.from('task_assignees').select('task_id,user_id'),
       forjai.from('time_entries').select('project_id,duration_seconds'),
+      forjai.from('v_project_priority_current').select('project_id,score_total,priority_class,rank'),
     ])
 
     const firstErr =
       stagesErr ?? projectsErr ?? tasksErr ?? statusesErr ?? profilesErr ?? assigneesErr ?? timesErr
     if (firstErr) throw new Error(firstErr.message)
+    // Prioridade é complementar: sem ela o painel segue, só sem score.
+    if (prioritiesErr) console.error('[ops-legais-iniciativas] prioridade:', prioritiesErr.message)
+    const priorityByProject = new Map(
+      (prioritiesErr ? [] : (priorities as PriorityRow[] ?? [])).map((p) => [p.project_id, p]),
+    )
 
     const stageById = new Map((stages as StageRow[] ?? []).map((s) => [s.id, s]))
     const statusById = new Map((statuses as StatusRow[] ?? []).map((s) => [s.id, s]))
@@ -321,6 +345,7 @@ Deno.serve(async (req) => {
         const raw = (tasksByProject.get(p.id) ?? []).find((t) => t.id === s.id)
         return raw ? taskDone(raw) : false
       }).length
+      const prioridade = priorityByProject.get(p.id)
       return {
         id: p.id,
         nome: p.name,
@@ -330,6 +355,11 @@ Deno.serve(async (req) => {
         responsavel: ownerName(p),
         data: deliveryDate(p, stageById.get(p.stage_id ?? '')),
         concluido,
+        etapa: stageById.get(p.stage_id ?? '')?.name ?? '',
+        prioridade: prioridade?.priority_class ?? null,
+        score: prioridade?.score_total ?? null,
+        rank_prioridade: prioridade?.rank ?? null,
+        prazo: isoDate(p.target_date),
         subtarefas,
         total_sub: subtarefas.length,
         sub_concluidas: subOk,

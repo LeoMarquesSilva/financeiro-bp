@@ -1,6 +1,9 @@
+import { useState, type CSSProperties } from 'react'
 import { MESES_EFICIENCIA, type MesFiltroEficiencia } from '../constants'
 import {
   type ApresentacaoIniciativasData,
+  type IniciativaAndamento,
+  type IniciativaPrioridade,
   type IniciativasMesEvo,
 } from '../utils/apresentacaoIniciativas'
 import { MesFilterButtons } from './MesFilterButtons'
@@ -8,6 +11,21 @@ import { MesFilterButtons } from './MesFilterButtons'
 const GOLD = '#D5B170'
 const GOLD_DARK = '#C6A361'
 const HEADER_BG = '#333f48'
+const NAVY = '#0E2841'
+
+type VisaoIniciativas = 'resumo' | 'andamento'
+
+const PRIORIDADE_ESTILO: Record<
+  IniciativaPrioridade | 'sem',
+  { label: string; background: string; color: string }
+> = {
+  urgent: { label: 'Urgente', background: '#F8D7D3', color: '#C0392B' },
+  high: { label: 'Alta', background: '#FCEFC7', color: '#9C6F0B' },
+  normal: { label: 'Normal', background: '#FDF3D6', color: '#1F5FA8' },
+  low: { label: 'Baixa', background: '#DCE6F1', color: '#1F5FA8' },
+  backlog: { label: 'Backlog', background: '#EDEFF2', color: '#64748B' },
+  sem: { label: 'Sem avaliação', background: '#D9D9D9', color: '#595959' },
+}
 
 function cellBg(atingiu: boolean): { background: string; color: string } {
   if (atingiu) return { background: '#ECFDF3', color: '#059669' }
@@ -190,6 +208,140 @@ function IniciativasEvolucaoFaixa({
   )
 }
 
+const thAndamento: CSSProperties = {
+  padding: '7px 8px',
+  fontSize: 13,
+  fontWeight: 700,
+  color: '#FFFFFF',
+  textAlign: 'center',
+  whiteSpace: 'nowrap',
+}
+
+const tdAndamento: CSSProperties = {
+  padding: '3px 8px',
+  fontSize: 13,
+  color: '#1F2937',
+  textAlign: 'center',
+  whiteSpace: 'nowrap',
+}
+
+function ADefinir() {
+  return <span style={{ fontStyle: 'italic', color: '#A6A6A6' }}>A definir</span>
+}
+
+function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] }) {
+  return (
+    <div
+      data-overview-copy-card
+      data-chart-export-preserve-bg
+      style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+    >
+      <table
+        data-iniciativas-andamento
+        style={{
+          width: '100%',
+          tableLayout: 'fixed',
+          borderCollapse: 'collapse',
+          fontFamily: 'Segoe UI, system-ui, sans-serif',
+        }}
+      >
+        <colgroup>
+          <col style={{ width: '4%' }} />
+          <col style={{ width: '33%' }} />
+          <col style={{ width: '13%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '20%' }} />
+          <col style={{ width: '11%' }} />
+        </colgroup>
+        <thead>
+          <tr style={{ background: NAVY }}>
+            <th style={thAndamento}>#</th>
+            <th style={{ ...thAndamento, textAlign: 'left' }}>Projeto</th>
+            <th style={thAndamento}>Etapa</th>
+            <th style={thAndamento}>Prioridade</th>
+            <th style={thAndamento}>Score</th>
+            <th style={thAndamento}>Responsável</th>
+            <th style={thAndamento}>Prazo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {itens.length === 0 ? (
+            <tr>
+              <td colSpan={7} style={{ ...tdAndamento, padding: '12px 8px', color: '#94A3B8' }}>
+                Nenhum projeto em andamento
+              </td>
+            </tr>
+          ) : (
+            itens.map((p, i) => {
+              const prio = PRIORIDADE_ESTILO[p.prioridade ?? 'sem']
+              return (
+                <tr key={p.id}>
+                  <td style={{ ...tdAndamento, color: '#7F7F7F' }}>{i + 1}</td>
+                  <td
+                    title={p.nome}
+                    style={{
+                      ...tdAndamento,
+                      textAlign: 'left',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {p.nome}
+                  </td>
+                  <td
+                    style={{
+                      ...tdAndamento,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: '#595959',
+                      background: '#D9D9D9',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {p.etapa || <ADefinir />}
+                  </td>
+                  <td
+                    style={{
+                      ...tdAndamento,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: prio.color,
+                      background: prio.background,
+                    }}
+                  >
+                    {prio.label}
+                  </td>
+                  <td
+                    style={{
+                      ...tdAndamento,
+                      fontWeight: 700,
+                      color: '#0F172A',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {p.score != null ? p.score : <ADefinir />}
+                  </td>
+                  <td
+                    title={p.responsavel || undefined}
+                    style={{ ...tdAndamento, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  >
+                    {p.responsavel || <ADefinir />}
+                  </td>
+                  <td style={{ ...tdAndamento, fontVariantNumeric: 'tabular-nums' }}>
+                    {p.prazoLabel || <ADefinir />}
+                  </td>
+                </tr>
+              )
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export function ApresentacaoIniciativasBloco({
   data,
   loading,
@@ -198,6 +350,8 @@ export function ApresentacaoIniciativasBloco({
   mesFiltro,
   onMesFiltroChange,
 }: Props) {
+  const [visao, setVisao] = useState<VisaoIniciativas>('resumo')
+
   return (
     <div
       style={{
@@ -222,17 +376,57 @@ export function ApresentacaoIniciativasBloco({
           background: '#FFFFFF',
         }}
       >
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
-          Período Iniciativas (independente do filtro global)
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Ver</span>
+          {(
+            [
+              ['resumo', 'Resumo'],
+              ['andamento', 'Em andamento'],
+            ] as const
+          ).map(([id, label]) => {
+            const ativo = visao === id
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={ativo}
+                onClick={() => setVisao(id)}
+                style={{
+                  height: 28,
+                  borderRadius: 6,
+                  border: ativo ? '1px solid #1D4ED8' : '1px solid #CBD5E1',
+                  background: ativo ? '#EFF6FF' : '#fff',
+                  padding: '0 10px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: ativo ? '#1D4ED8' : '#334155',
+                  cursor: 'pointer',
+                }}
+              >
+                {label}
+              </button>
+            )
+          })}
         </span>
-        <MesFilterButtons
-          value={mesFiltro}
-          onChange={onMesFiltroChange}
-          showSemanas={false}
-          showResultado={false}
-          showDiaPicker={false}
-          ano={ano}
-        />
+        {visao === 'resumo' ? (
+          <>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
+              Período Iniciativas (independente do filtro global)
+            </span>
+            <MesFilterButtons
+              value={mesFiltro}
+              onChange={onMesFiltroChange}
+              showSemanas={false}
+              showResultado={false}
+              showDiaPicker={false}
+              ano={ano}
+            />
+          </>
+        ) : (
+          <span style={{ fontSize: 11, color: '#64748B' }}>
+            Projetos em andamento hoje no FORJAI, pela ordem de prioridade.
+          </span>
+        )}
       </div>
 
     <div
@@ -271,6 +465,8 @@ export function ApresentacaoIniciativasBloco({
             />
           ))}
         </div>
+      ) : visao === 'andamento' ? (
+        <IniciativasAndamentoTabela itens={data.andamento} />
       ) : (
         <>
           <IniciativasEvolucaoFaixa
