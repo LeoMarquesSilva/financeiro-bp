@@ -414,11 +414,11 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
           <tr style={{ background: GOLD_DARK, color: '#fff' }}>
             <th style={{ ...thAndamento, textAlign: 'center' }}>#</th>
             <th style={thAndamento}>Projeto</th>
-            <th style={thAndamento}>Etapa</th>
+            <th style={{ ...thAndamento, textAlign: 'center' }}>Etapa</th>
             <th style={{ ...thAndamento, textAlign: 'center' }}>Prioridade</th>
-            <th style={{ ...thAndamento, textAlign: 'right' }}>Score</th>
-            <th style={thAndamento}>Responsável</th>
-            <th style={{ ...thAndamento, textAlign: 'right' }}>Prazo</th>
+            <th style={{ ...thAndamento, textAlign: 'center' }}>Score</th>
+            <th style={{ ...thAndamento, textAlign: 'center' }}>Responsável</th>
+            <th style={{ ...thAndamento, textAlign: 'center' }}>Prazo</th>
           </tr>
         </thead>
         <tbody>
@@ -441,7 +441,10 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
                   >
                     {p.nome}
                   </td>
-                  <td title={p.etapa || undefined} style={{ ...tdAndamento, color: '#475569' }}>
+                  <td
+                    title={p.etapa || undefined}
+                    style={{ ...tdAndamento, textAlign: 'center', color: '#475569' }}
+                  >
                     {p.etapa || <ADefinir />}
                   </td>
                   {/* Fundo na célula inteira: etiqueta inline-block saía deslocada no PPT. */}
@@ -459,7 +462,7 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
                   <td
                     style={{
                       ...tdAndamento,
-                      textAlign: 'right',
+                      textAlign: 'center',
                       fontWeight: 700,
                       color: '#0F172A',
                       fontVariantNumeric: 'tabular-nums',
@@ -467,10 +470,13 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
                   >
                     {p.score != null ? p.score : <ADefinir />}
                   </td>
-                  <td title={p.responsavel || undefined} style={{ ...tdAndamento, color: '#475569' }}>
+                  <td
+                    title={p.responsavel || undefined}
+                    style={{ ...tdAndamento, textAlign: 'center', color: '#475569' }}
+                  >
                     {p.responsavel || <ADefinir />}
                   </td>
-                  <td style={{ ...tdAndamento, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  <td style={{ ...tdAndamento, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
                     {p.prazoLabel || <ADefinir />}
                   </td>
                 </tr>
