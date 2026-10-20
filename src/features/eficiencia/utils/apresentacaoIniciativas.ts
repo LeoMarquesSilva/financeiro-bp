@@ -27,7 +27,12 @@ export type IniciativasMesEvo = {
   metaMensal: number
   pctMes: number
   pctMesLabel: string
+  /** Mês bateu 2 entregas, ou a meta anual já estava batida. */
   atingiu: boolean
+  /** Acumulado do ano já chegou à meta anual. */
+  metaAnualBatida: boolean
+  /** Primeiro mês em que o acumulado chegou à meta anual. */
+  mesMetaBatida: boolean
   destaque: boolean
 }
 
@@ -188,10 +193,14 @@ export function buildApresentacaoIniciativas(
   }
 
   let ytd = 0
+  let metaBatidaAntes = false
   const evolucao: IniciativasMesEvo[] = buckets.map((b, i) => {
     const mes = i + 1
     ytd += b.total
     const pctYtd = meta > 0 ? (ytd / meta) * 100 : 0
+    const metaAnualBatida = meta > 0 && ytd >= meta
+    const mesMetaBatida = metaAnualBatida && !metaBatidaAntes
+    metaBatidaAntes = metaAnualBatida
     const pctMes =
       INICIATIVAS_META_MENSAL > 0 ? (b.total / INICIATIVAS_META_MENSAL) * 100 : 0
     return {
@@ -206,7 +215,10 @@ export function buildApresentacaoIniciativas(
       metaMensal: INICIATIVAS_META_MENSAL,
       pctMes,
       pctMesLabel: formatPercent(pctMes),
-      atingiu: b.total >= INICIATIVAS_META_MENSAL,
+      // Depois de bater a meta anual, mês abaixo de 2 não fica vermelho.
+      atingiu: b.total >= INICIATIVAS_META_MENSAL || metaAnualBatida,
+      metaAnualBatida,
+      mesMetaBatida,
       destaque: mes === mesDestaque,
     }
   })

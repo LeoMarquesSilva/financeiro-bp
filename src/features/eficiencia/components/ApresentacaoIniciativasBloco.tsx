@@ -135,7 +135,11 @@ function IniciativasEvolucaoFaixa({
               key={m.mes}
               style={{
                 ...st,
-                border: m.destaque ? `2px solid ${GOLD_DARK}` : '1px solid #E2E8F0',
+                border: m.destaque
+                  ? `2px solid ${GOLD_DARK}`
+                  : m.mesMetaBatida
+                    ? '2px solid #059669'
+                    : '1px solid #E2E8F0',
                 borderRadius: 8,
                 display: 'flex',
                 flexDirection: 'column',
@@ -171,6 +175,23 @@ function IniciativasEvolucaoFaixa({
               >
                 {m.pctMesLabel}
               </div>
+              {m.mesMetaBatida ? (
+                <div
+                  title="Meta anual batida neste mês"
+                  style={{
+                    width: '100%',
+                    fontSize: 7,
+                    fontWeight: 800,
+                    lineHeight: 1.05,
+                    letterSpacing: '0.04em',
+                    color: '#047857',
+                    whiteSpace: 'nowrap',
+                    textAlign: 'center',
+                  }}
+                >
+                  ✓ META
+                </div>
+              ) : null}
             </div>
           )
         })}
