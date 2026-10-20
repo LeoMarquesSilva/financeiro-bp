@@ -25,7 +25,7 @@ import {
   mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
-import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
+import { useInadimplenciaAoVivo, useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
 import { useNpsKpi } from '../hooks/useEficiencia'
 import type { EficienciaOverview, RacionalIndicador } from '../types/eficiencia.types'
 import {
@@ -176,6 +176,11 @@ export function OverviewTab({
   const periodoCurtoAtivo = isPeriodoCurtoFiltro(mesFiltro)
   const { data: financeiroKpis, isLoading: loadingFinanceiroKpis } = useOverviewFinanceiroKpis(
     ano,
+    !loading && data != null,
+  )
+  const { data: inadAoVivo, isLoading: loadingInadAoVivo } = useInadimplenciaAoVivo(
+    ano,
+    mesFiltro,
     !loading && data != null,
   )
   const { data: npsKpi, loading: loadingNps } = useNpsKpi(ano)
@@ -415,7 +420,7 @@ export function OverviewTab({
     ? buildOverviewReceitaBruta(financeiroKpis.meses, financeiroKpis.rows, ano, mesFiltro)
     : null
   const inadimplenciaOverview = financeiroKpis
-    ? buildOverviewInadimplencia(financeiroKpis.meses, mesFiltro, ano)
+    ? buildOverviewInadimplencia(financeiroKpis.meses, inadAoVivo)
     : null
 
   const cellsReceitaBruta = aplicarCelulasFiltro(
@@ -709,7 +714,9 @@ export function OverviewTab({
               : cellsInadimplencia
           }
           acumulado={
-            loadingFinanceiroKpis ? { value: null, label: '…' } : acumuladoInadimplencia
+            loadingFinanceiroKpis || loadingInadAoVivo
+              ? { value: null, label: '…' }
+              : acumuladoInadimplencia
           }
           onRacionalClick={() => setRacionalAberto('indice_inadimplencia')}
         />

@@ -9,7 +9,7 @@ import {
   mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
-import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
+import { useInadimplenciaAoVivo, useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
 import { buildOverviewInadimplencia } from '../utils/overviewFinanceiroKpis'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
@@ -35,10 +35,13 @@ export function InadimplenciaTab({
 }: Props) {
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { data, isLoading } = useOverviewFinanceiroKpis(ano)
-  const overview = data ? buildOverviewInadimplencia(data.meses, mesFiltro, ano) : null
   const filtroGav = filtroEfetivoGestaoAVista(ano)
+  const { data: aoVivo, isLoading: loadingAoVivo } = useInadimplenciaAoVivo(ano, mesFiltro)
+  const { data: aoVivoGestaoVista, isLoading: loadingAoVivoGestaoVista } =
+    useInadimplenciaAoVivo(ano, filtroGav)
+  const overview = data ? buildOverviewInadimplencia(data.meses, aoVivo) : null
   const overviewGestaoVista = data
-    ? buildOverviewInadimplencia(data.meses, filtroGav, ano)
+    ? buildOverviewInadimplencia(data.meses, aoVivoGestaoVista)
     : null
 
   const mesesEscopo = (data?.meses ?? []).filter(
@@ -69,10 +72,10 @@ export function InadimplenciaTab({
               ? formatPercent(overviewGestaoVista.acumulado.value)
               : '—'
           }
-          hint="Saldo ÷ previsto · jun→hoje"
+          hint="Saldo ao vivo ÷ previsto · jun→hoje"
           icon={AlertTriangle}
           accentClass="bg-slate-100 text-slate-700"
-          loading={isLoading}
+          loading={isLoading || loadingAoVivoGestaoVista}
         />
         <EficienciaKpiCard
           title="Índice de Inadimplência no período selecionado"
@@ -81,30 +84,26 @@ export function InadimplenciaTab({
               ? formatPercent(overview.acumulado.value)
               : '—'
           }
-          hint="Saldo ÷ previsto · meses filtrados"
+          hint="Saldo ao vivo ÷ previsto · meses filtrados"
           icon={AlertTriangle}
           accentClass="bg-amber-100 text-amber-800"
-          loading={isLoading}
+          loading={isLoading || loadingAoVivo}
         />
         <EficienciaKpiCard
           title="Saldo inadimplência (período selecionado)"
           value={
-            data
+            aoVivo
               ? new Intl.NumberFormat('pt-BR', {
                   style: 'currency',
                   currency: 'BRL',
                   maximumFractionDigits: 0,
-                }).format(
-                  mesesEscopo.reduce(
-                    (s: number, m: GestaoVistaMesRow) => s + (m.inadimplencia ?? 0),
-                    0,
-                  ),
-                )
+                }).format(aoVivo.valor)
               : '—'
           }
+          hint="Saldo ao vivo do período (com baixa de pagamento posterior)"
           icon={AlertTriangle}
           accentClass="bg-slate-100 text-slate-700"
-          loading={isLoading}
+          loading={loadingAoVivo}
         />
       </div>
 
