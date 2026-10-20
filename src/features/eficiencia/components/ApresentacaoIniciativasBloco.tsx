@@ -11,7 +11,6 @@ import { MesFilterButtons } from './MesFilterButtons'
 const GOLD = '#D5B170'
 const GOLD_DARK = '#C6A361'
 const HEADER_BG = '#333f48'
-const NAVY = '#0E2841'
 
 type VisaoIniciativas = 'resumo' | 'andamento'
 
@@ -208,67 +207,271 @@ function IniciativasEvolucaoFaixa({
   )
 }
 
+/** Ordem das colunas da faixa de prioridades (mesmo papel dos meses no Resumo). */
+const PRIORIDADE_ORDEM: readonly (IniciativaPrioridade | 'sem')[] = [
+  'urgent',
+  'high',
+  'normal',
+  'low',
+  'backlog',
+  'sem',
+]
+
+/** Card branco dos quadros do Resumo (Evolução mês a mês / Entregas). */
+const cardAndamento: CSSProperties = {
+  borderRadius: 10,
+  border: '1px solid #E2E8F0',
+  background: '#FFFFFF',
+  padding: '10px 12px',
+  printColorAdjust: 'exact',
+  WebkitPrintColorAdjust: 'exact',
+}
+
+const cardTituloAndamento: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  textTransform: 'uppercase',
+  letterSpacing: '0.02em',
+  color: '#0F172A',
+  marginBottom: 8,
+}
+
 const thAndamento: CSSProperties = {
-  padding: '7px 8px',
-  fontSize: 13,
+  padding: '5px 6px',
   fontWeight: 700,
-  color: '#FFFFFF',
-  textAlign: 'center',
+  textAlign: 'left',
   whiteSpace: 'nowrap',
 }
 
 const tdAndamento: CSSProperties = {
-  padding: '3px 8px',
-  fontSize: 13,
-  color: '#1F2937',
-  textAlign: 'center',
+  padding: '4px 6px',
+  color: '#334155',
   whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+}
+
+function zebra(i: number): string {
+  return i % 2 === 1 ? '#F8FAFC' : '#FFF'
+}
+
+function pctDe(qtd: number, total: number): string {
+  return total > 0 ? `${Math.round((qtd / total) * 100)}%` : '-'
 }
 
 function ADefinir() {
   return <span style={{ fontStyle: 'italic', color: '#A6A6A6' }}>A definir</span>
 }
 
-function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] }) {
+/** Faixa do topo no formato da Evolução do Resumo: prioridades no lugar dos meses, total no lugar do acumulado. */
+function IniciativasAndamentoFaixa({ itens }: { itens: IniciativaAndamento[] }) {
+  const total = itens.length
+  const colunas = `minmax(280px, 1.6fr) repeat(${PRIORIDADE_ORDEM.length}, minmax(52px, 1fr)) minmax(88px, 0.9fr)`
+
   return (
     <div
       data-overview-copy-card
       data-chart-export-preserve-bg
-      style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: colunas,
+        gap: 4,
+        width: '100%',
+        alignItems: 'stretch',
+        printColorAdjust: 'exact',
+        WebkitPrintColorAdjust: 'exact',
+      }}
     >
-      <table
-        data-iniciativas-andamento
+      <div />
+      {PRIORIDADE_ORDEM.map((k) => (
+        <div
+          key={k}
+          style={{
+            background: HEADER_BG,
+            color: '#fff',
+            borderRadius: 6,
+            padding: '6px 4px',
+            textAlign: 'center',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.02em',
+            textTransform: 'uppercase',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {PRIORIDADE_ESTILO[k].label}
+        </div>
+      ))}
+      <div
         style={{
-          width: '100%',
-          tableLayout: 'fixed',
-          borderCollapse: 'collapse',
-          fontFamily: 'Segoe UI, system-ui, sans-serif',
+          background: GOLD,
+          color: '#1F2937',
+          borderRadius: 6,
+          padding: '6px 4px',
+          textAlign: 'center',
+          fontSize: 9,
+          fontWeight: 800,
+          letterSpacing: '0.04em',
         }}
       >
+        TOTAL
+      </div>
+
+      <div
+        data-iniciativas-faixa-rotulo
+        style={{
+          display: 'grid',
+          placeItems: 'center',
+          background: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: 8,
+          padding: '8px 12px',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          data-iniciativas-faixa-titulo
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: '#1F2937',
+            lineHeight: 1.2,
+            textAlign: 'center',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Projetos em andamento
+        </div>
+      </div>
+
+      {PRIORIDADE_ORDEM.map((k) => {
+        const qtd = itens.filter((p) => (p.prioridade ?? 'sem') === k).length
+        const st = PRIORIDADE_ESTILO[k]
+        return (
+          <div
+            key={k}
+            style={{
+              background: qtd > 0 ? st.background : '#F8FAFC',
+              color: qtd > 0 ? st.color : '#94A3B8',
+              border: '1px solid #E2E8F0',
+              borderRadius: 8,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 2,
+              padding: '4px 2px',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.05 }}>{qtd}</div>
+            <div style={{ fontSize: 7, fontWeight: 600, lineHeight: 1.05 }}>
+              {pctDe(qtd, total)}
+            </div>
+          </div>
+        )
+      })}
+
+      <div
+        style={{
+          background: '#F8F1E3',
+          border: `2px solid ${GOLD_DARK}`,
+          borderRadius: 8,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '6px 4px',
+          fontSize: 16,
+          fontWeight: 800,
+          color: '#1F2937',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {total}
+      </div>
+    </div>
+  )
+}
+
+function IniciativasAndamentoPorEtapa({ itens }: { itens: IniciativaAndamento[] }) {
+  const porEtapa = new Map<string, number>()
+  for (const p of itens) {
+    const etapa = p.etapa || 'A definir'
+    porEtapa.set(etapa, (porEtapa.get(etapa) ?? 0) + 1)
+  }
+  const linhas = [...porEtapa.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'),
+  )
+
+  return (
+    <div data-overview-copy-card data-chart-export-preserve-bg style={cardAndamento}>
+      <div style={cardTituloAndamento}>Por etapa</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+        <thead>
+          <tr style={{ background: GOLD_DARK, color: '#fff' }}>
+            <th style={thAndamento}>Etapa</th>
+            <th style={{ ...thAndamento, textAlign: 'right' }}>Projetos</th>
+            <th style={{ ...thAndamento, textAlign: 'right' }}>%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.length === 0 ? (
+            <tr>
+              <td colSpan={3} style={{ padding: '10px 6px', color: '#94A3B8', textAlign: 'center' }}>
+                Nenhum projeto em andamento
+              </td>
+            </tr>
+          ) : (
+            linhas.map(([etapa, qtd], i) => (
+              <tr key={etapa} style={{ background: zebra(i) }}>
+                <td style={tdAndamento}>{etapa}</td>
+                <td style={{ ...tdAndamento, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {qtd}
+                </td>
+                <td style={{ ...tdAndamento, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {pctDe(qtd, itens.length)}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] }) {
+  return (
+    <div data-overview-copy-card data-chart-export-preserve-bg style={cardAndamento}>
+      <div style={cardTituloAndamento}>Projetos em andamento</div>
+      <table
+        data-iniciativas-entregas
+        style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 11 }}
+      >
         <colgroup>
-          <col style={{ width: '4%' }} />
-          <col style={{ width: '33%' }} />
-          <col style={{ width: '13%' }} />
+          <col style={{ width: '5%' }} />
+          <col style={{ width: '35%' }} />
+          <col style={{ width: '15%' }} />
           <col style={{ width: '12%' }} />
           <col style={{ width: '7%' }} />
-          <col style={{ width: '20%' }} />
+          <col style={{ width: '15%' }} />
           <col style={{ width: '11%' }} />
         </colgroup>
         <thead>
-          <tr style={{ background: NAVY }}>
-            <th style={thAndamento}>#</th>
-            <th style={{ ...thAndamento, textAlign: 'left' }}>Projeto</th>
+          <tr style={{ background: GOLD_DARK, color: '#fff' }}>
+            <th style={{ ...thAndamento, textAlign: 'center' }}>#</th>
+            <th style={thAndamento}>Projeto</th>
             <th style={thAndamento}>Etapa</th>
-            <th style={thAndamento}>Prioridade</th>
-            <th style={thAndamento}>Score</th>
+            <th style={{ ...thAndamento, textAlign: 'center' }}>Prioridade</th>
+            <th style={{ ...thAndamento, textAlign: 'right' }}>Score</th>
             <th style={thAndamento}>Responsável</th>
-            <th style={thAndamento}>Prazo</th>
+            <th style={{ ...thAndamento, textAlign: 'right' }}>Prazo</th>
           </tr>
         </thead>
         <tbody>
           {itens.length === 0 ? (
             <tr>
-              <td colSpan={7} style={{ ...tdAndamento, padding: '12px 8px', color: '#94A3B8' }}>
+              <td colSpan={7} style={{ padding: '10px 6px', color: '#94A3B8', textAlign: 'center' }}>
                 Nenhum projeto em andamento
               </td>
             </tr>
@@ -276,46 +479,37 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
             itens.map((p, i) => {
               const prio = PRIORIDADE_ESTILO[p.prioridade ?? 'sem']
               return (
-                <tr key={p.id}>
-                  <td style={{ ...tdAndamento, color: '#7F7F7F' }}>{i + 1}</td>
+                <tr key={p.id} style={{ background: zebra(i) }}>
+                  <td style={{ ...tdAndamento, textAlign: 'center', color: '#94A3B8' }}>{i + 1}</td>
                   <td
+                    data-iniciativas-entrega-nome
                     title={p.nome}
-                    style={{
-                      ...tdAndamento,
-                      textAlign: 'left',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
+                    style={{ ...tdAndamento, color: '#0F172A', maxWidth: 0 }}
                   >
                     {p.nome}
                   </td>
-                  <td
-                    style={{
-                      ...tdAndamento,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: '#595959',
-                      background: '#D9D9D9',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
+                  <td title={p.etapa || undefined} style={{ ...tdAndamento, color: '#475569' }}>
                     {p.etapa || <ADefinir />}
                   </td>
-                  <td
-                    style={{
-                      ...tdAndamento,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: prio.color,
-                      background: prio.background,
-                    }}
-                  >
-                    {prio.label}
+                  <td style={{ ...tdAndamento, textAlign: 'center' }}>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        borderRadius: 4,
+                        padding: '1px 6px',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        background: prio.background,
+                        color: prio.color,
+                      }}
+                    >
+                      {prio.label}
+                    </span>
                   </td>
                   <td
                     style={{
                       ...tdAndamento,
+                      textAlign: 'right',
                       fontWeight: 700,
                       color: '#0F172A',
                       fontVariantNumeric: 'tabular-nums',
@@ -323,13 +517,10 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
                   >
                     {p.score != null ? p.score : <ADefinir />}
                   </td>
-                  <td
-                    title={p.responsavel || undefined}
-                    style={{ ...tdAndamento, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                  >
+                  <td title={p.responsavel || undefined} style={{ ...tdAndamento, color: '#475569' }}>
                     {p.responsavel || <ADefinir />}
                   </td>
-                  <td style={{ ...tdAndamento, fontVariantNumeric: 'tabular-nums' }}>
+                  <td style={{ ...tdAndamento, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     {p.prazoLabel || <ADefinir />}
                   </td>
                 </tr>
@@ -339,6 +530,26 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
         </tbody>
       </table>
     </div>
+  )
+}
+
+/** Visão Em andamento no mesmo esqueleto do Resumo: faixa no topo e dois quadros lado a lado. */
+function IniciativasAndamento({ itens }: { itens: IniciativaAndamento[] }) {
+  return (
+    <>
+      <IniciativasAndamentoFaixa itens={itens} />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 0.7fr) minmax(0, 1.65fr)',
+          gap: 10,
+          alignItems: 'start',
+        }}
+      >
+        <IniciativasAndamentoPorEtapa itens={itens} />
+        <IniciativasAndamentoTabela itens={itens} />
+      </div>
+    </>
   )
 }
 
@@ -466,7 +677,7 @@ export function ApresentacaoIniciativasBloco({
           ))}
         </div>
       ) : visao === 'andamento' ? (
-        <IniciativasAndamentoTabela itens={data.andamento} />
+        <IniciativasAndamento itens={data.andamento} />
       ) : (
         <>
           <IniciativasEvolucaoFaixa
