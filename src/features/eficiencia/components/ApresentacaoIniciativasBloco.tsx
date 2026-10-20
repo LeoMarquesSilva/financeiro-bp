@@ -393,53 +393,6 @@ function IniciativasAndamentoFaixa({ itens }: { itens: IniciativaAndamento[] }) 
   )
 }
 
-function IniciativasAndamentoPorEtapa({ itens }: { itens: IniciativaAndamento[] }) {
-  const porEtapa = new Map<string, number>()
-  for (const p of itens) {
-    const etapa = p.etapa || 'A definir'
-    porEtapa.set(etapa, (porEtapa.get(etapa) ?? 0) + 1)
-  }
-  const linhas = [...porEtapa.entries()].sort(
-    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'),
-  )
-
-  return (
-    <div data-overview-copy-card data-chart-export-preserve-bg style={cardAndamento}>
-      <div style={cardTituloAndamento}>Por etapa</div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-        <thead>
-          <tr style={{ background: GOLD_DARK, color: '#fff' }}>
-            <th style={thAndamento}>Etapa</th>
-            <th style={{ ...thAndamento, textAlign: 'right' }}>Projetos</th>
-            <th style={{ ...thAndamento, textAlign: 'right' }}>%</th>
-          </tr>
-        </thead>
-        <tbody>
-          {linhas.length === 0 ? (
-            <tr>
-              <td colSpan={3} style={{ padding: '10px 6px', color: '#94A3B8', textAlign: 'center' }}>
-                Nenhum projeto em andamento
-              </td>
-            </tr>
-          ) : (
-            linhas.map(([etapa, qtd], i) => (
-              <tr key={etapa} style={{ background: zebra(i) }}>
-                <td style={tdAndamento}>{etapa}</td>
-                <td style={{ ...tdAndamento, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                  {qtd}
-                </td>
-                <td style={{ ...tdAndamento, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                  {pctDe(qtd, itens.length)}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] }) {
   return (
     <div data-overview-copy-card data-chart-export-preserve-bg style={cardAndamento}>
@@ -449,13 +402,13 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
         style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 11 }}
       >
         <colgroup>
-          <col style={{ width: '5%' }} />
-          <col style={{ width: '35%' }} />
-          <col style={{ width: '15%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '7%' }} />
-          <col style={{ width: '15%' }} />
+          <col style={{ width: '3%' }} />
+          <col style={{ width: '37%' }} />
+          <col style={{ width: '14%' }} />
           <col style={{ width: '11%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '19%' }} />
+          <col style={{ width: '9%' }} />
         </colgroup>
         <thead>
           <tr style={{ background: GOLD_DARK, color: '#fff' }}>
@@ -491,20 +444,17 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
                   <td title={p.etapa || undefined} style={{ ...tdAndamento, color: '#475569' }}>
                     {p.etapa || <ADefinir />}
                   </td>
-                  <td style={{ ...tdAndamento, textAlign: 'center' }}>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        borderRadius: 4,
-                        padding: '1px 6px',
-                        fontSize: 10,
-                        fontWeight: 700,
-                        background: prio.background,
-                        color: prio.color,
-                      }}
-                    >
-                      {prio.label}
-                    </span>
+                  {/* Fundo na célula inteira: etiqueta inline-block saía deslocada no PPT. */}
+                  <td
+                    style={{
+                      ...tdAndamento,
+                      textAlign: 'center',
+                      fontWeight: 700,
+                      background: prio.background,
+                      color: prio.color,
+                    }}
+                  >
+                    {prio.label}
                   </td>
                   <td
                     style={{
@@ -533,22 +483,15 @@ function IniciativasAndamentoTabela({ itens }: { itens: IniciativaAndamento[] })
   )
 }
 
-/** Visão Em andamento no mesmo esqueleto do Resumo: faixa no topo e dois quadros lado a lado. */
+/**
+ * Visão Em andamento no esqueleto do Resumo: faixa no topo e o quadro de projetos.
+ * Tabela em largura total para nome, etapa e responsável não cortarem no slide.
+ */
 function IniciativasAndamento({ itens }: { itens: IniciativaAndamento[] }) {
   return (
     <>
       <IniciativasAndamentoFaixa itens={itens} />
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 0.7fr) minmax(0, 1.65fr)',
-          gap: 10,
-          alignItems: 'start',
-        }}
-      >
-        <IniciativasAndamentoPorEtapa itens={itens} />
-        <IniciativasAndamentoTabela itens={itens} />
-      </div>
+      <IniciativasAndamentoTabela itens={itens} />
     </>
   )
 }
