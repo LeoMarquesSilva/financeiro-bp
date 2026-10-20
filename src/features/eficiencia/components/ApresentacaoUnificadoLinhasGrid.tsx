@@ -73,6 +73,11 @@ function UnificadoMiniLinha({ serie }: { serie: UnificadoLinhaSerie }) {
   }))
   const valores = data.map((d) => d.valor).filter((v): v is number => v != null)
   const [yMin, yMax] = yDomain(serie.yKind, valores, serie.meta)
+  // Mais de 10 meses: um rótulo sim, um não, contado do fim para o último mês sempre aparecer.
+  const xTicks =
+    data.length > 10
+      ? data.filter((_, i) => (data.length - 1 - i) % 2 === 0).map((d) => d.mes)
+      : undefined
 
   return (
     <div
@@ -117,7 +122,8 @@ function UnificadoMiniLinha({ serie }: { serie: UnificadoLinhaSerie }) {
               tick={{ fontSize: 8, fill: UNIFICADO_LINHAS_THEME.axis }}
               axisLine={false}
               tickLine={false}
-              interval={data.length > 10 ? 1 : 0}
+              ticks={xTicks}
+              interval={0}
               height={28}
             />
             <YAxis
