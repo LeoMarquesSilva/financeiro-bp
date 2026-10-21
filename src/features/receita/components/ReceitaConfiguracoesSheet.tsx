@@ -9,6 +9,7 @@ import {
 import { ReceitaMetasConfig } from './ReceitaMetasConfig'
 import { ReceitaDepartamentoCoresConfig } from './ReceitaDepartamentoCoresConfig'
 import { ReceitaRelatorioMensalConfig } from './ReceitaRelatorioMensalConfig'
+import { ReceitaMeResponsaveisConfig } from './ReceitaMeResponsaveisConfig'
 import type { ReceitaMetasConfig as ReceitaMetasConfigType } from '../types/receita.types'
 import type { ReceitaDepartamentoCoresConfig as ReceitaDepartamentoCoresConfigType } from '../types/receita.types'
 
@@ -53,6 +54,7 @@ export function ReceitaConfiguracoesSheet({
             onSave={onSaveCores}
             isSaving={isSavingCores}
           />
+          <ReceitaMeResponsaveisConfig enabled={open} />
           <ReceitaRelatorioMensalConfig enabled={open} />
         </div>
       </SheetContent>

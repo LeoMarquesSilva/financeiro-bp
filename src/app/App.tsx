@@ -17,6 +17,8 @@ import { CobrancaSeguimentoPage } from '@/features/cobranca/pages/CobrancaSeguim
 import { UsuariosPage } from '@/features/usuarios/pages/UsuariosPage'
 import { ConfiguracoesPage } from '@/features/configuracoes/pages/ConfiguracoesPage'
 import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
+import { ReceitaMelhorEstimativaPage } from '@/features/receita/pages/ReceitaMelhorEstimativaPage'
+import { useReceitaMeAcesso } from '@/features/receita/hooks/useReceitaMe'
 import { OpexPage } from '@/features/opex/pages/OpexPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
@@ -61,6 +63,23 @@ function ProtectedRoute({
     return <Navigate to={resolveHomePath(role, moduleAccess)} replace />
   }
   return <>{children}</>
+}
+
+/** Melhor estimativa: quem acessa a Receita ou é responsável por alguma área. */
+function MelhorEstimativaRoute() {
+  const { role, moduleAccess } = useAuth()
+  const { config } = useRoleAccessDefaults()
+  const acesso = useReceitaMeAcesso()
+  const acessaReceita = canAccessRoutePath({
+    role,
+    moduleAccess,
+    routePath: '/financeiro/receita',
+    moduleKey: 'receita',
+    roleRouteAccess: config,
+  })
+  if (acessaReceita || acesso.minhasAreas.length > 0) return <ReceitaMelhorEstimativaPage />
+  if (acesso.isLoading) return <div className="h-64 animate-pulse rounded-xl bg-slate-100" />
+  return <Navigate to={resolveHomePath(role, moduleAccess)} replace />
 }
 
 function AppRoutes() {
@@ -169,6 +188,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route path="receita/melhor-estimativa" element={<MelhorEstimativaRoute />} />
         <Route
           path="opex"
           element={
