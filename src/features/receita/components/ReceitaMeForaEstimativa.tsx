@@ -1,8 +1,20 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
-import type { ReceitaMeAreaCalc, ReceitaMeCelula } from '../utils/receitaMeCalc'
+import {
+  ordenarPorColuna,
+  proximaOrdenacao,
+  type ReceitaMeAreaCalc,
+  type ReceitaMeCelula,
+  type ReceitaMeLinha,
+  type ReceitaMeOrdenacao,
+} from '../utils/receitaMeCalc'
 import { receitaMeDescreverTitulo, receitaMeMesRotulo } from '../utils/receitaMeLabels'
+import { ReceitaMeCabecalhoOrdenavel } from './ReceitaMeCabecalhoOrdenavel'
+
+/** Colunas: grupo, situação, um mês (valor fora) ou total fora. */
+type ChaveFora = 'grupo' | 'situacao' | 'total' | number
+type LinhaFora = { linha: ReceitaMeLinha; estados: Set<ReceitaMeCelula['estado']> }
 
 type Props = {
   ano: number
@@ -35,10 +47,27 @@ function tituloFora(c: ReceitaMeCelula): string {
  * Quem está fora da estimativa na área: títulos do mês em atraso (fora por padrão) e o
  * que o gerente marcou como "não deve pagar". Mesmos valores da matriz, isolados.
  */
+function situacaoTexto(estados: Set<ReceitaMeCelula['estado']>): string {
+  return (['em_atraso', 'nao_paga'] as const)
+    .filter((e) => estados.has(e))
+    .map((e) => ESTADO_FORA[e]?.label ?? e)
+    .join(', ')
+}
+
+function valorColuna({ linha, estados }: LinhaFora, chave: ChaveFora): number | string {
+  if (chave === 'grupo') return linha.grupo
+  if (chave === 'situacao') return situacaoTexto(estados)
+  if (chave === 'total') return linha.fora
+  return linha.celulas[chave]?.fora ?? 0
+}
+
 export function ReceitaMeForaEstimativa({ ano, calc }: Props) {
   const { meses } = calc
+  const [ordenacao, setOrdenacao] = useState<ReceitaMeOrdenacao<ChaveFora> | null>(null)
+  const ordenarPor = (chave: ChaveFora) =>
+    setOrdenacao((atual) => proximaOrdenacao(atual, chave, chave === 'grupo' || chave === 'situacao' ? 'asc' : 'desc'))
 
-  const linhas = useMemo(
+  const linhasPadrao = useMemo(
     () =>
       calc.linhas
         .filter((l) => l.fora > 0)
@@ -49,6 +78,10 @@ export function ReceitaMeForaEstimativa({ ano, calc }: Props) {
         .sort((a, b) => b.linha.fora - a.linha.fora || a.linha.grupo.localeCompare(b.linha.grupo, 'pt-BR')),
     [calc.linhas, meses],
   )
+  const linhas = useMemo(
+    () => ordenarPorColuna(linhasPadrao, ordenacao, valorColuna, (x) => x.linha.grupo),
+    [linhasPadrao, ordenacao],
+  )
 
   const totalPorMes = useMemo(() => {
     const out: Record<number, number> = {}
@@ -58,12 +91,23 @@ export function ReceitaMeForaEstimativa({ ano, calc }: Props) {
 
   return (
     <section className="rounded-xl border border-slate-200/60 bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-4 py-3">
-        <h3 className="text-sm font-semibold text-slate-900">Fora da estimativa</h3>
-        <p className="text-xs text-slate-500">
-          Clientes com título do mês em atraso (fora por padrão) ou marcados como não deve pagar. Os mesmos valores da
-          carteira acima, isolados; para mudar, clique na célula da carteira.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Fora da estimativa</h3>
+          <p className="text-xs text-slate-500">
+            Clientes com título do mês em atraso (fora por padrão) ou marcados como não deve pagar. Os mesmos valores da
+            carteira acima, isolados; para mudar, clique na célula da carteira.
+          </p>
+        </div>
+        {ordenacao && (
+          <button
+            type="button"
+            onClick={() => setOrdenacao(null)}
+            className="shrink-0 text-xs text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+          >
+            Ordem padrão
+          </button>
+        )}
       </div>
 
       {linhas.length === 0 ? (
@@ -73,14 +117,25 @@ export function ReceitaMeForaEstimativa({ ano, calc }: Props) {
           <table className="w-full min-w-[640px] text-sm tabular-nums">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
               <tr className="border-b border-slate-200">
-                <th className="px-3 py-2 text-left font-semibold">Grupo</th>
-                <th className="px-3 py-2 text-left font-semibold">Situação</th>
+                <ReceitaMeCabecalhoOrdenavel chave="grupo" ordenacao={ordenacao} onOrdenar={ordenarPor} alinhamento="esquerda">
+                  Grupo
+                </ReceitaMeCabecalhoOrdenavel>
+                <ReceitaMeCabecalhoOrdenavel
+                  chave="situacao"
+                  ordenacao={ordenacao}
+                  onOrdenar={ordenarPor}
+                  alinhamento="esquerda"
+                >
+                  Situação
+                </ReceitaMeCabecalhoOrdenavel>
                 {meses.map((m) => (
-                  <th key={m} className="px-3 py-2 text-right font-semibold">
+                  <ReceitaMeCabecalhoOrdenavel key={m} chave={m} ordenacao={ordenacao} onOrdenar={ordenarPor}>
                     {receitaMeMesRotulo(ano, m)}
-                  </th>
+                  </ReceitaMeCabecalhoOrdenavel>
                 ))}
-                <th className="px-3 py-2 text-right font-semibold">Total fora</th>
+                <ReceitaMeCabecalhoOrdenavel chave="total" ordenacao={ordenacao} onOrdenar={ordenarPor}>
+                  Total fora
+                </ReceitaMeCabecalhoOrdenavel>
               </tr>
             </thead>
             <tbody>

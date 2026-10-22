@@ -441,35 +441,58 @@ export function calcularAreaMe(input: {
 
 /** Coluna da matriz: grupo, recebido do mês corrente, um mês (em aberto) ou ME. */
 export type ReceitaMeOrdenacaoChave = 'grupo' | 'recebido' | 'me' | number
-export type ReceitaMeOrdenacao = { chave: ReceitaMeOrdenacaoChave; direcao: 'asc' | 'desc' }
+export type ReceitaMeOrdenacao<K extends string | number = ReceitaMeOrdenacaoChave> = {
+  chave: K
+  direcao: 'asc' | 'desc'
+}
 
-function valorOrdenacao(l: ReceitaMeLinha, chave: Exclude<ReceitaMeOrdenacaoChave, 'grupo'>): number {
+/**
+ * Ordena pelo valor da coluna (número ou texto); empate por nome do grupo.
+ * Sem ordenação, mantém a ordem recebida.
+ */
+export function ordenarPorColuna<T, K extends string | number>(
+  itens: readonly T[],
+  ordenacao: ReceitaMeOrdenacao<K> | null,
+  valor: (item: T, chave: K) => number | string,
+  nome: (item: T) => string,
+): T[] {
+  if (!ordenacao) return [...itens]
+  const { chave, direcao } = ordenacao
+  const fator = direcao === 'asc' ? 1 : -1
+  const porNome = (a: T, b: T) => nome(a).localeCompare(nome(b), 'pt-BR')
+  return [...itens].sort((a, b) => {
+    const va = valor(a, chave)
+    const vb = valor(b, chave)
+    const d =
+      typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'pt-BR')
+    return fator * d || porNome(a, b)
+  })
+}
+
+function valorOrdenacao(l: ReceitaMeLinha, chave: ReceitaMeOrdenacaoChave): number | string {
+  if (chave === 'grupo') return l.grupo
   if (chave === 'recebido') return l.recebido
   if (chave === 'me') return l.me
   return l.celulas[chave]?.aberto ?? 0
 }
 
-/** Ordena pelo valor exibido na coluna; empate (e coluna Grupo) por nome. Sem ordenação, mantém a ordem recebida. */
+/** Matriz: ordena pelo valor exibido na coluna (meses = em aberto). */
 export function ordenarLinhasMe(
   linhas: readonly ReceitaMeLinha[],
   ordenacao: ReceitaMeOrdenacao | null,
 ): ReceitaMeLinha[] {
-  if (!ordenacao) return [...linhas]
-  const { chave, direcao } = ordenacao
-  const fator = direcao === 'asc' ? 1 : -1
-  const porNome = (a: ReceitaMeLinha, b: ReceitaMeLinha) => a.grupo.localeCompare(b.grupo, 'pt-BR')
-  return [...linhas].sort((a, b) => {
-    if (chave === 'grupo') return fator * porNome(a, b)
-    return fator * (valorOrdenacao(a, chave) - valorOrdenacao(b, chave)) || porNome(a, b)
-  })
+  return ordenarPorColuna(linhas, ordenacao, valorOrdenacao, (l) => l.grupo)
 }
 
-/** Clique no cabeçalho: 1º maior→menor (Grupo: A→Z), 2º inverte, 3º volta à ordem padrão. */
-export function proximaOrdenacao(
-  atual: ReceitaMeOrdenacao | null,
-  chave: ReceitaMeOrdenacaoChave,
-): ReceitaMeOrdenacao | null {
-  const inicial: ReceitaMeOrdenacao['direcao'] = chave === 'grupo' ? 'asc' : 'desc'
+/**
+ * Clique no cabeçalho: 1º clique na direção inicial (números maior→menor, texto A→Z),
+ * 2º inverte, 3º volta à ordem padrão.
+ */
+export function proximaOrdenacao<K extends string | number>(
+  atual: ReceitaMeOrdenacao<K> | null,
+  chave: K,
+  inicial: ReceitaMeOrdenacao['direcao'] = chave === 'grupo' ? 'asc' : 'desc',
+): ReceitaMeOrdenacao<K> | null {
   if (!atual || atual.chave !== chave) return { chave, direcao: inicial }
   if (atual.direcao === inicial) return { chave, direcao: inicial === 'asc' ? 'desc' : 'asc' }
   return null

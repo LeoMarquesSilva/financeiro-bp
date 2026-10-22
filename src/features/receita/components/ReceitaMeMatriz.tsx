@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Ban, Check, Search } from 'lucide-react'
+import { Ban, Check, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
@@ -13,6 +13,7 @@ import {
   type ReceitaMeOrdenacaoChave,
 } from '../utils/receitaMeCalc'
 import { receitaMeDescreverTitulo, receitaMeMesRotulo } from '../utils/receitaMeLabels'
+import { ReceitaMeCabecalhoOrdenavel } from './ReceitaMeCabecalhoOrdenavel'
 
 type Props = {
   ano: number
@@ -51,52 +52,6 @@ function tituloCelula(c: ReceitaMeCelula, podeEditar: boolean): string {
   return [partes.join('\n'), estado[c.estado], podeEditar ? acao[c.estado] : null]
     .filter(Boolean)
     .join('\n')
-}
-
-function CabecalhoOrdenavel({
-  chave,
-  ordenacao,
-  onOrdenar,
-  alinhamento = 'direita',
-  rowSpan,
-  title,
-  children,
-}: {
-  chave: ReceitaMeOrdenacaoChave
-  ordenacao: ReceitaMeOrdenacao | null
-  onOrdenar: (chave: ReceitaMeOrdenacaoChave) => void
-  alinhamento?: 'esquerda' | 'direita'
-  rowSpan?: number
-  title?: string
-  children: React.ReactNode
-}) {
-  const ativo = ordenacao?.chave === chave
-  const Icone = !ativo ? ArrowUpDown : ordenacao.direcao === 'asc' ? ArrowUp : ArrowDown
-  return (
-    <th
-      rowSpan={rowSpan}
-      className={cn(
-        'px-3 py-2 font-semibold',
-        alinhamento === 'direita' ? 'text-right' : 'text-left',
-        rowSpan && rowSpan > 1 && 'align-bottom',
-      )}
-      aria-sort={ativo ? (ordenacao.direcao === 'asc' ? 'ascending' : 'descending') : 'none'}
-      title={title}
-    >
-      <button
-        type="button"
-        onClick={() => onOrdenar(chave)}
-        className={cn(
-          'inline-flex items-center gap-1 whitespace-nowrap uppercase tracking-wider transition-colors hover:text-slate-900',
-          alinhamento === 'direita' && 'flex-row-reverse',
-          ativo && 'text-slate-900',
-        )}
-      >
-        {children}
-        <Icone className={cn('h-3 w-3 shrink-0', ativo ? 'text-slate-700' : 'text-slate-300')} aria-hidden />
-      </button>
-    </th>
-  )
 }
 
 export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickLinha }: Props) {
@@ -187,7 +142,7 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
         <table className="w-full min-w-[720px] text-sm tabular-nums">
           <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
             <tr className={cn(mesCorrente == null && 'border-b border-slate-200')}>
-              <CabecalhoOrdenavel
+              <ReceitaMeCabecalhoOrdenavel
                 chave="grupo"
                 ordenacao={ordenacao}
                 onOrdenar={ordenarPor}
@@ -195,7 +150,7 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
                 rowSpan={linhasCabecalho}
               >
                 Grupo
-              </CabecalhoOrdenavel>
+              </ReceitaMeCabecalhoOrdenavel>
               {mesCorrente != null && (
                 <th
                   colSpan={2}
@@ -205,7 +160,7 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
                 </th>
               )}
               {mesesFuturos.map((m) => (
-                <CabecalhoOrdenavel
+                <ReceitaMeCabecalhoOrdenavel
                   key={m}
                   chave={m}
                   ordenacao={ordenacao}
@@ -214,31 +169,31 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
                   title="Valor em aberto dos títulos que vencem no mês"
                 >
                   {receitaMeMesRotulo(ano, m)}
-                </CabecalhoOrdenavel>
+                </ReceitaMeCabecalhoOrdenavel>
               ))}
-              <CabecalhoOrdenavel chave="me" ordenacao={ordenacao} onOrdenar={ordenarPor} rowSpan={linhasCabecalho}>
+              <ReceitaMeCabecalhoOrdenavel chave="me" ordenacao={ordenacao} onOrdenar={ordenarPor} rowSpan={linhasCabecalho}>
                 ME
-              </CabecalhoOrdenavel>
+              </ReceitaMeCabecalhoOrdenavel>
               <th rowSpan={linhasCabecalho} className="w-10 px-2 py-2" aria-label="Ações" />
             </tr>
             {mesCorrente != null && (
               <tr className="border-b border-slate-200">
-                <CabecalhoOrdenavel
+                <ReceitaMeCabecalhoOrdenavel
                   chave="recebido"
                   ordenacao={ordenacao}
                   onOrdenar={ordenarPor}
                   title="Caixa do mês, inclui pagamento de títulos de outros meses"
                 >
                   Recebido
-                </CabecalhoOrdenavel>
-                <CabecalhoOrdenavel
+                </ReceitaMeCabecalhoOrdenavel>
+                <ReceitaMeCabecalhoOrdenavel
                   chave={mesCorrente}
                   ordenacao={ordenacao}
                   onOrdenar={ordenarPor}
                   title="Títulos que vencem no mês e ainda não foram pagos (amarelo = vencido, em atraso)"
                 >
                   Em aberto
-                </CabecalhoOrdenavel>
+                </ReceitaMeCabecalhoOrdenavel>
               </tr>
             )}
           </thead>
