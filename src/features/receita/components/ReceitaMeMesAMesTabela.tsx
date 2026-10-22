@@ -18,7 +18,10 @@ function corDiferenca(v: number): string {
   return v >= 0 ? 'text-emerald-700' : 'text-red-600'
 }
 
-/** Bloco "Mês a mês" da planilha do escritório: meta do SIOE × realizado (fechado) ou ME (aberto). */
+/**
+ * Bloco "Mês a mês" da planilha do escritório: meta variável do mês × realizado (fechado) ou
+ * ME (aberto). Total, acumulado e gap usam a meta anual fixa.
+ */
 export function ReceitaMeMesAMesTabela({ ano, linhas, compacta = false }: Props) {
   if (linhas.length === 0) return null
   const total = linhas[linhas.length - 1]
@@ -32,13 +35,20 @@ export function ReceitaMeMesAMesTabela({ ano, linhas, compacta = false }: Props)
           <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] uppercase tracking-wider text-slate-500">
             <th className="px-3 py-2 text-left font-semibold">Mês</th>
             <th className="px-3 py-2 text-left font-semibold">Base</th>
-            <th className="px-3 py-2 text-right font-semibold">Meta</th>
+            <th
+              className="px-3 py-2 text-right font-semibold"
+              title="Meta variável, como na Gestão à vista: o que faltou nos meses fechados é redistribuído nos meses seguintes"
+            >
+              Meta do mês
+            </th>
             <th className="px-3 py-2 text-right font-semibold">Realizado ou ME</th>
             <th className="px-3 py-2 text-right font-semibold">Diferença</th>
             <th className="px-3 py-2 text-right font-semibold">% da meta</th>
             {!compacta && (
               <>
-                <th className="px-3 py-2 text-right font-semibold">Meta acum.</th>
+                <th className="px-3 py-2 text-right font-semibold" title="Meta anual fixa acumulada">
+                  Meta anual acum.
+                </th>
                 <th className="px-3 py-2 text-right font-semibold">Projeção acum.</th>
               </>
             )}
@@ -90,7 +100,7 @@ export function ReceitaMeMesAMesTabela({ ano, linhas, compacta = false }: Props)
             <td className="px-3 py-2" colSpan={2}>
               Total
             </td>
-            <td className="px-3 py-2 text-right" title={formatCurrency(metaTotal)}>
+            <td className="px-3 py-2 text-right" title={`Meta anual: ${formatCurrency(metaTotal)}`}>
               {formatCurrencyCompact(metaTotal)}
             </td>
             <td className="px-3 py-2 text-right" title={formatCurrency(valorTotal)}>

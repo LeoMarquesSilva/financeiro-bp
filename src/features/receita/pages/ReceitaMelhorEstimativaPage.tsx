@@ -65,11 +65,20 @@ export function ReceitaMelhorEstimativaPage() {
     return out
   }, [dados.base, dados.meses, dados.mesCorrente, dados.ajustes, dados.novasReceitas, dados.vistos, dados.status])
 
-  /** Meta base do SIOE por mês (Jun–Dez), sem o rebalanceamento do gráfico. */
-  const metaBasePorMes = useMemo(() => {
-    const out: Record<number, number> = {}
-    for (const r of dashboard?.rows ?? []) if (r.metaBase > 0) out[r.mes] = r.metaBase
-    return out
+  /**
+   * Metas do SIOE por mês (Jun–Dez), como na Gestão à vista: `variavel` é a meta do mês
+   * rebalanceada (o que faltou nos meses fechados vai para os seguintes); `base` é a
+   * meta anual fixa, usada no acumulado e no gap.
+   */
+  const { metaBasePorMes, metaVariavelPorMes } = useMemo(() => {
+    const base: Record<number, number> = {}
+    const variavel: Record<number, number> = {}
+    for (const r of dashboard?.rows ?? []) {
+      if (r.metaBase <= 0) continue
+      base[r.mes] = r.metaBase
+      variavel[r.mes] = r.meta > 0 ? r.meta : r.metaBase
+    }
+    return { metaBasePorMes: base, metaVariavelPorMes: variavel }
   }, [dashboard?.rows])
   const mesesMeta = useMemo(
     () => Object.keys(metaBasePorMes).map(Number).sort((a, b) => a - b),
@@ -79,15 +88,17 @@ export function ReceitaMelhorEstimativaPage() {
   const mesAMesArea = useMemo(() => {
     if (!areaKey || !calcs[areaKey]) return []
     const pct = RECEITA_ME_AREAS.find((a) => a.key === areaKey)?.pct ?? 0
-    const metaPorMes = Object.fromEntries(mesesMeta.map((m) => [m, (metaBasePorMes[m] * pct) / 100]))
+    const daArea = (porMes: Record<number, number>) =>
+      Object.fromEntries(mesesMeta.map((m) => [m, ((porMes[m] ?? 0) * pct) / 100]))
     return montarMesAMes({
       mesesMeta,
-      metaPorMes,
+      metaPorMes: daArea(metaVariavelPorMes),
+      metaBasePorMes: daArea(metaBasePorMes),
       realizadoPorMes: dados.realizadoPorArea?.[areaKey] ?? {},
       mePorMes: calcs[areaKey].mePorMes,
       mesesHorizonte: dados.meses,
     })
-  }, [areaKey, calcs, mesesMeta, metaBasePorMes, dados.realizadoPorArea, dados.meses])
+  }, [areaKey, calcs, mesesMeta, metaBasePorMes, metaVariavelPorMes, dados.realizadoPorArea, dados.meses])
 
   if (metasLoading || !ano) {
     return <div className="h-64 animate-pulse rounded-xl bg-slate-100" />
@@ -209,6 +220,7 @@ export function ReceitaMelhorEstimativaPage() {
                 mesCorrente={dados.mesCorrente}
                 mesesMeta={mesesMeta}
                 metaBasePorMes={metaBasePorMes}
+                metaVariavelPorMes={metaVariavelPorMes}
                 dashboardRows={dashboard.rows}
                 realizadoPorArea={dados.realizadoPorArea ?? {}}
                 status={dados.status}

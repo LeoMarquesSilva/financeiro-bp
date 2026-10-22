@@ -100,6 +100,8 @@ export const receitaMeService = {
           valor,
           pago,
           vencido: !pago && itemVencimentoVencidoAteCorte(item.data_vencimento, corte),
+          vencimento: item.data_vencimento?.slice(0, 10) ?? null,
+          pagamento: pago ? item.data_pagamento?.slice(0, 10) ?? null : null,
         })
       }
     })

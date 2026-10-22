@@ -32,6 +32,8 @@ type Props = {
   mesCorrente: number | null
   mesesMeta: number[]
   metaBasePorMes: Record<number, number>
+  /** Meta do mês rebalanceada (Gestão à vista). */
+  metaVariavelPorMes: Record<number, number>
   dashboardRows: ReceitaMesRow[]
   realizadoPorArea: Record<string, Record<number, number>>
   status: ReceitaMeAreaStatus[]
@@ -68,6 +70,7 @@ export function ReceitaMeEscritorioPanel({
   mesCorrente,
   mesesMeta,
   metaBasePorMes,
+  metaVariavelPorMes,
   dashboardRows,
   realizadoPorArea,
   status,
@@ -91,8 +94,16 @@ export function ReceitaMeEscritorioPanel({
   )
 
   const mesAMes = useMemo(
-    () => montarMesAMes({ mesesMeta, metaPorMes: metaBasePorMes, realizadoPorMes, mePorMes, mesesHorizonte: meses }),
-    [mesesMeta, metaBasePorMes, realizadoPorMes, mePorMes, meses],
+    () =>
+      montarMesAMes({
+        mesesMeta,
+        metaPorMes: metaVariavelPorMes,
+        metaBasePorMes,
+        realizadoPorMes,
+        mePorMes,
+        mesesHorizonte: meses,
+      }),
+    [mesesMeta, metaVariavelPorMes, metaBasePorMes, realizadoPorMes, mePorMes, meses],
   )
   const gap = useMemo(() => calcularGapMeta(mesAMes), [mesAMes])
 
@@ -177,7 +188,13 @@ export function ReceitaMeEscritorioPanel({
       </div>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-900">Mês a mês</h2>
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Mês a mês</h2>
+          <p className="text-xs text-slate-500">
+            Meta do mês variável, como na Gestão à vista: o que faltou nos meses fechados é redistribuído nos seguintes.
+            Acumulado e gap usam a meta anual.
+          </p>
+        </div>
         <ReceitaMeMesAMesTabela ano={ano} linhas={mesAMes} />
       </section>
 
@@ -253,7 +270,9 @@ export function ReceitaMeEscritorioPanel({
                   </th>
                 ))}
                 <th className="px-3 py-2 text-right font-semibold">ME {periodoMe}</th>
-                <th className="px-3 py-2 text-right font-semibold">Meta</th>
+                <th className="px-3 py-2 text-right font-semibold" title="Soma da meta variável dos meses do horizonte">
+                  Meta
+                </th>
                 <th className="px-3 py-2 text-right font-semibold">% meta</th>
                 <th className="px-3 py-2 text-left font-semibold">Situação</th>
               </tr>
@@ -263,7 +282,7 @@ export function ReceitaMeEscritorioPanel({
                 const c = calcs[key]
                 if (!c) return null
                 const area = RECEITA_ME_AREAS.find((a) => a.key === key)
-                const meta = area ? mesesMetaHorizonte.reduce((s, m) => s + ((metaBasePorMes[m] ?? 0) * area.pct) / 100, 0) : 0
+                const meta = area ? mesesMetaHorizonte.reduce((s, m) => s + ((metaVariavelPorMes[m] ?? 0) * area.pct) / 100, 0) : 0
                 const st = status.find((s) => s.area_key === key)
                 const resp = responsaveis.filter((r) => r.area_key === key && r.ativo).map((r) => r.nome.split(' ')[0])
                 const n = c.novidades.length
@@ -324,7 +343,7 @@ export function ReceitaMeEscritorioPanel({
                 ))}
                 <td className="px-3 py-2 text-right">{formatCurrencyCompact(total.me)}</td>
                 <td className="px-3 py-2 text-right">
-                  {formatCurrencyCompact(mesesMetaHorizonte.reduce((s, m) => s + (metaBasePorMes[m] ?? 0), 0))}
+                  {formatCurrencyCompact(mesesMetaHorizonte.reduce((s, m) => s + (metaVariavelPorMes[m] ?? 0), 0))}
                 </td>
                 <td className="px-3 py-2" colSpan={2} />
               </tr>

@@ -24,6 +24,18 @@ export type ReceitaMeItemPrevisto = {
   pago: boolean
   /** Vencido até o corte (ontem) e sem pagamento. */
   vencido: boolean
+  /** YYYY-MM-DD (para o tooltip da célula). */
+  vencimento?: string | null
+  pagamento?: string | null
+}
+
+/** Título que compõe a célula (grupo × mês), mostrado no tooltip. */
+export type ReceitaMeTituloDetalhe = {
+  valor: number
+  vencimento: string | null
+  pagamento: string | null
+  pago: boolean
+  vencido: boolean
 }
 
 export type ReceitaMeItemRecebido = {
@@ -41,6 +53,8 @@ export type ReceitaMeCelula = {
   aberto: number
   abertoVencido: number
   titulos: number
+  /** Títulos da célula por vencimento. */
+  detalhes: ReceitaMeTituloDetalhe[]
   estado: ReceitaMeCelulaEstado
   contado: number
   fora: number
@@ -200,7 +214,14 @@ export function calcularAreaMe(input: {
   const { areaKey, meses, mesCorrente } = input
   const mesesSet = new Set(meses)
 
-  type Bruto = { previsto: number; pago: number; aberto: number; abertoVencido: number; titulos: number }
+  type Bruto = {
+    previsto: number
+    pago: number
+    aberto: number
+    abertoVencido: number
+    titulos: number
+    detalhes: ReceitaMeTituloDetalhe[]
+  }
   const brutoPorCelula = new Map<string, Bruto>()
   const grupos = new Set<string>()
   for (const it of input.previstos) {
@@ -209,9 +230,23 @@ export function calcularAreaMe(input: {
     if (valor === 0) continue
     grupos.add(it.grupo)
     const k = chaveCelula(it.grupo, it.mes)
-    const cur = brutoPorCelula.get(k) ?? { previsto: 0, pago: 0, aberto: 0, abertoVencido: 0, titulos: 0 }
+    const cur = brutoPorCelula.get(k) ?? {
+      previsto: 0,
+      pago: 0,
+      aberto: 0,
+      abertoVencido: 0,
+      titulos: 0,
+      detalhes: [],
+    }
     cur.previsto += valor
     cur.titulos += 1
+    cur.detalhes.push({
+      valor,
+      vencimento: it.vencimento ?? null,
+      pagamento: it.pagamento ?? null,
+      pago: it.pago,
+      vencido: it.vencido,
+    })
     if (it.pago) cur.pago += valor
     else {
       cur.aberto += valor
@@ -263,6 +298,7 @@ export function calcularAreaMe(input: {
         aberto: abertoCel,
         abertoVencido: vencidoCel,
         titulos: b?.titulos ?? 0,
+        detalhes: [...(b?.detalhes ?? [])].sort((x, y) => (x.vencimento ?? '').localeCompare(y.vencimento ?? '')),
         estado: st.estado,
         contado: arred(st.contado),
         fora: arred(st.fora),
@@ -393,6 +429,42 @@ export function calcularAreaMe(input: {
   }
 }
 
+/** Coluna da matriz: grupo, recebido do mês corrente, um mês (em aberto) ou ME. */
+export type ReceitaMeOrdenacaoChave = 'grupo' | 'recebido' | 'me' | number
+export type ReceitaMeOrdenacao = { chave: ReceitaMeOrdenacaoChave; direcao: 'asc' | 'desc' }
+
+function valorOrdenacao(l: ReceitaMeLinha, chave: Exclude<ReceitaMeOrdenacaoChave, 'grupo'>): number {
+  if (chave === 'recebido') return l.recebido
+  if (chave === 'me') return l.me
+  return l.celulas[chave]?.aberto ?? 0
+}
+
+/** Ordena pelo valor exibido na coluna; empate (e coluna Grupo) por nome. Sem ordenação, mantém a ordem recebida. */
+export function ordenarLinhasMe(
+  linhas: readonly ReceitaMeLinha[],
+  ordenacao: ReceitaMeOrdenacao | null,
+): ReceitaMeLinha[] {
+  if (!ordenacao) return [...linhas]
+  const { chave, direcao } = ordenacao
+  const fator = direcao === 'asc' ? 1 : -1
+  const porNome = (a: ReceitaMeLinha, b: ReceitaMeLinha) => a.grupo.localeCompare(b.grupo, 'pt-BR')
+  return [...linhas].sort((a, b) => {
+    if (chave === 'grupo') return fator * porNome(a, b)
+    return fator * (valorOrdenacao(a, chave) - valorOrdenacao(b, chave)) || porNome(a, b)
+  })
+}
+
+/** Clique no cabeçalho: 1º maior→menor (Grupo: A→Z), 2º inverte, 3º volta à ordem padrão. */
+export function proximaOrdenacao(
+  atual: ReceitaMeOrdenacao | null,
+  chave: ReceitaMeOrdenacaoChave,
+): ReceitaMeOrdenacao | null {
+  const inicial: ReceitaMeOrdenacao['direcao'] = chave === 'grupo' ? 'asc' : 'desc'
+  if (!atual || atual.chave !== chave) return { chave, direcao: inicial }
+  if (atual.direcao === inicial) return { chave, direcao: inicial === 'asc' ? 'desc' : 'asc' }
+  return null
+}
+
 /** Horizonte da ME: mês corrente até dezembro (ano corrente); vazio para ano encerrado. */
 export function horizonteMe(ano: number, ref = new Date()): { meses: number[]; mesCorrente: number | null } {
   const y = ref.getFullYear()
@@ -416,15 +488,22 @@ export type ReceitaMeMesAMes = {
   gapAcumulado: number
 }
 
-/** Bloco "Mês a mês" da planilha do escritório: meta × realizado (fechado) ou ME (aberto). */
+/**
+ * Bloco "Mês a mês" da planilha do escritório: meta × realizado (fechado) ou ME (aberto).
+ * `metaPorMes` é a meta variável do mês (rebalanceada como na Gestão à vista: o que faltou
+ * nos meses fechados é redistribuído nos seguintes). Acumulado e gap usam `metaBasePorMes`,
+ * a meta anual fixa — somar a variável contaria o mesmo gap mais de uma vez.
+ */
 export function montarMesAMes(input: {
   mesesMeta: readonly number[]
   metaPorMes: Readonly<Record<number, number>>
+  metaBasePorMes?: Readonly<Record<number, number>>
   realizadoPorMes: Readonly<Record<number, number>>
   mePorMes: Readonly<Record<number, number>>
   mesesHorizonte: readonly number[]
 }): ReceitaMeMesAMes[] {
   const horizonte = new Set(input.mesesHorizonte)
+  const metaBase = input.metaBasePorMes ?? input.metaPorMes
   let metaAcumulada = 0
   let projecaoAcumulada = 0
   return [...input.mesesMeta]
@@ -433,7 +512,7 @@ export function montarMesAMes(input: {
       const base: ReceitaMeMesAMes['base'] = horizonte.has(mes) ? 'me' : 'realizado'
       const meta = input.metaPorMes[mes] ?? 0
       const valor = base === 'me' ? input.mePorMes[mes] ?? 0 : input.realizadoPorMes[mes] ?? 0
-      metaAcumulada += meta
+      metaAcumulada += metaBase[mes] ?? 0
       projecaoAcumulada += valor
       return {
         mes,
@@ -464,9 +543,9 @@ export type ReceitaMeGapMeta = {
   aumentoSobreMePct: number
 }
 
-/** Bloco "Gap meta" da planilha do escritório. */
+/** Bloco "Gap meta" da planilha do escritório (meta total = meta anual fixa). */
 export function calcularGapMeta(linhas: readonly ReceitaMeMesAMes[]): ReceitaMeGapMeta {
-  const metaTotal = linhas.reduce((s, l) => s + l.meta, 0)
+  const metaTotal = linhas.length > 0 ? linhas[linhas.length - 1].metaAcumulada : 0
   const realizadoFechado = linhas.filter((l) => l.base === 'realizado').reduce((s, l) => s + l.valor, 0)
   const abertos = linhas.filter((l) => l.base === 'me')
   const meAberto = abertos.reduce((s, l) => s + l.valor, 0)

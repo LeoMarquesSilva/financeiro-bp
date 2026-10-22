@@ -6,6 +6,8 @@ import {
   horizonteMe,
   montarMesAMes,
   novaReceitaCorrespondeGrupo,
+  ordenarLinhasMe,
+  proximaOrdenacao,
   proximoAjusteAoClicar,
   valorNovaReceitaPorMes,
   type ReceitaMeItemPrevisto,
@@ -158,6 +160,25 @@ test('ciclo de clique na célula', () => {
   assert.equal(proximoAjusteAoClicar('quitado'), 'ignorar')
 })
 
+test('ordenação por coluna: valor exibido, empate por nome e ciclo de cliques', () => {
+  const r = base({
+    previstos: [prev('Grupo B', 11, 1000), prev('Grupo A', 11, 1000), prev('Grupo C', 11, 3000), prev('Grupo C', 12, 100)],
+    recebidos: [{ areaKey: 'trabalhista', grupo: 'Grupo A', valor: 5000 }],
+  })
+  const nomes = (o: Parameters<typeof ordenarLinhasMe>[1]) => ordenarLinhasMe(r.linhas, o).map((l) => l.grupo)
+  assert.deepEqual(nomes({ chave: 11, direcao: 'desc' }), ['Grupo C', 'Grupo A', 'Grupo B'])
+  assert.deepEqual(nomes({ chave: 'recebido', direcao: 'desc' }), ['Grupo A', 'Grupo B', 'Grupo C'])
+  assert.deepEqual(nomes({ chave: 'grupo', direcao: 'desc' }), ['Grupo C', 'Grupo B', 'Grupo A'])
+  assert.deepEqual(nomes(null), r.linhas.map((l) => l.grupo))
+
+  const um = proximaOrdenacao(null, 'me')
+  assert.deepEqual(um, { chave: 'me', direcao: 'desc' })
+  const dois = proximaOrdenacao(um, 'me')
+  assert.deepEqual(dois, { chave: 'me', direcao: 'asc' })
+  assert.equal(proximaOrdenacao(dois, 'me'), null)
+  assert.deepEqual(proximaOrdenacao(dois, 'grupo'), { chave: 'grupo', direcao: 'asc' })
+})
+
 test('horizonte vai do mês corrente a dezembro', () => {
   assert.deepEqual(horizonteMe(2026, new Date(2026, 9, 21)), { meses: [10, 11, 12], mesCorrente: 10 })
   assert.deepEqual(horizonteMe(2025, new Date(2026, 9, 21)), { meses: [], mesCorrente: null })
@@ -179,4 +200,26 @@ test('mês a mês e gap usam realizado nos fechados e ME nos abertos', () => {
   assert.equal(Math.round(gap.gap), 2_600_000)
   assert.equal(gap.mesesAbertos, 3)
   assert.equal(Math.round(gap.necessarioPorMes), 2_000_000)
+})
+
+test('meta variável no mês, meta anual no acumulado e no gap', () => {
+  const base = 1_000
+  const mesesMeta = [6, 7, 8]
+  const linhas = montarMesAMes({
+    mesesMeta,
+    // Jun ficou 300 abaixo: a meta variável de Jul e Ago sobe 150 cada (como na Gestão à vista).
+    metaPorMes: { 6: base, 7: base + 150, 8: base + 150 },
+    metaBasePorMes: { 6: base, 7: base, 8: base },
+    realizadoPorMes: { 6: 700 },
+    mePorMes: { 7: 1_150, 8: 1_150 },
+    mesesHorizonte: [7, 8],
+  })
+  assert.equal(linhas[1].meta, 1_150)
+  assert.equal(linhas[1].diferenca, 0)
+  assert.equal(linhas[2].metaAcumulada, 3_000)
+  assert.equal(linhas[2].gapAcumulado, 0)
+  const gap = calcularGapMeta(linhas)
+  assert.equal(gap.metaTotal, 3_000)
+  assert.equal(gap.necessarioPorMes, 1_150)
+  assert.equal(gap.gap, 0)
 })

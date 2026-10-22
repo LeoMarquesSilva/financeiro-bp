@@ -1,9 +1,18 @@
-import { useMemo, useState } from 'react'
-import { Ban, Check, Search } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Ban, Check, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
-import type { ReceitaMeAreaCalc, ReceitaMeCelula, ReceitaMeLinha } from '../utils/receitaMeCalc'
+import {
+  ordenarLinhasMe,
+  proximaOrdenacao,
+  type ReceitaMeAreaCalc,
+  type ReceitaMeCelula,
+  type ReceitaMeLinha,
+  type ReceitaMeOrdenacao,
+  type ReceitaMeOrdenacaoChave,
+  type ReceitaMeTituloDetalhe,
+} from '../utils/receitaMeCalc'
 import { receitaMeMesRotulo } from '../utils/receitaMeLabels'
 
 type Props = {
@@ -22,12 +31,24 @@ const ESTADO_CLASS: Record<ReceitaMeCelula['estado'], string> = {
   quitado: 'text-slate-400',
 }
 
+/** '2026-10-25' → '25/10'. */
+function diaMes(iso: string): string {
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+}
+
+function linhaTitulo(d: ReceitaMeTituloDetalhe): string {
+  const venc = d.vencimento ? diaMes(d.vencimento) : 'sem data'
+  const valor = formatCurrency(d.valor)
+  if (d.pago) return `Venc. ${venc} · ${valor} · pago${d.pagamento ? ` em ${diaMes(d.pagamento)}` : ''}`
+  if (d.vencido) return `Venceu ${venc} · ${valor} · em atraso`
+  return `Vence ${venc} · ${valor}`
+}
+
 function tituloCelula(c: ReceitaMeCelula, podeEditar: boolean): string {
-  const partes = [
-    `${c.titulos} título(s) · previsto ${formatCurrency(c.previsto)}`,
-    c.pago > 0 ? `pago ${formatCurrency(c.pago)}` : null,
-    c.aberto > 0 ? `em aberto ${formatCurrency(c.aberto)}` : null,
-  ].filter(Boolean)
+  const partes = c.detalhes.map(linhaTitulo)
+  if (c.titulos > 1) {
+    partes.push(`Total: previsto ${formatCurrency(c.previsto)} · em aberto ${formatCurrency(c.aberto)}`)
+  }
   const estado: Record<ReceitaMeCelula['estado'], string> = {
     conta: 'Conta na estimativa.',
     nao_paga: 'Marcado como não deve pagar: fora da estimativa.',
@@ -41,20 +62,88 @@ function tituloCelula(c: ReceitaMeCelula, podeEditar: boolean): string {
     em_atraso: 'Clique para marcar que vai pagar.',
     vai_pagar: 'Clique para marcar como não deve pagar.',
   }
-  return [partes.join(' · '), estado[c.estado], podeEditar ? acao[c.estado] : null]
+  return [partes.join('\n'), estado[c.estado], podeEditar ? acao[c.estado] : null]
     .filter(Boolean)
     .join('\n')
 }
 
+function CabecalhoOrdenavel({
+  chave,
+  ordenacao,
+  onOrdenar,
+  alinhamento = 'direita',
+  rowSpan,
+  title,
+  children,
+}: {
+  chave: ReceitaMeOrdenacaoChave
+  ordenacao: ReceitaMeOrdenacao | null
+  onOrdenar: (chave: ReceitaMeOrdenacaoChave) => void
+  alinhamento?: 'esquerda' | 'direita'
+  rowSpan?: number
+  title?: string
+  children: React.ReactNode
+}) {
+  const ativo = ordenacao?.chave === chave
+  const Icone = !ativo ? ArrowUpDown : ordenacao.direcao === 'asc' ? ArrowUp : ArrowDown
+  return (
+    <th
+      rowSpan={rowSpan}
+      className={cn(
+        'px-3 py-2 font-semibold',
+        alinhamento === 'direita' ? 'text-right' : 'text-left',
+        rowSpan && rowSpan > 1 && 'align-bottom',
+      )}
+      aria-sort={ativo ? (ordenacao.direcao === 'asc' ? 'ascending' : 'descending') : 'none'}
+      title={title}
+    >
+      <button
+        type="button"
+        onClick={() => onOrdenar(chave)}
+        className={cn(
+          'inline-flex items-center gap-1 whitespace-nowrap uppercase tracking-wider transition-colors hover:text-slate-900',
+          alinhamento === 'direita' && 'flex-row-reverse',
+          ativo && 'text-slate-900',
+        )}
+      >
+        {children}
+        <Icone className={cn('h-3 w-3 shrink-0', ativo ? 'text-slate-700' : 'text-slate-300')} aria-hidden />
+      </button>
+    </th>
+  )
+}
+
 export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickLinha }: Props) {
   const [busca, setBusca] = useState('')
+  const [ordenacao, setOrdenacao] = useState<ReceitaMeOrdenacao | null>(null)
   const { meses, mesCorrente } = calc
+  /** Mês corrente vira um cabeçalho agrupado (recebido + em aberto); os demais meses ficam soltos. */
+  const mesesFuturos = meses.filter((m) => m !== mesCorrente)
+  const linhasCabecalho = mesCorrente != null ? 2 : 1
+  const bordaMesCorrente = (m: number) => (m === mesCorrente ? 'border-r border-slate-200' : '')
+
+  // A ordem só muda ao clicar no cabeçalho ou quando entram/saem grupos: marcar uma
+  // célula muda a ME da linha, e ela não pode pular de lugar sob o cursor.
+  const linhasAtuais = useRef(calc.linhas)
+  linhasAtuais.current = calc.linhas
+  const assinaturaGrupos = useMemo(
+    () => `${calc.areaKey}\u0000${calc.linhas.map((l) => l.grupo).sort().join('\u0000')}`,
+    [calc.areaKey, calc.linhas],
+  )
+  const ordem = useMemo(
+    () => ordenarLinhasMe(linhasAtuais.current, ordenacao).map((l) => l.grupo),
+    [ordenacao, assinaturaGrupos],
+  )
 
   const linhas = useMemo(() => {
+    const porGrupo = new Map(calc.linhas.map((l) => [l.grupo, l]))
     const q = busca.trim().toLowerCase()
-    if (!q) return calc.linhas
-    return calc.linhas.filter((l) => l.grupo.toLowerCase().includes(q))
-  }, [calc.linhas, busca])
+    return ordem
+      .map((g) => porGrupo.get(g))
+      .filter((l): l is ReceitaMeLinha => l != null && (!q || l.grupo.toLowerCase().includes(q)))
+  }, [calc.linhas, ordem, busca])
+
+  const ordenarPor = (chave: ReceitaMeOrdenacaoChave) => setOrdenacao((atual) => proximaOrdenacao(atual, chave))
 
   const totais = useMemo(() => {
     const porMes: Record<number, number> = {}
@@ -77,15 +166,26 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
               : 'Somente leitura: só o responsável da área, o admin e a Controladoria alteram.'}
           </p>
         </div>
-        <div className="relative w-full max-w-[240px]">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" aria-hidden />
-          <Input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar grupo"
-            className="h-8 pl-8 text-sm"
-            aria-label="Buscar grupo"
-          />
+        <div className="flex w-full max-w-[360px] items-center justify-end gap-2">
+          {ordenacao && (
+            <button
+              type="button"
+              onClick={() => setOrdenacao(null)}
+              className="shrink-0 text-xs text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+            >
+              Ordem padrão
+            </button>
+          )}
+          <div className="relative w-full max-w-[240px]">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" aria-hidden />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar grupo"
+              className="h-8 pl-8 text-sm"
+              aria-label="Buscar grupo"
+            />
+          </div>
         </div>
       </div>
 
@@ -100,22 +200,61 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
       <div className="max-h-[560px] overflow-auto">
         <table className="w-full min-w-[720px] text-sm tabular-nums">
           <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
-            <tr className="border-b border-slate-200">
-              <th className="px-3 py-2 text-left font-semibold">Grupo</th>
+            <tr className={cn(mesCorrente == null && 'border-b border-slate-200')}>
+              <CabecalhoOrdenavel
+                chave="grupo"
+                ordenacao={ordenacao}
+                onOrdenar={ordenarPor}
+                alinhamento="esquerda"
+                rowSpan={linhasCabecalho}
+              >
+                Grupo
+              </CabecalhoOrdenavel>
               {mesCorrente != null && (
-                <th className="px-3 py-2 text-right font-semibold" title="Caixa do mês corrente, inclui títulos de outros meses">
-                  Recebido {receitaMeMesRotulo(ano, mesCorrente)}
+                <th
+                  colSpan={2}
+                  className="border-b border-l border-r border-slate-200 bg-slate-100/70 px-3 pb-1 pt-2 text-center font-semibold text-slate-700"
+                >
+                  {receitaMeMesRotulo(ano, mesCorrente)}
                 </th>
               )}
-              {meses.map((m) => (
-                <th key={m} className="px-3 py-2 text-right font-semibold">
-                  {m === mesCorrente ? 'A receber ' : ''}
+              {mesesFuturos.map((m) => (
+                <CabecalhoOrdenavel
+                  key={m}
+                  chave={m}
+                  ordenacao={ordenacao}
+                  onOrdenar={ordenarPor}
+                  rowSpan={linhasCabecalho}
+                  title="Valor em aberto dos títulos que vencem no mês"
+                >
                   {receitaMeMesRotulo(ano, m)}
-                </th>
+                </CabecalhoOrdenavel>
               ))}
-              <th className="px-3 py-2 text-right font-semibold">ME</th>
-              <th className="w-10 px-2 py-2" aria-label="Ações" />
+              <CabecalhoOrdenavel chave="me" ordenacao={ordenacao} onOrdenar={ordenarPor} rowSpan={linhasCabecalho}>
+                ME
+              </CabecalhoOrdenavel>
+              <th rowSpan={linhasCabecalho} className="w-10 px-2 py-2" aria-label="Ações" />
             </tr>
+            {mesCorrente != null && (
+              <tr className="border-b border-slate-200">
+                <CabecalhoOrdenavel
+                  chave="recebido"
+                  ordenacao={ordenacao}
+                  onOrdenar={ordenarPor}
+                  title="Caixa do mês, inclui pagamento de títulos de outros meses"
+                >
+                  Recebido
+                </CabecalhoOrdenavel>
+                <CabecalhoOrdenavel
+                  chave={mesCorrente}
+                  ordenacao={ordenacao}
+                  onOrdenar={ordenarPor}
+                  title="Títulos que vencem no mês e ainda não foram pagos (amarelo = vencido, em atraso)"
+                >
+                  Em aberto
+                </CabecalhoOrdenavel>
+              </tr>
+            )}
           </thead>
           <tbody>
             {linhas.length === 0 && (
@@ -137,7 +276,7 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
                     {linha.grupo}
                   </td>
                   {mesCorrente != null && (
-                    <td className="px-3 py-1.5 text-right text-emerald-700" title={formatCurrency(linha.recebido)}>
+                    <td className="border-l border-slate-200 px-3 py-1.5 text-right text-emerald-700" title={formatCurrency(linha.recebido)}>
                       {linha.recebido > 0 ? formatCurrencyCompact(linha.recebido) : <span className="text-slate-300">—</span>}
                     </td>
                   )}
@@ -145,14 +284,18 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
                     const c = linha.celulas[m]
                     if (c.previsto <= 0) {
                       return (
-                        <td key={m} className="px-3 py-1.5 text-right text-slate-300">
+                        <td key={m} className={cn('px-3 py-1.5 text-right text-slate-300', bordaMesCorrente(m))}>
                           —
                         </td>
                       )
                     }
                     if (c.estado === 'quitado') {
                       return (
-                        <td key={m} className="px-3 py-1.5 text-right text-slate-400" title={tituloCelula(c, podeEditar)}>
+                        <td
+                          key={m}
+                          className={cn('px-3 py-1.5 text-right text-slate-400', bordaMesCorrente(m))}
+                          title={tituloCelula(c, podeEditar)}
+                        >
                           <span className="inline-flex items-center gap-1 text-[11px]">
                             <Check className="h-3 w-3" aria-hidden />
                             pago
@@ -161,7 +304,7 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
                       )
                     }
                     return (
-                      <td key={m} className="px-2 py-1 text-right">
+                      <td key={m} className={cn('px-2 py-1 text-right', bordaMesCorrente(m))}>
                         <button
                           type="button"
                           disabled={!podeEditar}
@@ -206,10 +349,12 @@ export function ReceitaMeMatriz({ ano, calc, podeEditar, onClickCelula, onClickL
               <tr className="border-t border-slate-200">
                 <td className="px-3 py-2">{busca ? 'Total filtrado' : 'Total da carteira'}</td>
                 {mesCorrente != null && (
-                  <td className="px-3 py-2 text-right text-emerald-700">{formatCurrencyCompact(totais.recebido)}</td>
+                  <td className="border-l border-slate-200 px-3 py-2 text-right text-emerald-700">
+                    {formatCurrencyCompact(totais.recebido)}
+                  </td>
                 )}
                 {meses.map((m) => (
-                  <td key={m} className="px-3 py-2 text-right" title="Só o que conta na estimativa">
+                  <td key={m} className={cn('px-3 py-2 text-right', bordaMesCorrente(m))} title="Só o que conta na estimativa">
                     {formatCurrencyCompact(totais.porMes[m])}
                   </td>
                 ))}
