@@ -24,6 +24,7 @@ import type {
   ReceitaMeSnapshotRow,
 } from '../types/receitaMe.types'
 import { ReceitaMeMesAMesTabela } from './ReceitaMeMesAMesTabela'
+import { ReceitaMeResumoCards } from './ReceitaMeResumoCards'
 
 type Props = {
   ano: number
@@ -43,24 +44,6 @@ type Props = {
 
 function pct(v: number): string {
   return `${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
-}
-
-function Kpi({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'negativo' | 'positivo' }) {
-  return (
-    <div className="rounded-xl border border-slate-200/60 bg-white p-3 shadow-sm sm:p-4">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
-      <p
-        className={cn(
-          'mt-1 text-xl font-bold tabular-nums text-slate-900',
-          tone === 'negativo' && 'text-red-600',
-          tone === 'positivo' && 'text-emerald-700',
-        )}
-      >
-        {value}
-      </p>
-      {hint && <p className="mt-1 text-[10px] leading-snug text-slate-500">{hint}</p>}
-    </div>
-  )
 }
 
 export function ReceitaMeEscritorioPanel({
@@ -111,6 +94,8 @@ export function ReceitaMeEscritorioPanel({
     recebido: lista.reduce((s, c) => s + c.recebido, 0),
     aberto: lista.reduce((s, c) => s + c.aberto, 0),
     fora: lista.reduce((s, c) => s + c.fora, 0),
+    foraAtraso: lista.reduce((s, c) => s + c.foraAtraso, 0),
+    foraNaoPaga: lista.reduce((s, c) => s + c.foraNaoPaga, 0),
     novas: lista.reduce((s, c) => s + c.novas, 0),
     potencial: lista.reduce((s, c) => s + c.potencial, 0),
     me: lista.reduce((s, c) => s + c.meTotal, 0),
@@ -171,21 +156,15 @@ export function ReceitaMeEscritorioPanel({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label={`Meta ${periodoMeta}`} value={formatCurrencyCompact(gap.metaTotal)} hint="Meta do SIOE (Configurações da Receita)" />
-        <Kpi
-          label={`Projeção ${periodoMeta}`}
-          value={formatCurrencyCompact(gap.projecao)}
-          hint={`Realizado ${formatCurrencyCompact(gap.realizadoFechado)} + ME ${formatCurrencyCompact(gap.meAberto)}`}
-        />
-        <Kpi label="Atingimento projetado" value={pct(gap.atingimentoPct)} tone={gap.atingimentoPct >= 100 ? 'positivo' : undefined} />
-        <Kpi
-          label="Gap para a meta"
-          value={formatCurrencyCompact(Math.max(0, gap.gap))}
-          tone={gap.gap > 0 ? 'negativo' : 'positivo'}
-          hint={gap.gap > 0 ? undefined : 'Meta coberta pela projeção'}
-        />
-      </div>
+      <ReceitaMeResumoCards
+        ano={ano}
+        gap={gap}
+        periodoMeta={periodoMeta}
+        periodoMe={periodoMe}
+        mesCorrente={mesCorrente}
+        metaHint="Meta do SIOE (Configurações da Receita)"
+        composicao={total}
+      />
 
       <section className="space-y-2">
         <div>
@@ -350,12 +329,6 @@ export function ReceitaMeEscritorioPanel({
             </tfoot>
           </table>
         </div>
-        <p className="text-xs text-slate-500">
-          Composição {periodoMe}: recebido {formatCurrencyCompact(total.recebido)} + em aberto {formatCurrencyCompact(total.aberto)} − fora da
-          estimativa {formatCurrencyCompact(total.fora)} + novas receitas {formatCurrencyCompact(total.novas)} ={' '}
-          <span className="font-semibold text-slate-700">{formatCurrencyCompact(total.me)}</span>
-          {total.potencial > 0 && ` · potencial com chance baixa: ${formatCurrencyCompact(total.potencial)}`}
-        </p>
       </section>
 
       <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">

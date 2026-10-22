@@ -104,6 +104,16 @@ test('vencido no mês corrente fica fora por padrão; vai_pagar e nao_paga inver
   assert.equal(nao.fora, 1000)
 })
 
+test('fora da estimativa separa em atraso (inadimplência) de não deve pagar', () => {
+  const r = base({
+    previstos: [prev('Grupo A', 10, 800, { vencido: true }), prev('Grupo B', 11, 500)],
+    ajustes: [ajuste('Grupo B', 11, 'nao_paga', 500)],
+  })
+  assert.equal(r.foraAtraso, 800)
+  assert.equal(r.foraNaoPaga, 500)
+  assert.equal(r.fora, r.foraAtraso + r.foraNaoPaga)
+})
+
 test('marcar não paga não muda a ordem das linhas', () => {
   const previstos = [prev('Grupo Grande', 11, 5000), prev('Grupo Pequeno', 11, 1000)]
   const antes = base({ previstos }).linhas.map((l) => l.grupo)
