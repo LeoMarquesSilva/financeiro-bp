@@ -270,7 +270,7 @@ export function ReceitaMeAreaPanel({
           tone="destaque"
           hint={
             metaHorizonte > 0
-              ? `Meta da área no período ${formatCurrencyCompact(metaHorizonte)} · ${
+              ? `Meta da área no período (variável) ${formatCurrencyCompact(metaHorizonte)} · ${
                   gapHorizonte > 0 ? `faltam ${formatCurrencyCompact(gapHorizonte)}` : 'meta coberta'
                 }`
               : undefined
@@ -282,8 +282,9 @@ export function ReceitaMeAreaPanel({
         <div>
           <h3 className="text-sm font-semibold text-slate-900">Meta da área mês a mês</h3>
           <p className="text-xs text-slate-500">
-            Meta do SIOE rateada pela contribuição da área. Meses fechados entram pelo realizado; os abertos, pela melhor
-            estimativa.
+            Meta variável do SIOE (a mesma da Gestão à vista: o que faltou nos meses fechados vai para os seguintes),
+            rateada pela contribuição da área. Meses fechados entram pelo realizado; os abertos, pela melhor estimativa.
+            O total e o gap acumulado usam a meta anual.
           </p>
         </div>
         <ReceitaMeMesAMesTabela ano={ano} linhas={mesAMes} compacta />
