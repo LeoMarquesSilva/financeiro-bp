@@ -1,4 +1,6 @@
+import { formatCurrency } from '@/shared/utils/format'
 import { mesAbrev, RECEITA_DEPARTAMENTO_LABELS, RECEITA_META_CONTRIBUICAO_AREA } from '../constants'
+import type { ReceitaMeTituloDetalhe } from './receitaMeCalc'
 import { RECEITA_RATEIO_OUTRAS_KEY } from './receitaRateioConsulta'
 import type { ReceitaMeChance, ReceitaMeOrigem } from '../types/receitaMe.types'
 
@@ -16,6 +18,20 @@ export function receitaMeAreaLabel(areaKey: string): string {
 export function receitaMeMesRotulo(ano: number, mes: number): string {
   const abrev = mesAbrev(mes)
   return `${abrev.charAt(0).toUpperCase()}${abrev.slice(1)}/${String(ano).slice(-2)}`
+}
+
+/** '2026-10-25' → '25/10'. */
+export function receitaMeDiaMes(iso: string): string {
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+}
+
+/** Linha do tooltip: "Venceu 10/10 · R$ 6.200,00 · em atraso", "Vence 25/10 · …", "Venc. … · pago em …". */
+export function receitaMeDescreverTitulo(d: ReceitaMeTituloDetalhe): string {
+  const venc = d.vencimento ? receitaMeDiaMes(d.vencimento) : 'sem data'
+  const valor = formatCurrency(d.valor)
+  if (d.pago) return `Venc. ${venc} · ${valor} · pago${d.pagamento ? ` em ${receitaMeDiaMes(d.pagamento)}` : ''}`
+  if (d.vencido) return `Venceu ${venc} · ${valor} · em atraso`
+  return `Vence ${venc} · ${valor}`
 }
 
 export function receitaMeMesesRotulo(ano: number, meses: readonly number[]): string {

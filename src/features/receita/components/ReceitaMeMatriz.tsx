@@ -11,9 +11,8 @@ import {
   type ReceitaMeLinha,
   type ReceitaMeOrdenacao,
   type ReceitaMeOrdenacaoChave,
-  type ReceitaMeTituloDetalhe,
 } from '../utils/receitaMeCalc'
-import { receitaMeMesRotulo } from '../utils/receitaMeLabels'
+import { receitaMeDescreverTitulo, receitaMeMesRotulo } from '../utils/receitaMeLabels'
 
 type Props = {
   ano: number
@@ -31,21 +30,8 @@ const ESTADO_CLASS: Record<ReceitaMeCelula['estado'], string> = {
   quitado: 'text-slate-400',
 }
 
-/** '2026-10-25' → '25/10'. */
-function diaMes(iso: string): string {
-  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
-}
-
-function linhaTitulo(d: ReceitaMeTituloDetalhe): string {
-  const venc = d.vencimento ? diaMes(d.vencimento) : 'sem data'
-  const valor = formatCurrency(d.valor)
-  if (d.pago) return `Venc. ${venc} · ${valor} · pago${d.pagamento ? ` em ${diaMes(d.pagamento)}` : ''}`
-  if (d.vencido) return `Venceu ${venc} · ${valor} · em atraso`
-  return `Vence ${venc} · ${valor}`
-}
-
 function tituloCelula(c: ReceitaMeCelula, podeEditar: boolean): string {
-  const partes = c.detalhes.map(linhaTitulo)
+  const partes = c.detalhes.map(receitaMeDescreverTitulo)
   if (c.titulos > 1) {
     partes.push(`Total: previsto ${formatCurrency(c.previsto)} · em aberto ${formatCurrency(c.aberto)}`)
   }

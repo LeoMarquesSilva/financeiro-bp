@@ -26,6 +26,7 @@ import { ReceitaMeNovidades } from './ReceitaMeNovidades'
 import { ReceitaMeNovasReceitas } from './ReceitaMeNovasReceitas'
 import { ReceitaMeMesAMesTabela } from './ReceitaMeMesAMesTabela'
 import { ReceitaMeResumoCards } from './ReceitaMeResumoCards'
+import { ReceitaMeForaEstimativa } from './ReceitaMeForaEstimativa'
 
 type Mutations = ReturnType<typeof useReceitaMeMutations>
 
@@ -269,6 +270,7 @@ export function ReceitaMeAreaPanel({
               await mutations.removerNovaReceita(id)
             }}
           />
+          <ReceitaMeForaEstimativa ano={ano} calc={calc} />
         </>
       )}
     </div>
