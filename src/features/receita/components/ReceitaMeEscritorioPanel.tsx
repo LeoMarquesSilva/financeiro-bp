@@ -208,7 +208,7 @@ export function ReceitaMeEscritorioPanel({
           <p className="mt-0.5 text-xs text-slate-500">
             Fora da estimativa hoje: {formatCurrencyCompact(total.fora)} (não deve pagar e em atraso).
           </p>
-          <table className="mt-3 w-full text-sm tabular-nums">
+          <table className="mt-3 w-full whitespace-nowrap text-sm tabular-nums">
             <thead className="text-[11px] uppercase tracking-wider text-slate-500">
               <tr>
                 <th className="pb-1 text-left font-semibold">Cenário</th>
@@ -239,7 +239,7 @@ export function ReceitaMeEscritorioPanel({
           <p className="text-xs text-slate-500">Clique numa área para abrir a matriz. Demais departamentos entram automaticamente, sem ajuste.</p>
         </div>
         <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-sm">
-          <table className="w-full min-w-[820px] text-sm tabular-nums">
+          <table className="w-full min-w-[820px] whitespace-nowrap text-sm tabular-nums">
             <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
               <tr className="border-b border-slate-200">
                 <th className="px-3 py-2 text-left font-semibold">Área</th>

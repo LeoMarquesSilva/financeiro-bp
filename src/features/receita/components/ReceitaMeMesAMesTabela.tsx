@@ -30,7 +30,7 @@ export function ReceitaMeMesAMesTabela({ ano, linhas, compacta = false }: Props)
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-sm">
-      <table className="w-full min-w-[640px] text-sm tabular-nums">
+      <table className="w-full min-w-[640px] whitespace-nowrap text-sm tabular-nums">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] uppercase tracking-wider text-slate-500">
             <th className="px-3 py-2 text-left font-semibold">Mês</th>
