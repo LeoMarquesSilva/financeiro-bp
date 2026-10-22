@@ -7,6 +7,7 @@ import {
   montarMesAMes,
   novaReceitaCorrespondeGrupo,
   ordenarLinhasMe,
+  ordenarPorColuna,
   proximaOrdenacao,
   proximoAjusteAoClicar,
   valorNovaReceitaPorMes,
@@ -187,6 +188,22 @@ test('ordenação por coluna: valor exibido, empate por nome e ciclo de cliques'
   assert.deepEqual(dois, { chave: 'me', direcao: 'asc' })
   assert.equal(proximaOrdenacao(dois, 'me'), null)
   assert.deepEqual(proximaOrdenacao(dois, 'grupo'), { chave: 'grupo', direcao: 'asc' })
+})
+
+test('ordenação genérica: texto, número e direção inicial explícita', () => {
+  const itens = [
+    { nome: 'B', situacao: 'Não deve pagar', total: 10 },
+    { nome: 'A', situacao: 'Em atraso', total: 10 },
+    { nome: 'C', situacao: 'Em atraso, Não deve pagar', total: 30 },
+  ]
+  type Chave = 'situacao' | 'total'
+  const valor = (i: (typeof itens)[number], c: Chave) => i[c]
+  const nomes = (o: { chave: Chave; direcao: 'asc' | 'desc' } | null) =>
+    ordenarPorColuna(itens, o, valor, (i) => i.nome).map((i) => i.nome)
+  assert.deepEqual(nomes({ chave: 'situacao', direcao: 'asc' }), ['A', 'C', 'B'])
+  assert.deepEqual(nomes({ chave: 'total', direcao: 'desc' }), ['C', 'A', 'B'])
+  assert.deepEqual(nomes(null), ['B', 'A', 'C'])
+  assert.deepEqual(proximaOrdenacao<Chave>(null, 'situacao', 'asc'), { chave: 'situacao', direcao: 'asc' })
 })
 
 test('horizonte vai do mês corrente a dezembro', () => {
