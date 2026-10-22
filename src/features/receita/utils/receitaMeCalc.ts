@@ -103,6 +103,10 @@ export type ReceitaMeAreaCalc = {
   recebido: number
   aberto: number
   fora: number
+  /** Parte do `fora` vencida sem pagamento que ficou fora por padrão (inadimplência do mês). */
+  foraAtraso: number
+  /** Parte do `fora` marcada pelo gerente como "não deve pagar". */
+  foraNaoPaga: number
   novas: number
   potencial: number
   mePorMes: Record<number, number>
@@ -278,6 +282,8 @@ export function calcularAreaMe(input: {
     novasPorMes[m] = 0
   }
 
+  let foraAtraso = 0
+  let foraNaoPaga = 0
   const linhas: ReceitaMeLinha[] = []
   for (const grupo of grupos) {
     const recebido = arred(recebidoPorGrupo.get(grupo) ?? 0)
@@ -309,6 +315,8 @@ export function calcularAreaMe(input: {
       me += st.contado
       mePorMes[m] += st.contado
       foraPorMes[m] += st.fora
+      if (st.estado === 'em_atraso') foraAtraso += st.fora
+      else if (st.estado === 'nao_paga') foraNaoPaga += st.fora
     }
     if (mesCorrente != null && mesesSet.has(mesCorrente)) mePorMes[mesCorrente] += recebido
     linhas.push({
@@ -419,6 +427,8 @@ export function calcularAreaMe(input: {
     recebido: arred(linhas.reduce((s, l) => s + l.recebido, 0)),
     aberto: arred(linhas.reduce((s, l) => s + l.aberto, 0)),
     fora: arred(soma(foraPorMes)),
+    foraAtraso: arred(foraAtraso),
+    foraNaoPaga: arred(foraNaoPaga),
     novas: arred(soma(novasPorMes)),
     potencial: arred(potencial),
     mePorMes,

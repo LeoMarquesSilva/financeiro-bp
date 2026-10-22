@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { CheckCircle2, CircleDashed } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { formatCurrency, formatCurrencyCompact, formatDateTime } from '@/shared/utils/format'
+import { formatDateTime } from '@/shared/utils/format'
 import {
   proximoAjusteAoClicar,
   type ReceitaMeAreaCalc,
@@ -12,8 +12,8 @@ import {
   type ReceitaMeNovidadeNovo,
   type ReceitaMeNovidadePagou,
 } from '../utils/receitaMeCalc'
-import { RECEITA_ME_TOLERANCIA } from '../utils/receitaMeCalc'
-import { receitaMeAreaLabel, receitaMeMesRotulo, receitaMeMesesRotulo } from '../utils/receitaMeLabels'
+import { calcularGapMeta, RECEITA_ME_TOLERANCIA } from '../utils/receitaMeCalc'
+import { RECEITA_ME_AREAS, receitaMeAreaLabel, receitaMeMesesRotulo } from '../utils/receitaMeLabels'
 import type { useReceitaMeMutations } from '../hooks/useReceitaMe'
 import type {
   ReceitaMeAreaStatus,
@@ -25,6 +25,7 @@ import { ReceitaMeMatriz } from './ReceitaMeMatriz'
 import { ReceitaMeNovidades } from './ReceitaMeNovidades'
 import { ReceitaMeNovasReceitas } from './ReceitaMeNovasReceitas'
 import { ReceitaMeMesAMesTabela } from './ReceitaMeMesAMesTabela'
+import { ReceitaMeResumoCards } from './ReceitaMeResumoCards'
 
 type Mutations = ReturnType<typeof useReceitaMeMutations>
 
@@ -37,42 +38,6 @@ type Props = {
   mesAMes: ReceitaMeMesAMes[]
   podeEditar: boolean
   mutations: Mutations
-}
-
-function Kpi({
-  label,
-  value,
-  hint,
-  tone = 'default',
-}: {
-  label: string
-  value: number
-  hint?: string
-  tone?: 'default' | 'positivo' | 'negativo' | 'destaque'
-}) {
-  return (
-    <div
-      className={cn(
-        'rounded-xl border bg-white p-3 shadow-sm sm:p-4',
-        tone === 'destaque' ? 'border-sky-200 ring-1 ring-sky-100' : 'border-slate-200/60',
-      )}
-    >
-      <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
-      <p
-        className={cn(
-          'mt-1 text-xl font-bold tabular-nums',
-          tone === 'positivo' && 'text-emerald-700',
-          tone === 'negativo' && 'text-red-600',
-          tone === 'destaque' && 'text-sky-800',
-          tone === 'default' && 'text-slate-900',
-        )}
-        title={formatCurrency(value)}
-      >
-        {formatCurrencyCompact(value)}
-      </p>
-      {hint && <p className="mt-1 text-[10px] leading-snug text-slate-500">{hint}</p>}
-    </div>
-  )
 }
 
 export function ReceitaMeAreaPanel({
@@ -90,8 +55,8 @@ export function ReceitaMeAreaPanel({
   const { meses, mesCorrente } = calc
   const periodo = receitaMeMesesRotulo(ano, meses)
 
-  const metaHorizonte = mesAMes.filter((l) => l.base === 'me').reduce((s, l) => s + l.meta, 0)
-  const gapHorizonte = metaHorizonte - calc.meTotal
+  const gapArea = useMemo(() => calcularGapMeta(mesAMes), [mesAMes])
+  const pctArea = RECEITA_ME_AREAS.find((a) => a.key === areaKey)?.pct ?? 0
   const gruposConhecidos = useMemo(() => calc.linhas.map((l) => l.grupo).sort((a, b) => a.localeCompare(b, 'pt-BR')), [calc.linhas])
 
   const visto = (grupo: string, mes: number, valor: number): ReceitaMeVisto => ({
@@ -249,34 +214,24 @@ export function ReceitaMeAreaPanel({
         />
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Kpi
-          label={mesCorrente != null ? `Recebido em ${receitaMeMesRotulo(ano, mesCorrente)}` : 'Recebido no mês'}
-          value={calc.recebido}
-          tone="positivo"
-          hint="Caixa do mês, inclui títulos de outros meses"
-        />
-        <Kpi label={`Em aberto ${periodo}`} value={calc.aberto} hint="Títulos com vencimento no horizonte, sem pagamento" />
-        <Kpi label="(−) Fora da estimativa" value={calc.fora} tone="negativo" hint="Não deve pagar e em atraso" />
-        <Kpi
-          label="(+) Novas receitas"
-          value={calc.novas}
-          tone="positivo"
-          hint={calc.potencial > 0 ? `+ ${formatCurrencyCompact(calc.potencial)} de potencial (chance baixa)` : 'Chance alta e média'}
-        />
-        <Kpi
-          label={`Melhor estimativa ${periodo}`}
-          value={calc.meTotal}
-          tone="destaque"
-          hint={
-            metaHorizonte > 0
-              ? `Meta da área no período (variável) ${formatCurrencyCompact(metaHorizonte)} · ${
-                  gapHorizonte > 0 ? `faltam ${formatCurrencyCompact(gapHorizonte)}` : 'meta coberta'
-                }`
-              : undefined
-          }
-        />
-      </div>
+      <ReceitaMeResumoCards
+        ano={ano}
+        gap={gapArea}
+        periodoMeta={receitaMeMesesRotulo(ano, mesAMes.map((l) => l.mes))}
+        periodoMe={periodo}
+        mesCorrente={mesCorrente}
+        metaHint={`Meta do SIOE × ${pctArea.toLocaleString('pt-BR')}% (contribuição da área)`}
+        composicao={{
+          recebido: calc.recebido,
+          aberto: calc.aberto,
+          fora: calc.fora,
+          foraAtraso: calc.foraAtraso,
+          foraNaoPaga: calc.foraNaoPaga,
+          novas: calc.novas,
+          potencial: calc.potencial,
+          me: calc.meTotal,
+        }}
+      />
 
       <section className="space-y-2">
         <div>
