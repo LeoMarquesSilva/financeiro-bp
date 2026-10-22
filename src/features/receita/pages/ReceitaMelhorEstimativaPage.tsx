@@ -148,16 +148,18 @@ export function ReceitaMelhorEstimativaPage() {
 
       <Tabs value={aba} onValueChange={(v) => setAba(v as Aba)} className="space-y-5">
         {acesso.podeVerEscritorio && (
-          <TabsList>
-            <TabsTrigger value="area">Por área</TabsTrigger>
-            <TabsTrigger value="escritorio">Escritório</TabsTrigger>
-            <TabsTrigger value="historico">Histórico</TabsTrigger>
-          </TabsList>
+          <div className="flex justify-center">
+            <TabsList>
+              <TabsTrigger value="area">Por área</TabsTrigger>
+              <TabsTrigger value="escritorio">Escritório</TabsTrigger>
+              <TabsTrigger value="historico">Histórico</TabsTrigger>
+            </TabsList>
+          </div>
         )}
 
         <TabsContent value="area" className="space-y-5">
           {areasVisiveis.length > 1 && (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Área">
+            <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Área">
               {areasVisiveis.map((key) => {
                 const n = novidadesPorArea(key)
                 return (
