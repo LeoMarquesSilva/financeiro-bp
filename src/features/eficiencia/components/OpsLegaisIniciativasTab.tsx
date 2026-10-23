@@ -19,9 +19,11 @@ import { filtrarSubtarefasPorResponsavel, formatIniciativasBi, subtarefasRealiza
 import { formatPercent } from '@/shared/utils/format'
 import {
   isDiaFiltro,
+  isPeriodoCurtoFiltro,
   isSemanaFiltro,
   mesNoFiltro,
   rangePeriodoFiltro,
+  rangeSemanaFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
@@ -687,7 +689,7 @@ function TabelaConcluidos({ rows, expandAll = false, resumoParcial = 0, emptyLab
   if (!rows.length) return <PainelEmptyState>{emptyLabel}</PainelEmptyState>
   return (
     <div>
-      {resumoParcial > 0 ? <p className="border-b border-amber-100 bg-amber-50/80 px-6 py-3 text-sm leading-relaxed text-amber-900"><strong>Pendente</strong> = projeto ainda aberto com subtarefa concluída na semana. Expanda para ver as entregas.</p> : null}
+      {resumoParcial > 0 ? <p className="border-b border-amber-100 bg-amber-50/80 px-6 py-3 text-sm leading-relaxed text-amber-900"><strong>Pendente</strong> = projeto não baixado na semana, mas com subtarefa concluída nela. Expanda para ver as entregas.</p> : null}
       <ListaProjetos rows={rowsOrdenadas} mode="concluidos" expandAll={expandAll} />
     </div>
   )
@@ -739,6 +741,75 @@ function contaNaMeta(tags: string[]): boolean {
   return hasTagItem(tags, 'Projetos') || hasTagItem(tags, 'Melhorias')
 }
 
+/** Projeto sem slug no FORJAI cai no link genérico do pipeline — aí agrupa pelo nome. */
+function chaveProjeto(url: string | null, nome: string): string {
+  return url?.includes('/projects/') ? url : `nome:${nome}`
+}
+
+/**
+ * Semana passada = seg–dom fechada (mesma regra do filtro global). O FORJAI manda da
+ * segunda passada até hoje; aqui corta para a semana e agrupa por projeto só o que foi
+ * entregue nela (projeto baixado e/ou subtarefas concluídas).
+ */
+function deriveSemanaPassada(
+  painel: OpsLegaisIniciativasPainel,
+): Pick<OpsLegaisIniciativasPainel, 'semana' | 'semana_por_tarefa' | 'semana_inicio' | 'semana_fim'> {
+  const { inicio, fimExclusivo } = rangeSemanaFiltro('semana_passada')
+  const fim = new Date(`${fimExclusivo}T00:00:00Z`)
+  fim.setUTCDate(fim.getUTCDate() - 1)
+
+  const semana = painel.semana.filter((i) => i.data != null && i.data >= inicio && i.data < fimExclusivo)
+
+  const conhecidos = new Map(
+    [...painel.andamento, ...painel.concluidos].map((p) => [chaveProjeto(p.url, p.nome), p]),
+  )
+  const grupos = new Map<string, OpsLegaisIniciativasProjeto>()
+  for (const item of semana) {
+    const nome = item.tipo === 'Projeto' ? item.nome : item.pai_titulo
+    const chave = chaveProjeto(item.url, nome)
+    let grupo = grupos.get(chave)
+    if (!grupo) {
+      const base = conhecidos.get(chave)
+      grupo = {
+        id: base?.id ?? chave,
+        nome: base?.nome ?? nome,
+        url: base?.url ?? item.url,
+        tipo: base?.tipo ?? '',
+        extensao: base?.extensao ?? '',
+        responsavel: base?.responsavel ?? '',
+        data: null,
+        concluido: false,
+        subtarefas: [],
+        total_sub: 0,
+        sub_concluidas: 0,
+      }
+      grupos.set(chave, grupo)
+    }
+    if (item.tipo === 'Projeto') {
+      grupo.concluido = true
+      grupo.data = item.data
+      if (!grupo.responsavel) grupo.responsavel = item.responsavel
+    } else {
+      grupo.subtarefas.push({
+        id: item.id,
+        nome: item.nome,
+        responsavel: item.responsavel,
+        data: item.data,
+        status: 'concluido',
+      })
+      grupo.total_sub = grupo.subtarefas.length
+      grupo.sub_concluidas = grupo.subtarefas.length
+    }
+  }
+
+  return {
+    semana,
+    semana_por_tarefa: [...grupos.values()],
+    semana_inicio: inicio,
+    semana_fim: fim.toISOString().slice(0, 10),
+  }
+}
+
 function progressColor(pct01: number): string {
   if (pct01 >= 1) return '#059669'
   if (pct01 >= 0.75) return '#0284C7'
@@ -777,10 +848,17 @@ function deriveIniciativasFiltrado(
       ? { inicio: base.inicio, fimExclusivo: base.fim }
       : rangePeriodoFiltro(ano, mesFiltro)
 
-  const concluidos = buildConcluidosPainelFromItens(
+  const concluidosAno = buildConcluidosPainelFromItens(
     itens,
     base.painel?.concluidos ?? [],
   )
+  // Semana / De–Até: só as subtarefas entregues no período, não o histórico do projeto.
+  const concluidos = isPeriodoCurtoFiltro(mesFiltro)
+    ? concluidosAno.map((p) => ({
+        ...p,
+        subtarefas: p.subtarefas.filter((s) => projetoNoFiltro(s.data, mesFiltro, ano)),
+      }))
+    : concluidosAno
 
   return {
     ...base,
@@ -807,6 +885,7 @@ function deriveIniciativasFiltrado(
     painel: base.painel
       ? {
           ...base.painel,
+          ...deriveSemanaPassada(base.painel),
           concluidos,
         }
       : undefined,
