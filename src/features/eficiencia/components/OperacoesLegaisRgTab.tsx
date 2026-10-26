@@ -186,7 +186,7 @@ export function OperacoesLegaisRgTab({
 
   const periodoCurtoAtivo = isPeriodoCurtoFiltro(mesFiltro)
   const periodoCurtoLabel = isSemanaFiltro(mesFiltro)
-    ? rangeSemanaFiltro(mesFiltro).label
+    ? rangeSemanaFiltro().label
     : isDiaFiltro(mesFiltro)
       ? rangeDiaFiltro(mesFiltro).label
       : null

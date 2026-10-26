@@ -109,7 +109,7 @@ export function applyRacionalPeriodo(
   mes: MesFiltroEficiencia,
 ): AnyQuery {
   if (isSemanaFiltro(mes)) {
-    const { inicio, fimExclusivo } = rangeSemanaFiltro(mes)
+    const { inicio, fimExclusivo } = rangeSemanaFiltro()
     return query.gte(dataColuna, inicio).lt(dataColuna, fimExclusivo)
   }
   if (isDiaFiltro(mes)) {
@@ -505,7 +505,7 @@ export function shouldSkipFiltroRetencaoArea(
 }
 
 export function formatRacionalPeriodoLabel(ano: number, mes: MesFiltroEficiencia): string {
-  if (isSemanaFiltro(mes)) return rangeSemanaFiltro(mes).label
+  if (isSemanaFiltro(mes)) return rangeSemanaFiltro().label
   if (isDiaFiltro(mes)) return rangeDiaFiltro(mes).label
   if (mes === 'resultado') {
     const fim = mesFimResultado(ano)

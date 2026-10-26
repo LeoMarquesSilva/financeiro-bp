@@ -23,7 +23,7 @@ import {
   isSemanaFiltro,
   mesNoFiltro,
   rangePeriodoFiltro,
-  rangeSemanaFiltro,
+  rangeSemanaSegDomPassada,
   type MesFiltroEficiencia,
 } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
@@ -773,12 +773,13 @@ function addDiasIso(iso: string, dias: number): string {
 }
 
 /**
- * Semana seg–dom (mesma regra do filtro global): a passada ou a atual. O FORJAI manda da
+ * Semana seg–dom: a passada ou a atual. O filtro global "Semana passada" é sexta a quinta,
+ * mas aqui "atual" precisa da semana corrente, então fica seg–dom. O FORJAI manda da
  * segunda passada até hoje; aqui corta para a semana e agrupa por projeto só o que foi
  * entregue nela (projeto baixado e/ou subtarefas concluídas).
  */
 function deriveSemana(painel: OpsLegaisIniciativasPainel, qual: 'passada' | 'atual'): SemanaEntregas {
-  const passada = rangeSemanaFiltro('semana_passada')
+  const passada = rangeSemanaSegDomPassada()
   const inicio = qual === 'atual' ? passada.fimExclusivo : passada.inicio
   const fimExclusivo = addDiasIso(inicio, 7)
 

@@ -20,7 +20,7 @@ export function treinamentoDataNoFiltro(
   const iso = String(data ?? '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false
   if (isSemanaFiltro(filtro)) {
-    const { inicio, fimExclusivo } = rangeSemanaFiltro(filtro)
+    const { inicio, fimExclusivo } = rangeSemanaFiltro()
     return iso >= inicio && iso < fimExclusivo
   }
   if (isDiaFiltro(filtro)) {

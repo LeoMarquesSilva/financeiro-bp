@@ -212,26 +212,15 @@ export function MesFilterButtons({
         </button>
       ) : null}
       {showSemanas ? (
-        <>
-          <button
-            type="button"
-            onClick={() => selectFiltro('semana_passada')}
-            className={cn(BTN, valueEfetivo === 'semana_passada' ? BTN_ON : BTN_OFF)}
-            aria-pressed={valueEfetivo === 'semana_passada'}
-            title={rangeSemanaFiltro('semana_passada').label}
-          >
-            {toPriMaiuscula('Semana passada')}
-          </button>
-          <button
-            type="button"
-            onClick={() => selectFiltro('semana_retrasada')}
-            className={cn(BTN, valueEfetivo === 'semana_retrasada' ? BTN_ON : BTN_OFF)}
-            aria-pressed={valueEfetivo === 'semana_retrasada'}
-            title={rangeSemanaFiltro('semana_retrasada').label}
-          >
-            {toPriMaiuscula('Semana retrasada')}
-          </button>
-        </>
+        <button
+          type="button"
+          onClick={() => selectFiltro('semana_passada')}
+          className={cn(BTN, valueEfetivo === 'semana_passada' ? BTN_ON : BTN_OFF)}
+          aria-pressed={valueEfetivo === 'semana_passada'}
+          title={rangeSemanaFiltro().label}
+        >
+          {toPriMaiuscula('Semana passada')}
+        </button>
       ) : null}
       {MESES_EFICIENCIA.map((label, idx) => {
         const mes = idx + 1
