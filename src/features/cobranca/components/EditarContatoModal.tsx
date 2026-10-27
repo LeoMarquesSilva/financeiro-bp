@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ModalBase } from '@/features/inadimplencia/components/ModalBase'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -24,6 +25,7 @@ function newRow(nome = ''): TelefoneRow {
 }
 
 export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
+  const queryClient = useQueryClient()
   const [telefones, setTelefones] = useState<TelefoneRow[]>([])
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
@@ -86,6 +88,9 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
       await cobrancaService.updateContato(row.pessoa_id, {
         telefones: validos.map(({ id, nome, telefone }) => ({ id, nome, telefone })),
         email: email.trim() || null,
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ['cobranca', 'telefones-whatsapp', row.pessoa_id],
       })
       toast.success('Contato atualizado')
       onSaved()

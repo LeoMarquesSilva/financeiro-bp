@@ -545,38 +545,32 @@ export const cobrancaService = {
     pessoa_id: string,
     telefones: PessoaTelefoneWhatsappInput[],
   ): Promise<void> {
-    const rows = telefones
-      .map((t, idx) => {
-        const tel = normalizeTelefoneForStorage(t.telefone)
-        if (!tel || !isTelefoneStorable(t.telefone)) return null
-        return {
-          id: t.id,
-          pessoa_id,
-          nome: t.nome.trim() || 'WhatsApp',
-          telefone: tel,
-          ordem: idx,
-        }
-      })
-      .filter(Boolean) as Array<{
-      id?: string
-      pessoa_id: string
-      nome: string
-      telefone: string
-      ordem: number
-    }>
+    const rows: Array<{ pessoa_id: string; nome: string; telefone: string; ordem: number }> = []
+    for (const t of telefones) {
+      const tel = normalizeTelefoneForStorage(t.telefone)
+      if (!tel || !isTelefoneStorable(t.telefone)) continue
+      // Número repetido violaria o índice único (pessoa_id, telefone).
+      if (rows.some((r) => r.telefone === tel)) continue
+      rows.push({ pessoa_id, nome: t.nome.trim() || 'WhatsApp', telefone: tel, ordem: rows.length })
+    }
 
-    const { error: delError } = await supabase
+    // Grava antes de remover: se a gravação falhar, os telefones atuais são preservados.
+    if (rows.length > 0) {
+      const { error: upsError } = await supabase
+        .from('pessoa_telefones_whatsapp')
+        .upsert(rows as never, { onConflict: 'pessoa_id,telefone' })
+      if (upsError) throw upsError
+    }
+
+    let removerAntigos = supabase
       .from('pessoa_telefones_whatsapp')
       .delete()
       .eq('pessoa_id', pessoa_id)
-    if (delError) throw delError
-
     if (rows.length > 0) {
-      const { error: insError } = await supabase.from('pessoa_telefones_whatsapp').insert(
-        rows.map(({ id: _id, ...rest }) => rest) as never,
-      )
-      if (insError) throw insError
+      removerAntigos = removerAntigos.not('telefone', 'in', `(${rows.map((r) => r.telefone).join(',')})`)
     }
+    const { error: delError } = await removerAntigos
+    if (delError) throw delError
 
     const principal = rows[0]?.telefone ?? null
     const { error: updError } = await supabase
@@ -746,9 +740,10 @@ export const cobrancaService = {
       await this.saveTelefonesWhatsapp(pessoa_id, contato.telefones)
     }
     if (contato.email !== undefined) {
+      // email_cobranca não é enviado pelo sync do VIOS; o trigger o espelha em pessoas.email.
       const { error } = await supabase
         .from('pessoas')
-        .update({ email: contato.email } as never)
+        .update({ email: contato.email, email_cobranca: contato.email } as never)
         .eq('id', pessoa_id)
       if (error) throw error
     }
