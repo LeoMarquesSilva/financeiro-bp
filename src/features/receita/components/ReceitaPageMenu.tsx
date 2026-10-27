@@ -5,6 +5,7 @@ import {
   FileSpreadsheet,
   LayoutDashboard,
   PieChart,
+  Scale,
   Table2,
   TrendingUp,
   TriangleAlert,
@@ -38,6 +39,7 @@ const SECTION_ITEMS: SectionItem[] = [
     label: 'Valores acumulados',
     icon: ChartColumnIncreasing,
   },
+  { kind: 'section', id: RECEITA_SECTION_IDS.custos, label: 'Custos e resultado', icon: Scale },
 ]
 
 const ACTION_ITEMS: ActionItem[] = [
