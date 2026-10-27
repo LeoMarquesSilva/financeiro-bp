@@ -1,8 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { cobrancaService } from '../services/cobrancaService'
 import { useTelefonesWhatsapp } from '../hooks/useTelefonesWhatsapp'
 import { formatPhoneMasked, parsePhoneForStorage } from '../utils/phoneMask'
@@ -29,10 +31,12 @@ export const TelefoneWhatsappPicker = forwardRef<TelefoneWhatsappPickerHandle, P
     { pessoaId, pessoaNome, fallbackTelefone, value, onChange, disabled },
     ref,
   ) {
+    const queryClient = useQueryClient()
     const { data: cadastrados = [], isLoading } = useTelefonesWhatsapp(pessoaId)
     const [mode, setMode] = useState<'select' | 'new'>('select')
     const [newNome, setNewNome] = useState('')
     const [newTelefone, setNewTelefone] = useState('')
+    const [savingNew, setSavingNew] = useState(false)
 
     const opcoes = useMemo(() => {
       const list = [...cadastrados]
@@ -48,8 +52,18 @@ export const TelefoneWhatsappPicker = forwardRef<TelefoneWhatsappPickerHandle, P
           ordem: -1,
         })
       }
+      // Número informado que não pôde ser salvo: mantém visível no select.
+      if (value && !list.some((t) => t.telefone === value)) {
+        list.push({
+          id: 'avulso',
+          pessoa_id: pessoaId ?? '',
+          nome: 'Número informado',
+          telefone: value,
+          ordem: list.length,
+        })
+      }
       return list
-    }, [cadastrados, fallbackTelefone, pessoaId, pessoaNome])
+    }, [cadastrados, fallbackTelefone, pessoaId, pessoaNome, value])
 
     useEffect(() => {
       if (!pessoaId) return
@@ -59,21 +73,24 @@ export const TelefoneWhatsappPicker = forwardRef<TelefoneWhatsappPickerHandle, P
       }
     }, [pessoaId, opcoes, value, onChange])
 
+    /** Persiste o número digitado no cadastro do cliente e atualiza a lista. */
+    const salvarNovoNumero = async (): Promise<{ telefone: string; nome: string } | null> => {
+      const tel = parsePhoneForStorage(newTelefone)
+      if (!tel) return null
+      const nome = newNome.trim() || pessoaNome?.trim() || 'WhatsApp'
+      if (!pessoaId) return { telefone: tel, nome }
+      const saved = await cobrancaService.addTelefoneWhatsapp(pessoaId, { nome, telefone: tel })
+      if (!saved) {
+        toast.error('Não foi possível salvar o número no cadastro do cliente.')
+        return { telefone: tel, nome }
+      }
+      await queryClient.invalidateQueries({ queryKey: ['cobranca', 'telefones-whatsapp', pessoaId] })
+      return { telefone: saved.telefone, nome: saved.nome }
+    }
+
     useImperativeHandle(ref, () => ({
       async resolve() {
-        if (mode === 'new') {
-          const tel = parsePhoneForStorage(newTelefone)
-          if (!tel) return null
-          const nome = newNome.trim() || pessoaNome?.trim() || 'WhatsApp'
-          if (pessoaId) {
-            const saved = await cobrancaService.addTelefoneWhatsapp(pessoaId, {
-              nome,
-              telefone: tel,
-            })
-            if (saved) return { telefone: saved.telefone, nome: saved.nome }
-          }
-          return { telefone: tel, nome }
-        }
+        if (mode === 'new') return salvarNovoNumero()
         const sel = opcoes.find((o) => o.telefone === value)
         if (!value) return null
         return { telefone: value, nome: sel?.nome ?? pessoaNome ?? 'Cliente' }
@@ -148,17 +165,22 @@ export const TelefoneWhatsappPicker = forwardRef<TelefoneWhatsappPickerHandle, P
               type="button"
               variant="outline"
               size="sm"
-              disabled={disabled}
+              disabled={disabled || savingNew}
               className="gap-1"
-              onClick={() => {
-                const tel = parsePhoneForStorage(newTelefone)
-                if (!tel) return
-                onChange(tel, { nome: newNome.trim() || 'WhatsApp' })
-                setMode('select')
+              onClick={async () => {
+                setSavingNew(true)
+                try {
+                  const saved = await salvarNovoNumero()
+                  if (!saved) return
+                  onChange(saved.telefone, { nome: saved.nome })
+                  setMode('select')
+                } finally {
+                  setSavingNew(false)
+                }
               }}
             >
               <Plus className="h-3.5 w-3.5" />
-              Usar este número
+              {savingNew ? 'Salvando…' : 'Salvar e usar este número'}
             </Button>
           </div>
         )}

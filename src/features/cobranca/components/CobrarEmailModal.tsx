@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { AlertTriangle, Mail } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import { toast } from 'sonner'
@@ -28,14 +29,22 @@ export function CobrarEmailModal({ open, rows, onClose, onSent }: Props) {
   const [assunto, setAssunto] = useState('')
   const [corpo, setCorpo] = useState('')
   const [emailDestino, setEmailDestino] = useState('')
+  const [salvarEmail, setSalvarEmail] = useState(true)
 
   const total = useMemo(() => rows.reduce((sum, r) => sum + Number(r.valor ?? 0), 0), [rows])
   const nome = rows[0]?.pessoa_nome || rows[0]?.cliente || 'Cliente'
   const isSingular = rows.length === 1
+  const pessoaId = rows[0]?.pessoa_id ?? null
+  const emailCadastrado = rows[0]?.pessoa_email?.trim() ?? ''
+  const emailAlterado =
+    !!pessoaId &&
+    !!emailDestino.trim() &&
+    emailDestino.trim().toLowerCase() !== emailCadastrado.toLowerCase()
 
   useEffect(() => {
     if (!open || rows.length === 0) return
     setEmailDestino(rows[0]?.pessoa_email?.trim() ?? '')
+    setSalvarEmail(true)
     setAssunto(buildAssuntoEmailCobranca(rows))
     setCorpo(buildCorpoEmailCobranca(rows, fullName))
   }, [open, rows, fullName])
@@ -58,6 +67,14 @@ export function CobrarEmailModal({ open, rows, onClose, onSent }: Props) {
 
     setSending(true)
     try {
+      if (pessoaId && emailAlterado && salvarEmail) {
+        try {
+          await cobrancaService.updateContato(pessoaId, { email: destino })
+        } catch {
+          toast.warning('Não foi possível salvar o e-mail no cadastro do cliente.')
+        }
+      }
+
       const result = await cobrancaService.enviarEmail(
         [
           {
@@ -138,6 +155,18 @@ export function CobrarEmailModal({ open, rows, onClose, onSent }: Props) {
             placeholder="financeiro@empresa.com.br"
             disabled={sending}
           />
+          {emailAlterado && (
+            <label className="flex items-center gap-2 pt-1 text-xs text-slate-600">
+              <Checkbox
+                checked={salvarEmail}
+                onCheckedChange={setSalvarEmail}
+                disabled={sending}
+              />
+              {emailCadastrado
+                ? `Substituir o e-mail do cadastro (${emailCadastrado}) por este`
+                : 'Salvar este e-mail no cadastro do cliente'}
+            </label>
+          )}
         </div>
 
         {!isSingular && (

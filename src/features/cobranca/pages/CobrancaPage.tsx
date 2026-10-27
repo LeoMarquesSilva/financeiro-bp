@@ -500,6 +500,7 @@ export function CobrancaPage() {
         open={grupoParaEmail.length > 0}
         rows={grupoParaEmail}
         onClose={() => setGrupoParaEmail([])}
+        onSent={refreshPainel}
       />
       <CobrancaArquivarModal
         open={!!arquivarRow}
