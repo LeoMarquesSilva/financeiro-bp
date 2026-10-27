@@ -524,6 +524,24 @@ export const cobrancaService = {
     return Array.from(map.entries()).map(([telefone, nome]) => ({ telefone, nome }))
   },
 
+  /** Último telefone/e-mail recebido do VIOS (pode divergir do contato em uso no SIOE). */
+  async getContatoVios(pessoa_id: string): Promise<{ telefone: string | null; email: string | null }> {
+    const { data, error } = await supabase
+      .from('pessoas')
+      .select('telefone_vios, email_vios')
+      .eq('id', pessoa_id)
+      .maybeSingle()
+    if (error) {
+      console.error('[cobrancaService] getContatoVios', error)
+      return { telefone: null, email: null }
+    }
+    const row = data as { telefone_vios: string | null; email_vios: string | null } | null
+    return {
+      telefone: row?.telefone_vios?.trim() || null,
+      email: row?.email_vios?.trim() || null,
+    }
+  },
+
   /** Telefones WhatsApp nomeados de uma pessoa. */
   async listTelefonesWhatsapp(pessoa_id: string): Promise<PessoaTelefoneWhatsapp[]> {
     const { data, error } = await supabase
