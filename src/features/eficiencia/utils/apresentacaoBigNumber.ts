@@ -34,6 +34,8 @@ export type ApresentacaoBigNumberData = {
     protocolos: BigNumberPar
     providencias: BigNumberPar
     receita_bruta: BigNumberPar
+    /** Custo do escritório (OPEX realizado) — exibido no card da Receita Bruta. */
+    custo_opex: BigNumberPar
   }
   top5: {
     timesheet: BigNumberTopPar
@@ -197,6 +199,7 @@ export async function fetchApresentacaoBigNumber(
       protocolos: parFrom(kpisRaw.protocolos),
       providencias: parFrom(kpisRaw.providencias),
       receita_bruta: parFrom(kpisRaw.receita_bruta),
+      custo_opex: parFrom(kpisRaw.custo_opex),
     },
     top5: {
       timesheet: topPar(topRaw.timesheet),
