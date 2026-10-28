@@ -232,3 +232,17 @@ export type ReceitaPrevistoItemRow = {
   /** 1º pagamento na cota em M, ou 1º vencimento na cota em M sem pagamento anterior. */
   contrato_novo?: boolean
 }
+
+/** Linha mensal de `receita_resultado_caixa_mensal` (base caixa: data de pagamento). */
+export type ReceitaResultadoCaixaMesRow = {
+  ano: number
+  mes: number
+  receita: number
+  opex: number
+  distribuicao: number
+  investimentos: number
+  financeiro: number
+  deducoes: number
+  repasses: number
+  transferencias: number
+}
