@@ -434,9 +434,13 @@ function buildProcessosCompletoColumnIndexes(headerRow) {
 }
 
 function rowToProcessosCompletoRecord(row, idx) {
-  const cliente = idx.cliente >= 0 ? String(row[idx.cliente] ?? '').trim() : '';
+  const cliente = idx.cliente >= 0 ? normalizeViosText(String(row[idx.cliente] ?? '')) : '';
   if (!cliente) return null;
-  const trim = (i) => (i >= 0 && row[i] != null && String(row[i]).trim() !== '' ? String(row[i]).trim() : null);
+  const trim = (i) => {
+    if (i < 0 || row[i] == null) return null;
+    const text = normalizeViosText(String(row[i]));
+    return text !== '' ? text : null;
+  };
   const dataCadastro = idx.data_cadastro >= 0 ? parseDateToISO(row[idx.data_cadastro]) || (idx.data_cadastro >= 0 && row[idx.data_cadastro] ? parseDateBR(row[idx.data_cadastro]) : null) : null;
   const dataEncerramento = idx.data_encerramento >= 0 ? parseDateToISO(row[idx.data_encerramento]) || parseDateBR(row[idx.data_encerramento]) : null;
   return {
