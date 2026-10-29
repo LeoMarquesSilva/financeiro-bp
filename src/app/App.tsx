@@ -20,6 +20,7 @@ import { ReceitaPage } from '@/features/receita/pages/ReceitaPage'
 import { ReceitaMelhorEstimativaPage } from '@/features/receita/pages/ReceitaMelhorEstimativaPage'
 import { useReceitaMeAcesso } from '@/features/receita/hooks/useReceitaMe'
 import { OpexPage } from '@/features/opex/pages/OpexPage'
+import { DlPage } from '@/features/dl/pages/DlPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
 import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
 import { RacionalExportPage } from '@/features/eficiencia/pages/RacionalExportPage'
@@ -194,6 +195,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute routePath="/financeiro/opex" moduleKey="opex">
               <OpexPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="dl"
+          element={
+            <ProtectedRoute routePath="/financeiro/dl">
+              <DlPage />
             </ProtectedRoute>
           }
         />

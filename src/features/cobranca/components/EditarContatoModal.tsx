@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ModalBase } from '@/features/inadimplencia/components/ModalBase'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Trash2 } from 'lucide-react'
+import { Mail, Phone, Plus, Trash2 } from 'lucide-react'
 import { cobrancaService } from '../services/cobrancaService'
+import { normalizePhone, phonesMatch } from '../utils/phone'
+import { formatPhoneMasked } from '../utils/phoneMask'
 import { PhoneInputCountry } from './PhoneInputCountry'
 import { toast } from 'sonner'
 import type { CobrancaPainelRow } from '@/lib/database.types'
@@ -24,8 +27,10 @@ function newRow(nome = ''): TelefoneRow {
 }
 
 export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
+  const queryClient = useQueryClient()
   const [telefones, setTelefones] = useState<TelefoneRow[]>([])
   const [email, setEmail] = useState('')
+  const [vios, setVios] = useState<{ telefone: string | null; email: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -33,8 +38,12 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
     if (!open || !row?.pessoa_id) return
     let cancelled = false
     setLoading(true)
-    void cobrancaService.listTelefonesWhatsapp(row.pessoa_id).then((list) => {
+    void Promise.all([
+      cobrancaService.listTelefonesWhatsapp(row.pessoa_id),
+      cobrancaService.getContatoVios(row.pessoa_id),
+    ]).then(([list, contatoVios]) => {
       if (cancelled) return
+      setVios(contatoVios)
       if (list.length > 0) {
         setTelefones(
           list.map((t) => ({
@@ -71,6 +80,29 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
     setTelefones((prev) => (prev.length <= 1 ? prev : prev.filter((t) => t.key !== key)))
   }
 
+  // Contato do VIOS diferente do usado no painel: oferece trocar em um clique.
+  const telefoneVios = normalizePhone(vios?.telefone)
+  const mostrarTelefoneVios =
+    !!telefoneVios && !(telefones[0] && phonesMatch(telefones[0].telefone, telefoneVios))
+  const emailVios = vios?.email ?? null
+  const mostrarEmailVios = !!emailVios && emailVios.toLowerCase() !== email.trim().toLowerCase()
+
+  const usarTelefoneVios = () => {
+    if (!telefoneVios) return
+    setTelefones((prev) => {
+      const idx = prev.findIndex((t) => phonesMatch(t.telefone, telefoneVios))
+      if (idx >= 0) return [prev[idx], ...prev.filter((_, i) => i !== idx)]
+      return [
+        {
+          key: crypto.randomUUID(),
+          nome: row?.pessoa_nome?.trim() || 'Principal',
+          telefone: telefoneVios,
+        },
+        ...prev.filter((t) => t.telefone.trim()),
+      ]
+    })
+  }
+
   const handleSave = async () => {
     if (!row?.pessoa_id) {
       toast.error('Este título não está vinculado a uma pessoa cadastrada; não é possível salvar o contato.')
@@ -86,6 +118,9 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
       await cobrancaService.updateContato(row.pessoa_id, {
         telefones: validos.map(({ id, nome, telefone }) => ({ id, nome, telefone })),
         email: email.trim() || null,
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ['cobranca', 'telefones-whatsapp', row.pessoa_id],
       })
       toast.success('Contato atualizado')
       onSaved()
@@ -110,6 +145,50 @@ export function EditarContatoModal({ open, row, onClose, onSaved }: Props) {
           <p className="font-medium text-slate-800">{row?.pessoa_nome || row?.cliente}</p>
           <p className="text-xs">Título {row?.nro_titulo ?? '-'}</p>
         </div>
+
+        {!loading && (mostrarTelefoneVios || mostrarEmailVios) && (
+          <div className="space-y-2 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-blue-800">No VIOS</p>
+            {mostrarTelefoneVios && telefoneVios && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5 text-slate-700">
+                  <Phone className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                  <span className="truncate">{formatPhoneMasked(telefoneVios) || telefoneVios}</span>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={saving}
+                  onClick={usarTelefoneVios}
+                >
+                  Usar como principal
+                </Button>
+              </div>
+            )}
+            {mostrarEmailVios && emailVios && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5 text-slate-700">
+                  <Mail className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                  <span className="truncate">{emailVios}</span>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => setEmail(emailVios)}
+                >
+                  Usar este
+                </Button>
+              </div>
+            )}
+            <p className="text-[11px] text-blue-700/80">
+              Diferente do contato usado no painel. O botão só preenche o formulário; confirme em
+              Salvar.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
