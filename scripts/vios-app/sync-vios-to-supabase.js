@@ -382,6 +382,20 @@ function findProcessosClienteIndex(norm) {
   return norm.findIndex((h) => (h === 'razao social' || h === 'razão social') && !h.includes('grupo'));
 }
 
+/** Coluna "Ação": cabeçalho exato; senão o que começa com "ação" (fora "ação data do cadastro"). Não pega "Valor da Ação" nem "Situação". */
+function findProcessosAcaoIndex(norm) {
+  const exact = norm.findIndex((h) => h === 'ação' || h === 'acao');
+  if (exact >= 0) return exact;
+  return norm.findIndex((h) => (h.startsWith('ação') || h.startsWith('acao')) && !h.includes('data'));
+}
+
+/** Colunas "Valor da Ação" e "Valor da ação atualizado". */
+function findProcessosValorAcaoIndex(norm, atualizado) {
+  return norm.findIndex(
+    (h) => (h.includes('valor da ação') || h.includes('valor da acao')) && h.includes('atualizad') === atualizado,
+  );
+}
+
 /** Índices de colunas para ProcessoCompleto (XLSX). Cliente = coluna obrigatória. */
 function buildProcessosCompletoColumnIndexes(headerRow) {
   const norm = headerRow.map((h) => (h != null ? String(h).toLowerCase().trim().replace(/\s+/g, ' ') : ''));
@@ -410,7 +424,9 @@ function buildProcessosCompletoColumnIndexes(headerRow) {
     area: find(['área', 'area']),
     advogado_responsavel: find(['advogado responsável', 'advogado responsavel']),
     cliente: findProcessosClienteIndex(norm),
-    acao: find(['ação', 'acao']),
+    acao: findProcessosAcaoIndex(norm),
+    valor_acao: findProcessosValorAcaoIndex(norm, false),
+    valor_acao_atualizado: findProcessosValorAcaoIndex(norm, true),
     acao_data_cadastro: find([
       'ação data do cadastro',
       'acao data do cadastro',
@@ -441,6 +457,8 @@ function rowToProcessosCompletoRecord(row, idx) {
     const text = normalizeViosText(String(row[i]));
     return text !== '' ? text : null;
   };
+  // Célula numérica vem como número; texto vem como "R$ 1.234,56".
+  const valor = (i) => (i < 0 ? null : parseValorBR(typeof row[i] === 'string' ? row[i].replace(/R\$/gi, '') : row[i]));
   const dataCadastro = idx.data_cadastro >= 0 ? parseDateToISO(row[idx.data_cadastro]) || (idx.data_cadastro >= 0 && row[idx.data_cadastro] ? parseDateBR(row[idx.data_cadastro]) : null) : null;
   const dataEncerramento = idx.data_encerramento >= 0 ? parseDateToISO(row[idx.data_encerramento]) || parseDateBR(row[idx.data_encerramento]) : null;
   return {
@@ -451,6 +469,8 @@ function rowToProcessosCompletoRecord(row, idx) {
     advogado_responsavel: trim(idx.advogado_responsavel),
     cliente,
     acao: trim(idx.acao),
+    valor_acao: valor(idx.valor_acao),
+    valor_acao_atualizado: valor(idx.valor_acao_atualizado),
     acao_data_cadastro: trim(idx.acao_data_cadastro),
     data_cadastro: dataCadastro,
     fase_processual: trim(idx.fase_processual),
@@ -498,7 +518,12 @@ export async function runSync(filePath) {
   if (indexes.cliente < 0) {
     throw new Error('Coluna Cliente não encontrada no ProcessoCompleto.');
   }
-  for (const [campo, label] of [['fase_processual', 'Fase Processual'], ['vinculo', 'Vínculo']]) {
+  for (const [campo, label] of [
+    ['fase_processual', 'Fase Processual'],
+    ['vinculo', 'Vínculo'],
+    ['valor_acao', 'Valor da Ação'],
+    ['valor_acao_atualizado', 'Valor da ação atualizado'],
+  ]) {
     if (indexes[campo] < 0) {
       console.warn(`[Sync Supabase] processos_completo: coluna "${label}" ausente no relatório VIOS — ${campo} ficará vazio.`);
     }
