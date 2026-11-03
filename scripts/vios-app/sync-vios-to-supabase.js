@@ -73,7 +73,21 @@ export function readViosWorkbook(filePath) {
   let delim = ';';
   if (tab > semi && tab > comma) delim = '\t';
   else if (comma > semi) delim = ',';
-  return XLSX.read(text, { type: 'string', FS: delim, cellDates: true, raw: true });
+  const workbook = XLSX.read(text, { type: 'string', FS: delim, cellDates: true, raw: true });
+  // O VIOS escreve alguns campos como fórmula de texto do Excel (ex.: CI ="61268"): fica só o valor.
+  for (const nome of workbook.SheetNames) {
+    const sheet = workbook.Sheets[nome];
+    for (const endereco of Object.keys(sheet)) {
+      const cell = sheet[endereco];
+      if (endereco.startsWith('!') || !cell || typeof cell.v !== 'string') continue;
+      const formula = cell.v.match(/^="([\s\S]*)"$/);
+      if (formula) {
+        cell.v = formula[1].replace(/""/g, '"');
+        cell.w = cell.v;
+      }
+    }
+  }
+  return workbook;
 }
 
 /**
@@ -569,6 +583,17 @@ export async function runSync(filePath) {
   const byCi = new Map();
   for (const r of rows) {
     byCi.set(String(r.ci ?? ''), r);
+  }
+  // CI é só dígitos: outro formato (ex.: ="61268" do CSV) faria o upsert criar linhas novas em vez de atualizar.
+  const ciInvalido = [...byCi.values()].filter((r) => !/^\d+$/.test(String(r.ci ?? '')));
+  if (ciInvalido.length > Math.max(10, byCi.size * 0.01)) {
+    throw new Error(
+      `processos_completo: ${ciInvalido.length} CIs fora do padrão (ex.: ${ciInvalido.slice(0, 3).map((r) => r.ci).join(', ')}) — sync abortado para não duplicar a tabela.`
+    );
+  }
+  if (ciInvalido.length) {
+    console.warn('[Sync Supabase] processos_completo: ignorando CIs fora do padrão:', ciInvalido.map((r) => r.ci).join(', '));
+    for (const r of ciInvalido) byCi.delete(String(r.ci ?? ''));
   }
   const rowsDedup = [...byCi.values()];
   if (rowsDedup.length < rows.length) {
