@@ -58,6 +58,25 @@ export function decodeViosCsvFile(filePath) {
 }
 
 /**
+ * Abre um relatório do VIOS em .xlsx ou .csv (Windows-1252, separador ; , ou tab) como workbook do SheetJS.
+ * No CSV os valores ficam como texto (raw): datas e valores em formato BR são convertidos por quem lê a linha.
+ */
+export function readViosWorkbook(filePath) {
+  if (path.extname(filePath).toLowerCase() !== '.csv') {
+    return XLSX.readFile(filePath, { cellDates: true, raw: true });
+  }
+  const text = decodeViosCsvFile(filePath).replace(/^\uFEFF/, '');
+  const firstLine = text.split(/\r?\n/).find((l) => l.trim()) || '';
+  const semi = (firstLine.match(/;/g) || []).length;
+  const comma = (firstLine.match(/,/g) || []).length;
+  const tab = (firstLine.match(/\t/g) || []).length;
+  let delim = ';';
+  if (tab > semi && tab > comma) delim = '\t';
+  else if (comma > semi) delim = ',';
+  return XLSX.read(text, { type: 'string', FS: delim, cellDates: true, raw: true });
+}
+
+/**
  * Normaliza texto para UTF-8 NFC após decode latin1.
  * Corrige mojibake residual (UTF-8 interpretado como latin1: Ã£, Ã§, etc.).
  */
@@ -495,9 +514,9 @@ function rowToProcessosCompletoRecord(row, idx) {
 }
 
 /**
- * Sincroniza o Excel ProcessoCompleto para a tabela processos_completo (uma linha por processo).
+ * Sincroniza o relatório ProcessoCompleto (.xlsx ou .csv do VIOS) para a tabela processos_completo (uma linha por processo).
  * Usa upsert por CI; duplicatas no mesmo arquivo são removidas por CI (fica a última). Chama processos_completo_vinculacao_pessoa().
- * @param {string} filePath - Caminho absoluto do arquivo Processos Completo.xlsx
+ * @param {string} filePath - Caminho absoluto do arquivo Processos Completo (.xlsx ou .csv)
  * @returns {Promise<{ upserted: number, errors: number }>}
  */
 export async function runSync(filePath) {
@@ -510,7 +529,7 @@ export async function runSync(filePath) {
   console.log('[Sync Supabase] ProcessoCompleto:', filePath);
   let workbook;
   try {
-    workbook = XLSX.readFile(filePath, { cellDates: true, raw: true });
+    workbook = readViosWorkbook(filePath);
   } catch (err) {
     throw new Error('Erro ao abrir o arquivo: ' + err.message);
   }
