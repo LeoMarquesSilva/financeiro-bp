@@ -58,6 +58,39 @@ export function decodeViosCsvFile(filePath) {
 }
 
 /**
+ * Abre um relatório do VIOS em .xlsx ou .csv (Windows-1252, separador ; , ou tab) como workbook do SheetJS.
+ * No CSV os valores ficam como texto (raw): datas e valores em formato BR são convertidos por quem lê a linha.
+ */
+export function readViosWorkbook(filePath) {
+  if (path.extname(filePath).toLowerCase() !== '.csv') {
+    return XLSX.readFile(filePath, { cellDates: true, raw: true });
+  }
+  const text = decodeViosCsvFile(filePath).replace(/^\uFEFF/, '');
+  const firstLine = text.split(/\r?\n/).find((l) => l.trim()) || '';
+  const semi = (firstLine.match(/;/g) || []).length;
+  const comma = (firstLine.match(/,/g) || []).length;
+  const tab = (firstLine.match(/\t/g) || []).length;
+  let delim = ';';
+  if (tab > semi && tab > comma) delim = '\t';
+  else if (comma > semi) delim = ',';
+  const workbook = XLSX.read(text, { type: 'string', FS: delim, cellDates: true, raw: true });
+  // O VIOS escreve alguns campos como fórmula de texto do Excel (ex.: CI ="61268"): fica só o valor.
+  for (const nome of workbook.SheetNames) {
+    const sheet = workbook.Sheets[nome];
+    for (const endereco of Object.keys(sheet)) {
+      const cell = sheet[endereco];
+      if (endereco.startsWith('!') || !cell || typeof cell.v !== 'string') continue;
+      const formula = cell.v.match(/^="([\s\S]*)"$/);
+      if (formula) {
+        cell.v = formula[1].replace(/""/g, '"');
+        cell.w = cell.v;
+      }
+    }
+  }
+  return workbook;
+}
+
+/**
  * Normaliza texto para UTF-8 NFC após decode latin1.
  * Corrige mojibake residual (UTF-8 interpretado como latin1: Ã£, Ã§, etc.).
  */
@@ -495,9 +528,9 @@ function rowToProcessosCompletoRecord(row, idx) {
 }
 
 /**
- * Sincroniza o Excel ProcessoCompleto para a tabela processos_completo (uma linha por processo).
+ * Sincroniza o relatório ProcessoCompleto (.xlsx ou .csv do VIOS) para a tabela processos_completo (uma linha por processo).
  * Usa upsert por CI; duplicatas no mesmo arquivo são removidas por CI (fica a última). Chama processos_completo_vinculacao_pessoa().
- * @param {string} filePath - Caminho absoluto do arquivo Processos Completo.xlsx
+ * @param {string} filePath - Caminho absoluto do arquivo Processos Completo (.xlsx ou .csv)
  * @returns {Promise<{ upserted: number, errors: number }>}
  */
 export async function runSync(filePath) {
@@ -510,7 +543,7 @@ export async function runSync(filePath) {
   console.log('[Sync Supabase] ProcessoCompleto:', filePath);
   let workbook;
   try {
-    workbook = XLSX.readFile(filePath, { cellDates: true, raw: true });
+    workbook = readViosWorkbook(filePath);
   } catch (err) {
     throw new Error('Erro ao abrir o arquivo: ' + err.message);
   }
@@ -550,6 +583,17 @@ export async function runSync(filePath) {
   const byCi = new Map();
   for (const r of rows) {
     byCi.set(String(r.ci ?? ''), r);
+  }
+  // CI é só dígitos: outro formato (ex.: ="61268" do CSV) faria o upsert criar linhas novas em vez de atualizar.
+  const ciInvalido = [...byCi.values()].filter((r) => !/^\d+$/.test(String(r.ci ?? '')));
+  if (ciInvalido.length > Math.max(10, byCi.size * 0.01)) {
+    throw new Error(
+      `processos_completo: ${ciInvalido.length} CIs fora do padrão (ex.: ${ciInvalido.slice(0, 3).map((r) => r.ci).join(', ')}) — sync abortado para não duplicar a tabela.`
+    );
+  }
+  if (ciInvalido.length) {
+    console.warn('[Sync Supabase] processos_completo: ignorando CIs fora do padrão:', ciInvalido.map((r) => r.ci).join(', '));
+    for (const r of ciInvalido) byCi.delete(String(r.ci ?? ''));
   }
   const rowsDedup = [...byCi.values()];
   if (rowsDedup.length < rows.length) {
