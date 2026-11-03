@@ -396,6 +396,13 @@ function findProcessosValorAcaoIndex(norm, atualizado) {
   );
 }
 
+/** Coluna "Observações (síntese do processo)" (ou só "Observações"). */
+function findProcessosObservacoesIndex(norm) {
+  const sintese = norm.findIndex((h) => h.includes('síntese do processo') || h.includes('sintese do processo'));
+  if (sintese >= 0) return sintese;
+  return norm.findIndex((h) => h.startsWith('observações') || h.startsWith('observacoes'));
+}
+
 /** Índices de colunas para ProcessoCompleto (XLSX). Cliente = coluna obrigatória. */
 function buildProcessosCompletoColumnIndexes(headerRow) {
   const norm = headerRow.map((h) => (h != null ? String(h).toLowerCase().trim().replace(/\s+/g, ' ') : ''));
@@ -446,6 +453,7 @@ function buildProcessosCompletoColumnIndexes(headerRow) {
     motivo_encerramento: find(['motivo de encerramento', 'motivo encerramento']),
     etiquetas: find(['etiquetas']),
     data_encerramento: find(['data do encerramento', 'data encerramento']),
+    observacoes: findProcessosObservacoesIndex(norm),
   };
 }
 
@@ -481,6 +489,8 @@ function rowToProcessosCompletoRecord(row, idx) {
     motivo_encerramento: trim(idx.motivo_encerramento),
     etiquetas: trim(idx.etiquetas),
     data_encerramento: dataEncerramento,
+    // Só vai quando o relatório tem a coluna: relatório antigo não apaga a síntese já gravada.
+    ...(idx.observacoes >= 0 ? { observacoes: trim(idx.observacoes) } : {}),
   };
 }
 
@@ -523,6 +533,7 @@ export async function runSync(filePath) {
     ['vinculo', 'Vínculo'],
     ['valor_acao', 'Valor da Ação'],
     ['valor_acao_atualizado', 'Valor da ação atualizado'],
+    ['observacoes', 'Observações (síntese do processo)'],
   ]) {
     if (indexes[campo] < 0) {
       console.warn(`[Sync Supabase] processos_completo: coluna "${label}" ausente no relatório VIOS — ${campo} ficará vazio.`);
@@ -551,11 +562,19 @@ export async function runSync(filePath) {
   let upserted = 0;
   let errors = 0;
   const BATCH = 200;
+  // Banco sem a coluna observacoes (migração 20261104120000 ainda não rodou): segue sem a síntese em vez de falhar tudo.
+  let semObservacoes = false;
+  const semSintese = (lote) => lote.map(({ observacoes: _observacoes, ...resto }) => resto);
   for (let i = 0; i < rowsDedup.length; i += BATCH) {
     const chunk = rowsDedup.slice(i, i + BATCH);
-    const { error } = await supabase
+    let { error } = await supabase
       .from('processos_completo')
-      .upsert(chunk, { onConflict: 'ci' });
+      .upsert(semObservacoes ? semSintese(chunk) : chunk, { onConflict: 'ci' });
+    if (error && !semObservacoes && error.message.includes('observacoes')) {
+      console.warn('[Sync Supabase] processos_completo: a coluna observacoes não existe no banco (rode a migração 20261104120000) — seguindo sem a síntese.');
+      semObservacoes = true;
+      ({ error } = await supabase.from('processos_completo').upsert(semSintese(chunk), { onConflict: 'ci' }));
+    }
     if (error) {
       console.error('[Sync Supabase] processos_completo upsert error:', error.message);
       errors++;
