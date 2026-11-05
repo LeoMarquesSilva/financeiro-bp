@@ -774,8 +774,9 @@ const FONTES = {
       const raw = parseXlsxBuffer(buffer, 'Admissão - Demissão')
       const rows = raw
         .map((r) => ({
-          // Cabeçalhos/valores já vêm com TRIM do parseXlsxBuffer.
-          nome: strOrNull(r['Nome']),
+          // Cabeçalhos/valores já vêm com TRIM do parseXlsxBuffer. Alias corrige grafia
+          // divergente da planilha para casar com SharePoint/AD (ex.: Cristiane → Cristiana).
+          nome: resolveNomeCanonico(strOrNull(r['Nome'])),
           area: strOrNull(r['Área']),
           nucleo: strOrNull(r['Núcleo']),
           cargo: strOrNull(r['Cargo']),
