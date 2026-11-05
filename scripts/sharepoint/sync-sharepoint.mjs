@@ -69,6 +69,21 @@ const SITE_JURIDICA = '/sites/CONTROLADORIAJURDICA'
 const DATA_CORTE_LISTAS_GRANDES = new Date('2025-01-01T00:00:00Z')
 /** Publicações: só os últimos N meses — o restante já está no SIOE e não muda. */
 const PUBLICACOES_MESES_JANELA = 4
+/**
+ * Com a esteira do SharePoint desligada, o BKP de publicações vem do Orquestra (linhas com origem 'orquestra').
+ * SYNC_PUBLICACOES=off (variável do repositório no GitHub) tira publicações da rodada automática; com
+ * --only publicacoes ainda dá para rodar à mão. O sync só mexe nas linhas com origem 'sharepoint'.
+ */
+const PUBLICACOES_DESLIGADO = String(process.env.SYNC_PUBLICACOES ?? '').trim().toLowerCase() === 'off'
+/**
+ * Linhas que a Isadora lançou na lista (03 e 04/11) como DUPLICIDADE para as publicações tratadas no piloto do Orquestra.
+ * O registro de verdade dessas 30 publicações vem do Orquestra; sem este filtro elas contariam duas vezes no painel.
+ * Fora da janela do sync, a limpeza de órfãos apaga as linhas daqui; na lista do SharePoint elas continuam.
+ */
+const ESPELHOS_DO_PILOTO = new Set([
+  170540, 170541, 170542, 170641, 170642, 170643, 170644, 170645, 170646, 170647, 170648, 170649, 170650, 170651, 170652,
+  170653, 170654, 170655, 170656, 170657, 170658, 170659, 170660, 170661, 170662, 170663, 170664, 170665, 170666, 170667,
+])
 
 function dataCorteMesesAtras(meses) {
   const d = new Date()
@@ -83,6 +98,7 @@ async function resolvePublicacoesSkipAfterId(corte) {
   const { data, error } = await supabase
     .from('sp_publicacoes')
     .select('sp_id')
+    .eq('origem', 'sharepoint')
     .gte('criado', folga.toISOString())
     .order('sp_id', { ascending: true })
     .limit(1)
@@ -283,6 +299,7 @@ async function deleteMissingIds(table, pkColumn, keepIds, scope = null) {
   for (let from = 0; ; from += pageSize) {
     let q = supabase.from(table).select(pkColumn).range(from, from + pageSize - 1)
     if (scope?.column && scope.gte) q = q.gte(scope.column, scope.gte)
+    if (scope?.eq) for (const [coluna, valor] of Object.entries(scope.eq)) q = q.eq(coluna, valor)
     const { data, error } = await q
     if (error) throw new Error(`ler ${table} para limpar órfãos: ${error.message}`)
     if (!data?.length) break
@@ -892,7 +909,7 @@ const FONTES = {
       const feriados = await loadFeriadosSet()
       const janela = items.filter((f) => {
         const criado = parseDate(pick(f, ['Criado', 'Created']))
-        return criado && criado >= corte
+        return criado && criado >= corte && !ESPELHOS_DO_PILOTO.has(Number(pick(f, ['ID', 'id'])))
       })
       console.log(
         `[publicacoes] janela ${PUBLICACOES_MESES_JANELA} meses (>= ${corte.toISOString().slice(0, 10)}): ${janela.length} itens`,
@@ -980,13 +997,15 @@ const FONTES = {
         .filter((r) => Number.isFinite(r.sp_id))
       const unique = dedupeBy(rows, (r) => r.sp_id)
       const upserted = await upsertChunks('sp_publicacoes', unique, 'sp_id')
-      // Histórico antigo permanece no SIOE. Só apaga órfão na janela dos últimos N meses.
+      // Histórico antigo permanece no SIOE. Só apaga órfão na janela dos últimos N meses, e só o que veio do
+      // SharePoint (as linhas do Orquestra não estão na lista).
       const keepIds = janela
         .map((f) => Number(pick(f, ['ID', 'id'])))
         .filter((id) => Number.isFinite(id))
       const deleted = await deleteMissingIds('sp_publicacoes', 'sp_id', keepIds, {
         column: 'criado',
         gte: corte.toISOString(),
+        eq: { origem: 'sharepoint' },
       })
       return { upserted, deleted }
     },
@@ -1491,7 +1510,14 @@ async function main() {
   const args = process.argv.slice(2)
   const onlyArg = args.includes('--only') ? args[args.indexOf('--only') + 1] : null
   const dumpArg = args.includes('--dump-fields') ? args[args.indexOf('--dump-fields') + 1] : null
-  const fontes = dumpArg ? [dumpArg] : onlyArg ? onlyArg.split(',') : ORDEM
+  const fontes = dumpArg
+    ? [dumpArg]
+    : onlyArg
+      ? onlyArg.split(',')
+      : ORDEM.filter((nome) => !(nome === 'publicacoes' && PUBLICACOES_DESLIGADO))
+  if (!dumpArg && !onlyArg && PUBLICACOES_DESLIGADO) {
+    console.log('[Sync SharePoint] publicacoes desligado (SYNC_PUBLICACOES=off): o BKP vem do Orquestra')
+  }
 
   console.log('[Sync SharePoint] resolvendo sites...')
   const ctx = {
