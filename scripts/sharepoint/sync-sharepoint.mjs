@@ -76,13 +76,15 @@ const PUBLICACOES_MESES_JANELA = 4
  */
 const PUBLICACOES_DESLIGADO = String(process.env.SYNC_PUBLICACOES ?? '').trim().toLowerCase() === 'off'
 /**
- * Linhas que a Isadora lançou na lista (03 e 04/11) como DUPLICIDADE para as publicações tratadas no piloto do Orquestra.
- * O registro de verdade dessas 30 publicações vem do Orquestra; sem este filtro elas contariam duas vezes no painel.
+ * Linhas lançadas na lista como DUPLICIDADE para as publicações tratadas no piloto do Orquestra: as da Isadora (lotes de
+ * 03 e 04/11) e as da Maria Heloiza, com a observação "VISTADO NA CENTRAL NOVA" (lotes de 05 e 06/11, lançadas em 09/11).
+ * O registro de verdade dessas 91 publicações vem do Orquestra; sem este filtro elas contariam duas vezes no painel.
  * Fora da janela do sync, a limpeza de órfãos apaga as linhas daqui; na lista do SharePoint elas continuam.
  */
 const ESPELHOS_DO_PILOTO = new Set([
   170540, 170541, 170542, 170641, 170642, 170643, 170644, 170645, 170646, 170647, 170648, 170649, 170650, 170651, 170652,
   170653, 170654, 170655, 170656, 170657, 170658, 170659, 170660, 170661, 170662, 170663, 170664, 170665, 170666, 170667,
+  ...Array.from({ length: 61 }, (_, i) => 171091 + i), // 171091 a 171151
 ])
 
 function dataCorteMesesAtras(meses) {
