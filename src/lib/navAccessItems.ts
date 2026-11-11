@@ -66,6 +66,11 @@ export const NAV_ACCESS_ITEMS: NavAccessItem[] = [
     roles: ['admin'],
   },
   {
+    to: '/financeiro/planejamento-2027',
+    label: 'Planejamento 2027',
+    roles: ['admin', 'financeiro'],
+  },
+  {
     to: '/financeiro/eficiencia',
     label: 'Eficiência Operacional',
     // Resultado Metas (jurídico). Coordenador precisa do checkbox — não herda via role.

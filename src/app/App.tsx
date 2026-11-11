@@ -22,6 +22,7 @@ import { useReceitaMeAcesso } from '@/features/receita/hooks/useReceitaMe'
 import { OpexPage } from '@/features/opex/pages/OpexPage'
 import { DlPage } from '@/features/dl/pages/DlPage'
 import { PerfilPage } from '@/features/perfil/pages/PerfilPage'
+import { PlanejamentoPage } from '@/features/planejamento/pages/PlanejamentoPage'
 import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
 import { RacionalExportPage } from '@/features/eficiencia/pages/RacionalExportPage'
 import { OperacoesLegaisPage } from '@/features/operacoes-legais/pages/OperacoesLegaisPage'
@@ -232,6 +233,14 @@ function AppRoutes() {
           }
         />
         <Route path="perfil" element={<PerfilPage />} />
+        <Route
+          path="planejamento-2027"
+          element={
+            <ProtectedRoute routePath="/financeiro/planejamento-2027">
+              <PlanejamentoPage />
+            </ProtectedRoute>
+          }
+        />
       </Route>
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="*" element={<Navigate to={homePath} replace />} />
