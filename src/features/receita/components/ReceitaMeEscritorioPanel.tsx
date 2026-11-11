@@ -163,6 +163,7 @@ export function ReceitaMeEscritorioPanel({
         periodoMe={periodoMe}
         mesCorrente={mesCorrente}
         metaHint="Meta do SIOE (Configurações da Receita)"
+        fenix={{ escopo: 'Escritório', linhas: mesAMes }}
         composicao={total}
       />
 

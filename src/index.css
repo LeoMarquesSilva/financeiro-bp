@@ -55,3 +55,18 @@
     font-size: clamp(0.875rem, 7.5cqi, 1.375rem);
   }
 }
+
+/* Fênix IA — modo de apontar um número (atributo no <html> enquanto ativo). */
+html[data-fenix-inspecao] body {
+  cursor: crosshair;
+}
+html[data-fenix-inspecao] [data-fenix] {
+  outline: 2px dashed rgba(201, 163, 101, 0.9);
+  outline-offset: 3px;
+  cursor: help;
+  transition: outline-color 120ms ease, box-shadow 120ms ease;
+}
+html[data-fenix-inspecao] [data-fenix]:hover {
+  outline: 3px solid #c9a365;
+  box-shadow: 0 0 0 7px rgba(201, 163, 101, 0.2);
+}
