@@ -10,6 +10,14 @@ import {
   YAxis,
 } from 'recharts'
 import { formatMinutosHeatLabel } from '../utils/desenvolvimentoEquipeHeatCell'
+import type { FenixExplicacao, FenixPontoGrafico } from '@/shared/fenix/fenix.types'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+
+/** Fênix IA numa mini-linha: `explicar` recebe o ponto sob o mouse (índice em `points`). */
+export type UnificadoLinhaFenix = {
+  chave: string
+  explicar: (ponto: FenixPontoGrafico | null) => FenixExplicacao
+}
 
 export type UnificadoLinhaPonto = {
   label: string
@@ -65,7 +73,14 @@ function yDomain(
   return [lo, Math.max(hi, lo + 8)]
 }
 
-function UnificadoMiniLinha({ serie }: { serie: UnificadoLinhaSerie }) {
+function UnificadoMiniLinha({
+  serie,
+  fenix,
+}: {
+  serie: UnificadoLinhaSerie
+  fenix?: UnificadoLinhaFenix
+}) {
+  const fenixGrafico = useFenixGrafico(fenix?.chave, fenix?.explicar)
   const data = serie.points.map((p) => ({
     mes: p.label,
     valor: p.valor,
@@ -82,6 +97,7 @@ function UnificadoMiniLinha({ serie }: { serie: UnificadoLinhaSerie }) {
   return (
     <div
       data-unificado-linha-card
+      data-fenix={fenixGrafico.fenixId}
       style={{
         background: 'transparent',
         border: 'none',
@@ -111,7 +127,12 @@ function UnificadoMiniLinha({ serie }: { serie: UnificadoLinhaSerie }) {
       </div>
       <div data-unificado-linha-plot style={{ flex: 1, minHeight: 0, width: '100%' }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 18, right: 10, left: 0, bottom: 4 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 18, right: 10, left: 0, bottom: 4 }}
+            onMouseMove={fenixGrafico.onMouseMove}
+            onMouseLeave={fenixGrafico.onMouseLeave}
+          >
             <CartesianGrid
               vertical={false}
               stroke={UNIFICADO_LINHAS_THEME.grid}
@@ -254,8 +275,11 @@ function UnificadoLinhasLegenda() {
 
 export function ApresentacaoUnificadoLinhasGrid({
   series,
+  fenixSerie,
 }: {
   series: UnificadoLinhaSerie[]
+  /** Fênix IA (opcional): explicação de cada mini-linha. */
+  fenixSerie?: (serie: UnificadoLinhaSerie) => UnificadoLinhaFenix | undefined
 }) {
   return (
     <div
@@ -275,7 +299,7 @@ export function ApresentacaoUnificadoLinhasGrid({
       }}
     >
       {series.map((serie) => (
-        <UnificadoMiniLinha key={serie.id} serie={serie} />
+        <UnificadoMiniLinha key={serie.id} serie={serie} fenix={fenixSerie?.(serie)} />
       ))}
       <UnificadoLinhasLegenda />
     </div>

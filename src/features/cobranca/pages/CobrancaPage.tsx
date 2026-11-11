@@ -284,7 +284,7 @@ export function CobrancaPage() {
         </TabsList>
 
         <TabsContent value="painel" className="mt-6 space-y-5">
-          <CobrancaKPIs resumo={resumo} loading={loadingResumo} />
+          <CobrancaKPIs resumo={resumo} loading={loadingResumo} fenixFiltros={filtrosBase} />
 
           <CobrancaFiltros
             totalTitulos={total}

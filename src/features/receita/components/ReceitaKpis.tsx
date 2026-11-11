@@ -10,6 +10,15 @@ import { ReceitaPrevistoDetalheSheet } from './ReceitaPrevistoDetalheSheet'
 import { ReceitaRecebidoKpiDetalheSheet } from './ReceitaRecebidoKpiDetalheSheet'
 import { ReceitaEncargosKpiDetalheSheet } from './ReceitaEncargosKpiDetalheSheet'
 import { ReceitaAtingimentoMetaDetalheSheet } from './ReceitaAtingimentoMetaDetalheSheet'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  explicarReceitaAtingimento,
+  explicarReceitaEncargos,
+  explicarReceitaMetaAcumulada,
+  explicarReceitaPrevisto,
+  explicarReceitaRecebido,
+} from '../fenix/receitaFenix'
 
 type Props = {
   rows: ReceitaMesRow[]
@@ -29,6 +38,8 @@ interface KPIItemProps {
   valueColor?: string
   accent?: 'sky' | 'violet' | 'amber'
   onClick?: () => void
+  /** Explicação do número no Fênix. */
+  fenix?: { chave: string; explicar: FenixExplicar }
 }
 
 function periodoAnoLabel(meses: number[], ano: number): string {
@@ -57,7 +68,9 @@ function KPIItem({
   valueColor = 'text-slate-900',
   accent = 'violet',
   onClick,
+  fenix,
 }: KPIItemProps) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   const interactive = Boolean(onClick)
   const Tag = interactive ? 'button' : 'div'
   const accentHover =
@@ -73,6 +86,7 @@ function KPIItem({
     <Tag
       type={interactive ? 'button' : undefined}
       onClick={onClick}
+      data-fenix={fenixId}
       className={cn(
         'relative w-full rounded-xl border border-slate-200/60 bg-white p-3 text-left shadow-sm sm:p-4',
         interactive &&
@@ -197,6 +211,10 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           valueColor={RECEITA_COLORS.recebido.textStrong}
           accent="sky"
           onClick={() => setRecebidoAberto(true)}
+          fenix={{
+            chave: 'receita.resumo.recebido',
+            explicar: () => explicarReceitaRecebido({ ano, rows, total: totalRecebido, periodo: recebidoPeriodo }),
+          }}
         />
         <KPIItem
           icon={Receipt}
@@ -209,6 +227,10 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           valueColor={RECEITA_COLORS.encargos.textStrong}
           accent="amber"
           onClick={() => setEncargosAberto(true)}
+          fenix={{
+            chave: 'receita.resumo.encargos',
+            explicar: () => explicarReceitaEncargos({ ano, rows, total: totalEncargos, periodo: encargosPeriodo }),
+          }}
         />
         <KPIItem
           icon={CalendarClock}
@@ -221,6 +243,10 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           valueColor={RECEITA_COLORS.previsto.textStrong}
           accent="violet"
           onClick={() => setPrevistoAberto(true)}
+          fenix={{
+            chave: 'receita.resumo.previsto',
+            explicar: () => explicarReceitaPrevisto({ ano, rows, total: totalPrevisto, periodo: previstoPeriodo }),
+          }}
         />
         <KPIItem
           icon={Target}
@@ -230,6 +256,10 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           hint={metaMensal > 0 ? `${formatCurrencyCompact(metaMensal)}/mês (ajustada)` : undefined}
           iconColor={RECEITA_COLORS.meta.bgIcon}
           valueColor={RECEITA_COLORS.meta.textStrong}
+          fenix={{
+            chave: 'receita.resumo.meta',
+            explicar: () => explicarReceitaMetaAcumulada({ ano, rows, metaAnual, metaMensal }),
+          }}
         />
         <KPIItem
           icon={TrendingUp}
@@ -246,6 +276,10 @@ export function ReceitaKpis({ rows, ano, loading }: Props) {
           valueColor={pctColor}
           accent="violet"
           onClick={() => setAtingimentoAberto(true)}
+          fenix={{
+            chave: 'receita.resumo.atingimento',
+            explicar: () => explicarReceitaAtingimento({ ano, rows, ...atingimentoMeta }),
+          }}
         />
       </div>
 

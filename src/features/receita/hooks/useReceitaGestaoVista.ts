@@ -39,8 +39,18 @@ export type UseReceitaGestaoVistaResult = {
   resumo: GestaoVistaResumo | null
   totalYtd: GestaoVistaMesRow | null
   areaSelecionada: ReceitaMetaAreaSlice | null
+  /** Previsto do mês em andamento cortado em ontem (o que entra no previsto acumulado). */
+  previstoCortePorMes?: ReadonlyMap<number, number>
+  /** Inadimplência vencida de cada mês com meta (parcelas do card Inad. vencida). */
+  inadVencidoPorMes?: Array<{ mes: number; valor: number }>
   isLoading: boolean
   error: Error | null
+}
+
+type InadVencidoMeta = {
+  valor: number
+  previsto: number
+  porMes: Array<{ mes: number; valor: number }>
 }
 
 export function useReceitaGestaoVista(
@@ -137,13 +147,13 @@ export function useReceitaGestaoVista(
   }, [previstoMesAtualItens, ano, mesAtualCalendario, areaKey])
 
   const {
-    data: inadVencidoAno,
+    data: inadVencidoAnoData,
     isLoading: inadVencidoLoading,
     error: inadVencidoError,
   } = useQuery({
     queryKey: ['receita', 'gestao-vista', 'inad-vencido-meta', ano, mesesInadVencido, areaKey],
-    queryFn: async () => {
-      if (mesesInadVencido.length === 0) return { valor: 0, previsto: 0 }
+    queryFn: async (): Promise<InadVencidoMeta> => {
+      if (mesesInadVencido.length === 0) return { valor: 0, previsto: 0, porMes: [] }
       if (!areaKey) {
         const fechamentos = await Promise.all(
           mesesInadVencido.map((m) => receitaService.fetchPrevistoFechamentoMes(ano, m)),
@@ -151,6 +161,7 @@ export function useReceitaGestaoVista(
         return {
           valor: fechamentos.reduce((s, f) => s + f.inadimplencia_kpi, 0),
           previsto: fechamentos.reduce((s, f) => s + f.previsto, 0),
+          porMes: fechamentos.map((f, i) => ({ mes: mesesInadVencido[i]!, valor: f.inadimplencia_kpi })),
         }
       }
       const porMes = await Promise.all(
@@ -161,6 +172,7 @@ export function useReceitaGestaoVista(
           ])
           const itens = filtrarPrevistoMesItensPorCiItens(prevAll, prevArea)
           return {
+            mes: m,
             inad: calcularInadVencidoNaoPagoMes(itens, ano, m),
             previsto: itens.reduce((s, i) => s + i.valor_item, 0),
           }
@@ -169,10 +181,12 @@ export function useReceitaGestaoVista(
       return {
         valor: porMes.reduce((s, r) => s + r.inad, 0),
         previsto: porMes.reduce((s, r) => s + r.previsto, 0),
+        porMes: porMes.map((r) => ({ mes: r.mes, valor: r.inad })),
       }
     },
     enabled: mesesInadVencido.length > 0,
   })
+  const inadVencidoAno = inadVencidoAnoData as InadVencidoMeta | undefined
 
   const mesesCongelados = useMemo(() => {
     const set = new Set<number>()
@@ -279,6 +293,8 @@ export function useReceitaGestaoVista(
     resumo,
     totalYtd,
     areaSelecionada,
+    previstoCortePorMes,
+    inadVencidoPorMes: inadVencidoAno?.porMes,
     isLoading,
     error: error instanceof Error ? error : error ? new Error(String(error)) : null,
   }

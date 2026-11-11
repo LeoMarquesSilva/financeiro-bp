@@ -25,6 +25,9 @@ import { EficienciaEficDesvioCard } from './EficienciaEficDesvioCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 import { RacionalSheet } from './RacionalSheet'
+import { explicarGraficoRazaoSimples } from '../fenix/eficienciaGraficosFenix'
+
+const TELA_OPS_FINANCEIRO = 'Operações Legais › Financeiro'
 
 type Props = {
   ano: number
@@ -95,6 +98,16 @@ export function OpsLegaisFinanceiroTab({ ano, mesFiltro }: Props) {
       }))
   }, [serieAno, mesFiltro, ano])
 
+  // Dados dos gráficos (os mesmos arrays vão para o Fênix).
+  const chartAntecipacao = antecipFiltrado.map((m) => ({
+    mes: m.mes,
+    valor: Number(m.pct_antecipacao ?? 0),
+  }))
+  const chartFechamento = fechamentoFiltrado.map((m) => ({
+    mes: m.mes,
+    valor: Number(m.pct_fechamento ?? 0),
+  }))
+
   const cobrados = periodo.cobrados_d1
   const foraOuSem = Math.max(0, periodo.total - periodo.cobrados_d1)
 
@@ -156,10 +169,28 @@ export function OpsLegaisFinanceiroTab({ ano, mesFiltro }: Props) {
           <EficienciaEvolucaoChart
             title="Antecipação de Faturamento"
             subtitle="% concluídas dentro do prazo ÷ total faturável (BI AntecipacaoHonorarios)"
-            data={antecipFiltrado.map((m) => ({
-              mes: m.mes,
-              valor: Number(m.pct_antecipacao ?? 0),
-            }))}
+            data={chartAntecipacao}
+            fenix={{
+              chave: 'eficiencia.ops-legais.grafico.antecipacao',
+              explicar: (ponto) =>
+                explicarGraficoRazaoSimples(
+                  {
+                    tipo: 'antecipacao',
+                    tela: TELA_OPS_FINANCEIRO,
+                    titulo: 'Antecipação de Faturamento',
+                    ano,
+                    mesFiltro,
+                    data: chartAntecipacao,
+                    metaFixa: EFICIENCIA_META_OPS_ANTECIPACAO,
+                    meses: antecipacaoMensal.map((m) => ({
+                      mes: m.mes,
+                      ok: Number(m.qtd_dentro_prazo ?? 0),
+                      total: Number(m.qtd_dentro_prazo ?? 0) + Number(m.qtd_fora_prazo ?? 0),
+                    })),
+                  },
+                  ponto,
+                ),
+            }}
             color="#0284c7"
             metaFixa={EFICIENCIA_META_OPS_ANTECIPACAO}
           />
@@ -197,6 +228,23 @@ export function OpsLegaisFinanceiroTab({ ano, mesFiltro }: Props) {
             title="Efetividade na Cobrança Inicial"
             subtitle="% títulos em aberto cobrados por WhatsApp no D+1 útil"
             data={chartEfetividade}
+            fenix={{
+              chave: 'eficiencia.ops-legais.grafico.efetividade',
+              explicar: (ponto) =>
+                explicarGraficoRazaoSimples(
+                  {
+                    tipo: 'efetividade',
+                    tela: TELA_OPS_FINANCEIRO,
+                    titulo: 'Efetividade na Cobrança Inicial',
+                    ano,
+                    mesFiltro,
+                    data: chartEfetividade,
+                    metaFixa: EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA,
+                    meses: serieAno.map((m) => ({ mes: m.mes, ok: m.cobrados_d1, total: m.total })),
+                  },
+                  ponto,
+                ),
+            }}
             color="#059669"
             metaFixa={EFICIENCIA_META_OPS_EFETIVIDADE_COBRANCA}
           />
@@ -232,10 +280,28 @@ export function OpsLegaisFinanceiroTab({ ano, mesFiltro }: Props) {
           <EficienciaEvolucaoChart
             title="Fechamento"
             subtitle="% competências no prazo · jun–ago/26 histórico · set/26+ automático (VIOS)"
-            data={fechamentoFiltrado.map((m) => ({
-              mes: m.mes,
-              valor: Number(m.pct_fechamento ?? 0),
-            }))}
+            data={chartFechamento}
+            fenix={{
+              chave: 'eficiencia.ops-legais.grafico.fechamento',
+              explicar: (ponto) =>
+                explicarGraficoRazaoSimples(
+                  {
+                    tipo: 'fechamento',
+                    tela: TELA_OPS_FINANCEIRO,
+                    titulo: 'Fechamento',
+                    ano,
+                    mesFiltro,
+                    data: chartFechamento,
+                    metaFixa: EFICIENCIA_META_OPS_FECHAMENTO,
+                    meses: fechamentoMensal.map((m) => ({
+                      mes: m.mes,
+                      ok: Number(m.qtd_dentro_prazo ?? 0),
+                      total: Number(m.qtd_dentro_prazo ?? 0) + Number(m.qtd_fora_prazo ?? 0),
+                    })),
+                  },
+                  ponto,
+                ),
+            }}
             color="#7c3aed"
             metaFixa={EFICIENCIA_META_OPS_FECHAMENTO}
           />

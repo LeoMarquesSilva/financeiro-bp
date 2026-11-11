@@ -4,6 +4,8 @@ import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { mesAbrev } from '@/features/receita/constants'
 import { DL_LINHAS, totalDemonstrativo } from '../utils/dlCalc'
 import type { DlMesCalculado } from '../types/dl.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import { explicarDlLinha, type DlFenixContexto } from '../fenix/dlFenix'
 
 type Props = {
   titulo: string
@@ -13,6 +15,8 @@ type Props = {
   referencia: number | null
   /** Mês ainda aberto (marcado com *). */
   mesParcial?: number | null
+  /** Explicação de cada linha no Fênix (chave base + contexto da área ou do escritório). */
+  fenix?: { chave: string; contexto: DlFenixContexto }
 }
 
 function formatar(key: string, v: number): string {
@@ -22,7 +26,71 @@ function formatar(key: string, v: number): string {
   return formatCurrency(v)
 }
 
-export function DlDemonstrativoTable({ titulo, subtitulo, meses, referencia, mesParcial }: Props) {
+type LinhaProps = {
+  linha: (typeof DL_LINHAS)[number]
+  meses: DlMesCalculado[]
+  total: DlMesCalculado
+  referencia: number | null
+  fenix?: Props['fenix']
+}
+
+function LinhaDemonstrativo({ linha: l, meses, total, referencia, fenix }: LinhaProps) {
+  const fenixId = useFenixAlvo(
+    fenix ? `${fenix.chave}.${l.key}` : undefined,
+    fenix ? () => explicarDlLinha(l.key, meses, total, fenix.contexto) : undefined,
+  )
+  const resultado = l.tipo === 'resultado'
+  const valorTotal = total[l.key]
+  const corPct = (v: number) =>
+    referencia == null ? '' : v >= referencia ? 'text-emerald-700' : 'text-rose-700'
+  return (
+    <tr
+      data-fenix={fenixId}
+      className={cn(
+        'border-b border-slate-100 tabular-nums',
+        resultado && 'bg-slate-50 font-semibold text-slate-900',
+        l.tipo === 'saida' && 'text-slate-600',
+        l.tipo === 'info' && 'text-xs text-slate-500',
+        l.key === 'dl_gestor' && 'font-semibold text-amber-800',
+      )}
+    >
+      <td className="sticky left-0 whitespace-nowrap bg-inherit py-2 pr-3 text-left">
+        {l.label}
+        {l.key === 'margem_pct' && referencia != null && (
+          <span className="ml-1 text-[11px] font-normal text-slate-400">
+            (ref. {formatPercent(referencia * 100)})
+          </span>
+        )}
+      </td>
+      {meses.map((m) => {
+        const v = m[l.key]
+        return (
+          <td
+            key={m.mes}
+            className={cn(
+              'whitespace-nowrap px-2 py-2 text-right',
+              l.key === 'margem_pct' && m.receita_liquida > 0 && corPct(v),
+              resultado && v < 0 && 'text-rose-700',
+            )}
+          >
+            {l.key === 'margem_pct' && m.receita_liquida <= 0 ? '—' : formatar(l.key, v)}
+          </td>
+        )
+      })}
+      <td
+        className={cn(
+          'whitespace-nowrap py-2 pl-3 text-right font-semibold',
+          l.key === 'margem_pct' && corPct(valorTotal),
+          resultado && valorTotal < 0 && 'text-rose-700',
+        )}
+      >
+        {l.key === 'profissionais' ? `${formatar(l.key, valorTotal)} (média)` : formatar(l.key, valorTotal)}
+      </td>
+    </tr>
+  )
+}
+
+export function DlDemonstrativoTable({ titulo, subtitulo, meses, referencia, mesParcial, fenix }: Props) {
   const total = totalDemonstrativo(meses)
   const herdou = meses.some((m) => m.herdado)
   const aliquotaHerdada = meses.some((m) => m.aliquota_herdada && !m.fechado && m.receita_bruta > 0)
@@ -60,57 +128,9 @@ export function DlDemonstrativoTable({ titulo, subtitulo, meses, referencia, mes
             </tr>
           </thead>
           <tbody>
-            {DL_LINHAS.map((l) => {
-              const resultado = l.tipo === 'resultado'
-              const valorTotal = total[l.key]
-              const corPct = (v: number) =>
-                referencia == null ? '' : v >= referencia ? 'text-emerald-700' : 'text-rose-700'
-              return (
-                <tr
-                  key={l.key}
-                  className={cn(
-                    'border-b border-slate-100 tabular-nums',
-                    resultado && 'bg-slate-50 font-semibold text-slate-900',
-                    l.tipo === 'saida' && 'text-slate-600',
-                    l.tipo === 'info' && 'text-xs text-slate-500',
-                    l.key === 'dl_gestor' && 'font-semibold text-amber-800',
-                  )}
-                >
-                  <td className="sticky left-0 whitespace-nowrap bg-inherit py-2 pr-3 text-left">
-                    {l.label}
-                    {l.key === 'margem_pct' && referencia != null && (
-                      <span className="ml-1 text-[11px] font-normal text-slate-400">
-                        (ref. {formatPercent(referencia * 100)})
-                      </span>
-                    )}
-                  </td>
-                  {meses.map((m) => {
-                    const v = m[l.key]
-                    return (
-                      <td
-                        key={m.mes}
-                        className={cn(
-                          'whitespace-nowrap px-2 py-2 text-right',
-                          l.key === 'margem_pct' && m.receita_liquida > 0 && corPct(v),
-                          resultado && v < 0 && 'text-rose-700',
-                        )}
-                      >
-                        {l.key === 'margem_pct' && m.receita_liquida <= 0 ? '—' : formatar(l.key, v)}
-                      </td>
-                    )
-                  })}
-                  <td
-                    className={cn(
-                      'whitespace-nowrap py-2 pl-3 text-right font-semibold',
-                      l.key === 'margem_pct' && corPct(valorTotal),
-                      resultado && valorTotal < 0 && 'text-rose-700',
-                    )}
-                  >
-                    {l.key === 'profissionais' ? `${formatar(l.key, valorTotal)} (média)` : formatar(l.key, valorTotal)}
-                  </td>
-                </tr>
-              )
-            })}
+            {DL_LINHAS.map((l) => (
+              <LinhaDemonstrativo key={l.key} linha={l} meses={meses} total={total} referencia={referencia} fenix={fenix} />
+            ))}
           </tbody>
         </table>
       </div>

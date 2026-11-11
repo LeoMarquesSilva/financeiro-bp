@@ -50,6 +50,12 @@ import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
 import { resolvePessoaDisplayNome } from '../utils/formatPessoaNome'
 import { resolvePessoaAvatarUrl } from '../utils/resolvePessoaAvatar'
 import { totaisOpsCadastroFromResumo } from '../utils/periodoCurtoIndicadorTotais'
+import {
+  explicarEficDesvio,
+  explicarTurnover,
+  type FenixOrigemPeriodo,
+} from '../fenix/eficienciaOperacionalFenix'
+import { explicarGraficoRazao } from '../fenix/eficienciaGraficosFenix'
 
 type SecaoId =
   | 'protocolos'
@@ -299,6 +305,81 @@ export function OperacoesLegaisRgTab({
     return { dentro, fora, tot, pct: tot > 0 ? (dentro / tot) * 100 : null }
   }, [cadFiltrado, periodoCurtoAtivo, resumosSemana])
 
+  // Dados dos gráficos de evolução (os mesmos arrays vão para o Fênix).
+  const chartOpsSla = periodoCurtoAtivo
+    ? [
+        {
+          mes: 1,
+          valor: protTotais.pctD1,
+          label: periodoCurtoLabel ?? 'Período',
+        },
+      ]
+    : protFiltrado.map((m) => ({
+        mes: m.mes,
+        valor: Number(m.pct_d1 ?? 0),
+      }))
+  const chartOpsEfi = periodoCurtoAtivo
+    ? [
+        {
+          mes: 1,
+          valor: protTotais.pctInc,
+          label: periodoCurtoLabel ?? 'Período',
+        },
+      ]
+    : protFiltrado.map((m) => ({
+        mes: m.mes,
+        valor: Number(m.pct_sem_inconsistencia),
+      }))
+  const chartOpsAnalise = periodoCurtoAtivo
+    ? [
+        {
+          mes: 1,
+          valor: pubAnaliseTotais.pct,
+          label: periodoCurtoLabel ?? 'Período',
+        },
+      ]
+    : pubAnaliseFiltrado.map((m) => ({
+        mes: m.mes,
+        valor: Number(m.pct_eficiencia ?? 0),
+      }))
+  const chartOpsAgenda = periodoCurtoAtivo
+    ? [
+        {
+          mes: 1,
+          valor: pubAgendaTotais.pct,
+          label: periodoCurtoLabel ?? 'Período',
+        },
+      ]
+    : pubAgendaFiltrado.map((m) => ({
+        mes: m.mes,
+        valor: Number(m.pct_eficiencia ?? 0),
+      }))
+  const chartOpsCadastro = periodoCurtoAtivo
+    ? [
+        {
+          mes: 1,
+          valor: cadTotais.pct ?? 0,
+          label: periodoCurtoLabel ?? 'Período',
+        },
+      ]
+    : cadFiltrado.map((m) => ({
+        mes: m.mes,
+        valor: Number(m.pct_dentro_prazo),
+      }))
+
+  // Fênix IA: mesma origem dos totais acima (resumo do intervalo ou soma dos meses).
+  const origemFenix: FenixOrigemPeriodo =
+    periodoCurtoAtivo && resumosSemana ? 'periodo_curto' : 'mensal'
+  const mesesFenix = <T extends { mes: number }>(
+    rows: T[],
+    ok: (r: T) => number,
+    total: (r: T) => number,
+  ) =>
+    origemFenix === 'mensal'
+      ? rows.map((r) => ({ mes: r.mes, ok: ok(r), total: total(r) }))
+      : undefined
+  const TELA_OPS_TURNOVER = 'Operações Legais › Retenção de Talentos'
+
   return (
     <div className="space-y-5">
       {!hideSecaoNav ? (
@@ -342,6 +423,23 @@ export function OperacoesLegaisRgTab({
                 qtdOk={protTotais.qtdD1}
                 qtdNok={protTotais.qtdFatal}
                 loading={loading || (periodoCurtoAtivo && loadingSemana)}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.protocolos.sla',
+                  explicar: () =>
+                    explicarEficDesvio({
+                      indicador: 'ops_legais_sla_protocolo',
+                      ano,
+                      mesFiltro,
+                      origem: origemFenix,
+                      ok: protTotais.qtdD1,
+                      nok: protTotais.qtdFatal,
+                      meses: mesesFenix(
+                        protFiltrado,
+                        (m) => Number(m.qtd_d1 ?? 0),
+                        (m) => Number(m.total ?? 0),
+                      ),
+                    }),
+                }}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_sla_protocolo"
@@ -352,20 +450,24 @@ export function OperacoesLegaisRgTab({
               />
               <EficienciaEvolucaoChart
                 title="SLA PROTOCOLO"
-                data={
-                  periodoCurtoAtivo
-                    ? [
-                        {
-                          mes: 1,
-                          valor: protTotais.pctD1,
-                          label: periodoCurtoLabel ?? 'Período',
-                        },
-                      ]
-                    : protFiltrado.map((m) => ({
-                        mes: m.mes,
-                        valor: Number(m.pct_d1 ?? 0),
-                      }))
-                }
+                data={chartOpsSla}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.grafico.sla',
+                  explicar: (ponto) =>
+                    explicarGraficoRazao(
+                      {
+                        indicador: 'ops_legais_sla_protocolo',
+                        titulo: 'SLA PROTOCOLO',
+                        ano,
+                        mesFiltro,
+                        data: chartOpsSla,
+                        metaFixa: EFICIENCIA_META_OPS_SLA_PROTOCOLO,
+                        periodoCurto: periodoCurtoAtivo ? { ok: protTotais.qtdD1, total: protTotais.total } : null,
+                        meses: protocoloMensal.map((m) => ({ mes: m.mes, ok: Number(m.qtd_d1 ?? 0), total: Number(m.total ?? 0) })),
+                      },
+                      ponto,
+                    ),
+                }}
                 color="#7c3aed"
                 metaFixa={EFICIENCIA_META_OPS_SLA_PROTOCOLO}
                 onRacionalClick={() => setRacionalAberto('ops_legais_sla_protocolo')}
@@ -387,6 +489,23 @@ export function OperacoesLegaisRgTab({
                 qtdOk={protTotais.semInc}
                 qtdNok={protTotais.comInc}
                 loading={loading || (periodoCurtoAtivo && loadingSemana)}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.protocolos.eficiencia',
+                  explicar: () =>
+                    explicarEficDesvio({
+                      indicador: 'ops_legais_eficiencia_protocolo',
+                      ano,
+                      mesFiltro,
+                      origem: origemFenix,
+                      ok: protTotais.semInc,
+                      nok: protTotais.comInc,
+                      meses: mesesFenix(
+                        protFiltrado,
+                        (m) => Number(m.sem_inconsistencia ?? 0),
+                        (m) => Number(m.total_eficiencia ?? 0),
+                      ),
+                    }),
+                }}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_eficiencia_protocolo"
@@ -397,20 +516,24 @@ export function OperacoesLegaisRgTab({
               />
               <EficienciaEvolucaoChart
                 title="Eficiência Protocolo"
-                data={
-                  periodoCurtoAtivo
-                    ? [
-                        {
-                          mes: 1,
-                          valor: protTotais.pctInc,
-                          label: periodoCurtoLabel ?? 'Período',
-                        },
-                      ]
-                    : protFiltrado.map((m) => ({
-                        mes: m.mes,
-                        valor: Number(m.pct_sem_inconsistencia),
-                      }))
-                }
+                data={chartOpsEfi}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.grafico.eficiencia',
+                  explicar: (ponto) =>
+                    explicarGraficoRazao(
+                      {
+                        indicador: 'ops_legais_eficiencia_protocolo',
+                        titulo: 'Eficiência Protocolo',
+                        ano,
+                        mesFiltro,
+                        data: chartOpsEfi,
+                        metaFixa: EFICIENCIA_META_OPS_EFICIENCIA,
+                        periodoCurto: periodoCurtoAtivo ? { ok: protTotais.semInc, total: protTotais.efiBase } : null,
+                        meses: protocoloMensal.map((m) => ({ mes: m.mes, ok: Number(m.sem_inconsistencia ?? 0), total: Number(m.total_eficiencia ?? 0) })),
+                      },
+                      ponto,
+                    ),
+                }}
                 color="#059669"
                 metaFixa={EFICIENCIA_META_OPS_EFICIENCIA}
                 onRacionalClick={() => setRacionalAberto('ops_legais_eficiencia_protocolo')}
@@ -433,6 +556,23 @@ export function OperacoesLegaisRgTab({
                 qtdOk={pubAnaliseTotais.ok}
                 qtdNok={pubAnaliseTotais.nok}
                 loading={loading || (periodoCurtoAtivo && loadingSemana)}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.publicacoes.analise',
+                  explicar: () =>
+                    explicarEficDesvio({
+                      indicador: 'ops_legais_pub_analise',
+                      ano,
+                      mesFiltro,
+                      origem: origemFenix,
+                      ok: pubAnaliseTotais.ok,
+                      nok: pubAnaliseTotais.nok,
+                      meses: mesesFenix(
+                        pubAnaliseFiltrado,
+                        (m) => Number(m.qtd_eficiencia ?? 0),
+                        (m) => Number(m.qtd_eficiencia ?? 0) + Number(m.qtd_desvio ?? 0),
+                      ),
+                    }),
+                }}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_pub_analise"
@@ -443,20 +583,24 @@ export function OperacoesLegaisRgTab({
               />
               <EficienciaEvolucaoChart
                 title="ANÁLISE DE PUBLICAÇÃO"
-                data={
-                  periodoCurtoAtivo
-                    ? [
-                        {
-                          mes: 1,
-                          valor: pubAnaliseTotais.pct,
-                          label: periodoCurtoLabel ?? 'Período',
-                        },
-                      ]
-                    : pubAnaliseFiltrado.map((m) => ({
-                        mes: m.mes,
-                        valor: Number(m.pct_eficiencia ?? 0),
-                      }))
-                }
+                data={chartOpsAnalise}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.grafico.analise',
+                  explicar: (ponto) =>
+                    explicarGraficoRazao(
+                      {
+                        indicador: 'ops_legais_pub_analise',
+                        titulo: 'ANÁLISE DE PUBLICAÇÃO',
+                        ano,
+                        mesFiltro,
+                        data: chartOpsAnalise,
+                        metaFixa: EFICIENCIA_META_OPS_PUBLICACOES,
+                        periodoCurto: periodoCurtoAtivo ? { ok: pubAnaliseTotais.ok, total: pubAnaliseTotais.ok + pubAnaliseTotais.nok } : null,
+                        meses: publicacoesAnalise.map((m) => ({ mes: m.mes, ok: Number(m.qtd_eficiencia ?? 0), total: Number(m.qtd_eficiencia ?? 0) + Number(m.qtd_desvio ?? 0) })),
+                      },
+                      ponto,
+                    ),
+                }}
                 color="#0891b2"
                 metaFixa={EFICIENCIA_META_OPS_PUBLICACOES}
                 onRacionalClick={() => setRacionalAberto('ops_legais_pub_analise')}
@@ -472,6 +616,23 @@ export function OperacoesLegaisRgTab({
                 qtdOk={pubAgendaTotais.ok}
                 qtdNok={pubAgendaTotais.nok}
                 loading={loading || (periodoCurtoAtivo && loadingSemana)}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.publicacoes.agendamento',
+                  explicar: () =>
+                    explicarEficDesvio({
+                      indicador: 'ops_legais_pub_agendamento',
+                      ano,
+                      mesFiltro,
+                      origem: origemFenix,
+                      ok: pubAgendaTotais.ok,
+                      nok: pubAgendaTotais.nok,
+                      meses: mesesFenix(
+                        pubAgendaFiltrado,
+                        (m) => Number(m.qtd_eficiencia ?? 0),
+                        (m) => Number(m.qtd_eficiencia ?? 0) + Number(m.qtd_desvio ?? 0),
+                      ),
+                    }),
+                }}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_pub_agendamento"
@@ -482,20 +643,24 @@ export function OperacoesLegaisRgTab({
               />
               <EficienciaEvolucaoChart
                 title="AGENDAMENTO DE PUBLICAÇÃO"
-                data={
-                  periodoCurtoAtivo
-                    ? [
-                        {
-                          mes: 1,
-                          valor: pubAgendaTotais.pct,
-                          label: periodoCurtoLabel ?? 'Período',
-                        },
-                      ]
-                    : pubAgendaFiltrado.map((m) => ({
-                        mes: m.mes,
-                        valor: Number(m.pct_eficiencia ?? 0),
-                      }))
-                }
+                data={chartOpsAgenda}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.grafico.agendamento',
+                  explicar: (ponto) =>
+                    explicarGraficoRazao(
+                      {
+                        indicador: 'ops_legais_pub_agendamento',
+                        titulo: 'AGENDAMENTO DE PUBLICAÇÃO',
+                        ano,
+                        mesFiltro,
+                        data: chartOpsAgenda,
+                        metaFixa: EFICIENCIA_META_OPS_PUBLICACOES,
+                        periodoCurto: periodoCurtoAtivo ? { ok: pubAgendaTotais.ok, total: pubAgendaTotais.ok + pubAgendaTotais.nok } : null,
+                        meses: publicacoesAgendamento.map((m) => ({ mes: m.mes, ok: Number(m.qtd_eficiencia ?? 0), total: Number(m.qtd_eficiencia ?? 0) + Number(m.qtd_desvio ?? 0) })),
+                      },
+                      ponto,
+                    ),
+                }}
                 color="#0e7490"
                 metaFixa={EFICIENCIA_META_OPS_PUBLICACOES}
                 onRacionalClick={() => setRacionalAberto('ops_legais_pub_agendamento')}
@@ -552,6 +717,26 @@ export function OperacoesLegaisRgTab({
                 qtdOk={cadTotais.dentro}
                 qtdNok={cadTotais.fora}
                 loading={loading || (periodoCurtoAtivo && loadingSemana)}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.cadastro.eficiencia',
+                  explicar: () =>
+                    explicarEficDesvio({
+                      indicador: 'ops_legais_cadastro',
+                      ano,
+                      mesFiltro,
+                      origem: periodoCurtoAtivo && resumosSemana?.cad ? 'periodo_curto' : 'mensal',
+                      ok: cadTotais.dentro,
+                      nok: cadTotais.fora,
+                      meses:
+                        periodoCurtoAtivo && resumosSemana?.cad
+                          ? undefined
+                          : cadFiltrado.map((m) => ({
+                              mes: m.mes,
+                              ok: m.dentro_prazo,
+                              total: m.dentro_prazo + m.fora_prazo,
+                            })),
+                    }),
+                }}
               />
               <OpsLegaisInconsistenciasCard
                 indicador="ops_legais_cadastro"
@@ -564,20 +749,24 @@ export function OperacoesLegaisRgTab({
             <EficienciaEvolucaoChart
               title="Eficiência Cadastro"
               subtitle="BI · DePara · controladoria · Abertura/Serviço"
-              data={
-                periodoCurtoAtivo
-                  ? [
+              data={chartOpsCadastro}
+                fenix={{
+                  chave: 'eficiencia.ops-legais.grafico.cadastro',
+                  explicar: (ponto) =>
+                    explicarGraficoRazao(
                       {
-                        mes: 1,
-                        valor: cadTotais.pct ?? 0,
-                        label: periodoCurtoLabel ?? 'Período',
+                        indicador: 'ops_legais_cadastro',
+                        titulo: 'Eficiência Cadastro',
+                        ano,
+                        mesFiltro,
+                        data: chartOpsCadastro,
+                        metaFixa: EFICIENCIA_META_OPS_CADASTRO,
+                        periodoCurto: periodoCurtoAtivo ? { ok: cadTotais.dentro, total: cadTotais.dentro + cadTotais.fora } : null,
+                        meses: cadastroMensal.map((m) => ({ mes: m.mes, ok: m.dentro_prazo, total: m.dentro_prazo + m.fora_prazo })),
                       },
-                    ]
-                  : cadFiltrado.map((m) => ({
-                      mes: m.mes,
-                      valor: Number(m.pct_dentro_prazo),
-                    }))
-              }
+                      ponto,
+                    ),
+                }}
               color="#059669"
               metaFixa={EFICIENCIA_META_OPS_CADASTRO}
               onRacionalClick={() => setRacionalAberto('ops_legais_cadastro')}
@@ -616,6 +805,24 @@ export function OperacoesLegaisRgTab({
               icon={UserMinus}
               accentClass="bg-teal-100 text-teal-700"
               loading={loadingTurn}
+              fenix={
+                turnAnual
+                  ? {
+                      chave: 'eficiencia.ops-legais.turnover.retencao',
+                      explicar: () =>
+                        explicarTurnover({
+                          tela: TELA_OPS_TURNOVER,
+                          ano,
+                          area: EFICIENCIA_AREA_OPS_LEGAIS,
+                          foco: 'retencao',
+                          ativos: Number(turnAnual.funcionarios_ativos),
+                          saidas: Number(turnAnual.saidas_voluntarias),
+                          pctRetencao: Number(turnAnual.pct_retencao),
+                          meta: Number(turnAnual.meta_pct_retencao_minima),
+                        }),
+                    }
+                  : undefined
+              }
             />
             <EficienciaKpiCard
               title="Ativos"
@@ -623,6 +830,25 @@ export function OperacoesLegaisRgTab({
               icon={UserMinus}
               accentClass="bg-slate-100 text-slate-700"
               loading={loadingTurn}
+              fenix={
+                turnAnual
+                  ? {
+                      chave: 'eficiencia.ops-legais.turnover.ativos',
+                      explicar: () =>
+                        explicarTurnover({
+                          tela: TELA_OPS_TURNOVER,
+                          ano,
+                          area: EFICIENCIA_AREA_OPS_LEGAIS,
+                          foco: 'ativos',
+                          ativos: Number(turnAnual.funcionarios_ativos),
+                          saidas: Number(turnAnual.saidas_voluntarias),
+                          pctRetencao: Number(turnAnual.pct_retencao),
+                          meta: Number(turnAnual.meta_pct_retencao_minima),
+                          valor: String(turnAnual.funcionarios_ativos),
+                        }),
+                    }
+                  : undefined
+              }
             />
             <EficienciaKpiCard
               title="Saídas voluntárias"
@@ -630,6 +856,25 @@ export function OperacoesLegaisRgTab({
               icon={UserMinus}
               accentClass="bg-rose-100 text-rose-700"
               loading={loadingTurn}
+              fenix={
+                turnAnual
+                  ? {
+                      chave: 'eficiencia.ops-legais.turnover.saidas',
+                      explicar: () =>
+                        explicarTurnover({
+                          tela: TELA_OPS_TURNOVER,
+                          ano,
+                          area: EFICIENCIA_AREA_OPS_LEGAIS,
+                          foco: 'saidas',
+                          ativos: Number(turnAnual.funcionarios_ativos),
+                          saidas: Number(turnAnual.saidas_voluntarias),
+                          pctRetencao: Number(turnAnual.pct_retencao),
+                          meta: Number(turnAnual.meta_pct_retencao_minima),
+                          valor: String(turnAnual.saidas_voluntarias),
+                        }),
+                    }
+                  : undefined
+              }
             />
           </div>
 

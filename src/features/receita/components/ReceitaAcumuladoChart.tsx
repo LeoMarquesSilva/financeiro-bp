@@ -30,6 +30,8 @@ import {
 } from '../utils/receitaAcumuladoChart'
 import { buildAreaSlices, formatColunaLabel, formatPercentLabel } from '../utils/receitaColunasChart'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+import { explicarGraficoAcumulado } from '../fenix/receitaGraficosFenix'
 
 const SERIES = [
   {
@@ -366,6 +368,23 @@ export function ReceitaAcumuladoChart({
 
   const showRecebidoPorArea = percentMode && porArea && !deptLoading && !deptError
 
+  // Fênix: explica o mês sob o mouse com o mesmo array do gráfico (e os pontos em R$).
+  const fenixGrafico = useFenixGrafico('receita.grafico.acumulado', (ponto) =>
+    explicarGraficoAcumulado(
+      {
+        ano,
+        rows,
+        data: chartData,
+        baseReais: rawChartData,
+        percentMode,
+        porArea: showRecebidoPorArea,
+        slices: areaSlices,
+        visiveis: [...visibleSeries],
+      },
+      ponto,
+    ),
+  )
+
   const toggle = (key: SeriesKey) => {
     setVisible((prev) => {
       const next = new Set(prev)
@@ -440,7 +459,7 @@ export function ReceitaAcumuladoChart({
         )}
       </div>
 
-      <div ref={chartExportRef} className="flex flex-col">
+      <div ref={chartExportRef} className="flex flex-col" data-fenix={fenixGrafico.fenixId}>
       {porArea && percentMode && deptError && (
         <p className="mb-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           Não foi possível carregar recebido por área. Verifique a função{' '}
@@ -468,6 +487,8 @@ export function ReceitaAcumuladoChart({
             }}
             barCategoryGap="22%"
             barGap={4}
+            onMouseMove={fenixGrafico.onMouseMove}
+            onMouseLeave={fenixGrafico.onMouseLeave}
           >
             <CartesianGrid
               vertical={false}

@@ -37,9 +37,22 @@ import {
   variacaoPct,
   type CascataLinha,
 } from '../utils/receitaResultadoCaixa'
+import { useFenixAlvo, useFenixGrafico } from '@/shared/fenix/useFenix'
+import { explicarGraficoOpex } from '../fenix/receitaGraficosFenix'
+import {
+  explicarCaixaLinhaDre,
+  explicarCaixaOpex,
+  explicarCaixaResultado,
+  explicarCaixaSaida,
+  type ResultadoCaixaFenixContexto,
+  type SaidaCaixaKey,
+} from '../fenix/receitaSecoesFenix'
+import { FenixTr, type FenixAlvoProp } from './FenixAlvo'
 
 type Props = {
   ano: number
+  /** Nome da tela no Fênix quando a seção é usada fora da Receita (ex.: DL). */
+  fenixTela?: string
 }
 
 const ICONES_NAO_OPEX = {
@@ -117,6 +130,7 @@ function SaidaCard({
   anterior,
   ano,
   muted = false,
+  fenix,
 }: {
   icon: React.ElementType
   label: string
@@ -125,9 +139,12 @@ function SaidaCard({
   anterior: number
   ano: number
   muted?: boolean
+  fenix?: FenixAlvoProp
 }) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   return (
     <div
+      data-fenix={fenixId}
       className={cn(
         'rounded-xl border p-3 shadow-sm sm:p-4',
         muted ? 'border-dashed border-slate-200 bg-slate-50/60' : 'border-slate-200/60 bg-white',
@@ -159,18 +176,21 @@ function DestaqueCard({
   receitaAtual,
   receitaAnterior,
   ano,
+  fenix,
 }: {
   titulo: string
   linha: CascataLinha
   receitaAtual: number
   receitaAnterior: number
   ano: number
+  fenix?: FenixAlvoProp
 }) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   const margemAtual = receitaAtual > 0 ? (linha.atual / receitaAtual) * 100 : null
   const margemAnterior = receitaAnterior > 0 ? (linha.anterior / receitaAnterior) * 100 : null
   const diffPp = margemAtual != null && margemAnterior != null ? margemAtual - margemAnterior : null
   return (
-    <div className="rounded-xl border border-slate-200/60 bg-white p-3 shadow-sm sm:p-4">
+    <div className="rounded-xl border border-slate-200/60 bg-white p-3 shadow-sm sm:p-4" data-fenix={fenixId}>
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{titulo}</p>
       <p
         className={cn(
@@ -250,7 +270,7 @@ function OpexTooltip({
   )
 }
 
-export function ReceitaResultadoCaixaSection({ ano }: Props) {
+export function ReceitaResultadoCaixaSection({ ano, fenixTela }: Props) {
   const { data: rows, isLoading, error } = useReceitaResultadoCaixa(ano)
   const mesAtual = mesAtualResultadoCaixa(ano)
   const [mesIni, setMesIni] = useState(1)
@@ -281,6 +301,36 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
   }, [rows, ano, ini, fim, parcial, mesAtual])
 
   const linha = (key: string) => cascata.find((l) => l.key === key)!
+
+  // Fênix: mesmas linhas e totais que a seção mostra.
+  const fenixCtx: ResultadoCaixaFenixContexto = {
+    ano,
+    mesIni: ini,
+    mesFim: fim,
+    parcial,
+    rows: rows ?? [],
+    atual,
+    anterior,
+    tela: fenixTela,
+  }
+  const fenixAlvo = (chave: string, explicar: FenixAlvoProp['explicar']): FenixAlvoProp => ({
+    chave: `receita.custos.${chave}`,
+    explicar,
+  })
+  const opexFenixId = useFenixAlvo(
+    rows ? 'receita.custos.opex' : undefined,
+    rows ? () => explicarCaixaOpex(fenixCtx) : undefined,
+  )
+  const opexGrafico = useFenixGrafico(
+    rows ? 'receita.custos.grafico.opex' : undefined,
+    rows
+      ? (ponto) =>
+          explicarGraficoOpex(
+            { ano, data: chartData, totalAtual: atual.opex, totalAnterior: anterior.opex, parcial, tela: fenixTela },
+            ponto,
+          )
+      : undefined,
+  )
 
   return (
     <div className="space-y-4">
@@ -325,7 +375,7 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
                 </span>
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Despesas operacionais (OPEX) mês a mês</h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500" data-fenix={opexFenixId}>
                     {formatCurrency(atual.opex)} em {ano} vs {formatCurrency(anterior.opex)} em {ano - 1} ·{' '}
                     <Variacao atual={atual.opex} anterior={anterior.opex} saida />
                   </p>
@@ -333,7 +383,7 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
               </div>
               <ChartCopyButton containerRef={chartRef} />
             </div>
-            <div ref={chartRef} className="bg-white">
+            <div ref={chartRef} className="bg-white" data-fenix={opexGrafico.fenixId}>
               <div data-chart-legend className="mb-1 flex items-center justify-center gap-4 text-xs text-slate-600">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-sm" style={{ background: OPEX_COLORS.anoAnterior.hex }} />
@@ -347,7 +397,13 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
               </div>
               <div data-chart-plot className="h-72 w-full min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 22, right: 8, bottom: 0, left: 8 }} barGap={2}>
+                  <BarChart
+                    data={chartData}
+                    margin={{ top: 22, right: 8, bottom: 0, left: 8 }}
+                    barGap={2}
+                    onMouseMove={opexGrafico.onMouseMove}
+                    onMouseLeave={opexGrafico.onMouseLeave}
+                  >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis
                       dataKey="label"
@@ -410,6 +466,7 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
                   atual={atual[s.key]}
                   anterior={anterior[s.key]}
                   ano={ano}
+                  fenix={fenixAlvo(s.key, () => explicarCaixaSaida(fenixCtx, s.key as SaidaCaixaKey))}
                 />
               ))}
             </div>
@@ -427,6 +484,7 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
                   anterior={anterior[s.key]}
                   ano={ano}
                   muted
+                  fenix={fenixAlvo(s.key, () => explicarCaixaSaida(fenixCtx, s.key as SaidaCaixaKey))}
                 />
               ))}
             </div>
@@ -454,6 +512,7 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
                 receitaAtual={atual.receita}
                 receitaAnterior={anterior.receita}
                 ano={ano}
+                fenix={fenixAlvo('receita', () => explicarCaixaLinhaDre(fenixCtx, linha('receita')))}
               />
               <DestaqueCard
                 titulo="Resultado Operacional de Caixa"
@@ -461,6 +520,7 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
                 receitaAtual={atual.receita}
                 receitaAnterior={anterior.receita}
                 ano={ano}
+                fenix={fenixAlvo('resultado_operacional', () => explicarCaixaResultado(fenixCtx, linha('resultado_operacional')))}
               />
               <DestaqueCard
                 titulo="Geração de Caixa Líquida"
@@ -468,6 +528,7 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
                 receitaAtual={atual.receita}
                 receitaAnterior={anterior.receita}
                 ano={ano}
+                fenix={fenixAlvo('geracao_caixa_liquida', () => explicarCaixaResultado(fenixCtx, linha('geracao_caixa_liquida')))}
               />
             </div>
 
@@ -490,8 +551,9 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
                     const pctRec = (v: number, rec: number) => (rec > 0 ? formatPercent((v / rec) * 100) : '—')
                     const diff = l.atual - l.anterior
                     return (
-                      <tr
+                      <FenixTr
                         key={l.key}
+                        fenix={fenixAlvo(`dre.${l.key}`, () => explicarCaixaLinhaDre(fenixCtx, l))}
                         className={cn(
                           'border-b border-slate-100 tabular-nums',
                           resultado && 'bg-slate-50 font-semibold text-slate-900',
@@ -519,7 +581,7 @@ export function ReceitaResultadoCaixaSection({ ano }: Props) {
                         <td className="whitespace-nowrap py-2 pl-3 text-right text-xs">
                           <Variacao atual={l.atual} anterior={l.anterior} saida={l.tipo === 'saida'} />
                         </td>
-                      </tr>
+                      </FenixTr>
                     )
                   })}
                 </tbody>

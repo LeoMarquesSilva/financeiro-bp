@@ -90,6 +90,8 @@ import {
   findMetaAreaSlice,
   resolveDepartamentoAreaColor,
 } from '../utils/departamentoAreaCores'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+import { explicarGraficoColunas, type ColunasMetrica } from '../fenix/receitaGraficosFenix'
 
 type MetricKey = (typeof RECEITA_COLUNAS_METRICAS)[number]['key']
 
@@ -1879,6 +1881,32 @@ export function ReceitaComparativoColunasChart({
 
   const renderColunasTooltip = () => null
 
+  // Fênix: explica a coluna do mês sob o mouse (mesmo array do gráfico + os mesmos pontos em R$).
+  const fenixGrafico = useFenixGrafico('receita.grafico.colunas', (ponto) => {
+    const areaMeta = areaSelecionada ? findMetaAreaSlice(metaAreaSlices, areaSelecionada) : null
+    return explicarGraficoColunas(
+      {
+        ano,
+        data: chartData,
+        baseReais: rawChartData,
+        slices: effectiveStackSlices,
+        rows,
+        planoMode,
+        percentMetaMode,
+        porArea,
+        mostrarRecebido: showRecebidoStack,
+        area:
+          showAreaDrilldown && areaMeta && singleAreaSlice
+            ? { label: areaMeta.label, pct: areaMeta.pct }
+            : null,
+        metricasVisiveis: RECEITA_COLUNAS_METRICAS.filter((m) => chartVisibleMetrics.has(m.key)).map(
+          (m) => m.key as ColunasMetrica,
+        ),
+      },
+      ponto,
+    )
+  })
+
   const toggleMetric = (key: MetricKey) => {
     setVisibleMetrics((prev) => {
       const next = new Set(prev)
@@ -2080,7 +2108,7 @@ export function ReceitaComparativoColunasChart({
             ))}
           </div>
 
-          <div ref={chartExportRef} className="flex flex-col">
+          <div ref={chartExportRef} className="flex flex-col" data-fenix={fenixGrafico.fenixId}>
           <div
             data-chart-plot
             className="relative h-[360px] min-h-[360px] w-full min-w-0 overflow-visible"
@@ -2125,7 +2153,11 @@ export function ReceitaComparativoColunasChart({
                 }}
                 barCategoryGap="18%"
                 barGap={2}
-                onMouseMove={handleChartMouseMove}
+                onMouseMove={(state: MouseHandlerDataParam) => {
+                  handleChartMouseMove(state)
+                  fenixGrafico.onMouseMove(state)
+                }}
+                onMouseLeave={fenixGrafico.onMouseLeave}
               >
                 <CartesianGrid
                   vertical={false}

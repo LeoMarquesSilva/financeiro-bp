@@ -2,11 +2,30 @@ import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
 import { ArrowUpRight, type LucideIcon } from 'lucide-react'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
 
 export type DashboardCarteiraStat = {
   label: string
   value: string
   hint?: string
+  /** Explicação do número no Fênix. */
+  fenix?: { chave: string; explicar: FenixExplicar }
+}
+
+function StatRow({ stat }: { stat: DashboardCarteiraStat }) {
+  const fenixId = useFenixAlvo(stat.fenix?.chave, stat.fenix?.explicar)
+  return (
+    <div className="flex items-baseline justify-between gap-2" data-fenix={fenixId}>
+      <dt className="text-xs text-slate-500">{stat.label}</dt>
+      <dd className="text-right">
+        <span className="text-sm font-semibold tabular-nums text-slate-900">{stat.value}</span>
+        {stat.hint && (
+          <p className="text-[10px] text-slate-400">{stat.hint}</p>
+        )}
+      </dd>
+    </div>
+  )
 }
 
 type Props = {
@@ -54,15 +73,7 @@ export function DashboardCarteiraCard({
 
       <dl className="mt-auto space-y-2">
         {stats.map((stat) => (
-          <div key={stat.label} className="flex items-baseline justify-between gap-2">
-            <dt className="text-xs text-slate-500">{stat.label}</dt>
-            <dd className="text-right">
-              <span className="text-sm font-semibold tabular-nums text-slate-900">{stat.value}</span>
-              {stat.hint && (
-                <p className="text-[10px] text-slate-400">{stat.hint}</p>
-              )}
-            </dd>
-          </div>
+          <StatRow key={stat.label} stat={stat} />
         ))}
       </dl>
     </NavLink>

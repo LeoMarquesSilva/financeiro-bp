@@ -43,6 +43,17 @@ import { RacionalSheet } from './RacionalSheet'
 import type { SlaVistagemDiaRow } from '../types/eficiencia.types'
 import type { HeatCell } from './OverviewKpiHeatRow'
 import type { RacionalIndicador } from '../types/eficiencia.types'
+import {
+  explicarContagem,
+  explicarRazao,
+  type FenixMesContagem,
+  type FenixOrigemPeriodo,
+} from '../fenix/eficienciaOperacionalFenix'
+import {
+  explicarGraficoRazao,
+  explicarRankingIndicador,
+  type RankingDimensao,
+} from '../fenix/eficienciaGraficosFenix'
 
 const BI_BAR = '#94a3b8'
 
@@ -159,6 +170,23 @@ export function SlaVistagemTab({
         ? SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT
         : null
   const areaHint = area ? `Área ${area}` : undefined
+
+  const fenixIndicador = risco ? 'sla_vistagem_risco' : 'sla_vistagem_normal'
+  const fenixAba = risco ? 'vistagem-risco' : 'vistagem-normal'
+  const origemPeriodo: FenixOrigemPeriodo = periodoCurto.periodoCurtoAtivo
+    ? 'periodo_curto'
+    : responsavel
+      ? 'responsavel'
+      : 'mensal'
+  const contagemMensal = (rows: typeof mensal): FenixMesContagem[] =>
+    rows.map((m) => ({ mes: m.mes, ok: m.vistado_d1, total: m.total }))
+  const fenixIndisponivel = indisponivelOps
+    ? `SLA Vistagem ${risco ? 'Risco' : 'Normal'} não se aplica a Operações Legais: com essa área no filtro o card fica sem número.`
+    : indisponivelNormal
+      ? 'Trabalhista não tem SLA Vistagem Normal: a área só tem demanda de risco, então o card fica sem número.'
+      : null
+
+  const fenixDimensaoDesvio: RankingDimensao = rankingPorGrupo ? 'grupo' : 'responsavel'
 
   const resultadoRacional: HeatCell | null =
     pctGeral != null ? { value: pctGeral, label: formatPercent(pctGeral) } : null
@@ -301,6 +329,25 @@ export function SlaVistagemTab({
           loading={loading}
           scopeEquipe
           pessoaNome={responsavel}
+          fenix={{
+            chave: `eficiencia.${fenixAba}.gestao-a-vista`,
+            explicar: () =>
+              explicarRazao({
+                indicador: fenixIndicador,
+                ano,
+                escopo: 'gestao_a_vista',
+                area,
+                responsavel,
+                ok: totalVistadoD1Gav,
+                total: totalPublicacoesGav,
+                pct: pctGestaoVista,
+                meses: contagemMensal(mensalGestaoVista),
+                contratosSemCasos:
+                  !indisponivel &&
+                  isSlaVistagemRiscoContratosSemCasos(area, risco, totalPublicacoesGav),
+                indisponivel: fenixIndisponivel,
+              }),
+          }}
         />
         <EficienciaKpiCard
           title={`SLA D+1 no período selecionado (${risco ? 'demanda de risco' : 'demanda comum'})`}
@@ -318,6 +365,27 @@ export function SlaVistagemTab({
           pessoaNome={responsavel}
           currentPct={pctGeral}
           vsEquipePct={pctGestaoVista}
+          fenix={{
+            chave: `eficiencia.${fenixAba}.periodo`,
+            explicar: () =>
+              explicarRazao({
+                indicador: fenixIndicador,
+                ano,
+                escopo: 'periodo',
+                area,
+                mesFiltro,
+                origem: origemPeriodo,
+                responsavel,
+                ok: totalVistadoD1,
+                total: totalPublicacoes,
+                pct: pctGeral,
+                meses: origemPeriodo === 'mensal' ? contagemMensal(mensalFiltrado) : undefined,
+                contratosSemCasos:
+                  !indisponivel &&
+                  isSlaVistagemRiscoContratosSemCasos(area, risco, totalPublicacoes),
+                indisponivel: fenixIndisponivel,
+              }),
+          }}
         />
         <EficienciaKpiCard
           title="Publicações no período selecionado"
@@ -326,6 +394,24 @@ export function SlaVistagemTab({
           accentClass="bg-slate-100 text-slate-700"
           loading={loadingKpi}
           reservePessoaSlot={Boolean(responsavel?.trim())}
+          fenix={{
+            chave: `eficiencia.${fenixAba}.publicacoes`,
+            explicar: () =>
+              explicarContagem({
+                indicador: fenixIndicador,
+                ano,
+                titulo: 'Publicações no período selecionado',
+                area,
+                mesFiltro,
+                origem: origemPeriodo,
+                responsavel,
+                mostra: 'total',
+                ok: totalVistadoD1,
+                total: totalPublicacoes,
+                valor: String(totalPublicacoes),
+                indisponivel: fenixIndisponivel,
+              }),
+          }}
         />
       </div>
 
@@ -333,6 +419,32 @@ export function SlaVistagemTab({
         title={`SLA de Vistagem D+1 — ${risco ? 'Demanda de Risco' : 'Demanda Comum'}`}
         subtitle={chartSubtitle}
         data={loadingChart ? [] : chartData}
+        fenix={
+          indisponivel
+            ? undefined
+            : {
+                chave: `eficiencia.${fenixAba}.grafico.evolucao`,
+                explicar: (ponto) =>
+                  explicarGraficoRazao(
+                    {
+                      indicador: fenixIndicador,
+                      titulo: `SLA de Vistagem D+1 — ${risco ? 'Demanda de Risco' : 'Demanda Comum'}`,
+                      ano,
+                      area,
+                      mesFiltro,
+                      responsavel,
+                      granularidade:
+                        drill.chartGranularidade === 'dia' && mesDrillTarget != null ? 'dia' : 'mes',
+                      mesDia: mesDrillTarget,
+                      data: loadingChart ? [] : chartData,
+                      metaFixa: EFICIENCIA_META_VISTAGEM,
+                      meses: contagemMensal(mensal),
+                      dias: diario.map((d: SlaVistagemDiaRow) => ({ dia: d.dia, total: d.total })),
+                    },
+                    ponto,
+                  ),
+              }
+        }
         color={risco ? '#dc2626' : '#0ea5e9'}
         metaFixa={EFICIENCIA_META_VISTAGEM}
         granularidade={drill.chartGranularidade}
@@ -356,6 +468,28 @@ export function SlaVistagemTab({
           title={rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsável'}
           subtitle={areaHint}
           rows={rankingDesvioRows}
+          fenix={
+            indisponivel
+              ? undefined
+              : {
+                  chave: `eficiencia.${fenixAba}.grafico.desvio-pct`,
+                  qtdKey: 'qtd_desvio',
+                  explicar: (barras, ponto) =>
+                    explicarRankingIndicador(
+                      {
+                        indicador: fenixIndicador,
+                        dimensao: fenixDimensaoDesvio,
+                        titulo: rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsável',
+                        ano,
+                        area,
+                        mesFiltro,
+                        responsavel,
+                        barras,
+                      },
+                      ponto,
+                    ),
+                }
+          }
           labelKey={rankingDesvioLabelKey}
           valueKey="pct_do_total"
           valueLabel="% do total"
@@ -377,6 +511,28 @@ export function SlaVistagemTab({
           title="Tipo Publicação"
           subtitle={areaHint}
           rows={porTipoAgregado}
+          fenix={
+            indisponivel
+              ? undefined
+              : {
+                  chave: `eficiencia.${fenixAba}.grafico.tipo`,
+                  qtdKey: 'qtd_desvio',
+                  explicar: (barras, ponto) =>
+                    explicarRankingIndicador(
+                      {
+                        indicador: fenixIndicador,
+                        dimensao: 'tipo',
+                        titulo: 'Tipo Publicação',
+                        ano,
+                        area,
+                        mesFiltro,
+                        responsavel: null,
+                        barras,
+                      },
+                      ponto,
+                    ),
+                }
+          }
           labelKey="tipo_publicacao"
           valueKey="qtd_desvio"
           valueLabel="Desvios"
@@ -395,6 +551,28 @@ export function SlaVistagemTab({
           title={rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsável'}
           subtitle={areaHint}
           rows={rankingDesvioRows}
+          fenix={
+            indisponivel
+              ? undefined
+              : {
+                  chave: `eficiencia.${fenixAba}.grafico.desvio-qtd`,
+                  qtdKey: 'qtd_desvio',
+                  explicar: (barras, ponto) =>
+                    explicarRankingIndicador(
+                      {
+                        indicador: fenixIndicador,
+                        dimensao: fenixDimensaoDesvio,
+                        titulo: rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsável',
+                        ano,
+                        area,
+                        mesFiltro,
+                        responsavel,
+                        barras,
+                      },
+                      ponto,
+                    ),
+                }
+          }
           labelKey={rankingDesvioLabelKey}
           valueKey="qtd_desvio"
           valueLabel="Desvios"

@@ -19,6 +19,7 @@ import { CobrancaSeguimentoGrupoSheet } from '../components/CobrancaSeguimentoGr
 import { CobrancaSeguimentoInadimplenciaAlert } from '../components/CobrancaSeguimentoInadimplenciaAlert'
 import { CobrancaSeguimentoRevisaoComiteSheet } from '../components/CobrancaSeguimentoRevisaoComiteSheet'
 import { calcularKpisFromGrupos } from '../utils/cobrancaSeguimentoKpis'
+import { TELA_PONTUAL, filtrosPontualPagina } from '../fenix/cobrancaFenix'
 import type {
   CobrancaSeguimentoGrupo,
   CobrancaSeguimentoGrupoAcima60,
@@ -177,7 +178,21 @@ export function CobrancaSeguimentoPage() {
           </select>
         </div>
 
-        <CobrancaSeguimentoKPIs kpis={kpisFiltrados} grupos={gruposFiltrados} loading={loading} />
+        <CobrancaSeguimentoKPIs
+          kpis={kpisFiltrados}
+          grupos={gruposFiltrados}
+          loading={loading}
+          fenixContexto={{
+            tela: TELA_PONTUAL,
+            filtros: filtrosPontualPagina({
+              busca,
+              faixa,
+              statusD1,
+              comite: inadimplenciaIndex ? filtroComite : 'todos',
+            }),
+            comite: inadimplenciaIndex ? filtroComite : 'todos',
+          }}
+        />
 
         <CobrancaSeguimentoGruposTable
           grupos={gruposFiltrados}
