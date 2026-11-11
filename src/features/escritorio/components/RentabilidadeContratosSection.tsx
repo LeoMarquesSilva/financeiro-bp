@@ -26,6 +26,14 @@ import {
   labelPeriodo,
   resultadoHoraPositivo,
 } from '../utils/rentabilidadeFormat'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  explicarRentabilidadeGrupo,
+  explicarRentabilidadeHoraEfetiva,
+  explicarRentabilidadeHoraPrevista,
+  explicarRentabilidadeHoras,
+} from '../fenix/escritorioFenix'
 
 type Props = {
   filtros: LevantamentoFiltros
@@ -193,18 +201,77 @@ function CardMedia({
   valor,
   detalhe,
   loading,
+  fenix,
 }: {
   titulo: string
   valor: string
   detalhe: string
   loading: boolean
+  fenix?: { chave: string; explicar: FenixExplicar }
 }) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <div data-fenix={fenixId} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{titulo}</p>
       <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{loading ? '…' : valor}</p>
       <p className="mt-1 text-xs text-slate-400">{detalhe}</p>
     </div>
+  )
+}
+
+function LinhaRanking({
+  linha,
+  index,
+  data,
+  filtros,
+}: {
+  linha: RentabilidadeContratoLinha
+  index: number
+  data: RentabilidadeContratos
+  filtros: LevantamentoFiltros
+}) {
+  const fenixId = useFenixAlvo('escritorio.rentabilidade.grupo', () =>
+    explicarRentabilidadeGrupo(linha, data, filtros, index + 1),
+  )
+  return (
+    <tr data-fenix={fenixId} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+      <td className="px-4 py-3 tabular-nums text-slate-400">{index + 1}</td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
+            {iniciaisCliente(linha.cliente)}
+          </div>
+          <div className="min-w-0">
+            <span className="block max-w-[16rem] truncate font-medium text-slate-900">
+              {linha.cliente}
+            </span>
+            {linha.razoes_sociais.length > 1 ? (
+              <span
+                className="block text-xs text-slate-500"
+                title={linha.razoes_sociais.join('\n')}
+              >
+                {linha.razoes_sociais.length} razões sociais
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums text-slate-800">
+        {formatCurrency(linha.recebido_periodo)}
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums text-slate-800">
+        {formatCurrency(linha.previsto_periodo)}
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums text-slate-800">
+        {formatMediaHorasMes(linha.horas_minutos)}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <TaxaCell valor={linha.valor_hora_efetivo} media={data.valor_hora_efetivo_escritorio} />
+      </td>
+      <td className="px-4 py-3 text-right">
+        <TaxaCell valor={linha.valor_hora_previsto} media={data.valor_hora_previsto_escritorio} />
+      </td>
+    </tr>
   )
 }
 
@@ -308,6 +375,11 @@ export function RentabilidadeContratosSection({
           valor={formatMediaHorasMes(data?.horas_minutos)}
           detalhe="Todas as horas do período"
           loading={loading}
+          fenix={
+            data && !loading
+              ? { chave: 'escritorio.rentabilidade.horas', explicar: () => explicarRentabilidadeHoras(data, filtros) }
+              : undefined
+          }
         />
         <CardMedia
           titulo="Valor efetivo médio da hora"
@@ -318,6 +390,11 @@ export function RentabilidadeContratosSection({
               : 'Recebido ÷ horas do escritório'
           }
           loading={loading}
+          fenix={
+            data && !loading
+              ? { chave: 'escritorio.rentabilidade.hora_efetiva', explicar: () => explicarRentabilidadeHoraEfetiva(data, filtros) }
+              : undefined
+          }
         />
         <CardMedia
           titulo="Valor médio previsto/faturado"
@@ -328,6 +405,11 @@ export function RentabilidadeContratosSection({
               : 'Previsto ÷ horas do escritório'
           }
           loading={loading}
+          fenix={
+            data && !loading
+              ? { chave: 'escritorio.rentabilidade.hora_prevista', explicar: () => explicarRentabilidadeHoraPrevista(data, filtros) }
+              : undefined
+          }
         />
       </div>
 
@@ -471,53 +553,7 @@ export function RentabilidadeContratosSection({
               </thead>
               <tbody>
                 {linhas.map((linha, index) => (
-                  <tr
-                    key={linha.cliente}
-                    className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60"
-                  >
-                    <td className="px-4 py-3 tabular-nums text-slate-400">{index + 1}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
-                          {iniciaisCliente(linha.cliente)}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="block max-w-[16rem] truncate font-medium text-slate-900">
-                            {linha.cliente}
-                          </span>
-                          {linha.razoes_sociais.length > 1 ? (
-                            <span
-                              className="block text-xs text-slate-500"
-                              title={linha.razoes_sociais.join('\n')}
-                            >
-                              {linha.razoes_sociais.length} razões sociais
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-800">
-                      {formatCurrency(linha.recebido_periodo)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-800">
-                      {formatCurrency(linha.previsto_periodo)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-800">
-                      {formatMediaHorasMes(linha.horas_minutos)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <TaxaCell
-                        valor={linha.valor_hora_efetivo}
-                        media={data.valor_hora_efetivo_escritorio}
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <TaxaCell
-                        valor={linha.valor_hora_previsto}
-                        media={data.valor_hora_previsto_escritorio}
-                      />
-                    </td>
-                  </tr>
+                  <LinhaRanking key={linha.cliente} linha={linha} index={index} data={data} filtros={filtros} />
                 ))}
               </tbody>
             </table>

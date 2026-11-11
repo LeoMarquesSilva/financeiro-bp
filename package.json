@@ -11,7 +11,7 @@
     "test:official-photos": "node --test tests/official-photos.test.ts",
     "test:receita-me": "node --test tests/receita-me-calc.test.ts",
     "test:dl": "node --test tests/dl-calc.test.ts",
-    "test:fenix": "node --test tests/fenix-receita.test.ts",
+    "test:fenix": "node --test 'tests/fenix-*.test.ts'",
     "preview": "npx vite preview",
     "import:cdi": "node scripts/import-cdi-xlsx.cjs",
     "verify:cdi": "node scripts/verify-cdi-xlsx.cjs",

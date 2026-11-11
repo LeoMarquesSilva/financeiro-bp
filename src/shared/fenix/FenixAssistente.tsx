@@ -8,7 +8,20 @@ const LOGO_FENIX = '/fenix.png'
 const uiProps = { [FENIX_UI_ATRIBUTO]: '' }
 
 /** Telas que já têm números explicados — aparece na tela inicial do painel. */
-const TELAS_COM_FENIX = ['Receita › Resumo do ano', 'Receita › Melhor estimativa (por área e escritório)']
+const TELAS_COM_FENIX = [
+  'Receita › Resumo, Gestão à vista, Inadimplência e Custos e resultado',
+  'Receita › gráficos Comparativo mensal, Recebido por área, Valores acumulados e OPEX mês a mês',
+  'Receita › Melhor estimativa (por área e escritório)',
+  'DL › Visão geral, Por área e Resultado de caixa',
+  'OPEX › Resumo, Projeção de despesas fixas e gráficos (mensal, detalhe, departamentos, orçamento)',
+  'Escritório › Levantamento e Rentabilidade',
+  'Cobrança › Painel de cobrança e Indicadores (D+1)',
+  'Inadimplência › Painel, Comitê e Pontual',
+  'Inadimplência judicializada',
+  'Timesheet › Resumo e gráfico de horas por mês',
+  'Eficiência › Overview, SLAs, Protocolo, Agendamento, Desenvolvimento, Retenção, PDI, NPS, Receita bruta e Inadimplência (cards, evolução mensal e rankings)',
+  'Operações legais › Overview, Protocolo, Publicações, Cadastro, Desenvolvimento, Retenção, PDI, Financeiro e Marketing (cards e gráficos)',
+]
 
 function LinhaConta({ linha }: { linha: FenixLinha }) {
   const tipo = linha.tipo ?? 'parcela'
@@ -118,7 +131,7 @@ function Inicio() {
       <ol className="space-y-2">
         {[
           'Clique em "Apontar um número".',
-          'Os números que o Fênix explica ficam com contorno dourado. Clique no que gerou a dúvida.',
+          'Os números que o Fênix explica ficam com contorno dourado. Clique no que gerou a dúvida. Em gráfico, pare o mouse no mês e clique.',
           'Veja a fórmula, a memória de cálculo, os filtros e as regras aplicadas.',
         ].map((passo, i) => (
           <li key={passo} className="flex gap-2.5">
@@ -153,10 +166,10 @@ export function FenixAssistente() {
         <button
           type="button"
           {...uiProps}
-          onClick={fenix.abrirPainel}
+          onClick={fenix.iniciarInspecao}
           className="group fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-2 rounded-l-2xl border border-r-0 border-white/10 bg-[#101f2e] py-2.5 pl-2.5 pr-2 text-white shadow-lg shadow-slate-900/20 transition-all hover:pl-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
-          aria-label="Abrir Fênix IA"
-          title="Fênix IA: entenda como cada número foi calculado"
+          aria-label="Fênix IA: apontar um número"
+          title="Fênix IA: clique e aponte o número que você quer entender"
         >
           <img src={LOGO_FENIX} alt="" className="h-7 w-7 object-contain" />
           <span className="max-w-0 overflow-hidden whitespace-nowrap text-sm font-semibold opacity-0 transition-all duration-200 group-hover:max-w-[6rem] group-hover:opacity-100 group-focus-visible:max-w-[6rem] group-focus-visible:opacity-100">
@@ -175,7 +188,7 @@ export function FenixAssistente() {
           <span className="font-medium">
             {avisoSemAlvo
               ? 'Esse ponto ainda não tem explicação. Clique num número com contorno dourado.'
-              : 'Clique no número que você quer entender'}
+              : 'Clique no número que você quer entender. Em gráfico, pare o mouse no mês e clique.'}
           </span>
           <button
             type="button"

@@ -11,13 +11,18 @@ import {
 import { MESES_EFICIENCIA } from '@/features/eficiencia/constants'
 import { formatTimesheetHoras } from '../utils/formatTimesheetHoras'
 import type { TimesheetMes } from '../services/timesheetService'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+import type { TimesheetFenixRecorte } from '../fenix/timesheetFenix'
+import { explicarGraficoTimesheetMes } from '../fenix/timesheetGraficosFenix'
 
 type Props = {
   meses: TimesheetMes[]
   loading?: boolean
+  /** Contexto para o Fênix explicar as barras (mesmo recorte e totais dos cards). */
+  fenix?: { recorte: TimesheetFenixRecorte; totalMinutos: number; totalLancamentos: number }
 }
 
-export function TimesheetMesChart({ meses, loading }: Props) {
+export function TimesheetMesChart({ meses, loading, fenix }: Props) {
   const data = Array.from({ length: 12 }, (_, i) => {
     const row = meses.find((m) => m.mes === i + 1)
     return {
@@ -27,14 +32,24 @@ export function TimesheetMesChart({ meses, loading }: Props) {
     }
   })
 
+  const fenixGrafico = useFenixGrafico(
+    fenix && !loading ? 'timesheet.grafico.horas_mes' : undefined,
+    fenix ? (ponto) => explicarGraficoTimesheetMes({ ...fenix, data }, ponto) : undefined,
+  )
+
   if (loading) {
     return <div className="h-64 animate-pulse rounded-xl bg-slate-100" />
   }
 
   return (
-    <div className="h-72 w-full">
+    <div className="h-72 w-full" data-fenix={fenixGrafico.fenixId}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 28, right: 8, left: 0, bottom: 0 }}>
+        <BarChart
+          data={data}
+          margin={{ top: 28, right: 8, left: 0, bottom: 0 }}
+          onMouseMove={fenixGrafico.onMouseMove}
+          onMouseLeave={fenixGrafico.onMouseLeave}
+        >
           <CartesianGrid stroke="#E2E8F0" vertical={false} />
           <XAxis dataKey="mes" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
           <YAxis

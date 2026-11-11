@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { formatPercent } from '@/shared/utils/format'
 import { copyOverviewKpiCardsToClipboard } from '@/shared/utils/copyChartImage'
 import { Button } from '@/components/ui/button'
-import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
+import { OverviewKpiHeatRow, type HeatCell, type OverviewFenixAlvo } from './OverviewKpiHeatRow'
 import { AreaFilterButtons } from './AreaFilterButtons'
 import { RacionalSheet } from './RacionalSheet'
 import {
@@ -32,6 +32,8 @@ import {
   aplicarCelulasFiltro,
   buildOverviewInadimplencia,
   buildOverviewReceitaBruta,
+  mesesInadimplenciaAoVivo,
+  receitaBrutaMonetarioAcumulado,
 } from '../utils/overviewFinanceiroKpis'
 import { acumuladoGestaoPdi, buildGestaoPdiCells } from '../utils/gestaoPdiCalc'
 import { resolveMetaTexto } from '../utils/overviewKpiMeta'
@@ -52,6 +54,24 @@ import {
   SLA_VISTAGEM_RISCO_CONTRATOS_SEM_CASOS_PCT,
   totalPublicacoesVistagem,
 } from '../utils/slaVistagemKpi'
+import {
+  explicarDesenvolvimento,
+  explicarGestaoPdi,
+  explicarInadimplencia,
+  explicarNps,
+  explicarRazao,
+  explicarReceitaBruta,
+  explicarTurnover,
+  type FenixMesContagem,
+  type IndicadorRazao,
+} from '../fenix/eficienciaOperacionalFenix'
+
+const TELA_OVERVIEW = 'Eficiência › Overview'
+
+/** Texto da célula como aparece na tela (linha de cima + linha de baixo). */
+function rotuloCelula(cell: HeatCell): string {
+  return cell.subLabel ? `${cell.label} (${cell.subLabel})` : cell.label
+}
 
 type Props = {
   ano: number
@@ -533,6 +553,329 @@ export function OverviewTab({
       ops_legais_fechamento: { metaAcumulado: 100 },
     }
 
+  // --- Fênix IA: memória de cálculo de cada Acum. (e das células mensais operacionais) ---
+  const cellsSlaProtocolo = aplicarCelulasFiltro(
+    buildCells(data.slaProtocolo, (r) => r.pct_eficiencia),
+    mesFiltro,
+    ano,
+  )
+  const cellsEficienciaProtocolo = aplicarCelulasFiltro(
+    buildCells(data.eficienciaProtocolo, (r) => r.pct_eficiencia),
+    mesFiltro,
+    ano,
+  )
+  const riscoContratosSemCasos = isSlaVistagemRiscoContratosSemCasos(
+    area,
+    true,
+    totalPublicacoesVistagem(data.slaVistagemRisco),
+  )
+  const indisponivelOpsLegais = (nome: string) =>
+    `${nome} não se aplica a Operações Legais: com essa área no filtro a linha fica sem número.`
+  const vistagemNormalIndisponivelTexto = vistagemNormalIndisponivel
+    ? area === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL
+      ? 'Trabalhista não tem SLA Vistagem Normal: a área só tem demanda de risco, então a linha fica sem número.'
+      : indisponivelOpsLegais('SLA Vistagem Normal')
+    : null
+
+  const fenixAcumRazao = (
+    indicador: IndicadorRazao,
+    chave: string,
+    cell: HeatCell,
+    resumo: { ok: number; total: number } | null,
+    meses: FenixMesContagem[],
+    extra: { meta?: number; indisponivel?: string | null; contratosSemCasos?: boolean } = {},
+  ): OverviewFenixAlvo => ({
+    chave: `eficiencia.overview.${chave}.acumulado`,
+    explicar: () => {
+      const curto = periodoCurtoAtivo && resumo != null
+      return explicarRazao({
+        indicador,
+        ano,
+        escopo: 'overview',
+        tela: TELA_OVERVIEW,
+        area,
+        mesFiltro,
+        origem: curto ? 'periodo_curto' : 'mensal',
+        ok: curto ? resumo.ok : meses.reduce((s, m) => s + m.ok, 0),
+        total: curto ? resumo.total : meses.reduce((s, m) => s + m.total, 0),
+        pct: cell.value,
+        valor: cell.label,
+        meses: curto ? undefined : meses,
+        ...extra,
+      })
+    },
+  })
+
+  const fenixMesRazao =
+    (
+      indicador: IndicadorRazao,
+      chave: string,
+      cells: HeatCell[],
+      porMes: (mes: number) => (FenixMesContagem & { meta?: number | null }) | undefined,
+      extra: { contratosSemCasos?: boolean } = {},
+    ) =>
+    (indice: number): OverviewFenixAlvo | undefined => {
+      const cell = cells[indice]
+      if (!cell || cell.value == null) return undefined
+      const mes = indice + 1
+      return {
+        chave: `eficiencia.overview.${chave}.mes-${mes}`,
+        explicar: () => {
+          const c = porMes(mes)
+          return explicarRazao({
+            indicador,
+            ano,
+            escopo: 'mes',
+            mes,
+            tela: TELA_OVERVIEW,
+            area,
+            ok: c?.ok ?? 0,
+            total: c?.total ?? 0,
+            pct: cell.value,
+            valor: cell.label,
+            meta: c?.meta ?? undefined,
+            contratosSemCasos: extra.contratosSemCasos && (c?.total ?? 0) <= 0,
+          })
+        },
+      }
+    }
+
+  const linhaSla = (r: EficienciaOverview['slaProtocolo'][number]) => ({
+    mes: r.mes,
+    ok: r.qtd_d1,
+    total: r.qtd_total,
+    meta: r.meta,
+  })
+  const linhaEfi = (r: EficienciaOverview['eficienciaProtocolo'][number]) => ({
+    mes: r.mes,
+    ok: r.sem_inconsistencia,
+    total: r.total,
+  })
+  const linhaAgend = (r: EficienciaOverview['agendamento'][number]) => ({
+    mes: r.mes,
+    ok: r.dentro_prazo,
+    total: r.dentro_prazo + r.fora_prazo,
+  })
+  const linhaVist = (r: EficienciaOverview['slaVistagemRisco'][number]) => ({
+    mes: r.mes,
+    ok: r.vistado_d1,
+    total: r.total,
+  })
+
+  const fenixSlaProtocolo = fenixAcumRazao(
+    'sla_protocolo',
+    'sla-protocolo',
+    acumuladoSlaProtocolo,
+    periodoCurtoAtivo && resumosPeriodo?.sla
+      ? (() => {
+          const t = totaisSlaProtocoloFromResumo(resumosPeriodo.sla)
+          return { ok: t.qtdD1, total: t.qtdTotal }
+        })()
+      : null,
+    filterMensal(data.slaProtocolo).map(linhaSla),
+    { meta: slaProtocoloMetaAcumulado },
+  )
+  const fenixEficienciaProtocolo = fenixAcumRazao(
+    'eficiencia_protocolo',
+    'eficiencia-protocolo',
+    acumuladoEficienciaProtocolo,
+    periodoCurtoAtivo && resumosPeriodo?.efi
+      ? (() => {
+          const t = totaisEficienciaProtocoloFromResumo(resumosPeriodo.efi)
+          return { ok: t.semInconsistencia, total: t.total }
+        })()
+      : null,
+    filterMensal(data.eficienciaProtocolo).map(linhaEfi),
+  )
+  const fenixAgendamento = fenixAcumRazao(
+    'sla_ciencia_agendamentos',
+    'agendamento',
+    acumuladoAgendamentoExibicao,
+    periodoCurtoAtivo && resumosPeriodo?.agend
+      ? (() => {
+          const t = totaisAgendamentoFromResumo(resumosPeriodo.agend)
+          return { ok: t.dentroPrazo, total: t.total }
+        })()
+      : null,
+    filterMensal(data.agendamento).map(linhaAgend),
+    {
+      indisponivel: agendamentoVistagemOpsLegais
+        ? indisponivelOpsLegais('SLA Ciência Agendamentos')
+        : null,
+    },
+  )
+  const resumoVistRisco =
+    periodoCurtoAtivo && resumosPeriodo?.vistRisco
+      ? totaisVistagemFromResumo(resumosPeriodo.vistRisco)
+      : null
+  const vistRiscoRows = filterMensal(data.slaVistagemRisco).map(linhaVist)
+  const fenixVistagemRisco = fenixAcumRazao(
+    'sla_vistagem_risco',
+    'vistagem-risco',
+    acumuladoVistagemRiscoExibicao,
+    resumoVistRisco ? { ok: resumoVistRisco.vistadoD1, total: resumoVistRisco.total } : null,
+    vistRiscoRows,
+    {
+      indisponivel: agendamentoVistagemOpsLegais ? indisponivelOpsLegais('SLA Vistagem Risco') : null,
+      contratosSemCasos: isSlaVistagemRiscoContratosSemCasos(
+        area,
+        true,
+        resumoVistRisco ? resumoVistRisco.total : vistRiscoRows.reduce((s, m) => s + m.total, 0),
+      ),
+    },
+  )
+  const fenixVistagemNormal = fenixAcumRazao(
+    'sla_vistagem_normal',
+    'vistagem-normal',
+    acumuladoVistagemComumExibicao,
+    periodoCurtoAtivo && resumosPeriodo?.vistNormal
+      ? (() => {
+          const t = totaisVistagemFromResumo(resumosPeriodo.vistNormal)
+          return { ok: t.vistadoD1, total: t.total }
+        })()
+      : null,
+    filterMensal(data.slaVistagemComum).map(linhaVist),
+    { indisponivel: vistagemNormalIndisponivelTexto },
+  )
+
+  const porMesDe =
+    <T extends { mes: number }>(rows: T[], linha: (r: T) => FenixMesContagem & { meta?: number | null }) =>
+    (mes: number) => {
+      const r = rows.find((x) => x.mes === mes)
+      return r ? linha(r) : undefined
+    }
+
+  const fenixDesenvolvimento: OverviewFenixAlvo = {
+    chave: 'eficiencia.overview.desenvolvimento.acumulado',
+    explicar: () => {
+      const t = data.treinamentos
+      if (mesFiltro == null || mesFiltro === 'resultado') {
+        return explicarDesenvolvimento({
+          tela: TELA_OVERVIEW,
+          ano,
+          area,
+          mesFiltro,
+          modo: 'ano',
+          minutos: Number(t?.minutos_lancados ?? 0),
+          metaMinutos: Number(t?.meta_minutos ?? 0),
+          pessoas: t?.pessoas_ativas ?? null,
+          pct: acumuladoTreinamentos.value,
+          valor: rotuloCelula(acumuladoTreinamentos),
+          resultadoAnual: true,
+        })
+      }
+      const rows = filterMensal(data.treinamentosMensal)
+      return explicarDesenvolvimento({
+        tela: TELA_OVERVIEW,
+        ano,
+        area,
+        mesFiltro,
+        modo: 'meses',
+        minutos: rows.reduce((s, r) => s + Number(r.minutos_lancados), 0),
+        metaMinutos: Number(t?.meta_minutos ?? rows[0]?.meta_minutos ?? 0),
+        pessoas: t?.pessoas_ativas ?? null,
+        pct: acumuladoTreinamentos.value,
+        valor: rotuloCelula(acumuladoTreinamentos),
+        meses: rows.map((r) => ({ mes: r.mes, minutos: Number(r.minutos_lancados) })),
+      })
+    },
+  }
+
+  const turnover = data.turnover
+  const fenixRetencao: OverviewFenixAlvo | undefined = turnover
+    ? {
+        chave: 'eficiencia.overview.retencao.acumulado',
+        explicar: () =>
+          explicarTurnover({
+            tela: TELA_OVERVIEW,
+            ano,
+            area,
+            foco: 'retencao',
+            titulo: 'Retenção de Talentos',
+            ativos: Number(turnover.funcionarios_ativos),
+            saidas: Number(turnover.saidas_voluntarias),
+            pctRetencao: Number(turnover.pct_retencao),
+            meta: Number(turnover.meta_pct_retencao_minima ?? 90),
+            valor: retencaoCell.label,
+            detalhe: 'Para ver pessoa a pessoa, feche o Fênix e clique em "Racional" ao lado da linha.',
+          }),
+      }
+    : undefined
+
+  const fenixGestaoPdi: OverviewFenixAlvo = {
+    chave: 'eficiencia.overview.gestao-pdi.acumulado',
+    explicar: () =>
+      explicarGestaoPdi({
+        tela: TELA_OVERVIEW,
+        ano,
+        area,
+        mesFiltro,
+        meses: (data.gestaoPdiMensal ?? [])
+          .filter((r) => mesNoFiltro(r.mes, mesFiltro, ano))
+          .map((r) => ({ mes: r.mes, aptas: Number(r.aptas), elegiveis: Number(r.elegiveis) })),
+        pct: acumuladoGestaoPdiCell.value,
+        valor: acumuladoGestaoPdiCell.label,
+      }),
+  }
+
+  const fenixReceitaBruta: OverviewFenixAlvo | undefined =
+    financeiroKpis && !loadingFinanceiroKpis
+      ? {
+          chave: 'eficiencia.overview.receita-bruta.acumulado',
+          explicar: () => {
+            const m = receitaBrutaMonetarioAcumulado(
+              financeiroKpis.meses,
+              financeiroKpis.rows,
+              ano,
+              mesFiltro,
+            )
+            return explicarReceitaBruta({
+              ano,
+              mesFiltro,
+              recebido: m?.recebido ?? 0,
+              meta: m?.meta ?? 0,
+              pct: acumuladoReceitaBruta.value,
+              valor: acumuladoReceitaBruta.label,
+            })
+          },
+        }
+      : undefined
+
+  const fenixInadimplencia: OverviewFenixAlvo | undefined =
+    inadAoVivo && !loadingFinanceiroKpis && !loadingInadAoVivo
+      ? {
+          chave: 'eficiencia.overview.inadimplencia.acumulado',
+          explicar: () =>
+            explicarInadimplencia({
+              ano,
+              mesFiltro,
+              meses: mesesInadimplenciaAoVivo(mesFiltro, ano),
+              inadimplencia: inadAoVivo.valor,
+              previsto: inadAoVivo.previsto,
+              pct: inadAoVivo.pct,
+              valor: acumuladoInadimplencia.label,
+            }),
+        }
+      : undefined
+
+  const fenixNps = (chave: string): OverviewFenixAlvo | undefined =>
+    npsKpi && npsValor != null
+      ? {
+          chave,
+          explicar: () =>
+            explicarNps({
+              ano,
+              nps: npsValor,
+              promotores: npsKpi.promoters,
+              neutros: npsKpi.passives,
+              detratores: npsKpi.detractors,
+              total: npsKpi.total,
+              campanha: npsKpi.campaignName,
+              valor: npsLabel,
+            }),
+        }
+      : undefined
+
   const handleCopiarOverview = async () => {
     const container = copyRef.current
     if (!container) {
@@ -605,25 +948,31 @@ export function OverviewTab({
           metasPorMes={slaProtocoloMetasPorMes}
           metaAcumulado={slaProtocoloMetaAcumulado}
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(
-            buildCells(data.slaProtocolo, (r) => r.pct_eficiencia),
-            mesFiltro,
-            ano,
-          )}
+          cells={cellsSlaProtocolo}
           acumulado={acumuladoSlaProtocolo}
           onRacionalClick={() => setRacionalAberto('sla_protocolo')}
+          fenixAcumulado={fenixSlaProtocolo}
+          fenixCelula={fenixMesRazao(
+            'sla_protocolo',
+            'sla-protocolo',
+            cellsSlaProtocolo,
+            porMesDe(data.slaProtocolo, linhaSla),
+          )}
         />
         <OverviewKpiHeatRow
           title="Eficiência Protocolo"
           meta={95}
           mesDestaque={mesDestaque}
-          cells={aplicarCelulasFiltro(
-            buildCells(data.eficienciaProtocolo, (r) => r.pct_eficiencia),
-            mesFiltro,
-            ano,
-          )}
+          cells={cellsEficienciaProtocolo}
           acumulado={acumuladoEficienciaProtocolo}
           onRacionalClick={() => setRacionalAberto('eficiencia_protocolo')}
+          fenixAcumulado={fenixEficienciaProtocolo}
+          fenixCelula={fenixMesRazao(
+            'eficiencia_protocolo',
+            'eficiencia-protocolo',
+            cellsEficienciaProtocolo,
+            porMesDe(data.eficienciaProtocolo, linhaEfi),
+          )}
         />
         <OverviewKpiHeatRow
           title="SLA Ciência Agendamentos"
@@ -636,6 +985,13 @@ export function OverviewTab({
               ? undefined
               : () => setRacionalAberto('sla_ciencia_agendamentos')
           }
+          fenixAcumulado={fenixAgendamento}
+          fenixCelula={fenixMesRazao(
+            'sla_ciencia_agendamentos',
+            'agendamento',
+            cellsAgendamento,
+            porMesDe(data.agendamento, linhaAgend),
+          )}
         />
         <OverviewKpiHeatRow
           title="SLA Vistagem Risco"
@@ -648,6 +1004,14 @@ export function OverviewTab({
               ? undefined
               : () => setRacionalAberto('sla_vistagem_risco')
           }
+          fenixAcumulado={fenixVistagemRisco}
+          fenixCelula={fenixMesRazao(
+            'sla_vistagem_risco',
+            'vistagem-risco',
+            cellsVistagemRisco,
+            porMesDe(data.slaVistagemRisco, linhaVist),
+            { contratosSemCasos: riscoContratosSemCasos },
+          )}
         />
         <OverviewKpiHeatRow
           title="SLA Vistagem Normal"
@@ -660,6 +1024,13 @@ export function OverviewTab({
               ? undefined
               : () => setRacionalAberto('sla_vistagem_normal')
           }
+          fenixAcumulado={fenixVistagemNormal}
+          fenixCelula={fenixMesRazao(
+            'sla_vistagem_normal',
+            'vistagem-normal',
+            cellsVistagemNormal,
+            porMesDe(data.slaVistagemComum, linhaVist),
+          )}
         />
         <OverviewKpiHeatRow
           title="Desenvolvimento Equipe"
@@ -672,6 +1043,7 @@ export function OverviewTab({
           acumulado={acumuladoTreinamentos}
           copyAnualAcumulado={treinamentosAcumulado}
           onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
+          fenixAcumulado={fenixDesenvolvimento}
         />
         <OverviewKpiHeatRow
           title="Retenção de Talentos"
@@ -681,6 +1053,7 @@ export function OverviewTab({
           cells={[]}
           acumulado={retencaoCell}
           onRacionalClick={() => setRacionalAberto('retencao_talentos')}
+          fenixAcumulado={fenixRetencao}
         />
         <OverviewKpiHeatRow
           title="Gestão de PDI"
@@ -689,6 +1062,7 @@ export function OverviewTab({
           cells={cellsGestaoPdi}
           acumulado={acumuladoGestaoPdiCell}
           onRacionalClick={() => setRacionalAberto('gestao_pdi')}
+          fenixAcumulado={fenixGestaoPdi}
         />
         <OverviewKpiHeatRow
           title="Receita Bruta"
@@ -701,6 +1075,7 @@ export function OverviewTab({
           }
           acumulado={loadingFinanceiroKpis ? { value: null, label: '…' } : acumuladoReceitaBruta}
           onRacionalClick={() => setRacionalAberto('receita_bruta')}
+          fenixAcumulado={fenixReceitaBruta}
         />
         <OverviewKpiHeatRow
           title="Índice de Inadimplência"
@@ -719,6 +1094,7 @@ export function OverviewTab({
               : acumuladoInadimplencia
           }
           onRacionalClick={() => setRacionalAberto('indice_inadimplencia')}
+          fenixAcumulado={fenixInadimplencia}
         />
         <OverviewKpiHeatRow
           title="NPS"
@@ -728,6 +1104,12 @@ export function OverviewTab({
           cellColSpans={npsColSpans}
           cells={npsCells}
           acumulado={npsAcumulado}
+          fenixAcumulado={fenixNps('eficiencia.overview.nps.acumulado')}
+          fenixCelula={(indice) =>
+            indice === EFICIENCIA_NPS_MES_INICIO - 1
+              ? fenixNps('eficiencia.overview.nps.celula')
+              : undefined
+          }
         />
         <OverviewKpiHeatRow
           title="Reputação**"

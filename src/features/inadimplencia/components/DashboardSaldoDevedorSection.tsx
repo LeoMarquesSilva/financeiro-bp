@@ -20,6 +20,16 @@ import {
   type EvolucaoSaldoDevedorData,
   type SaldoDevedorSortKey,
 } from '../utils/saldoDevedor'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  explicarSaldoAcumulado,
+  explicarSaldoCresceram,
+  explicarSaldoEstoqueAnterior,
+  explicarSaldoGeradoAno,
+  explicarSaldoReduziram,
+  type SaldoDevedorFenixInput,
+} from '../fenix/inadimplenciaFenix'
 
 type SortDir = 'asc' | 'desc'
 
@@ -69,12 +79,16 @@ function KpiCard({
   value,
   hint,
   accent,
+  fenix,
 }: {
   title: string
   value: string
   hint: string
   accent: 'blue' | 'red' | 'green'
+  /** Explicação do número no Fênix. */
+  fenix?: { chave: string; explicar: FenixExplicar }
 }) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   const bar = {
     blue: 'bg-sky-600',
     red: 'bg-red-600',
@@ -82,7 +96,10 @@ function KpiCard({
   }[accent]
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <div
+      className="relative overflow-hidden rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"
+      data-fenix={fenixId}
+    >
       <span className={cn('absolute inset-y-0 left-0 w-1', bar)} />
       <p className="pl-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{title}</p>
       <p className="mt-1 pl-2 text-lg font-bold tabular-nums text-slate-900">{value}</p>
@@ -236,6 +253,12 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
   const leitura = buildLeituraSaldoDevedor(data)
   const abrev = periodoAbrevLabel(mesInicio, mesFim)
   const posicao = periodoPosicaoLabel(ano, mesInicio, mesFim)
+  const fenixInput: SaldoDevedorFenixInput = {
+    data,
+    cresceram: clientes.filter(clienteSubiuDivida),
+    reduziram: clientes.filter(clienteDesceuDivida),
+    periodoAbrev: abrev,
+  }
 
   return (
     <div className="space-y-5">
@@ -282,24 +305,28 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
           value={formatCurrency(totais.acumulado)}
           hint={`${totais.qtd} cliente${totais.qtd === 1 ? '' : 's'} · em aberto, sem desconto concedido`}
           accent="blue"
+          fenix={{ chave: 'inadimplencia.saldo.acumulado', explicar: () => explicarSaldoAcumulado(fenixInput) }}
         />
         <KpiCard
           title={`Estoque de ${anoAnterior}`}
           value={formatCurrency(totais.saldoAnterior)}
           hint={`Fechamento de ${anoAnterior}`}
           accent="blue"
+          fenix={{ chave: 'inadimplencia.saldo.estoque', explicar: () => explicarSaldoEstoqueAnterior(fenixInput) }}
         />
         <KpiCard
           title={`Gerado em ${ano} (${abrev})`}
           value={formatCurrency(totais.geradoAno)}
           hint={`Em aberto com vencimento em ${ano}`}
           accent={totais.geradoAno >= 0 ? 'red' : 'green'}
+          fenix={{ chave: 'inadimplencia.saldo.gerado', explicar: () => explicarSaldoGeradoAno(fenixInput) }}
         />
         <KpiCard
           title="Clientes que cresceram"
           value={`${totais.qtdCresceram} de ${totais.qtd}`}
           hint={`${formatCurrency(totais.dividaNova)} de dívida nova`}
           accent="red"
+          fenix={{ chave: 'inadimplencia.saldo.cresceram', explicar: () => explicarSaldoCresceram(fenixInput) }}
         />
         <KpiCard
           title="Clientes que reduziram"
@@ -310,6 +337,7 @@ function Conteudo({ data }: { data: EvolucaoSaldoDevedorData }) {
               : 'Sem dívida nova no ano'
           }
           accent="green"
+          fenix={{ chave: 'inadimplencia.saldo.reduziram', explicar: () => explicarSaldoReduziram(fenixInput) }}
         />
       </div>
 

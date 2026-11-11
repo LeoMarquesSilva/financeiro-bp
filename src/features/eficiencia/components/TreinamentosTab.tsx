@@ -26,6 +26,16 @@ import {
   type TreinamentosVisao,
 } from './TreinamentosVisaoToggle'
 import { OverviewRacionalButton, type HeatCell } from './OverviewKpiHeatRow'
+import {
+  explicarTreinamentosAtivos,
+  explicarTreinamentosDesenvolvimento,
+  explicarTreinamentosHoras,
+  regrasPessoaJuridico,
+  rotuloPeriodoEficiencia,
+  TELA_EFICIENCIA_PESSOAS,
+  type DesenvolvimentoFenixCtx,
+  type TreinamentoPessoaFenix,
+} from '../fenix/eficienciaPessoasFinanceiroFenix'
 
 function formatHorasKpi(minutos: number): string {
   return `${formatMinutosHeatLabel(minutos)}h`
@@ -110,6 +120,31 @@ export function TreinamentosTab({
           : null
   const abaixoMeta = pct != null && pct < 100
   const pctEquipe = anual?.pct_atingimento ?? null
+  const periodoLabel = rotuloPeriodoEficiencia(filtroPeriodo, ano)
+
+  const paraFenix = (p: (typeof porPessoaPeriodo)[number]): TreinamentoPessoaFenix => ({
+    colaborador: p.colaborador,
+    minutos: Number(p.minutos_lancados ?? 0),
+    metaMinutos: p.meta_minutos != null ? Number(p.meta_minutos) : null,
+    admissao: p.admissao ?? null,
+  })
+  const fenixCtx = (): DesenvolvimentoFenixCtx => ({
+    ano,
+    area,
+    periodo: periodoLabel,
+    recortePeriodo: filtroPeriodo != null,
+    resultadoAnoInteiro: mesFiltro === 'resultado',
+    responsavel,
+    pessoa: pessoaUnica ? { ...paraFenix(pessoaUnica), metaMinutos: metaMinutos } : null,
+    minutos: minutosLancados != null ? Number(minutosLancados) : null,
+    metaMinutos: metaMinutos != null ? Number(metaMinutos) : null,
+    pct,
+    pctEquipe,
+    pessoasAtivas,
+    equipe: porPessoaPeriodo.map(paraFenix),
+    somadas: porPessoaFiltrado.map(paraFenix),
+    itens: itensFiltrados,
+  })
 
   return (
     <div className="space-y-5">
@@ -143,6 +178,10 @@ export function TreinamentosTab({
           pessoaNome={responsavel}
           currentPct={pessoaUnica ? pct : null}
           vsEquipePct={pessoaUnica ? pctEquipe : null}
+          fenix={{
+            chave: 'eficiencia.desenvolvimento.atingimento',
+            explicar: () => explicarTreinamentosDesenvolvimento(fenixCtx()),
+          }}
         />
         <EficienciaKpiCard
           title="Horas Realizadas"
@@ -160,6 +199,10 @@ export function TreinamentosTab({
           accentClass="bg-sky-100 text-sky-700"
           loading={loading}
           pessoaNome={responsavel}
+          fenix={{
+            chave: 'eficiencia.desenvolvimento.horas',
+            explicar: () => explicarTreinamentosHoras(fenixCtx()),
+          }}
         />
         <EficienciaKpiCard
           title="Colaboradores Ativos"
@@ -169,6 +212,10 @@ export function TreinamentosTab({
           accentClass="bg-violet-100 text-violet-700"
           loading={loading}
           pessoaNome={responsavel}
+          fenix={{
+            chave: 'eficiencia.desenvolvimento.ativos',
+            explicar: () => explicarTreinamentosAtivos(fenixCtx()),
+          }}
         />
       </div>
 
@@ -201,6 +248,13 @@ export function TreinamentosTab({
             itens={itensFiltrados}
             loading={loading}
             mostrarBannerDuplicados={area != null}
+            fenix={{
+              tela: TELA_EFICIENCIA_PESSOAS.desenvolvimento,
+              ano,
+              periodo: periodoLabel,
+              regras: regrasPessoaJuridico(filtroPeriodo != null),
+              fonteTecnica: 'eficiencia_treinamentos_por_pessoa (meta e horas) · sp_treinamentos_presenca',
+            }}
           />
         ) : (
           <TreinamentosCursoCards

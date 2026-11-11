@@ -39,6 +39,10 @@ import { projetadoRestanteFixas } from '../utils/opexProjecao'
 import type { OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 import type { OpexMesGrupoRow, OpexMesRow, OpexPlanoRow } from '../types/opex.types'
 import { OpexPlanoTitulos } from './OpexPlanoTitulos'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+import { explicarGraficoOpexDetalhe, explicarGraficoOpexMensal } from '../fenix/opexGraficosFenix'
+
+type FenixGraficoHandlers = Pick<ReturnType<typeof useFenixGrafico>, 'onMouseMove' | 'onMouseLeave'>
 
 type Props = {
   rows: OpexMesRow[]
@@ -222,6 +226,7 @@ function OpexHorizontalCompareChart({
   ano,
   anoAnterior,
   mostrarProjecao = false,
+  fenixHandlers,
 }: {
   data: DrillBarRow[]
   onBarClick: (row: DrillBarRow) => void
@@ -229,6 +234,8 @@ function OpexHorizontalCompareChart({
   ano: number
   anoAnterior: number
   mostrarProjecao?: boolean
+  /** Fênix: guarda a barra sob o mouse para explicar no clique. */
+  fenixHandlers?: FenixGraficoHandlers
 }) {
   return (
     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
@@ -238,6 +245,8 @@ function OpexHorizontalCompareChart({
         margin={{ left: 12, right: 88, top: 8, bottom: 4 }}
         barCategoryGap="22%"
         barGap={4}
+        onMouseMove={fenixHandlers?.onMouseMove}
+        onMouseLeave={fenixHandlers?.onMouseLeave}
       >
         <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
         <XAxis type="number" tickFormatter={formatAxis} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
@@ -629,6 +638,30 @@ export function OpexPrevistoRealizadoChart({
     (compararAnoAnterior && (drillGrupo ? loadingPlanosAA : loadingGruposAA))
   const chartHeight = drillAberto && !drillPlano ? Math.max(320, chartBars.length * 48 + 88) : 320
 
+  const fenixCtx = { ano, mesAtual, mesesFiltro, orcamentoImportado: Boolean(orcamentoImportado), planoFiltro }
+  const fenixMensal = useFenixGrafico(
+    drillAberto ? undefined : 'opex.grafico.mensal',
+    drillAberto ? undefined : (ponto) => explicarGraficoOpexMensal({ ctx: fenixCtx, data: chartData }, ponto),
+  )
+  const detalheVisivel = drillPeriodo != null && !drillPlano && !loadingDrill && chartBars.length > 0
+  const fenixDetalhe = useFenixGrafico(
+    detalheVisivel ? 'opex.grafico.detalhe' : undefined,
+    detalheVisivel && drillPeriodo != null
+      ? (ponto) =>
+          explicarGraficoOpexDetalhe(
+            {
+              ctx: fenixCtx,
+              data: chartBars,
+              periodo: drillPeriodo,
+              grupo: drillGrupo,
+              compararAnoAnterior,
+              mostrarProjecao: drillAno,
+            },
+            ponto,
+          )
+      : undefined,
+  )
+
   const tituloDrill = drillPlano
     ? drillPlano
     : drillGrupo
@@ -830,7 +863,7 @@ export function OpexPrevistoRealizadoChart({
       )}
 
       {drillAberto && !drillPlano && (
-        <div className="w-full" style={{ height: chartHeight, minHeight: 320 }}>
+        <div className="w-full" style={{ height: chartHeight, minHeight: 320 }} data-fenix={fenixDetalhe.fenixId}>
           {loadingDrill && (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
@@ -852,6 +885,7 @@ export function OpexPrevistoRealizadoChart({
               ano={ano}
               anoAnterior={anoAnterior}
               mostrarProjecao={drillAno}
+              fenixHandlers={fenixDetalhe}
               onBarClick={(row) => {
                 if (drillGrupo) {
                   setDrillPlano(row.key)
@@ -866,9 +900,14 @@ export function OpexPrevistoRealizadoChart({
       )}
 
       {!drillAberto && (
-        <div className="w-full" style={{ height: 320, minHeight: 320 }}>
+        <div className="w-full" style={{ height: 320, minHeight: 320 }} data-fenix={fenixMensal.fenixId}>
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
-            <ComposedChart data={chartData} margin={{ left: 4, right: 12, top: 28, bottom: 4 }}>
+            <ComposedChart
+              data={chartData}
+              margin={{ left: 4, right: 12, top: 28, bottom: 4 }}
+              onMouseMove={fenixMensal.onMouseMove}
+              onMouseLeave={fenixMensal.onMouseLeave}
+            >
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
               <XAxis
                 dataKey="mesLabel"

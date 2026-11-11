@@ -18,6 +18,16 @@ import { formatTimesheetHoras } from '../utils/formatTimesheetHoras'
 import { exportTimesheetRacionalExcel } from '../utils/timesheetRacionalExport'
 import { TimesheetMesChart } from '../components/TimesheetMesChart'
 import { TimesheetRanking } from '../components/TimesheetRanking'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  explicarTimesheetGrupos,
+  explicarTimesheetHoras,
+  explicarTimesheetLancamentos,
+  explicarTimesheetResponsaveis,
+  type TimesheetFenixRecorte,
+} from '../fenix/timesheetFenix'
+import type { TimesheetMes } from '../services/timesheetService'
 
 const ANO_PADRAO = 2026
 const ANOS = [2026, 2025] as const
@@ -33,15 +43,19 @@ function Kpi({
   hint,
   icon: Icon,
   loading,
+  fenix,
 }: {
   label: string
   value: string
   hint: string
   icon: typeof Timer
   loading: boolean
+  /** Explicação do número no Fênix. */
+  fenix?: { chave: string; explicar: FenixExplicar }
 }) {
+  const fenixId = useFenixAlvo(loading ? undefined : fenix?.chave, fenix?.explicar)
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm" data-fenix={fenixId}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
         <Icon className="h-4 w-4 text-[#C6A361]" aria-hidden />
@@ -121,6 +135,17 @@ export function TimesheetPage() {
     [data?.responsaveis],
   )
   const [exportando, setExportando] = useState(false)
+
+  // Fênix: recorte e valores iguais aos dos cards.
+  const fenixRecorte: TimesheetFenixRecorte = {
+    ano,
+    areaLabel: recorteLabel,
+    areas: areasConsulta,
+    podeFiltrarAreas: access.canFilterAreas,
+    meses: mesesConsulta,
+    responsavel,
+  }
+  const porMes: TimesheetMes[] = data?.por_mes ?? []
 
   async function handleExportarRacional() {
     if (exportando || semVinculo) return
@@ -234,6 +259,14 @@ export function TimesheetPage() {
               hint="Soma dos minutos de cada lançamento"
               icon={Timer}
               loading={loading}
+              fenix={{
+                chave: 'timesheet.resumo.horas',
+                explicar: () =>
+                  explicarTimesheetHoras(fenixRecorte, {
+                    minutos: data?.minutos ?? 0,
+                    porMes: porMes.map((m) => ({ mes: m.mes, minutos: m.minutos })),
+                  }),
+              }}
             />
             <Kpi
               label="Lançamentos"
@@ -241,6 +274,14 @@ export function TimesheetPage() {
               hint={mesesConsulta ? 'Apontamentos nos meses escolhidos' : 'Apontamentos no ano'}
               icon={Layers}
               loading={loading}
+              fenix={{
+                chave: 'timesheet.resumo.lancamentos',
+                explicar: () =>
+                  explicarTimesheetLancamentos(fenixRecorte, {
+                    lancamentos: data?.lancamentos ?? 0,
+                    porMes: porMes.map((m) => ({ mes: m.mes, lancamentos: m.lancamentos })),
+                  }),
+              }}
             />
             <Kpi
               label="Responsáveis"
@@ -248,6 +289,10 @@ export function TimesheetPage() {
               hint="Colaboradores com hora lançada"
               icon={Users}
               loading={loading}
+              fenix={{
+                chave: 'timesheet.resumo.responsaveis',
+                explicar: () => explicarTimesheetResponsaveis(fenixRecorte, { valor: data?.colaboradores ?? 0 }),
+              }}
             />
             <Kpi
               label="Grupos"
@@ -255,6 +300,10 @@ export function TimesheetPage() {
               hint="Grupos de cliente com hora"
               icon={UsersRound}
               loading={loading}
+              fenix={{
+                chave: 'timesheet.resumo.grupos',
+                explicar: () => explicarTimesheetGrupos(fenixRecorte, { valor: data?.grupos ?? 0 }),
+              }}
             />
           </div>
 
@@ -263,7 +312,15 @@ export function TimesheetPage() {
               <Clock3 className="h-4 w-4 text-slate-500" />
               Horas por mês
             </h2>
-            <TimesheetMesChart meses={data?.por_mes ?? []} loading={loading} />
+            <TimesheetMesChart
+              meses={data?.por_mes ?? []}
+              loading={loading}
+              fenix={{
+                recorte: fenixRecorte,
+                totalMinutos: data?.minutos ?? 0,
+                totalLancamentos: data?.lancamentos ?? 0,
+              }}
+            />
             <p className="mt-2 text-center text-[11px] text-slate-400">
               {MESES_EFICIENCIA[0]} a {MESES_EFICIENCIA[11]} · eixo em horas
             </p>

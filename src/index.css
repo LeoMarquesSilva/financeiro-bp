@@ -57,13 +57,20 @@
 }
 
 /* Fênix IA — modo de apontar um número (atributo no <html> enquanto ativo). */
-html[data-fenix-inspecao] body {
-  cursor: crosshair;
+/* Mira em toda a página (inclusive sobre botões e links), menos na interface do próprio Fênix. */
+html[data-fenix-inspecao],
+html[data-fenix-inspecao] * {
+  cursor: crosshair !important;
+}
+html[data-fenix-inspecao] [data-fenix-ui] * {
+  cursor: default !important;
+}
+html[data-fenix-inspecao] [data-fenix-ui] button {
+  cursor: pointer !important;
 }
 html[data-fenix-inspecao] [data-fenix] {
   outline: 2px dashed rgba(201, 163, 101, 0.9);
   outline-offset: 3px;
-  cursor: help;
   transition: outline-color 120ms ease, box-shadow 120ms ease;
 }
 html[data-fenix-inspecao] [data-fenix]:hover {

@@ -17,6 +17,8 @@ export type FenixEstado = {
   semAlvos: boolean
   /** A pessoa clicou num ponto sem explicação durante o modo de apontar. */
   avisoSemAlvo: boolean
+  /** Ao cancelar o modo de apontar, reabre o painel (só quando ele estava aberto antes). */
+  voltarAoPainel: boolean
 }
 
 export type FenixContexto = FenixEstado & {

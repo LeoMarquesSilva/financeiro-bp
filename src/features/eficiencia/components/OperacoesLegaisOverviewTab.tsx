@@ -21,9 +21,27 @@ import {
   isMesesFiltro,
   isPeriodoCurtoFiltro,
   isResultadoFiltro,
+  mesNoFiltro,
   mesesEfetivosFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
+import {
+  explicarDesenvolvimento,
+  explicarGestaoPdi,
+  explicarIniciativas,
+  explicarMarketing,
+  explicarRazao,
+  explicarTurnover,
+  type FenixMesContagem,
+  type IndicadorRazao,
+} from '../fenix/eficienciaOperacionalFenix'
+import { infoIndicador, rotuloMesAno } from '../fenix/eficienciaOperacionalFenix'
+import {
+  explicarDesenvolvimentoAcumuladoNoMes,
+  explicarIniciativasAcumuladoNoMes,
+  explicarSerieUnificada,
+} from '../fenix/eficienciaGraficosFenix'
+import { explicarGestaoPdiPeriodo } from '../fenix/eficienciaPessoasFinanceiroFenix'
 import {
   useGestaoPdi,
   useOpsLegaisRg,
@@ -44,9 +62,10 @@ import type {
 import {
   ApresentacaoUnificadoLinhasGrid,
   type UnificadoLinhaPonto,
+  type UnificadoLinhaFenix,
   type UnificadoLinhaSerie,
 } from './ApresentacaoUnificadoLinhasGrid'
-import { OverviewKpiHeatRow, type HeatCell } from './OverviewKpiHeatRow'
+import { OverviewKpiHeatRow, type HeatCell, type OverviewFenixAlvo } from './OverviewKpiHeatRow'
 import { formatMinutosHeatLabel, META_MENSAL_DESENVOLVIMENTO } from '../utils/desenvolvimentoEquipeHeatCell'
 import { RacionalSheet } from './RacionalSheet'
 import {
@@ -66,6 +85,8 @@ type Props = {
   ano: number
   mesFiltro: MesFiltroEficiencia
 }
+
+const TELA_OPS_OVERVIEW = 'Operações Legais › Overview'
 
 const PCT0 = (v: number) => `${v.toFixed(2)}%`
 
@@ -593,6 +614,365 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
     ano,
   ])
 
+  // --- Fênix IA: memória de cálculo de cada Acum. e das células mensais operacionais ---
+  /** Com semana/dias, as linhas mensais usam os meses inteiros que o intervalo toca. */
+  const mesFiltroFenix: MesFiltroEficiencia = isPeriodoCurtoFiltro(mesFiltro)
+    ? mesesEfetivosFiltro(mesFiltro, ano)
+    : mesFiltro
+  const regrasPeriodoCurto = isPeriodoCurtoFiltro(mesFiltro)
+    ? [
+        'Nesta tela, com filtro de semana ou de dias, as linhas por mês usam os meses inteiros que o intervalo toca.',
+      ]
+    : []
+
+  const fenixAcumOps = (
+    indicador: IndicadorRazao,
+    chave: string,
+    cell: HeatCell,
+    meses: FenixMesContagem[],
+  ): OverviewFenixAlvo => ({
+    chave: `eficiencia.ops-legais-overview.${chave}.acumulado`,
+    explicar: () =>
+      explicarRazao({
+        indicador,
+        ano,
+        escopo: 'overview',
+        tela: TELA_OPS_OVERVIEW,
+        mesFiltro: mesFiltroFenix,
+        origem: 'mensal',
+        ok: meses.reduce((s, m) => s + m.ok, 0),
+        total: meses.reduce((s, m) => s + m.total, 0),
+        pct: cell.value,
+        valor: cell.label,
+        meses,
+        regrasExtras: regrasPeriodoCurto,
+      }),
+  })
+
+  const fenixMesOps =
+    <T extends { mes: number }>(
+      indicador: IndicadorRazao,
+      chave: string,
+      cells: HeatCell[],
+      rows: T[],
+      linha: (r: T) => FenixMesContagem,
+    ) =>
+    (indice: number): OverviewFenixAlvo | undefined => {
+      const cell = cells[indice]
+      if (!cell || cell.value == null) return undefined
+      const mes = indice + 1
+      return {
+        chave: `eficiencia.ops-legais-overview.${chave}.mes-${mes}`,
+        explicar: () => {
+          const r = rows.find((x) => x.mes === mes)
+          const c = r ? linha(r) : { mes, ok: 0, total: 0 }
+          return explicarRazao({
+            indicador,
+            ano,
+            escopo: 'mes',
+            mes,
+            tela: TELA_OPS_OVERVIEW,
+            ok: c.ok,
+            total: c.total,
+            pct: cell.value,
+            valor: cell.label,
+          })
+        },
+      }
+    }
+
+  const linhaSla = (m: (typeof protocoloMensal)[number]) => ({
+    mes: m.mes,
+    ok: Number(m.qtd_d1 ?? 0),
+    total: Number(m.total ?? 0),
+  })
+  const linhaEfi = (m: (typeof protocoloMensal)[number]) => ({
+    mes: m.mes,
+    ok: Number(m.sem_inconsistencia ?? 0),
+    total: Number(m.total_eficiencia ?? m.total ?? 0),
+  })
+  const linhaPub = (m: (typeof publicacoesAnalise)[number]) => ({
+    mes: m.mes,
+    ok: Number(m.qtd_eficiencia ?? 0),
+    total: Number(m.total ?? 0),
+  })
+  const linhaCad = (m: (typeof cadastroMensal)[number]) => ({
+    mes: m.mes,
+    ok: Number(m.dentro_prazo ?? 0),
+    total: Number(m.dentro_prazo ?? 0) + Number(m.fora_prazo ?? 0),
+  })
+
+  const fenixDesenvolvimento: OverviewFenixAlvo = {
+    chave: 'eficiencia.ops-legais-overview.desenvolvimento.acumulado',
+    explicar: () => {
+      const metaAno = Number(treinoAnual?.meta_minutos) || 0
+      const base = {
+        tela: TELA_OPS_OVERVIEW,
+        titulo: 'Desenvolvimento Contínuo · Acum.',
+        ano,
+        area: EFICIENCIA_AREA_OPS_LEGAIS,
+        mesFiltro,
+        pessoas: treinoAnual?.pessoas_ativas ?? null,
+        pct: acumTreino.value,
+        valor: acumTreino.label,
+      }
+      if (mesFiltro == null) {
+        return explicarDesenvolvimento({
+          ...base,
+          modo: 'ano',
+          minutos: Number(treinoAnual?.minutos_lancados ?? 0),
+          metaMinutos: metaAno,
+        })
+      }
+      if (isPeriodoCurtoFiltro(mesFiltro)) {
+        const itensPeriodo = filtrarItensTreinamentoPorFiltro(itens, mesFiltro, ano)
+        const minutos = aplicarMinutosTreinamentoPeriodo(treinoPorPessoa, itensPeriodo).reduce(
+          (s, p) => s + Number(p.minutos_lancados ?? 0),
+          0,
+        )
+        return explicarDesenvolvimento({ ...base, modo: 'periodo_curto', minutos, metaMinutos: metaAno })
+      }
+      const rows = filtrarMensalPorMesFiltro(treinoMensal, mesFiltro, ano)
+      return explicarDesenvolvimento({
+        ...base,
+        modo: 'meses',
+        minutos: rows.reduce((s, r) => s + Number(r.minutos_lancados), 0),
+        metaMinutos: metaAno || Number(rows[0]?.meta_minutos) || 0,
+        meses: rows.map((r) => ({ mes: r.mes, minutos: Number(r.minutos_lancados) })),
+      })
+    },
+  }
+
+  const fenixRetencao: OverviewFenixAlvo | undefined = turnAnual
+    ? {
+        chave: 'eficiencia.ops-legais-overview.retencao.acumulado',
+        explicar: () =>
+          explicarTurnover({
+            tela: TELA_OPS_OVERVIEW,
+            ano,
+            area: EFICIENCIA_AREA_OPS_LEGAIS,
+            foco: 'retencao',
+            titulo: 'Retenção de Talentos',
+            ativos: Number(turnAnual.funcionarios_ativos),
+            saidas: Number(turnAnual.saidas_voluntarias),
+            pctRetencao: Number(turnAnual.pct_retencao),
+            meta: Number(turnAnual.meta_pct_retencao_minima ?? 90),
+            valor: acumRetencao.label,
+          }),
+      }
+    : undefined
+
+  const fenixPdi: OverviewFenixAlvo = {
+    chave: 'eficiencia.ops-legais-overview.gestao-pdi.acumulado',
+    explicar: () =>
+      explicarGestaoPdi({
+        tela: TELA_OPS_OVERVIEW,
+        ano,
+        area: EFICIENCIA_AREA_OPS_LEGAIS,
+        mesFiltro: mesFiltroFenix,
+        meses: pdiMensal
+          .filter((r) => mesNoFiltro(r.mes, mesFiltro, ano))
+          .map((r) => ({ mes: r.mes, aptas: Number(r.aptas), elegiveis: Number(r.elegiveis) })),
+        pct: acumPdi.value,
+        valor: acumPdi.label,
+      }),
+  }
+
+  const fenixIniciativas: OverviewFenixAlvo | undefined = loadingIniciativas
+    ? undefined
+    : {
+        chave: 'eficiencia.ops-legais-overview.iniciativas.acumulado',
+        explicar: () =>
+          explicarIniciativas({
+            ano,
+            mesFiltro: mesFiltroFenix,
+            meses: (mesFiltro == null
+              ? iniciativasPorMes
+              : filtrarMensalPorMesFiltro(iniciativasPorMes, mesFiltro, ano)
+            ).map((r) => ({ mes: r.mes, qtd: r.qtd })),
+            pct: acumIniciativas.value,
+            valor: acumIniciativas.label,
+          }),
+      }
+
+  const fenixMarketing = (
+    tipo: 'posts' | 'engajamento' | 'pautas' | 'alcance',
+    cell: HeatCell,
+  ): OverviewFenixAlvo | undefined => {
+    if (loadingMarketing) return undefined
+    const meta =
+      tipo === 'posts'
+        ? MARKETING_META_POSTS_ANUAL
+        : tipo === 'engajamento'
+          ? MARKETING_META_ENGAJAMENTO_PCT
+          : tipo === 'pautas'
+            ? MARKETING_META_PAUTAS_POR_MES
+            : MARKETING_META_ALCANCE
+    const base = tipo === 'posts' || tipo === 'pautas' ? marketingFiltrado : marketingComDado
+    const divisor =
+      tipo === 'posts'
+        ? MARKETING_META_POSTS_ANUAL
+        : tipo === 'pautas'
+          ? Math.max(marketingFiltrado.length, 1) * MARKETING_META_PAUTAS_POR_MES
+          : marketingComDado.length
+    return {
+      chave: `eficiencia.ops-legais-overview.mkt-${tipo}.acumulado`,
+      explicar: () =>
+        explicarMarketing({
+          tipo,
+          ano,
+          mesFiltro: mesFiltroFenix,
+          meses: base.map((r) => ({
+            mes: r.mes,
+            valor:
+              tipo === 'posts'
+                ? r.posts
+                : tipo === 'pautas'
+                  ? r.pautas
+                  : tipo === 'engajamento'
+                    ? r.engajamentoPct
+                    : r.alcance,
+          })),
+          divisor,
+          resultado: cell.value,
+          valor: cell.label,
+          meta,
+        }),
+    }
+  }
+
+  // Fênix na visão "Gráfico de linha": cada mini-linha explica o ponto sob o mouse
+  // com a mesma conta da célula do mês na tabela.
+  const mesesLinha = mesesDoGrafico(mesFiltro, ano)
+  const fenixSerieLinha = (serie: UnificadoLinhaSerie): UnificadoLinhaFenix | undefined => {
+    const pontosSerie = {
+      titulo: serie.title,
+      metaLabel: serie.metaLabel,
+      yKind: serie.yKind,
+      meta: serie.meta,
+      pontos: serie.points,
+    }
+    const montar = (
+      resumo: string,
+      extras: {
+        regras?: readonly string[]
+        fonte?: string
+        fonteTecnica?: string
+        explicarPonto?: (indice: number) => ReturnType<typeof explicarSerieUnificada> | null | undefined
+      },
+    ): UnificadoLinhaFenix => ({
+      chave: `eficiencia.ops-legais-overview.linha.${serie.id}`,
+      explicar: (ponto) =>
+        explicarSerieUnificada(
+          {
+            tela: TELA_OPS_OVERVIEW,
+            ano,
+            mesFiltro: mesFiltroFenix,
+            serie: pontosSerie,
+            resumo,
+            ...extras,
+          },
+          ponto,
+        ),
+    })
+    const razao = (indicador: IndicadorRazao, celula: (mesIndice: number) => OverviewFenixAlvo | undefined) => {
+      const info = infoIndicador(indicador)
+      return montar(`${info.nome} mês a mês (cada ponto é a célula do mês na tabela).`, {
+        regras: info.regras,
+        fonte: info.fonte,
+        fonteTecnica: info.fonteTecnica,
+        explicarPonto: (i) => {
+          const mes = mesesLinha[i]
+          return mes ? celula(mes - 1)?.explicar() : null
+        },
+      })
+    }
+    switch (serie.id) {
+      case 'sla':
+        return razao('ops_legais_sla_protocolo', (i) =>
+          fenixMesOps('ops_legais_sla_protocolo', 'sla-protocolo', cellsSla, protocoloMensal, linhaSla)(i),
+        )
+      case 'efi':
+        return razao('ops_legais_eficiencia_protocolo', (i) =>
+          fenixMesOps('ops_legais_eficiencia_protocolo', 'eficiencia-protocolo', cellsEfi, protocoloMensal, linhaEfi)(i),
+        )
+      case 'analise':
+        return razao('ops_legais_pub_analise', (i) =>
+          fenixMesOps('ops_legais_pub_analise', 'analise-publicacao', cellsAnalise, publicacoesAnalise, linhaPub)(i),
+        )
+      case 'agenda':
+        return razao('ops_legais_pub_agendamento', (i) =>
+          fenixMesOps('ops_legais_pub_agendamento', 'agendamento-publicacao', cellsAgenda, publicacoesAgendamento, linhaPub)(i),
+        )
+      case 'cadastro':
+        return razao('ops_legais_cadastro', (i) =>
+          fenixMesOps('ops_legais_cadastro', 'cadastro', cellsCadastro, cadastroMensal, linhaCad)(i),
+        )
+      case 'pdi':
+        return montar('Gestão de PDI de Operações Legais mês a mês (aptas ÷ avaliações do mês).', {
+          explicarPonto: (i) => {
+            const mes = mesesLinha[i]
+            const row = mes ? pdiMensal.find((r) => r.mes === mes) : undefined
+            if (!mes || !row || cellsPdi[mes - 1]?.value == null) return null
+            return explicarGestaoPdiPeriodo({
+              tela: TELA_OPS_OVERVIEW,
+              ano,
+              area: EFICIENCIA_AREA_OPS_LEGAIS,
+              periodo: rotuloMesAno(ano, mes),
+              meses: [row],
+              pct: row.pct_aptas,
+              aptas: row.aptas,
+              desvios: row.desvios,
+              pessoa: null,
+            })
+          },
+        })
+      case 'desenvolvimento':
+        return montar('Horas de treinamento de Operações Legais acumuladas mês a mês.', {
+          regras: ['A linha é acumulada: cada ponto soma as horas dos meses anteriores do gráfico.'],
+          explicarPonto: (i) => {
+            const mes = mesesLinha[i]
+            if (!mes || serie.points[i]?.valor == null) return null
+            const parcelas = mesesLinha
+              .slice(0, i + 1)
+              .filter((m) => cellsTreino[m - 1]?.value != null)
+              .flatMap((m) => {
+                const row = treinoMensal.find((r) => r.mes === m)
+                return row ? [{ mes: m, minutos: Number(row.minutos_lancados) }] : []
+              })
+            return explicarDesenvolvimentoAcumuladoNoMes({
+              tela: TELA_OPS_OVERVIEW,
+              ano,
+              mes,
+              parcelas,
+              metaMinutos: Number(treinoAnual?.meta_minutos) || 0,
+              metaLabel: metaTreinoLabel,
+            })
+          },
+        })
+      case 'retencao':
+        return montar('Retenção de Talentos é anual: o mesmo número aparece em todos os meses da linha.', {
+          explicarPonto: () => fenixRetencao?.explicar() ?? null,
+        })
+      case 'iniciativas':
+        return montar('Entregas de projetos e melhorias acumuladas no ano até cada mês.', {
+          explicarPonto: (i) => {
+            const mes = mesesLinha[i]
+            if (!mes || serie.points[i]?.valor == null) return null
+            return explicarIniciativasAcumuladoNoMes({
+              tela: TELA_OPS_OVERVIEW,
+              ano,
+              mes,
+              meses: iniciativasPorMes.map((r) => ({ mes: r.mes, qtd: r.qtd })),
+              meta: EFICIENCIA_META_OPS_INICIATIVAS,
+            })
+          },
+        })
+      default:
+        return undefined
+    }
+  }
+
   const busy =
     loading ||
     loadingTurn ||
@@ -684,7 +1064,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
             data-apresentacao-fill-slide
             className="min-h-[720px]"
           >
-            <ApresentacaoUnificadoLinhasGrid series={seriesLinha} />
+            <ApresentacaoUnificadoLinhasGrid series={seriesLinha} fenixSerie={fenixSerieLinha} />
           </div>
         ) : null}
         <div
@@ -698,6 +1078,19 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsSla}
           acumulado={acumSla}
           onRacionalClick={() => setRacionalAberto('ops_legais_sla_protocolo')}
+          fenixAcumulado={fenixAcumOps(
+            'ops_legais_sla_protocolo',
+            'sla-protocolo',
+            acumSla,
+            protFiltrado.map(linhaSla),
+          )}
+          fenixCelula={fenixMesOps(
+            'ops_legais_sla_protocolo',
+            'sla-protocolo',
+            cellsSla,
+            protocoloMensal,
+            linhaSla,
+          )}
         />
         <OverviewKpiHeatRow
           title="Eficiência Protocolo"
@@ -706,6 +1099,19 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsEfi}
           acumulado={acumEfi}
           onRacionalClick={() => setRacionalAberto('ops_legais_eficiencia_protocolo')}
+          fenixAcumulado={fenixAcumOps(
+            'ops_legais_eficiencia_protocolo',
+            'eficiencia-protocolo',
+            acumEfi,
+            protFiltrado.map(linhaEfi),
+          )}
+          fenixCelula={fenixMesOps(
+            'ops_legais_eficiencia_protocolo',
+            'eficiencia-protocolo',
+            cellsEfi,
+            protocoloMensal,
+            linhaEfi,
+          )}
         />
         <OverviewKpiHeatRow
           title="Eficiência Análise de Publicação"
@@ -714,6 +1120,19 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsAnalise}
           acumulado={acumAnalise}
           onRacionalClick={() => setRacionalAberto('ops_legais_pub_analise')}
+          fenixAcumulado={fenixAcumOps(
+            'ops_legais_pub_analise',
+            'analise-publicacao',
+            acumAnalise,
+            analiseFiltrado.map(linhaPub),
+          )}
+          fenixCelula={fenixMesOps(
+            'ops_legais_pub_analise',
+            'analise-publicacao',
+            cellsAnalise,
+            publicacoesAnalise,
+            linhaPub,
+          )}
         />
         <OverviewKpiHeatRow
           title="Eficiência Agendamento"
@@ -722,6 +1141,19 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsAgenda}
           acumulado={acumAgenda}
           onRacionalClick={() => setRacionalAberto('ops_legais_pub_agendamento')}
+          fenixAcumulado={fenixAcumOps(
+            'ops_legais_pub_agendamento',
+            'agendamento-publicacao',
+            acumAgenda,
+            agendaFiltrado.map(linhaPub),
+          )}
+          fenixCelula={fenixMesOps(
+            'ops_legais_pub_agendamento',
+            'agendamento-publicacao',
+            cellsAgenda,
+            publicacoesAgendamento,
+            linhaPub,
+          )}
         />
         <OverviewKpiHeatRow
           title="Eficiência no Cadastro de Processos"
@@ -730,6 +1162,19 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={cellsCadastro}
           acumulado={acumCadastro}
           onRacionalClick={() => setRacionalAberto('ops_legais_cadastro')}
+          fenixAcumulado={fenixAcumOps(
+            'ops_legais_cadastro',
+            'cadastro',
+            acumCadastro,
+            cadFiltrado.map(linhaCad),
+          )}
+          fenixCelula={fenixMesOps(
+            'ops_legais_cadastro',
+            'cadastro',
+            cellsCadastro,
+            cadastroMensal,
+            linhaCad,
+          )}
         />
         <OverviewKpiHeatRow
           title="Desenvolvimento Contínuo"
@@ -749,6 +1194,9 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           }
           copyAnualCells={isResultadoFiltro(mesFiltro) ? undefined : cellsTreinoAnual}
           onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
+          fenixAcumulado={
+            loadingTreino || loadingTreinoMensal ? undefined : fenixDesenvolvimento
+          }
         />
         <OverviewKpiHeatRow
           title="Retenção de Talentos"
@@ -758,6 +1206,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           cells={[]}
           acumulado={acumRetencao}
           onRacionalClick={() => setRacionalAberto('retencao_talentos')}
+          fenixAcumulado={fenixRetencao}
         />
         <OverviewKpiHeatRow
           title="Gestão de PDI"
@@ -770,6 +1219,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           }
           acumulado={loadingPdi ? { value: null, label: '…' } : acumPdi}
           onRacionalClick={() => setRacionalAberto('gestao_pdi')}
+          fenixAcumulado={loadingPdi ? undefined : fenixPdi}
         />
         <OverviewKpiHeatRow
           title="Iniciativas Estratégicas"
@@ -783,6 +1233,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           }
           acumulado={acumIniciativas}
           onRacionalClick={() => setRacionalAberto('ops_legais_iniciativas')}
+          fenixAcumulado={fenixIniciativas}
         />
         </div>
         <div
@@ -801,6 +1252,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           }
           acumulado={acumMarketingPosts}
           onRacionalClick={() => setRacionalAberto('ops_legais_marketing')}
+          fenixAcumulado={fenixMarketing('posts', acumMarketingPosts)}
         />
         <OverviewKpiHeatRow
           title="MKT - Engajamento"
@@ -814,6 +1266,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           }
           acumulado={acumMarketingEngaj}
           onRacionalClick={() => setRacionalAberto('ops_legais_marketing')}
+          fenixAcumulado={fenixMarketing('engajamento', acumMarketingEngaj)}
         />
         <OverviewKpiHeatRow
           title="MKT - Pautas Anuais"
@@ -827,6 +1280,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           }
           acumulado={acumMarketingPautas}
           onRacionalClick={() => setRacionalAberto('ops_legais_marketing')}
+          fenixAcumulado={fenixMarketing('pautas', acumMarketingPautas)}
         />
         <OverviewKpiHeatRow
           title="MKT - Alcance Mensal"
@@ -840,6 +1294,7 @@ export function OperacoesLegaisOverviewTab({ ano, mesFiltro }: Props) {
           }
           acumulado={acumMarketingAlcance}
           onRacionalClick={() => setRacionalAberto('ops_legais_marketing')}
+          fenixAcumulado={fenixMarketing('alcance', acumMarketingAlcance)}
         />
         </div>
       </div>

@@ -3,6 +3,8 @@ import { AlertTriangle, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/shared/utils/format'
 import type { CobrancaSeguimentoGrupoAcima60 } from '../types/cobrancaSeguimento.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import { explicarPontualAcima60 } from '../fenix/cobrancaFenix'
 
 type Props = {
   grupos: CobrancaSeguimentoGrupoAcima60[]
@@ -20,6 +22,10 @@ export function CobrancaSeguimentoInadimplenciaAlert({
   onRevisar,
 }: Props) {
   const [expandido, setExpandido] = useState(false)
+  const fenixId = useFenixAlvo(
+    loading || grupos.length === 0 ? undefined : 'pontual.alerta.acima-60',
+    () => explicarPontualAcima60({ grupos, valorTotal, qtdTitulos }),
+  )
 
   if (loading || grupos.length === 0) return null
 
@@ -29,7 +35,7 @@ export function CobrancaSeguimentoInadimplenciaAlert({
       : `${grupos.length} grupos com títulos vencidos há mais de 60 dias fora do Comitê de Inadimplência`
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 shadow-sm">
+    <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 shadow-sm" data-fenix={fenixId}>
       <div className="flex gap-3 sm:items-start">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden />
 

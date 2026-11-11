@@ -45,3 +45,12 @@ export type FenixExplicacao = {
 }
 
 export type FenixExplicar = () => FenixExplicacao
+
+/** Ponto do gráfico sob o mouse quando a pessoa clicou (índice no array `data` do gráfico). */
+export type FenixPontoGrafico = {
+  indice: number
+  /** Rótulo do eixo (ex.: "jun"). */
+  rotulo: string | null
+  /** Série sob o mouse, quando o Recharts informa (ex.: dataKey da barra). */
+  serie: string | null
+}

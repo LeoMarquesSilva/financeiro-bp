@@ -38,7 +38,16 @@ export function ReceitaGestaoAVistaSection({
     [departamentoCores],
   )
 
-  const { meses, resumo, totalYtd, areaSelecionada, isLoading, error } = useReceitaGestaoVista(
+  const {
+    meses,
+    resumo,
+    totalYtd,
+    areaSelecionada,
+    previstoCortePorMes,
+    inadVencidoPorMes,
+    isLoading,
+    error,
+  } = useReceitaGestaoVista(
     ano,
     rows,
     areaKey,
@@ -174,6 +183,13 @@ export function ReceitaGestaoAVistaSection({
                 areaLabel={areaSelecionada?.label}
                 loading={loading}
                 layout="column"
+                fenix={{
+                  ano,
+                  area: areaSelecionada ? { label: areaSelecionada.label, pct: areaSelecionada.pct } : null,
+                  meses,
+                  previstoCortePorMes,
+                  inadPorMes: inadVencidoPorMes,
+                }}
               />
             </div>
             <div className="min-w-0 xl:col-span-3">

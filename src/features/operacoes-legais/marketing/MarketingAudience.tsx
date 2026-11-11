@@ -1,6 +1,7 @@
 import { Activity, Eye, Info, Link2, TrendingUp, UserRoundCheck, Users } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MarketingAccountChart } from './MarketingCharts'
+import type { MarketingFenixContexto } from '../fenix/marketingFenix'
 import type {
   InstagramAccountInsight,
   InstagramAccountStats,
@@ -59,10 +60,13 @@ export function MarketingAudience({
   insights,
   demographics,
   accountHistory,
+  fenix,
 }: {
   insights: InstagramAccountInsight[]
   demographics: InstagramDemographic[]
   accountHistory: InstagramAccountStats[]
+  /** Período para o Fênix explicar o gráfico da conta. */
+  fenix?: MarketingFenixContexto
 }) {
   const totals = insights.reduce(
     (acc, row) => ({
@@ -98,7 +102,7 @@ export function MarketingAudience({
 
       <Card className="border-slate-200/80 shadow-sm">
         <CardHeader className="pb-2"><CardTitle className="text-base">Tendência da conta</CardTitle><p className="text-xs text-slate-500">Cada ponto representa o valor coletado naquele dia</p></CardHeader>
-        <CardContent>{insights.length ? <MarketingAccountChart data={insights} /> : <p className="py-20 text-center text-sm text-slate-500">Sincronize a conta para iniciar a série diária.</p>}</CardContent>
+        <CardContent>{insights.length ? <MarketingAccountChart data={insights} fenix={fenix ? { contexto: fenix } : undefined} /> : <p className="py-20 text-center text-sm text-slate-500">Sincronize a conta para iniciar a série diária.</p>}</CardContent>
       </Card>
 
       <Card className="border-slate-200/80 shadow-sm">

@@ -10,9 +10,20 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
-import { buildOverviewReceitaBruta } from '../utils/overviewFinanceiroKpis'
+import {
+  buildOverviewReceitaBruta,
+  receitaBrutaMonetarioAcumulado,
+} from '../utils/overviewFinanceiroKpis'
+import {
+  explicarReceitaBrutaPct,
+  explicarReceitaBrutaRecebido,
+  modoReceitaBruta,
+  rotuloPeriodoEficiencia,
+  TELA_EFICIENCIA_PESSOAS,
+} from '../fenix/eficienciaPessoasFinanceiroFenix'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { explicarGraficoReceitaBruta } from '../fenix/eficienciaGraficosFenix'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 
@@ -48,6 +59,33 @@ export function ReceitaBrutaTab({
       m.mes >= MES_INICIO_RESULTADO && mesNoFiltro(m.mes, mesFiltro, ano),
   )
 
+  const recebidoAcumulado = mesesEscopo.reduce(
+    (s: number, m: GestaoVistaMesRow) => s + (m.recebido ?? 0),
+    0,
+  )
+
+  /** Fênix: mesma conta do card (recebido e meta de receitaBrutaMonetarioAcumulado). */
+  const explicarPct = (escopo: 'gestao_vista' | 'periodo') => () => {
+    const filtro: MesFiltroEficiencia = escopo === 'gestao_vista' ? filtroGav : mesFiltro
+    const card = escopo === 'gestao_vista' ? overviewGestaoVista : overview
+    const meses = data?.meses ?? []
+    const rows = data?.rows ?? []
+    const monetario = data ? receitaBrutaMonetarioAcumulado(meses, rows, ano, filtro) : null
+    const { modo, meses: mesesConta } = modoReceitaBruta(filtro, ano, meses)
+    return explicarReceitaBrutaPct({
+      ano,
+      escopo,
+      pct: card?.acumulado.value ?? null,
+      recebido: monetario?.recebido ?? null,
+      meta: monetario?.meta ?? null,
+      modo,
+      mesesConta,
+      meses,
+      rows,
+      periodo: rotuloPeriodoEficiencia(mesFiltro, ano),
+    })
+  }
+
   const chartData = mesesEscopo
     .filter((m: GestaoVistaMesRow) => m.pctMeta != null)
     .map((m: GestaoVistaMesRow) => ({
@@ -79,6 +117,7 @@ export function ReceitaBrutaTab({
           icon={TrendingUp}
           accentClass="bg-slate-100 text-slate-700"
           loading={isLoading}
+          fenix={{ chave: 'eficiencia.receita-bruta.gestao-vista', explicar: explicarPct('gestao_vista') }}
         />
         <EficienciaKpiCard
           title="Receita Bruta no período selecionado"
@@ -95,6 +134,7 @@ export function ReceitaBrutaTab({
           icon={TrendingUp}
           accentClass="bg-emerald-100 text-emerald-700"
           loading={isLoading}
+          fenix={{ chave: 'eficiencia.receita-bruta.periodo', explicar: explicarPct('periodo') }}
         />
         <EficienciaKpiCard
           title="Recebido acumulado (período selecionado)"
@@ -104,17 +144,22 @@ export function ReceitaBrutaTab({
                   style: 'currency',
                   currency: 'BRL',
                   maximumFractionDigits: 0,
-                }).format(
-                  mesesEscopo.reduce(
-                    (s: number, m: GestaoVistaMesRow) => s + (m.recebido ?? 0),
-                    0,
-                  ),
-                )
+                }).format(recebidoAcumulado)
               : '—'
           }
           icon={TrendingUp}
           accentClass="bg-slate-100 text-slate-700"
           loading={isLoading}
+          fenix={{
+            chave: 'eficiencia.receita-bruta.recebido',
+            explicar: () =>
+              explicarReceitaBrutaRecebido({
+                ano,
+                meses: mesesEscopo,
+                total: recebidoAcumulado,
+                periodo: rotuloPeriodoEficiencia(mesFiltro, ano),
+              }),
+          }}
         />
       </div>
 
@@ -122,6 +167,22 @@ export function ReceitaBrutaTab({
         title="Receita Bruta"
         subtitle="% recebido ÷ meta mensal (a partir de junho)"
         data={chartData}
+        fenix={{
+          chave: 'eficiencia.receita-bruta.grafico',
+          explicar: (ponto) =>
+            explicarGraficoReceitaBruta(
+              {
+                tela: TELA_EFICIENCIA_PESSOAS.receitaBruta,
+                ano,
+                mesFiltro,
+                data: chartData,
+                meses: data?.meses ?? [],
+                rows: data?.rows ?? [],
+                metaFixa: EFICIENCIA_META_RECEITA_BRUTA,
+              },
+              ponto,
+            ),
+        }}
         color="#059669"
         metaFixa={EFICIENCIA_META_RECEITA_BRUTA}
         onRacionalClick={() => setRacionalAberto(true)}

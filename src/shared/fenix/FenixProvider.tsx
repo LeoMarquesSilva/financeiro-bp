@@ -22,6 +22,7 @@ const ESTADO_INICIAL: FenixEstado = {
   erro: null,
   semAlvos: false,
   avisoSemAlvo: false,
+  voltarAoPainel: false,
 }
 
 export function FenixProvider({ children }: { children: React.ReactNode }) {
@@ -46,13 +47,20 @@ export function FenixProvider({ children }: { children: React.ReactNode }) {
     const temAlvo = document.querySelector(`[${FENIX_ATRIBUTO}]`) != null
     setEstado((s) =>
       temAlvo
-        ? { ...s, inspecionando: true, painelAberto: false, semAlvos: false, avisoSemAlvo: false }
+        ? {
+            ...s,
+            inspecionando: true,
+            voltarAoPainel: s.painelAberto,
+            painelAberto: false,
+            semAlvos: false,
+            avisoSemAlvo: false,
+          }
         : { ...s, painelAberto: true, semAlvos: true },
     )
   }, [])
 
   const cancelarInspecao = useCallback(
-    () => setEstado((s) => ({ ...s, inspecionando: false, painelAberto: true, avisoSemAlvo: false })),
+    () => setEstado((s) => ({ ...s, inspecionando: false, painelAberto: s.voltarAoPainel, avisoSemAlvo: false })),
     [],
   )
 
@@ -105,7 +113,7 @@ export function FenixProvider({ children }: { children: React.ReactNode }) {
       if (e.key !== 'Escape') return
       e.preventDefault()
       e.stopPropagation()
-      setEstado((s) => ({ ...s, inspecionando: false, painelAberto: true, avisoSemAlvo: false }))
+      setEstado((s) => ({ ...s, inspecionando: false, painelAberto: s.voltarAoPainel, avisoSemAlvo: false }))
     }
 
     const eventosBloqueados = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'dblclick', 'submit'] as const

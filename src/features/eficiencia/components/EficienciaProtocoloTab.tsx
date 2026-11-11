@@ -37,6 +37,13 @@ import {
   emptyLabelDesvioResponsavel,
   rankingDesvioFiltrado,
 } from '../utils/responsavelMatch'
+import {
+  explicarContagem,
+  explicarRazao,
+  type FenixMesContagem,
+  type FenixOrigemPeriodo,
+} from '../fenix/eficienciaOperacionalFenix'
+import { explicarGraficoRazao, explicarRankingIndicador } from '../fenix/eficienciaGraficosFenix'
 
 const BI_BAR = '#94a3b8'
 
@@ -200,6 +207,13 @@ export function EficienciaProtocoloTab({
   const totalGav = mensalGestaoVista.reduce((s, m) => s + m.total, 0)
   const pctGestaoVista = totalGav > 0 ? (semInconsistenciaGav / totalGav) * 100 : null
   const areaHint = area ? `Área ${area}` : undefined
+  const origemPeriodo: FenixOrigemPeriodo = periodoCurto.periodoCurtoAtivo
+    ? 'periodo_curto'
+    : responsavel
+      ? 'responsavel'
+      : 'mensal'
+  const contagemMensal = (rows: typeof mensal): FenixMesContagem[] =>
+    rows.map((m) => ({ mes: m.mes, ok: m.sem_inconsistencia, total: m.total }))
   const loadingPeriodo =
     loading ||
     periodoCurto.loading ||
@@ -295,6 +309,21 @@ export function EficienciaProtocoloTab({
           loading={loading}
           scopeEquipe
           pessoaNome={responsavel}
+          fenix={{
+            chave: 'eficiencia.eficiencia-protocolo.gestao-a-vista',
+            explicar: () =>
+              explicarRazao({
+                indicador: 'eficiencia_protocolo',
+                ano,
+                escopo: 'gestao_a_vista',
+                area,
+                responsavel,
+                ok: semInconsistenciaGav,
+                total: totalGav,
+                pct: pctGestaoVista,
+                meses: contagemMensal(mensalGestaoVista),
+              }),
+          }}
         />
         <EficienciaKpiCard
           title="Eficiência de Protocolo no período selecionado"
@@ -306,6 +335,23 @@ export function EficienciaProtocoloTab({
           pessoaNome={responsavel}
           currentPct={pctGeral}
           vsEquipePct={pctGestaoVista}
+          fenix={{
+            chave: 'eficiencia.eficiencia-protocolo.periodo',
+            explicar: () =>
+              explicarRazao({
+                indicador: 'eficiencia_protocolo',
+                ano,
+                escopo: 'periodo',
+                area,
+                mesFiltro,
+                origem: origemPeriodo,
+                responsavel,
+                ok: semInconsistencia,
+                total,
+                pct: pctGeral,
+                meses: origemPeriodo === 'mensal' ? contagemMensal(mensalFiltrado) : undefined,
+              }),
+          }}
         />
         <EficienciaKpiCard
           title="Protocolos no período selecionado"
@@ -319,6 +365,23 @@ export function EficienciaProtocoloTab({
           accentClass="bg-slate-100 text-slate-700"
           loading={loadingPeriodo}
           reservePessoaSlot={Boolean(responsavel?.trim())}
+          fenix={{
+            chave: 'eficiencia.eficiencia-protocolo.protocolos',
+            explicar: () =>
+              explicarContagem({
+                indicador: 'eficiencia_protocolo',
+                ano,
+                titulo: 'Protocolos no período selecionado',
+                area,
+                mesFiltro,
+                origem: origemPeriodo,
+                responsavel,
+                mostra: 'total',
+                ok: semInconsistencia,
+                total,
+                valor: String(total),
+              }),
+          }}
         />
       </div>
 
@@ -326,6 +389,28 @@ export function EficienciaProtocoloTab({
         title="Eficiência de Protocolo"
         subtitle={chartSubtitle}
         data={loadingChart ? [] : chartData}
+        fenix={{
+          chave: 'eficiencia.eficiencia-protocolo.grafico.evolucao',
+          explicar: (ponto) =>
+            explicarGraficoRazao(
+              {
+                indicador: 'eficiencia_protocolo',
+                titulo: 'Eficiência de Protocolo',
+                ano,
+                area,
+                mesFiltro,
+                responsavel,
+                granularidade:
+                  drill.chartGranularidade === 'dia' && mesDrillTarget != null ? 'dia' : 'mes',
+                mesDia: mesDrillTarget,
+                data: loadingChart ? [] : chartData,
+                metaFixa: EFICIENCIA_META_EFICIENCIA_PROTOCOLO,
+                meses: mensal.map((m) => ({ mes: m.mes, ok: m.sem_inconsistencia, total: m.total })),
+                dias: diario.map((d: EficienciaProtocoloDiaRow) => ({ dia: d.dia, total: d.total })),
+              },
+              ponto,
+            ),
+        }}
         color="#059669"
         metaFixa={EFICIENCIA_META_EFICIENCIA_PROTOCOLO}
         granularidade={drill.chartGranularidade}
@@ -349,6 +434,24 @@ export function EficienciaProtocoloTab({
           title="% Desvio Responsáveis"
           subtitle={areaHint}
           rows={rankingFiltrado}
+          fenix={{
+            chave: 'eficiencia.eficiencia-protocolo.grafico.desvio-pct',
+            qtdKey: 'qtd_inconsistencia',
+            explicar: (barras, ponto) =>
+              explicarRankingIndicador(
+                {
+                  indicador: 'eficiencia_protocolo',
+                  dimensao: 'responsavel',
+                  titulo: '% Desvio Responsáveis',
+                  ano,
+                  area,
+                  mesFiltro,
+                  responsavel,
+                  barras,
+                },
+                ponto,
+              ),
+          }}
           labelKey="usuario"
           valueKey="pct_do_total"
           valueLabel="% do total"
@@ -369,6 +472,24 @@ export function EficienciaProtocoloTab({
           title={`Qtd Desvio ${rankingQtdTitlePrefix}`}
           subtitle={areaHint}
           rows={rankingQtdRows}
+          fenix={{
+            chave: 'eficiencia.eficiencia-protocolo.grafico.desvio-qtd',
+            qtdKey: 'qtd_inconsistencia',
+            explicar: (barras, ponto) =>
+              explicarRankingIndicador(
+                {
+                  indicador: 'eficiencia_protocolo',
+                  dimensao: rankingPorTipo ? 'tipo' : rankingPorGrupo ? 'grupo' : 'responsavel',
+                  titulo: `Qtd Desvio ${rankingQtdTitlePrefix}`,
+                  ano,
+                  area,
+                  mesFiltro,
+                  responsavel: rankingPorTipo || rankingPorGrupo ? null : responsavel,
+                  barras,
+                },
+                ponto,
+              ),
+          }}
           labelKey={rankingQtdLabelKey}
           valueKey="qtd_inconsistencia"
           valueLabel="Inconsistências"

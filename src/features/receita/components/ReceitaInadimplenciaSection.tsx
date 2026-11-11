@@ -33,7 +33,19 @@ import {
   valorExibicaoEvolucao,
   type SelecaoGruposPorMes,
 } from '../utils/receitaInadimplenciaCalc'
-import { aplicarFiltroAreaInadimplencia } from '../utils/receitaInadimplenciaAreaFilter'
+import {
+  aplicarFiltroAreaInadimplencia,
+  gruposAlocadosPorAreaPeriodo,
+} from '../utils/receitaInadimplenciaAreaFilter'
+import {
+  explicarInadConcentracao,
+  explicarInadReducao,
+  explicarInadResultadoPct,
+  explicarInadResultadoValor,
+  explicarInadTop5,
+  type InadimplenciaFenixContexto,
+} from '../fenix/receitaSecoesFenix'
+import { FenixDiv, FenixTr, type FenixAlvoProp } from './FenixAlvo'
 
 const NAVY = '#1a2744'
 const GOLD = '#c9a227'
@@ -548,6 +560,30 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
   const PackCopyIcon =
     packCopyStatus === 'loading' ? Loader2 : packCopyStatus === 'done' ? Check : Copy
 
+  // Fênix: explicações montadas com os mesmos valores dos cards.
+  const fenixCtx: InadimplenciaFenixContexto = {
+    ano: dashboard.ano,
+    mesInicio: dashboard.mes_inicio,
+    mesFim: dashboard.mes_fim,
+    areaLabel: filtroAreaAtivo ? (areaLabel ?? areaKey) : null,
+  }
+  const fenixAlvo = (chave: string, explicar: FenixAlvoProp['explicar']): FenixAlvoProp => ({
+    chave: `receita.inadimplencia.${chave}`,
+    explicar,
+  })
+  const fenixGruposValor = (): Array<{ nome: string; valor: number }> => {
+    if (filtroAreaAtivo && areaKey) {
+      return gruposAlocadosPorAreaPeriodo(gruposDeptPeriodo ?? [], areaKey).map((g) => ({
+        nome: g.grupo_cliente,
+        valor: g.valor,
+      }))
+    }
+    const lista = gruposPeriodo ?? []
+    const usados = incluidosEfetivos ? lista.filter((g) => incluidosEfetivos.has(g.grupo_cliente)) : lista
+    return usados.map((g) => ({ nome: g.grupo_cliente, valor: g.valor }))
+  }
+  const fenixEvolucaoReducao = filtroAreaAtivo ? dashboard.evolucao : data.evolucao
+
   return (
     <TooltipProvider delayDuration={200}>
     <section className="space-y-5">
@@ -636,7 +672,21 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="relative w-full self-start">
-          <div className="relative">
+          <FenixDiv
+            className="relative"
+            fenix={fenixAlvo('valor', () => {
+              const grupos = fenixGruposValor()
+              return explicarInadResultadoValor(fenixCtx, {
+                valor: dashboard.valor_total_periodo,
+                grupos,
+                gruposExcluidos:
+                  !filtroAreaAtivo && gruposPeriodo ? gruposPeriodo.length - grupos.length : undefined,
+                ajustado: Boolean(
+                  dashboard.clientes_ajustado || dashboard.evolucao.some((m) => m.ajustado),
+                ),
+              })
+            })}
+          >
             <div
               ref={acumuladaCardRef}
               data-receita-inadimplencia-export="acumulada"
@@ -690,14 +740,14 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               className="absolute inset-0 z-10 cursor-pointer rounded-2xl hover:bg-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-inset"
               aria-label={`Ver detalhes resultado R$ ${periodoCurto}`}
             />
-          </div>
+          </FenixDiv>
           <div className="absolute right-3 top-3 z-20 sm:right-4 sm:top-4" data-chart-export-ignore>
             <ElementCopyButton containerRef={acumuladaCardRef} preserveBackground />
           </div>
         </div>
 
         <div className="relative w-full self-start">
-          <div
+          <FenixDiv
             ref={pctCardRef}
             data-receita-inadimplencia-export="pct"
             data-chart-export-preserve-bg
@@ -705,6 +755,13 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
             data-chart-export-inline-row
             className="flex w-full items-center gap-3 rounded-2xl border border-slate-200/50 px-4 py-4 shadow-sm sm:gap-4 sm:px-5"
             style={{ backgroundColor: CREAM }}
+            fenix={fenixAlvo('pct', () =>
+              explicarInadResultadoPct(fenixCtx, {
+                valor: dashboard.valor_total_periodo,
+                pct: dashboard.pct_periodo,
+                previstoPorMes: dashboard.evolucao.map((m) => ({ mes: m.mes, valor: previstoMesEvolucao(m) })),
+              }),
+            )}
           >
             <IconCircle className="h-10 w-10 sm:h-11 sm:w-11">
               <Percent className="h-5 w-5" strokeWidth={2.5} />
@@ -728,7 +785,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 </p>
               )}
             </div>
-          </div>
+          </FenixDiv>
           <div className="absolute right-3 top-3 z-20 sm:right-4 sm:top-4" data-chart-export-ignore>
             <ElementCopyButton containerRef={pctCardRef} preserveBackground />
           </div>
@@ -818,14 +875,20 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               </tbody>
               {dashboard.top5.length > 0 && (
                 <tfoot>
-                  <tr className="text-white" style={{ backgroundColor: NAVY }}>
+                  <FenixTr
+                    className="text-white"
+                    style={{ backgroundColor: NAVY }}
+                    fenix={fenixAlvo('top5', () =>
+                      explicarInadTop5(fenixCtx, { top5: dashboard.top5, total: dashboard.top5_total }),
+                    )}
+                  >
                     <td className="rounded-bl-lg py-2.5 pl-3 pr-2 text-xs font-bold uppercase tracking-wide">
                       Total dos 5 maiores
                     </td>
                     <td className="rounded-br-lg py-2.5 pl-2 pr-3 text-right text-sm font-bold tabular-nums">
                       {formatCurrency(dashboard.top5_total)}
                     </td>
-                  </tr>
+                  </FenixTr>
                 </tfoot>
               )}
             </table>
@@ -934,9 +997,26 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
 
       <div className="grid gap-4 md:grid-cols-2">
         {dashboard.destaque_reducao_pct != null && dashboard.destaque_reducao_pct > 0 && primeiroMes && ultimoMes && (
-          <div
+          <FenixDiv
             className="flex items-start gap-4 rounded-2xl border border-slate-200/50 px-5 py-4 shadow-sm"
             style={{ backgroundColor: CREAM }}
+            fenix={
+              fenixEvolucaoReducao.length > 0
+                ? fenixAlvo('reducao', () =>
+                    explicarInadReducao(fenixCtx, {
+                      primeiro: {
+                        mes: fenixEvolucaoReducao[0]!.mes,
+                        valor: fenixEvolucaoReducao[0]!.valor,
+                      },
+                      ultimo: {
+                        mes: fenixEvolucaoReducao[fenixEvolucaoReducao.length - 1]!.mes,
+                        valor: fenixEvolucaoReducao[fenixEvolucaoReducao.length - 1]!.valor,
+                      },
+                      pct: dashboard.destaque_reducao_pct ?? 0,
+                    }),
+                  )
+                : undefined
+            }
           >
             <IconCircle>
               <Target className="h-5 w-5" />
@@ -952,15 +1032,22 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
                 {String(dashboard.ano).slice(-2)}
               </p>
             </div>
-          </div>
+          </FenixDiv>
         )}
 
-        <div
+        <FenixDiv
           className={cn(
             'flex items-start gap-4 rounded-2xl border border-slate-200/50 px-5 py-4 shadow-sm',
             dashboard.destaque_reducao_pct == null || dashboard.destaque_reducao_pct <= 0 ? 'md:col-span-2' : '',
           )}
           style={{ backgroundColor: CREAM }}
+          fenix={fenixAlvo('concentracao', () =>
+            explicarInadConcentracao(fenixCtx, {
+              top5Total: dashboard.top5_total,
+              valor: dashboard.valor_total_periodo,
+              pct: dashboard.top5_pct,
+            }),
+          )}
         >
           <IconCircle>
             <AlertTriangle className="h-5 w-5" />
@@ -978,7 +1065,7 @@ export function ReceitaInadimplenciaSection({ ano }: Props) {
               </span>
             </p>
           </div>
-        </div>
+        </FenixDiv>
       </div>
 
       {filtroAreaAtivo && areaKey && deptPorMes && (
