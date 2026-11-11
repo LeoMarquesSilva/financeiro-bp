@@ -1,7 +1,11 @@
 import { supabase } from '@/lib/supabaseClient'
 import type {
+  DlAliquota,
   DlArea,
   DlClienteArea,
+  DlFechamento,
+  DlOrigemParametro,
+  DlRegraNegativo,
   DlGestor,
   DlGestorCliente,
   DlGestorMes,
@@ -10,12 +14,13 @@ import type {
 } from '../types/dl.types'
 
 const n = (v: unknown) => Number(v) || 0
+const nOuNulo = (v: unknown) => (v == null ? null : Number(v))
 
 export const dlService = {
   async fetchAreas(): Promise<DlArea[]> {
     const { data, error } = await supabase
       .from('dl_areas' as never)
-      .select('area_key, nome, departamento, referencia_mercado, ordem')
+      .select('area_key, nome, departamento, referencia_mercado, ordem, regra_negativo')
       .order('ordem' as never)
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
@@ -24,6 +29,7 @@ export const dlService = {
       departamento: String(r.departamento),
       referencia_mercado: r.referencia_mercado == null ? null : n(r.referencia_mercado),
       ordem: n(r.ordem),
+      regra_negativo: (r.regra_negativo === 'acumulado' ? 'acumulado' : 'mensal') as DlRegraNegativo,
     }))
   },
 
@@ -42,6 +48,12 @@ export const dlService = {
       pct_controladoria: n(r.pct_controladoria),
       parametro_herdado: Boolean(r.parametro_herdado),
       socios_prolabore: n(r.socios_prolabore),
+      liberacao_recursos: n(r.liberacao_recursos),
+      aliquota: n(r.aliquota),
+      aliquota_herdada: Boolean(r.aliquota_herdada),
+      origem_profissionais: String(r.origem_profissionais ?? 'manual') as DlOrigemParametro,
+      origem_controladoria: String(r.origem_controladoria ?? 'manual') as DlOrigemParametro,
+      fechado: Boolean(r.fechado),
     }))
   },
 
@@ -55,6 +67,9 @@ export const dlService = {
       liquido_clientes: n(r.liquido_clientes),
       resultado_clientes: n(r.resultado_clientes),
       dl: n(r.dl),
+      dl_calculado: n(r.dl_calculado ?? r.dl),
+      ajuste: n(r.ajuste),
+      fechado: Boolean(r.fechado),
     }))
   },
 
@@ -72,28 +87,23 @@ export const dlService = {
     if (gestorIds.length === 0) return []
     const { data, error } = await supabase
       .from('dl_gestor_clientes' as never)
-      .select('gestor_id, cliente')
+      .select('gestor_id, cliente, incluido')
       .in('gestor_id' as never, gestorIds as never)
     if (error) throw error
     return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
       gestor_id: String(r.gestor_id),
       cliente: String(r.cliente),
+      incluido: r.incluido !== false,
     }))
   },
 
-  async adicionarCliente(gestorId: string, cliente: string): Promise<void> {
+  /** Marca o cliente como dentro ou fora do DL do gestor (sem linha = entra automaticamente). */
+  async definirClienteCarteira(gestorId: string, cliente: string, incluido: boolean): Promise<void> {
     const { error } = await supabase
       .from('dl_gestor_clientes' as never)
-      .upsert({ gestor_id: gestorId, cliente } as never, { onConflict: 'gestor_id,cliente' })
-    if (error) throw error
-  },
-
-  async removerCliente(gestorId: string, cliente: string): Promise<void> {
-    const { error } = await supabase
-      .from('dl_gestor_clientes' as never)
-      .delete()
-      .eq('gestor_id' as never, gestorId as never)
-      .eq('cliente' as never, cliente as never)
+      .upsert({ gestor_id: gestorId, cliente, incluido, updated_at: new Date().toISOString() } as never, {
+        onConflict: 'gestor_id,cliente',
+      })
     if (error) throw error
   },
 
@@ -107,9 +117,75 @@ export const dlService = {
       ano: n(r.ano),
       mes: n(r.mes),
       area_key: String(r.area_key),
-      profissionais: n(r.profissionais),
-      pct_controladoria: n(r.pct_controladoria),
+      profissionais: nOuNulo(r.profissionais),
+      pct_controladoria: nOuNulo(r.pct_controladoria),
     }))
+  },
+
+  async fetchAliquotas(ano: number): Promise<DlAliquota[]> {
+    const { data, error } = await supabase
+      .from('dl_aliquotas' as never)
+      .select('ano, mes, aliquota')
+      .eq('ano' as never, ano as never)
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({ ano: n(r.ano), mes: n(r.mes), aliquota: n(r.aliquota) }))
+  },
+
+  /** Grava as alíquotas preenchidas e apaga as que ficaram em branco (o mês volta a herdar). */
+  async salvarAliquotas(ano: number, salvar: DlAliquota[], apagarMeses: number[], updatedBy: string | null): Promise<void> {
+    if (salvar.length > 0) {
+      const { error } = await supabase.from('dl_aliquotas' as never).upsert(
+        salvar.map((a) => ({ ...a, updated_by: updatedBy, updated_at: new Date().toISOString() })) as never,
+        { onConflict: 'ano,mes' },
+      )
+      if (error) throw error
+    }
+    if (apagarMeses.length > 0) {
+      const { error } = await supabase
+        .from('dl_aliquotas' as never)
+        .delete()
+        .eq('ano' as never, ano as never)
+        .in('mes' as never, apagarMeses as never)
+      if (error) throw error
+    }
+  },
+
+  async salvarRegraNegativo(areaKey: string, regra: DlRegraNegativo): Promise<void> {
+    const { error } = await supabase
+      .from('dl_areas' as never)
+      .update({ regra_negativo: regra } as never)
+      .eq('area_key' as never, areaKey as never)
+    if (error) throw error
+  },
+
+  async fetchFechamentos(ano: number): Promise<DlFechamento[]> {
+    const { data, error } = await supabase
+      .from('dl_fechamentos' as never)
+      .select('ano, mes, fechado_em, fechado_por')
+      .eq('ano' as never, ano as never)
+      .order('mes' as never)
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+      ano: n(r.ano),
+      mes: n(r.mes),
+      fechado_em: String(r.fechado_em),
+      fechado_por: r.fechado_por == null ? null : String(r.fechado_por),
+    }))
+  },
+
+  /** Fecha todos os meses abertos até `mes`, em ordem. Devolve quantos fechou. */
+  async fecharMes(ano: number, mes: number, observacao: string | null): Promise<number> {
+    const { data, error } = await supabase.rpc(
+      'dl_fechar_mes' as never,
+      { p_ano: ano, p_mes: mes, p_observacao: observacao } as never,
+    )
+    if (error) throw error
+    return n(data)
+  },
+
+  async reabrirMes(ano: number, mes: number): Promise<void> {
+    const { error } = await supabase.rpc('dl_reabrir_mes' as never, { p_ano: ano, p_mes: mes } as never)
+    if (error) throw error
   },
 
   async fetchGestores(ano: number): Promise<DlGestor[]> {

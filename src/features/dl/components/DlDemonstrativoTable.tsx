@@ -1,3 +1,4 @@
+import { Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { mesAbrev } from '@/features/receita/constants'
@@ -24,6 +25,8 @@ function formatar(key: string, v: number): string {
 export function DlDemonstrativoTable({ titulo, subtitulo, meses, referencia, mesParcial }: Props) {
   const total = totalDemonstrativo(meses)
   const herdou = meses.some((m) => m.herdado)
+  const aliquotaHerdada = meses.some((m) => m.aliquota_herdada && !m.fechado && m.receita_bruta > 0)
+  const temFechado = meses.some((m) => m.fechado)
 
   return (
     <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm sm:p-5">
@@ -38,9 +41,19 @@ export function DlDemonstrativoTable({ titulo, subtitulo, meses, referencia, mes
               <th className="sticky left-0 bg-white py-2 pr-3 text-left font-medium">Linha</th>
               {meses.map((m) => (
                 <th key={m.mes} className="whitespace-nowrap px-2 py-2 text-right font-medium">
+                  {m.fechado && <Lock className="mr-1 inline h-3 w-3 text-slate-400" aria-label="Mês fechado" />}
                   {mesAbrev(m.mes)}
                   {mesParcial === m.mes ? '*' : ''}
-                  {m.herdado && <span className="ml-0.5 text-amber-500" title="Parâmetros herdados do último mês cadastrado">•</span>}
+                  {m.herdado && !m.fechado && (
+                    <span className="ml-0.5 text-amber-500" title="% da Controladoria do último Fechamento Legal Ops gravado">
+                      •
+                    </span>
+                  )}
+                  {m.aliquota_herdada && !m.fechado && m.receita_bruta > 0 && (
+                    <span className="ml-0.5 text-rose-500" title="Alíquota do mês não cadastrada: usa a do último mês">
+                      ª
+                    </span>
+                  )}
                 </th>
               ))}
               <th className="whitespace-nowrap py-2 pl-3 text-right font-semibold text-slate-700">Total</th>
@@ -101,10 +114,12 @@ export function DlDemonstrativoTable({ titulo, subtitulo, meses, referencia, mes
           </tbody>
         </table>
       </div>
-      {(herdou || mesParcial) && (
+      {(herdou || mesParcial || aliquotaHerdada || temFechado) && (
         <p className="mt-2 text-[11px] text-slate-400">
+          {temFechado ? 'Cadeado: mês fechado (valores da foto do fechamento). ' : ''}
           {mesParcial ? '* mês corrente, ainda parcial. ' : ''}
-          {herdou ? '• profissionais e % Controladoria herdados do último mês cadastrado em Parâmetros.' : ''}
+          {herdou ? '• % da Controladoria do último Fechamento Legal Ops gravado (o do mês ainda não entrou). ' : ''}
+          {aliquotaHerdada ? 'ª alíquota do mês não cadastrada em Parâmetros: usa a do último mês cadastrado.' : ''}
         </p>
       )}
     </section>

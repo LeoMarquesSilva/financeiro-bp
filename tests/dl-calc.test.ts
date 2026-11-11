@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcularDemonstrativo, dlGestorPorArea, totalDemonstrativo } from '../src/features/dl/utils/dlCalc.ts'
-import type { DlGestor, DlGestorAreaMes, DlMesRow } from '../src/features/dl/types/dl.types.ts'
+import { calcularDemonstrativo, dlGestorPorArea, dlGestorTabela, totalDemonstrativo } from '../src/features/dl/utils/dlCalc.ts'
+import type { DlGestor, DlGestorAreaMes, DlGestorMes, DlMesRow } from '../src/features/dl/types/dl.types.ts'
 
 const linha = (area_key: string, mes: number, over: Partial<DlMesRow> = {}): DlMesRow => ({
   area_key,
@@ -15,6 +15,25 @@ const linha = (area_key: string, mes: number, over: Partial<DlMesRow> = {}): DlM
   pct_controladoria: 10,
   parametro_herdado: false,
   socios_prolabore: 120_000,
+  liberacao_recursos: 0,
+  aliquota: 16.0587,
+  aliquota_herdada: false,
+  origem_profissionais: 'cadastro_rh',
+  origem_controladoria: 'legal_ops',
+  fechado: false,
+  ...over,
+})
+
+const gm = (gestor_id: string, mes: number, dl: number, over: Partial<DlGestorMes> = {}): DlGestorMes => ({
+  gestor_id,
+  mes,
+  clientes: 10,
+  liquido_clientes: 100,
+  resultado_clientes: 50,
+  dl,
+  dl_calculado: dl,
+  ajuste: 0,
+  fechado: false,
   ...over,
 })
 
@@ -40,9 +59,9 @@ test('DL do gestor vem do banco e é ligado à área pelo gestor', () => {
   const dl = dlGestorPorArea(
     [gestor('g1', 'civel'), gestor('g2', 'trabalhista')],
     [
-      { gestor_id: 'g1', mes: 6, clientes: 40, liquido_clientes: 100, resultado_clientes: 50, dl: 2_000 },
-      { gestor_id: 'g2', mes: 6, clientes: 30, liquido_clientes: 100, resultado_clientes: -10, dl: 0 },
-      { gestor_id: 'removido', mes: 6, clientes: 1, liquido_clientes: 1, resultado_clientes: 1, dl: 999 },
+      gm('g1', 6, 2_000),
+      gm('g2', 6, 0, { resultado_clientes: -10 }),
+      gm('removido', 6, 999),
     ],
   )
   assert.deepEqual(dl, [
@@ -76,4 +95,34 @@ test('total do período soma meses e recalcula a margem', () => {
   assert.equal(t.resultado, 80_000)
   assert.equal(t.dl_gestor, 4_000)
   assert.equal(t.profissionais, 5)
+})
+
+test('Liberação de Recursos soma à parte e entra no total', () => {
+  const rows = [linha('rec_credito', 9, { liberacao_recursos: 18_000 }), linha('civel', 9)]
+  const [m] = calcularDemonstrativo(rows, ['rec_credito', 'civel'], [9], [])
+  assert.equal(m.liberacao_recursos, 18_000)
+  assert.equal(m.receita_bruta, 200_000)
+  assert.equal(totalDemonstrativo([m]).liberacao_recursos, 18_000)
+})
+
+test('mês fechado e alíquota herdada sobem para o demonstrativo', () => {
+  const rows = [linha('civel', 8, { fechado: true }), linha('civel', 9, { aliquota_herdada: true })]
+  const [ago, set] = calcularDemonstrativo(rows, ['civel'], [8, 9], [])
+  assert.equal(ago.fechado, true)
+  assert.equal(ago.aliquota_herdada, false)
+  assert.equal(set.fechado, false)
+  assert.equal(set.aliquota_herdada, true)
+})
+
+test('tabela de gestores: valor a pagar com ajuste e mês fora da vigência', () => {
+  const g = { ...gestor('g1', 'rec_credito'), mes_inicio: 8 }
+  const [linha1] = dlGestorTabela(
+    [g],
+    [gm('g1', 8, 0, { fechado: true }), gm('g1', 9, 1_094, { dl_calculado: 1_205, ajuste: -111 })],
+    [7, 8, 9],
+  )
+  assert.equal(linha1!.meses[0], null)
+  assert.equal(linha1!.meses[1]!.fechado, true)
+  assert.equal(linha1!.meses[2]!.ajuste, -111)
+  assert.equal(linha1!.total, 1_094)
 })

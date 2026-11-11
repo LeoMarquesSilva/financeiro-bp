@@ -1,20 +1,44 @@
-import { useEffect, useMemo, useState } from 'react'
-import { HandCoins, RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
-import { MESES_NOME } from '@/features/receita/constants'
-import { ReceitaResultadoCaixaSection } from '@/features/receita/components/ReceitaResultadoCaixaSection'
-import { useDlAreas, useDlGestorMensal, useDlGestores, useDlResultado } from '../hooks/useDl'
-import { DlDemonstrativoTable } from '../components/DlDemonstrativoTable'
-import { DlResumoAreas } from '../components/DlResumoAreas'
-import { DlParametros } from '../components/DlParametros'
-import type { DlArea, DlGestor, DlMesRow } from '../types/dl.types'
-import { DL_REFERENCIA_GERAL, calcularDemonstrativo, dlGestorPorArea, intervaloMeses, mesAtualDl } from '../utils/dlCalc'
+import { useEffect, useMemo, useState } from "react";
+import { HandCoins, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
+import { MESES_NOME } from "@/features/receita/constants";
+import { ReceitaResultadoCaixaSection } from "@/features/receita/components/ReceitaResultadoCaixaSection";
+import {
+  useDlAreas,
+  useDlGestorMensal,
+  useDlGestores,
+  useDlResultado,
+} from "../hooks/useDl";
+import { DlDemonstrativoTable } from "../components/DlDemonstrativoTable";
+import { DlResumoAreas } from "../components/DlResumoAreas";
+import { DlParametros } from "../components/DlParametros";
+import { DlGestoresTable } from "../components/DlGestoresTable";
+import { DlFechamentoBar } from "../components/DlFechamentoBar";
+import type { DlArea, DlGestor, DlMesRow } from "../types/dl.types";
+import {
+  DL_REFERENCIA_GERAL,
+  calcularDemonstrativo,
+  dlGestorPorArea,
+  dlGestorTabela,
+  intervaloMeses,
+  mesAtualDl,
+} from "../utils/dlCalc";
 
-const ANOS = [2026, 2027]
+const ANOS = [2026, 2027];
 
-function MesSelect({ label, value, max, onChange }: { label: string; value: number; max: number; onChange: (m: number) => void }) {
+function MesSelect({
+  label,
+  value,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  onChange: (m: number) => void;
+}) {
   return (
     <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
       {label}
@@ -30,56 +54,84 @@ function MesSelect({ label, value, max, onChange }: { label: string; value: numb
         ))}
       </select>
     </label>
-  )
+  );
 }
 
 export function DlPage() {
-  const [ano, setAno] = useState(Math.max(new Date().getFullYear(), ANOS[0]!))
-  const mesAtual = mesAtualDl(ano)
-  const [de, setDe] = useState(1)
-  const [ate, setAte] = useState(mesAtual)
-  const [aba, setAba] = useState('geral')
-  const [areaSel, setAreaSel] = useState('civel')
+  const [ano, setAno] = useState(Math.max(new Date().getFullYear(), ANOS[0]!));
+  const mesAtual = mesAtualDl(ano);
+  const [de, setDe] = useState(1);
+  const [ate, setAte] = useState(mesAtual);
+  const [aba, setAba] = useState("geral");
+  const [areaSel, setAreaSel] = useState("civel");
 
   useEffect(() => {
-    setDe(1)
-    setAte(mesAtualDl(ano))
-  }, [ano])
+    setDe(1);
+    setAte(mesAtualDl(ano));
+  }, [ano]);
 
-  const { data: areasData, error: erroAreas } = useDlAreas()
-  const { data: rowsData, isLoading, error, refetch, isFetching } = useDlResultado(ano)
-  const { data: gestoresData } = useDlGestores(ano)
-  const { data: gestorMesData, error: erroGestor } = useDlGestorMensal(ano)
-  const areas: DlArea[] = useMemo(() => areasData ?? [], [areasData])
-  const rows: DlMesRow[] = useMemo(() => rowsData ?? [], [rowsData])
-  const gestores: DlGestor[] = useMemo(() => gestoresData ?? [], [gestoresData])
-  const dlGestor = useMemo(() => dlGestorPorArea(gestores, gestorMesData ?? []), [gestores, gestorMesData])
+  const { data: areasData, error: erroAreas } = useDlAreas();
+  const {
+    data: rowsData,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useDlResultado(ano);
+  const { data: gestoresData } = useDlGestores(ano);
+  const { data: gestorMesData, error: erroGestor } = useDlGestorMensal(ano);
+  const areas: DlArea[] = useMemo(() => areasData ?? [], [areasData]);
+  const rows: DlMesRow[] = useMemo(() => rowsData ?? [], [rowsData]);
+  const gestores: DlGestor[] = useMemo(
+    () => gestoresData ?? [],
+    [gestoresData],
+  );
+  const dlGestor = useMemo(
+    () => dlGestorPorArea(gestores, gestorMesData ?? []),
+    [gestores, gestorMesData],
+  );
 
-  const meses = useMemo(() => intervaloMeses(de, ate), [de, ate])
-  const mesParcial = ano === new Date().getFullYear() ? mesAtual : null
-  const areaInfo = areas.find((a) => a.area_key === areaSel)
+  const meses = useMemo(() => intervaloMeses(de, ate), [de, ate]);
+  const mesParcial = ano === new Date().getFullYear() ? mesAtual : null;
+  const areaInfo = areas.find((a) => a.area_key === areaSel);
 
   const geral = useMemo(
-    () => calcularDemonstrativo(rows, areas.map((a) => a.area_key), meses, dlGestor),
+    () =>
+      calcularDemonstrativo(
+        rows,
+        areas.map((a) => a.area_key),
+        meses,
+        dlGestor,
+      ),
     [rows, areas, meses, dlGestor],
-  )
+  );
   const porArea = useMemo(
     () => calcularDemonstrativo(rows, [areaSel], meses, dlGestor),
     [rows, areaSel, meses, dlGestor],
-  )
+  );
+  const tabelaGestores = useMemo(
+    () => dlGestorTabela(gestores, gestorMesData ?? [], meses),
+    [gestores, gestorMesData, meses],
+  );
 
-  const erro = error ?? erroAreas ?? erroGestor
+  const erro = error ?? erroAreas ?? erroGestor;
 
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
-            <HandCoins className="h-6 w-6 shrink-0 text-amber-700" aria-hidden />
+            <HandCoins
+              className="h-6 w-6 shrink-0 text-amber-700"
+              aria-hidden
+            />
             DL — Distribuição de Lucros
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Fechamento por área calculado direto do SIOE (VIOS), base caixa: receita, despesas, rateios e DL dos gestores.
+            Fechamento por área calculado direto do SIOE (VIOS), base caixa:
+            receita, despesas, rateios e DL dos gestores. Mês fechado fica
+            gravado; mudanças posteriores no VIOS entram como ajuste no mês
+            seguinte.
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -91,23 +143,45 @@ export function DlPage() {
                   type="button"
                   onClick={() => setAno(y)}
                   className={cn(
-                    'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                    ano === y ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50',
+                    "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    ano === y
+                      ? "bg-amber-600 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-50",
                   )}
                 >
                   {y}
                 </button>
               ))}
             </div>
-            <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => void refetch()} disabled={isFetching}>
-              <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} aria-hidden />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw
+                className={cn("h-4 w-4", isFetching && "animate-spin")}
+                aria-hidden
+              />
               Atualizar
             </Button>
           </div>
-          {aba !== 'caixa' && aba !== 'parametros' && (
+          {aba !== "caixa" && aba !== "parametros" && (
             <div className="flex flex-wrap items-center gap-3">
-              <MesSelect label="De" value={de} max={mesAtual} onChange={setDe} />
-              <MesSelect label="Até" value={ate} max={mesAtual} onChange={setAte} />
+              <MesSelect
+                label="De"
+                value={de}
+                max={mesAtual}
+                onChange={setDe}
+              />
+              <MesSelect
+                label="Até"
+                value={ate}
+                max={mesAtual}
+                onChange={setAte}
+              />
             </div>
           )}
         </div>
@@ -115,9 +189,15 @@ export function DlPage() {
 
       {erro && (
         <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Erro ao carregar o DL: {erro instanceof Error ? erro.message : 'verifique a função dl_resultado_mensal no Supabase'}.
+          Erro ao carregar o DL:{" "}
+          {erro instanceof Error
+            ? erro.message
+            : "verifique a função dl_resultado_mensal no Supabase"}
+          .
         </p>
       )}
+
+      {aba !== "caixa" && <DlFechamentoBar ano={ano} />}
 
       <Tabs value={aba} onValueChange={setAba}>
         <TabsList className="inline-flex h-auto flex-row flex-wrap items-stretch gap-0.5 p-1">
@@ -138,8 +218,8 @@ export function DlPage() {
                 meses={meses}
                 dlGestor={dlGestor}
                 onSelecionarArea={(k) => {
-                  setAreaSel(k)
-                  setAba('area')
+                  setAreaSel(k);
+                  setAba("area");
                 }}
               />
               <DlDemonstrativoTable
@@ -148,6 +228,13 @@ export function DlPage() {
                 meses={geral}
                 referencia={DL_REFERENCIA_GERAL}
                 mesParcial={mesParcial}
+              />
+              <DlGestoresTable
+                titulo="DL por gestor"
+                linhas={tabelaGestores}
+                meses={meses}
+                areas={areas}
+                comArea
               />
             </>
           )}
@@ -161,10 +248,10 @@ export function DlPage() {
                 type="button"
                 onClick={() => setAreaSel(a.area_key)}
                 className={cn(
-                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                   areaSel === a.area_key
-                    ? 'border-amber-300 bg-amber-50 text-amber-900'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                    ? "border-amber-300 bg-amber-50 text-amber-900"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
                 )}
               >
                 {a.nome}
@@ -174,20 +261,32 @@ export function DlPage() {
           {isLoading ? (
             <div className="h-80 animate-pulse rounded-xl bg-slate-100" />
           ) : (
-            <DlDemonstrativoTable
-              titulo={`DL mensal — ${areaInfo?.nome ?? areaSel}`}
-              subtitulo={
-                gestores.filter((g) => g.area_key === areaSel).length > 0
-                  ? `Gestores: ${gestores
-                      .filter((g) => g.area_key === areaSel)
-                      .map((g) => `${g.nome} ${g.pct.toLocaleString('pt-BR')}%`)
-                      .join(' · ')}`
-                  : 'Sem gestor com DL cadastrado'
-              }
-              meses={porArea}
-              referencia={areaInfo?.referencia_mercado ?? null}
-              mesParcial={mesParcial}
-            />
+            <>
+              <DlDemonstrativoTable
+                titulo={`DL mensal — ${areaInfo?.nome ?? areaSel}`}
+                subtitulo={
+                  gestores.filter((g) => g.area_key === areaSel).length > 0
+                    ? `Gestores: ${gestores
+                        .filter((g) => g.area_key === areaSel)
+                        .map(
+                          (g) => `${g.nome} ${g.pct.toLocaleString("pt-BR")}%`,
+                        )
+                        .join(" · ")}`
+                    : "Sem gestor com DL cadastrado"
+                }
+                meses={porArea}
+                referencia={areaInfo?.referencia_mercado ?? null}
+                mesParcial={mesParcial}
+              />
+              <DlGestoresTable
+                titulo={`DL por gestor — ${areaInfo?.nome ?? areaSel}`}
+                linhas={tabelaGestores.filter(
+                  (l) => l.gestor.area_key === areaSel,
+                )}
+                meses={meses}
+                areas={areas}
+              />
+            </>
           )}
         </TabsContent>
 
@@ -200,5 +299,5 @@ export function DlPage() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

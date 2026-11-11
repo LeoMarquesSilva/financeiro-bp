@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { dlService } from '../services/dlService'
-import type { DlGestor, DlParametroMensal } from '../types/dl.types'
+import type { DlAliquota, DlGestor, DlParametroMensal, DlRegraNegativo } from '../types/dl.types'
 
 export function useDlAreas() {
   return useQuery({ queryKey: ['dl', 'areas'], queryFn: () => dlService.fetchAreas(), staleTime: Infinity })
@@ -64,9 +64,49 @@ export function useDlCarteiraCliente() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: { gestorId: string; cliente: string; incluir: boolean }) =>
-      input.incluir
-        ? dlService.adicionarCliente(input.gestorId, input.cliente)
-        : dlService.removerCliente(input.gestorId, input.cliente),
+      dlService.definirClienteCarteira(input.gestorId, input.cliente, input.incluir),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['dl'] }),
+  })
+}
+
+export function useDlAliquotas(ano: number) {
+  return useQuery({ queryKey: ['dl', 'aliquotas', ano], queryFn: () => dlService.fetchAliquotas(ano) })
+}
+
+export function useDlSalvarAliquotas(ano: number, updatedBy: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { salvar: DlAliquota[]; apagarMeses: number[] }) =>
+      dlService.salvarAliquotas(ano, input.salvar, input.apagarMeses, updatedBy),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['dl'] }),
+  })
+}
+
+export function useDlRegraNegativo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { areaKey: string; regra: DlRegraNegativo }) => dlService.salvarRegraNegativo(input.areaKey, input.regra),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['dl'] }),
+  })
+}
+
+export function useDlFechamentos(ano: number) {
+  return useQuery({ queryKey: ['dl', 'fechamentos', ano], queryFn: () => dlService.fetchFechamentos(ano) })
+}
+
+/** Fechar ou reabrir muda a foto e o ajuste: recarrega o módulo inteiro. */
+export function useDlFecharMes(ano: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { mes: number; observacao: string | null }) => dlService.fecharMes(ano, input.mes, input.observacao),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['dl'] }),
+  })
+}
+
+export function useDlReabrirMes(ano: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (mes: number) => dlService.reabrirMes(ano, mes),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['dl'] }),
   })
 }

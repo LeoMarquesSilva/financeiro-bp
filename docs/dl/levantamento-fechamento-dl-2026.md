@@ -58,28 +58,43 @@ arquivos e despesas da aba PAG classificadas à mão).
 
 ## Como o módulo DL do SIOE calcula
 
-- **Receita bruta:** honorários recebidos, pelo departamento do item no VIOS.
-- **Impostos:** 16,0587% do recebido quando o título tem NFS-e (o VIOS grava `N/A` sem NF).
+Regras revistas com o consultor financeiro em 11/11/2026.
+
+- **Receita bruta:** honorários recebidos, pelo departamento do item no VIOS. A **Liberação de Recursos**
+  (recebimentos em nome do Banco do Brasil) aparece numa linha à parte, dentro da receita bruta.
+- **Impostos:** alíquota do mês × recebido com NFS-e (o VIOS grava `N/A` sem NF). A alíquota varia com o
+  faturamento (Simples Nacional; vai mudar com a migração para o Lucro Presumido) e é informada todo mês em
+  Parâmetros. Mês sem alíquota usa a do último mês cadastrado e fica marcado. Jan–ago/2026: 16,0587%, como
+  na planilha.
 - **Desp. operacionais:** OPEX do departamento (mesma regra do painel OPEX), sem impostos sobre
-  faturamento. **Distribuição de lucros — inclusive o DL pago aos gestores —, repasses, investimentos,
-  empréstimos e deduções ficam fora** (decisão de 26/10/2026; a planilha descontava o DL pago).
-- **Desp. Controladoria:** OPEX de Operações Legais × % de agendamentos da área.
+  faturamento. **Distribuição de lucros — inclusive o DL pago aos gestores e a antiga parcela fixa do
+  Trabalhista —, repasses, investimentos, empréstimos e deduções ficam fora** (decisão de 26/10/2026; a
+  parcela fixa era DL e acabou em ago/2026).
+- **Desp. Controladoria:** OPEX de Operações Legais × **% de horas da Ops da área** no Fechamento Legal Ops
+  (timesheet), gravado em `legal_ops_rateio_mensal` a cada fechamento. O "% de agendamentos" da planilha é
+  esse mesmo número. Mês sem fechamento Legal Ops usa o último gravado e fica marcado.
 - **Desp. indiretas:** OPEX de Facilities, Financeiro, Marketing, R.H., T.I. e Comercial + **pró-labore
-  dos sócios lançado no VIOS**, rateados por profissionais.
+  dos sócios lançado no VIOS**, rateados por profissionais. **Profissionais** vêm do cadastro de RH
+  (`sp_turnover`): quem trabalhou ao menos um dia no mês na área (quem entra no último dia conta no mês
+  seguinte; advogado parceiro não conta). Jan–ago/2026 mantêm os números digitados da planilha.
 - **DL Gestor:** por cliente da carteira do gestor: líquido do cliente − despesas da área (operacionais +
-  Controladoria + indiretas) rateadas pela receita líquida; soma × % do gestor. **Mês negativo vira zero**
-  (decisão de 26/10/2026). Gestor sem carteira não recebe DL (é o caso do ADD, como na planilha).
+  Controladoria + indiretas) rateadas pela receita líquida; soma × % do gestor. **Cliente novo da área entra
+  na carteira automaticamente**; quem estava com 0% na planilha (inclusive o Banco do Brasil, que vai para
+  os sócios) ficou marcado como excluído. Mês negativo segue a regra da área: **mensal** (zera o mês,
+  padrão) ou **acumulado** (compensa no ano) — pendente de definição dos sócios.
+- **Fechamento do mês:** o SIOE grava a foto do mês (áreas e gestores). Depois disso, o que mudar no VIOS
+  para um mês fechado (ex.: NFS-e lançada depois) não altera o valor fechado: a diferença entra como ajuste
+  no DL do próximo mês fechado, sem deixar o DL do mês negativo (o resto segue para o mês seguinte). Só o
+  último mês fechado pode ser reaberto.
 
-Profissionais e % de agendamentos ficam na aba **Parâmetros** (pré-preenchidos com a planilha; o VIOS não
-tem essa informação de forma confiável: `colaboradores` não registra desligamentos e 78% de
-`sp_agendamento` não tem área). Meses sem cadastro herdam o último mês preenchido. O % e a carteira de
-cada gestor também ficam lá.
-
-O DL Gestor de jun–ago fica próximo da planilha; as diferenças vêm de NFS-e lançadas depois da
-exportação (imposto maior no SIOE), DL pago e parcelas fixas fora da despesa da área, negativo zerado e
-receita alterada no VIOS.
+Gestores, %, vigência e carteira ficam na aba **Parâmetros**. Profissionais e % da Controladoria podem ser
+corrigidos à mão num mês (o valor digitado vence o automático).
 
 ## Pontos em aberto
 
-- **Liberação de Recursos** não é separada no SIOE (a planilha zera de jun em diante e soma em honorários).
-- **Renato em Rec. Crédito** (só ago na planilha, com o mesmo valor do Giancarlo) não foi cadastrado.
+- **Regra do negativo** (mensal × acumulado) depende dos sócios.
+- **Corte:** set e out/2026 ainda foram fechados na planilha; falta comparar com o SIOE e decidir o mês
+  a partir do qual o SIOE é a fonte oficial.
+- **Alíquotas de set/2026 em diante** precisam ser informadas (a planilha usava 16,0587%; em nov/2026 o
+  consultor informou 21,36%).
+- **Ajuste entre anos:** a diferença de um mês fechado só entra em meses do mesmo ano.
