@@ -1,0 +1,188 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { AREA_KEYS_2027, soma } from '../src/features/planejamento/utils/areasPlanejamento.ts'
+import {
+  estimarImpostoPelaTaxa,
+  mePorAreaPlanejamento,
+  montarBaseRealizada,
+  projetarAno,
+  totaisArea,
+} from '../src/features/planejamento/utils/planejamentoBase.ts'
+import {
+  linhasMetasOficiais,
+  normalizarPremissas,
+  premissasPadrao,
+  simular,
+} from '../src/features/planejamento/utils/planejamentoCalc.ts'
+import {
+  linhasMetasOperacionais,
+  metaEfetivaArea,
+  valoresJuridico,
+} from '../src/features/planejamento/utils/indicadoresOperacionais.ts'
+import type { PlanMargemRow, PlanOpexBlocosRow } from '../src/features/planejamento/types.ts'
+
+function margemRow(area_key: string, mes: number, over: Partial<PlanMargemRow> = {}): PlanMargemRow {
+  return {
+    area_key,
+    mes,
+    receita_bruta: 100_000,
+    base_nf: 50_000,
+    aliquota: 16,
+    aliquota_herdada: false,
+    impostos: 8_000,
+    desp_pessoas: 30_000,
+    desp_demais: 10_000,
+    desp_operacionais: 40_000,
+    pct_controladoria: 10,
+    origem_controladoria: 'legal_ops',
+    desp_controladoria: 5_000,
+    pessoas_reclassificadas: 0,
+    ...over,
+  }
+}
+
+function opexRow(mes: number): PlanOpexBlocosRow {
+  return { mes, areas: 0, controladoria: 60_000, estrutura: 20_000, outros: 0, total: 0, pessoas_reclassificadas: 0, pessoas_sem_match: 0 }
+}
+
+function baseUmaArea(meses = 12, over: (m: number) => Partial<PlanMargemRow> = () => ({})) {
+  const rows = Array.from({ length: meses }, (_, i) => margemRow('civel', i + 1, over(i + 1)))
+  const opex = Array.from({ length: 12 }, (_, i) => opexRow(i + 1))
+  return montarBaseRealizada(2026, rows, opex)
+}
+
+test('margem de contribuição = receita − imposto − pessoas − demais − Controladoria; % sobre a líquida', () => {
+  const base = baseUmaArea()
+  const t = totaisArea(base.areas.civel)
+  assert.equal(t.receita, 1_200_000)
+  assert.equal(t.margem, 12 * (100_000 - 8_000 - 30_000 - 10_000 - 5_000))
+  assert.ok(Math.abs((t.margemPct ?? 0) - (t.margem / (t.receita - t.impostos)) * 100) < 1e-9)
+})
+
+test('projeção 2026: receita pela ME, imposto pela taxa efetiva, custos repetem o último mês fechado', () => {
+  const base = baseUmaArea(10, (m) => (m === 10 ? { desp_pessoas: 33_000 } : {}))
+  const me = mePorAreaPlanejamento({ civel: { 11: 120_000, 12: 90_000 } }, base, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  const p = projetarAno(base, 10, me)
+  assert.equal(p.areas.civel.receita[10], 120_000)
+  assert.equal(p.areas.civel.receita[11], 90_000)
+  assert.ok(Math.abs(p.areas.civel.impostos[10] - 120_000 * 0.08) < 1e-6)
+  assert.equal(p.areas.civel.pessoas[10], 33_000)
+  assert.equal(p.areas.civel.pessoas[11], 33_000)
+  assert.deepEqual(p.projetado.slice(9), [false, true, true])
+})
+
+test('ME de "outras" vai para ADD e Tributário pela receita realizada de cada uma', () => {
+  const rows = [margemRow('add', 1, { receita_bruta: 300 }), margemRow('tributario', 1, { receita_bruta: 100 })]
+  const base = montarBaseRealizada(2026, rows, [])
+  const me = mePorAreaPlanejamento({ outras: { 11: 1000 } }, base, [1])
+  assert.equal(me.add[11], 750)
+  assert.equal(me.tributario[11], 250)
+})
+
+test('imposto 2025 estimado pela taxa efetiva de 2026 da área', () => {
+  const b26 = baseUmaArea()
+  const b25 = montarBaseRealizada(2025, [margemRow('civel', 1, { receita_bruta: 50_000, impostos: 0 })], [])
+  const est = estimarImpostoPelaTaxa(b25, b26, [1, 2, 3])
+  assert.ok(est.impostoEstimado)
+  assert.ok(Math.abs(est.areas.civel.impostos[0] - 50_000 * 0.08) < 1e-6)
+  assert.equal(est.areas.civel.impostosNf[0], 0)
+})
+
+test('simulador: crescimento, receita nova, sazonalidade, alíquota, reajuste e contratações', () => {
+  const base = baseUmaArea(12, (m) => ({ receita_bruta: m === 12 ? 200_000 : 100_000 }))
+  const pad = premissasPadrao({ aliquotaPct: 10, inadimplenciaMetaPct: 10 })
+  const prem = normalizarPremissas(
+    {
+      escritorio: { aliquotaPct: 10, reajustePct: 5, mesReajuste: 7, inadimplenciaMetaPct: 10, distribuicao: 'sazonal' },
+      areas: { civel: { crescimentoPct: 10, receitaNova: 130_000, contratacoes: 2, custoContratacao: 10_000, mesInicioContratacao: 4 } },
+    },
+    pad,
+  )
+  const r = simular(base, prem)
+  const a = r.areas.civel
+  const baseAno = 1_300_000
+  assert.equal(a.receitaBaseAno, baseAno)
+  assert.ok(Math.abs(a.receitaAno - (baseAno * 1.1 + 130_000)) < 1e-6)
+  // Dezembro pesa 2/13 da receita 2026.
+  assert.ok(Math.abs(a.receita[11] - a.receitaAno * (200_000 / baseAno)) < 1e-6)
+  assert.ok(Math.abs(soma(a.receita) - a.receitaAno) < 1e-6)
+  assert.ok(Math.abs(a.impostos[0] - a.receita[0] * 0.1) < 1e-6)
+  assert.equal(a.pessoas[0], 30_000)
+  assert.equal(a.pessoas[3], 30_000 + 20_000)
+  assert.ok(Math.abs(a.pessoas[6] - (30_000 * 1.05 + 20_000)) < 1e-6)
+  // Faturamento necessário com 10% de inadimplência.
+  assert.ok(Math.abs(r.escritorio.faturamentoNecessarioAno - r.escritorio.receitaAno / 0.9) < 1e-6)
+  // Resultado = margens − estrutura − Controladoria não rateada (60 mil − 5 mil rateado).
+  assert.ok(Math.abs(r.escritorio.resultado[0] - (r.escritorio.margem[0] - 20_000 - 55_000)) < 1e-6)
+})
+
+test('distribuição linear divide a receita do ano em 12 partes iguais', () => {
+  const base = baseUmaArea(12, (m) => ({ receita_bruta: m * 1000 }))
+  const prem = premissasPadrao({ aliquotaPct: 0, inadimplenciaMetaPct: 0 })
+  prem.escritorio.distribuicao = 'linear'
+  const r = simular(base, prem)
+  assert.ok(Math.abs(r.areas.civel.receita[0] - r.areas.civel.receita[11]) < 1e-6)
+})
+
+test('premissas salvas incompletas são completadas com o padrão', () => {
+  const pad = premissasPadrao({ aliquotaPct: 6, inadimplenciaMetaPct: 10 })
+  const p = normalizarPremissas({ areas: { civel: { crescimentoPct: '12' } }, operacionais: { sla_protocolo: { escritorio: 90, areas: { Cível: '' } } } }, pad)
+  assert.equal(p.areas.civel.crescimentoPct, 12)
+  assert.equal(p.areas.trabalhista.crescimentoPct, 0)
+  assert.equal(p.escritorio.aliquotaPct, 6)
+  assert.equal(p.operacionais.sla_protocolo.escritorio, 90)
+  assert.equal(p.operacionais.sla_protocolo.areas['Cível'], null)
+})
+
+test('metas oficiais: 12 meses × áreas ativas (sem Distressed Deals), e metas operacionais do escritório e por área', () => {
+  const base = baseUmaArea()
+  const r = simular(base, premissasPadrao({ aliquotaPct: 10, inadimplenciaMetaPct: 8 }))
+  const linhas = linhasMetasOficiais(r, 8)
+  assert.equal(linhas.length, 12 * AREA_KEYS_2027.length)
+  assert.ok(!linhas.some((l) => l.area_key === 'add'))
+  const ops = linhasMetasOperacionais({ sla_protocolo: { escritorio: 90, areas: { 'Cível': 92, Trabalhista: null } } })
+  assert.deepEqual(
+    ops.map((l) => [l.indicador, l.area_key, l.meta]),
+    [
+      ['sla_protocolo', null, 90],
+      ['sla_protocolo', 'Cível', 92],
+    ],
+  )
+  assert.equal(metaEfetivaArea({ escritorio: 90, areas: { 'Cível': 92 } }, 'Trabalhista'), 90)
+  assert.equal(metaEfetivaArea({ escritorio: 90, areas: { 'Cível': 92 } }, 'Cível'), 92)
+})
+
+test('indicadores jurídicos: acumulado é a soma das razões, não a média dos meses', () => {
+  const v = valoresJuridico({
+    slaProtocolo: [
+      { mes: 1, qtd_d1: 9, qtd_fatal: 1, qtd_total: 10, pct_eficiencia: 90, meta: 85 },
+      { mes: 2, qtd_d1: 50, qtd_fatal: 50, qtd_total: 100, pct_eficiencia: 50, meta: 85 },
+    ],
+    eficienciaProtocolo: [],
+    agendamento: [],
+    slaVistagemRisco: [],
+    slaVistagemComum: [],
+    treinamentos: { minutos_lancados: 1680, pessoas_ativas: 2, meta_minutos: 1680, pct_atingimento: 100 },
+    treinamentosMensal: [],
+    turnover: null,
+    gestaoPdiMensal: [],
+  })
+  assert.equal(v.sla_protocolo?.mensal[0], 90)
+  assert.ok(Math.abs((v.sla_protocolo?.acumulado ?? 0) - (59 / 110) * 100) < 1e-9)
+  assert.equal(v.desenvolvimento_equipe?.acumulado, 840)
+  assert.equal(v.retencao?.acumulado, null)
+})
+
+test('área encerrada (Distressed Deals) não tem projeção em 2027, mas a receita 2026 fica na base do escritório', () => {
+  const rows = [margemRow('add', 1, { receita_bruta: 50_000 }), margemRow('civel', 1, { receita_bruta: 100_000 })]
+  const base = montarBaseRealizada(2026, rows, [])
+  const p = premissasPadrao({ aliquotaPct: 10, inadimplenciaMetaPct: 10 })
+  p.areas.add.crescimentoPct = 50
+  p.areas.add.receitaNova = 1_000
+  const r = simular(base, p)
+  assert.equal(r.areas.add.receitaAno, 0)
+  assert.equal(soma(r.areas.add.margem), 0)
+  assert.equal(r.areas.add.receitaBaseAno, 50_000)
+  assert.equal(r.escritorio.receitaBaseAno, 150_000)
+  assert.equal(r.escritorio.receitaAno, 100_000)
+})
