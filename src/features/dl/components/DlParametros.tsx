@@ -373,7 +373,7 @@ function GestorLinha({
           <button
             type="button"
             onClick={onToggle}
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-700 hover:text-slate-900"
+            className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-slate-700 hover:text-slate-900"
           >
             {aberto ? <ChevronDown className="h-3.5 w-3.5" aria-hidden /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden />}
             {`${resumoCarteira?.incluidos ?? 0} clientes no DL`}

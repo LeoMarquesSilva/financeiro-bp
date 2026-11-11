@@ -85,12 +85,23 @@ export const dlService = {
 
   async fetchCarteiras(gestorIds: string[]): Promise<DlGestorCliente[]> {
     if (gestorIds.length === 0) return []
-    const { data, error } = await supabase
-      .from('dl_gestor_clientes' as never)
-      .select('gestor_id, cliente, incluido')
-      .in('gestor_id' as never, gestorIds as never)
-    if (error) throw error
-    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    // ~155 linhas por gestor (inclusões e exclusões): pagina para não esbarrar no limite de 1.000 do PostgREST.
+    const pagina = 1000
+    const linhas: Array<Record<string, unknown>> = []
+    for (let de = 0; ; de += pagina) {
+      const { data, error } = await supabase
+        .from('dl_gestor_clientes' as never)
+        .select('gestor_id, cliente, incluido')
+        .in('gestor_id' as never, gestorIds as never)
+        .order('gestor_id' as never)
+        .order('cliente' as never)
+        .range(de, de + pagina - 1)
+      if (error) throw error
+      const lote = (data ?? []) as Array<Record<string, unknown>>
+      linhas.push(...lote)
+      if (lote.length < pagina) break
+    }
+    return linhas.map((r) => ({
       gestor_id: String(r.gestor_id),
       cliente: String(r.cliente),
       incluido: r.incluido !== false,
