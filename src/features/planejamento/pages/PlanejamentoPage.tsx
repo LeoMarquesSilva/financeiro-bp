@@ -25,9 +25,8 @@ import { SimuladorTab } from '../components/SimuladorTab'
 type Confirmacao = { titulo: string; texto: string; rotulo: string; destrutivo?: boolean; acao: () => Promise<void> }
 
 /**
- * Planejamento Estratégico 2027. Página aberta por link (fora do menu): qualquer pessoa logada
- * no SIOE entra. Os números vêm das RPCs `planejamento_*` e dos módulos Receita/ME, OPEX,
- * Inadimplência e Eficiência.
+ * Planejamento Estratégico 2027 (menu "Planejamento 2027"; perfis Admin e Financeiro por padrão).
+ * Os números vêm das RPCs `planejamento_*` e dos módulos Receita/ME, OPEX, Inadimplência e Eficiência.
  */
 export function PlanejamentoPage() {
   const qc = useQueryClient()
@@ -211,8 +210,7 @@ export function PlanejamentoPage() {
             Planejamento Estratégico 2027
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Receita, margem, OPEX, inadimplência, operacional e pessoas de 2025 e 2026, e o simulador de metas 2027. Página aberta por
-            link (fora do menu) para quem tem login no SIOE.
+            Receita, margem, OPEX, inadimplência, operacional e pessoas de 2025 e 2026, e o simulador de metas 2027.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

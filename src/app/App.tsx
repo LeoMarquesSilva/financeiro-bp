@@ -233,8 +233,14 @@ function AppRoutes() {
           }
         />
         <Route path="perfil" element={<PerfilPage />} />
-        {/* Planejamento 2027: fora do menu, aberto por link para qualquer pessoa logada. */}
-        <Route path="planejamento-2027" element={<PlanejamentoPage />} />
+        <Route
+          path="planejamento-2027"
+          element={
+            <ProtectedRoute routePath="/financeiro/planejamento-2027">
+              <PlanejamentoPage />
+            </ProtectedRoute>
+          }
+        />
       </Route>
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="*" element={<Navigate to={homePath} replace />} />
