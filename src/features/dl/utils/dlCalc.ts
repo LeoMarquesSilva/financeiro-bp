@@ -38,9 +38,14 @@ export function dlGestorPorArea(gestores: DlGestor[], gestorMes: DlGestorMes[]):
   })
 }
 
+/** Gestor com vigência em algum dos meses (quem saiu ou mudou de área some dos meses seguintes). */
+export function gestorVigenteNoPeriodo(g: DlGestor, meses: number[]): boolean {
+  return meses.some((m) => m >= g.mes_inicio && m <= g.mes_fim)
+}
+
 /** DL de cada gestor mês a mês (com o ajuste de meses fechados), para conferência e pagamento. */
 export function dlGestorTabela(gestores: DlGestor[], gestorMes: DlGestorMes[], meses: number[]): DlGestorLinha[] {
-  return gestores.map((gestor) => {
+  return gestores.filter((g) => gestorVigenteNoPeriodo(g, meses)).map((gestor) => {
     const linhas = meses.map((mes) => {
       const g = gestorMes.find((x) => x.gestor_id === gestor.id && x.mes === mes)
       return g ? { mes, dl: g.dl, dl_calculado: g.dl_calculado, ajuste: g.ajuste, fechado: g.fechado } : null

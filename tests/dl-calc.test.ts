@@ -126,3 +126,13 @@ test('tabela de gestores: valor a pagar com ajuste e mês fora da vigência', ()
   assert.equal(linha1!.meses[2]!.ajuste, -111)
   assert.equal(linha1!.total, 1_094)
 })
+
+test('gestor que saiu ou mudou de área só aparece nos meses de vigência', () => {
+  const saiu = { ...gestor('g1', 'insolvencia'), mes_fim: 7 }
+  const mudou = { ...gestor('g2', 'trabalhista'), mes_inicio: 6, mes_fim: 7 }
+  const ativo = gestor('g3', 'civel')
+  const so_out = dlGestorTabela([saiu, mudou, ativo], [gm('g3', 10, 500)], [10])
+  assert.deepEqual(so_out.map((l) => l.gestor.id), ['g3'])
+  const jun_out = dlGestorTabela([saiu, mudou, ativo], [], [6, 7, 8, 9, 10])
+  assert.deepEqual(jun_out.map((l) => l.gestor.id), ['g1', 'g2', 'g3'])
+})
