@@ -29,8 +29,9 @@ arquivos e despesas da aba PAG classificadas à mão).
    junho não zera, e o Trabalhista entra negativo em jul/ago, reduzindo o DL Gestor total.
 4. **Regra de negativo diferente por área:** ADD e Trabalhista checam o resultado **anual** (`$P$20`);
    as demais checam só o mês.
-5. **DL do Renato fora do total:** `DL MENSAL!D21` soma `'DL REC CREDITO'!D22` (Giancarlo) e não a
-   linha 23 (Renato). Em ago as duas linhas têm o mesmo valor, o que sugere fórmula duplicada.
+5. **Segundo gestor de Rec. Crédito fora do total:** `DL MENSAL!D21` soma só a linha 22 de
+   `'DL REC CREDITO'` e não a linha 23. Os dois gestores receberam em ago (confirmado pelo consultor), então
+   o total do DL MENSAL fica menor do que o pago.
 6. **Fontes misturadas:** jan–mai a receita vem de `BASE CR 2026_V2_Abr_Mai_Com-Imposto.xlsx` e
    `BASE CR 2026_V2.xlsx` (arquivos locais em `D:\`, fora do SharePoint); jun–ago vêm da NOVA BASE CR.
    Quem abrir a planilha em outra máquina não atualiza esses vínculos.

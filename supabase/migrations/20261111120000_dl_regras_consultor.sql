@@ -618,5 +618,5 @@ BEGIN
 END;
 $function$;
 
--- Rateio Legal Ops, exclusões da carteira (clientes com 0% na planilha) e o Renato em Rec. Crédito
+-- Rateio Legal Ops, exclusões da carteira (clientes com 0% na planilha) e o segundo gestor de Rec. Crédito
 -- foram carregados direto no banco de produção, fora do repositório: são dados da Controladoria.
