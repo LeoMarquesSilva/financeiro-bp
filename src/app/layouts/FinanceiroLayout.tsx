@@ -10,6 +10,8 @@ import {
   FinanceiroErrorBoundaryConnected,
 } from '@/shared/error-reporting/ErrorReportingProvider'
 import { SioeSyncAutoRefresh } from '@/shared/providers/SioeSyncAutoRefresh'
+import { FenixProvider } from '@/shared/fenix/FenixProvider'
+import { FenixAssistente } from '@/shared/fenix/FenixAssistente'
 
 export function FinanceiroLayout() {
   const { passwordChanged } = useAuth()
@@ -19,29 +21,32 @@ export function FinanceiroLayout() {
   return (
     <WhatsappNotificationsProvider>
       <ErrorReportingProvider>
-        <SioeSyncAutoRefresh />
-        <div className="min-h-screen bg-slate-50" data-error-report-root>
-          <AppSidebar />
+        <FenixProvider>
+          <SioeSyncAutoRefresh />
+          <FenixAssistente />
+          <div className="min-h-screen bg-slate-50" data-error-report-root>
+            <AppSidebar />
 
-          <div className="ml-14 flex min-h-screen flex-col">
-            <TopBar />
+            <div className="ml-14 flex min-h-screen flex-col">
+              <TopBar />
 
-            {!passwordChanged && !bannerDismissed && (
-              <div className="px-6 pt-4 lg:px-8">
-                <PasswordChangeBanner
-                  onNavigateToProfile={() => navigate('/financeiro/perfil')}
-                  onDismiss={() => setBannerDismissed(true)}
-                />
-              </div>
-            )}
+              {!passwordChanged && !bannerDismissed && (
+                <div className="px-6 pt-4 lg:px-8">
+                  <PasswordChangeBanner
+                    onNavigateToProfile={() => navigate('/financeiro/perfil')}
+                    onDismiss={() => setBannerDismissed(true)}
+                  />
+                </div>
+              )}
 
-            <main className="flex-1 px-6 py-6 lg:px-8">
-              <FinanceiroErrorBoundaryConnected>
-                <Outlet />
-              </FinanceiroErrorBoundaryConnected>
-            </main>
+              <main className="flex-1 px-6 py-6 lg:px-8">
+                <FinanceiroErrorBoundaryConnected>
+                  <Outlet />
+                </FinanceiroErrorBoundaryConnected>
+              </main>
+            </div>
           </div>
-        </div>
+        </FenixProvider>
       </ErrorReportingProvider>
     </WhatsappNotificationsProvider>
   )

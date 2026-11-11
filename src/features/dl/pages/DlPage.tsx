@@ -137,6 +137,7 @@ export function DlPage() {
                 rows={rows}
                 meses={meses}
                 dlGestor={dlGestor}
+                fenix={{ ano, mesParcial, gestores }}
                 onSelecionarArea={(k) => {
                   setAreaSel(k)
                   setAba('area')
@@ -148,6 +149,18 @@ export function DlPage() {
                 meses={geral}
                 referencia={DL_REFERENCIA_GERAL}
                 mesParcial={mesParcial}
+                fenix={{
+                  chave: 'dl.geral',
+                  contexto: {
+                    ano,
+                    meses,
+                    areasNomes: areas.map((a) => a.nome),
+                    mesParcial,
+                    rows,
+                    gestores,
+                    tela: 'DL › Visão geral › DL mensal do escritório',
+                  },
+                }}
               />
             </>
           )}
@@ -187,12 +200,28 @@ export function DlPage() {
               meses={porArea}
               referencia={areaInfo?.referencia_mercado ?? null}
               mesParcial={mesParcial}
+              fenix={{
+                chave: 'dl.area',
+                contexto: {
+                  ano,
+                  meses,
+                  area: {
+                    key: areaSel,
+                    nome: areaInfo?.nome ?? areaSel,
+                    departamento: areaInfo?.departamento ?? areaSel,
+                    referencia: areaInfo?.referencia_mercado ?? null,
+                  },
+                  mesParcial,
+                  rows,
+                  gestores,
+                },
+              }}
             />
           )}
         </TabsContent>
 
         <TabsContent value="caixa" className="mt-4">
-          <ReceitaResultadoCaixaSection ano={ano} />
+          <ReceitaResultadoCaixaSection ano={ano} fenixTela="DL › Resultado de caixa" />
         </TabsContent>
 
         <TabsContent value="parametros" className="mt-4">

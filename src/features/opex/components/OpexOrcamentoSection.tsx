@@ -690,6 +690,7 @@ export function OpexOrcamentoSection({ ano }: Props) {
             linhas={linhasFiltradas}
             mesSelecionado={mesFiltro}
             onMesSelect={setMesFiltro}
+            fenix={{ chave: 'opex.grafico.orcamento', ano, busca }}
           />
         </div>
       )}
@@ -732,6 +733,8 @@ export function OpexOrcamentoSection({ ano }: Props) {
               onEditarValorGrupo={abrirEditarValorGrupo}
               onEditarDescricao={abrirEditarDescricao}
               onExcluir={(id) => void handleExcluir(id)}
+              fenixAno={ano}
+              fenixBusca={busca}
             />
           </table>
         )}

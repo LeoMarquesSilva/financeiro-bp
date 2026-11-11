@@ -22,8 +22,18 @@ import {
   groupPostsByMonth,
   rankAreasByPostVolume,
   rankPeopleByPostVolume,
+  summarizeInstagram,
 } from './instagramAnalytics'
 import { compareMarketingPautaPeriods, computeMarketingPautaGoal } from './marketingPautas'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  explicarMarketingAlcance,
+  explicarMarketingEngajamento,
+  explicarMarketingPautas,
+  explicarMarketingPostagens,
+  type MarketingFenixContexto,
+} from '../fenix/marketingFenix'
 import { MarketingAreaIcon } from './MarketingAreaIcon'
 import {
   MarketingFormatChart,
@@ -76,6 +86,7 @@ function GoalMetric({
   delta,
   icon: Icon,
   format,
+  fenix,
 }: {
   label: string
   value: number
@@ -84,10 +95,13 @@ function GoalMetric({
   delta: number | null
   icon: typeof Eye
   format: (value: number) => string
+  /** Explicação do número no Fênix. */
+  fenix?: { chave: string; explicar: FenixExplicar }
 }) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   const progress = target > 0 ? Math.min(100, (value / target) * 100) : 0
   return (
-    <article className="relative min-w-0 px-5 py-5 sm:px-6">
+    <article className="relative min-w-0 px-5 py-5 sm:px-6" data-fenix={fenixId}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-slate-500">{label}</p>
@@ -168,6 +182,7 @@ export function MarketingOverview({
         label: new Date(`${row.month}-01T12:00:00Z`).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
       }))
   const reachGoalPerPoint = days <= 100 ? 15_000 / (365.2425 / 12) : 15_000
+  const fenixCtx: MarketingFenixContexto = { range, rangeMeta: goalRange, comparacao: comparisonLabel }
 
   return (
     <div className="space-y-5">
@@ -190,6 +205,17 @@ export function MarketingOverview({
             delta={comparison.reach.changePct}
             icon={Eye}
             format={compact}
+            fenix={{
+              chave: 'opslegais.marketing.alcance',
+              explicar: () =>
+                explicarMarketingAlcance(fenixCtx, {
+                  valor: comparison.reach.current,
+                  posts: comparison.posts.current,
+                  meta: goals.reach.target,
+                  anterior: comparison.reach.previous,
+                  variacao: comparison.reach.changePct,
+                }),
+            }}
           />
           <GoalMetric
             label="Engajamento"
@@ -198,6 +224,20 @@ export function MarketingOverview({
             cadence="anual"
             delta={comparison.engagement.changePct}
             icon={Trophy}
+            fenix={{
+              chave: 'opslegais.marketing.engajamento',
+              explicar: () => {
+                const resumo = summarizeInstagram(posts)
+                return explicarMarketingEngajamento(fenixCtx, {
+                  valor: comparison.engagement.current,
+                  interacoes: resumo.interactions,
+                  alcance: resumo.reach,
+                  posts: resumo.posts,
+                  anterior: comparison.engagement.previous,
+                  variacao: comparison.engagement.changePct,
+                })
+              },
+            }}
             format={(value) => `${value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%`}
           />
           <GoalMetric
@@ -208,6 +248,17 @@ export function MarketingOverview({
             delta={comparison.posts.changePct}
             icon={Images}
             format={number}
+            fenix={{
+              chave: 'opslegais.marketing.postagens',
+              explicar: () =>
+                explicarMarketingPostagens(fenixCtx, {
+                  valor: comparison.posts.current,
+                  meta: goals.posts.target,
+                  porFormato: formats.map((f) => ({ formato: f.format, posts: f.posts })),
+                  anterior: comparison.posts.previous,
+                  variacao: comparison.posts.changePct,
+                }),
+            }}
           />
           <GoalMetric
             label="Pautas"
@@ -216,6 +267,16 @@ export function MarketingOverview({
             cadence="10/mês"
             delta={pautaComparison.changePct}
             icon={ClipboardCheck}
+            fenix={{
+              chave: 'opslegais.marketing.pautas',
+              explicar: () =>
+                explicarMarketingPautas(fenixCtx, {
+                  valor: pautaComparison.current,
+                  meta: pautaTarget,
+                  anterior: pautaComparison.previous,
+                  variacao: pautaComparison.changePct,
+                }),
+            }}
             format={(value) => value.toLocaleString('pt-BR', {
               maximumFractionDigits: Number.isInteger(value) ? 0 : 1,
             })}
@@ -231,7 +292,11 @@ export function MarketingOverview({
           </CardHeader>
           <CardContent>
             {trend.length ? (
-              <MarketingPerformanceTrendChart data={trend} reachGoal={reachGoalPerPoint} />
+              <MarketingPerformanceTrendChart
+                data={trend}
+                reachGoal={reachGoalPerPoint}
+                fenix={{ contexto: fenixCtx, agrupamento: days <= 100 ? 'dia' : 'mes' }}
+              />
             ) : (
               <div className="grid h-72 place-items-center text-sm text-slate-500">Sem publicações neste período.</div>
             )}
@@ -345,7 +410,7 @@ export function MarketingOverview({
       <div className="grid gap-5 xl:grid-cols-[1fr_1.2fr]">
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="pb-2"><CardTitle className="text-base">Volume e engajamento por formato</CardTitle></CardHeader>
-          <CardContent><MarketingFormatChart data={formats} /></CardContent>
+          <CardContent><MarketingFormatChart data={formats} fenix={{ contexto: fenixCtx }} /></CardContent>
         </Card>
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="pb-2"><CardTitle className="text-base">Melhores publicações</CardTitle><p className="text-xs text-slate-500">Ordenadas pela taxa de engajamento sobre alcance</p></CardHeader>

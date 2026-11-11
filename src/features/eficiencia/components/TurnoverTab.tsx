@@ -22,6 +22,12 @@ import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 import { RacionalSheet } from './RacionalSheet'
 import type { HeatCell } from './OverviewKpiHeatRow'
+import {
+  explicarFuncionariosAtivos,
+  explicarRetencao,
+  explicarSaidasVoluntarias,
+  type RetencaoFenixCtx,
+} from '../fenix/eficienciaPessoasFinanceiroFenix'
 
 function dataRefTempoCasa(ano: number, hoje = new Date()): Date {
   if (ano === hoje.getFullYear()) {
@@ -127,6 +133,17 @@ export function TurnoverTab({
     responsavel,
   )
 
+  const fenixCtx = (): RetencaoFenixCtx => ({
+    ano,
+    area,
+    funcionariosAtivos: anual?.funcionarios_ativos ?? null,
+    saidasVoluntarias: anual?.saidas_voluntarias ?? null,
+    pctRetencao: anual?.pct_retencao ?? null,
+    metaMinima: anual?.meta_pct_retencao_minima ?? null,
+    desligamentos: area ? desligamentos.filter((d) => d.area === area) : desligamentos,
+    qtdListaAtivos: ativosData ? ativosComTempo.length : null,
+  })
+
   const resultadoRacional: HeatCell | null = anual
     ? { value: anual.pct_retencao, label: formatPercent(anual.pct_retencao) }
     : null
@@ -160,6 +177,7 @@ export function TurnoverTab({
           icon={UserMinus}
           accentClass="bg-teal-100 text-teal-700"
           loading={loading}
+          fenix={{ chave: 'eficiencia.retencao.retencao', explicar: () => explicarRetencao(fenixCtx()) }}
         />
         <EficienciaKpiCard
           title="Funcionários ativos"
@@ -167,6 +185,7 @@ export function TurnoverTab({
           icon={UserMinus}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
+          fenix={{ chave: 'eficiencia.retencao.ativos', explicar: () => explicarFuncionariosAtivos(fenixCtx()) }}
         />
         <EficienciaKpiCard
           title="Saídas voluntárias no ano"
@@ -174,6 +193,7 @@ export function TurnoverTab({
           icon={UserMinus}
           accentClass="bg-rose-100 text-rose-700"
           loading={loading}
+          fenix={{ chave: 'eficiencia.retencao.saidas', explicar: () => explicarSaidasVoluntarias(fenixCtx()) }}
         />
       </div>
 

@@ -254,6 +254,7 @@ export function InadimplenciaPage() {
         followUpVencidos={dashboardData?.followUpAlerts?.vencidos}
         followUpAVencer={dashboardData?.followUpAlerts?.aVencerEm7Dias}
         loading={dashboardLoading}
+        fenixDados={dashboardData}
       />
 
       <section className="rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">

@@ -10,9 +10,20 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { useInadimplenciaAoVivo, useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
-import { buildOverviewInadimplencia } from '../utils/overviewFinanceiroKpis'
+import {
+  buildOverviewInadimplencia,
+  mesesInadimplenciaAoVivo,
+} from '../utils/overviewFinanceiroKpis'
+import {
+  explicarInadimplenciaIndice,
+  explicarInadimplenciaSaldo,
+  rotuloPeriodoEficiencia,
+  TELA_EFICIENCIA_PESSOAS,
+  type InadimplenciaFenixCtx,
+} from '../fenix/eficienciaPessoasFinanceiroFenix'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { explicarGraficoInadimplencia } from '../fenix/eficienciaGraficosFenix'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 
@@ -49,6 +60,14 @@ export function InadimplenciaTab({
       m.mes >= MES_INICIO_RESULTADO && mesNoFiltro(m.mes, mesFiltro, ano),
   )
 
+  const fenixCtx = (escopo: 'gestao_vista' | 'periodo'): InadimplenciaFenixCtx => ({
+    ano,
+    escopo,
+    meses: mesesInadimplenciaAoVivo(escopo === 'gestao_vista' ? filtroGav : mesFiltro, ano),
+    aoVivo: escopo === 'gestao_vista' ? aoVivoGestaoVista : aoVivo,
+    periodo: rotuloPeriodoEficiencia(mesFiltro, ano),
+  })
+
   const chartData = mesesEscopo
     .filter((m: GestaoVistaMesRow) => m.inadimplenciaPct != null)
     .map((m: GestaoVistaMesRow) => ({ mes: m.mes, valor: m.inadimplenciaPct! }))
@@ -76,6 +95,10 @@ export function InadimplenciaTab({
           icon={AlertTriangle}
           accentClass="bg-slate-100 text-slate-700"
           loading={isLoading || loadingAoVivoGestaoVista}
+          fenix={{
+            chave: 'eficiencia.inadimplencia.gestao-vista',
+            explicar: () => explicarInadimplenciaIndice(fenixCtx('gestao_vista')),
+          }}
         />
         <EficienciaKpiCard
           title="Índice de Inadimplência no período selecionado"
@@ -88,6 +111,10 @@ export function InadimplenciaTab({
           icon={AlertTriangle}
           accentClass="bg-amber-100 text-amber-800"
           loading={isLoading || loadingAoVivo}
+          fenix={{
+            chave: 'eficiencia.inadimplencia.periodo',
+            explicar: () => explicarInadimplenciaIndice(fenixCtx('periodo')),
+          }}
         />
         <EficienciaKpiCard
           title="Saldo inadimplência (período selecionado)"
@@ -104,6 +131,10 @@ export function InadimplenciaTab({
           icon={AlertTriangle}
           accentClass="bg-slate-100 text-slate-700"
           loading={loadingAoVivo}
+          fenix={{
+            chave: 'eficiencia.inadimplencia.saldo',
+            explicar: () => explicarInadimplenciaSaldo(fenixCtx('periodo')),
+          }}
         />
       </div>
 
@@ -111,6 +142,20 @@ export function InadimplenciaTab({
         title="Índice de Inadimplência"
         subtitle="% saldo congelado ÷ previsto (a partir de junho)"
         data={chartData}
+        fenix={{
+          chave: 'eficiencia.inadimplencia.grafico',
+          explicar: (ponto) =>
+            explicarGraficoInadimplencia(
+              {
+                tela: TELA_EFICIENCIA_PESSOAS.inadimplencia,
+                ano,
+                mesFiltro,
+                data: chartData,
+                meses: data?.meses ?? [],
+              },
+              ponto,
+            ),
+        }}
         color="#d97706"
         onRacionalClick={() => setRacionalAberto(true)}
       />

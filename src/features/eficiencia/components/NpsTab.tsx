@@ -5,6 +5,11 @@ import { useNpsKpi } from '../hooks/useEficiencia'
 import { npsZona } from '../utils/npsCalc'
 import { atingiuMetaKpi } from '../utils/overviewKpiMeta'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
+import {
+  explicarNps,
+  explicarNpsDimensao,
+  explicarNpsGrupo,
+} from '../fenix/eficienciaPessoasFinanceiroFenix'
 
 type Props = {
   ano: number
@@ -30,6 +35,7 @@ export function NpsTab({ ano }: Props) {
   const atingiu = atingiuMetaKpi(nps, EFICIENCIA_META_NPS)
   const campanha = data?.campaignName?.trim() || `NPS ${ano}`
   const respostas = data?.total ?? 0
+  const fenixCtx = () => ({ ano, kpi: data })
 
   return (
     <div className="space-y-5">
@@ -49,6 +55,7 @@ export function NpsTab({ ano }: Props) {
           icon={Smile}
           accentClass="bg-emerald-100 text-emerald-700"
           loading={loading}
+          fenix={{ chave: 'eficiencia.nps.nps', explicar: () => explicarNps(fenixCtx()) }}
         />
         <EficienciaKpiCard
           title="Promotores (9–10)"
@@ -57,6 +64,7 @@ export function NpsTab({ ano }: Props) {
           icon={Smile}
           accentClass="bg-emerald-50 text-emerald-700"
           loading={loading}
+          fenix={{ chave: 'eficiencia.nps.promotores', explicar: () => explicarNpsGrupo(fenixCtx(), 'promotores') }}
         />
         <EficienciaKpiCard
           title="Neutros (7–8)"
@@ -65,6 +73,7 @@ export function NpsTab({ ano }: Props) {
           icon={Smile}
           accentClass="bg-amber-50 text-amber-700"
           loading={loading}
+          fenix={{ chave: 'eficiencia.nps.neutros', explicar: () => explicarNpsGrupo(fenixCtx(), 'neutros') }}
         />
         <EficienciaKpiCard
           title="Detratores (0–6)"
@@ -73,6 +82,7 @@ export function NpsTab({ ano }: Props) {
           icon={Smile}
           accentClass="bg-rose-50 text-rose-700"
           loading={loading}
+          fenix={{ chave: 'eficiencia.nps.detratores', explicar: () => explicarNpsGrupo(fenixCtx(), 'detratores') }}
         />
       </div>
 
@@ -84,6 +94,10 @@ export function NpsTab({ ano }: Props) {
           icon={Smile}
           accentClass="bg-slate-100 text-slate-600"
           loading={loading}
+          fenix={{
+            chave: 'eficiencia.nps.disponibilidade',
+            explicar: () => explicarNpsDimensao(fenixCtx(), 'availability'),
+          }}
         />
         <EficienciaKpiCard
           title="Comunicação"
@@ -92,6 +106,10 @@ export function NpsTab({ ano }: Props) {
           icon={Smile}
           accentClass="bg-slate-100 text-slate-600"
           loading={loading}
+          fenix={{
+            chave: 'eficiencia.nps.comunicacao',
+            explicar: () => explicarNpsDimensao(fenixCtx(), 'communication'),
+          }}
         />
         <EficienciaKpiCard
           title="Inovação"
@@ -100,6 +118,10 @@ export function NpsTab({ ano }: Props) {
           icon={Smile}
           accentClass="bg-slate-100 text-slate-600"
           loading={loading}
+          fenix={{
+            chave: 'eficiencia.nps.inovacao',
+            explicar: () => explicarNpsDimensao(fenixCtx(), 'innovation'),
+          }}
         />
         <EficienciaKpiCard
           title="Competência técnica"
@@ -108,6 +130,10 @@ export function NpsTab({ ano }: Props) {
           icon={Smile}
           accentClass="bg-slate-100 text-slate-600"
           loading={loading}
+          fenix={{
+            chave: 'eficiencia.nps.competencia-tecnica',
+            explicar: () => explicarNpsDimensao(fenixCtx(), 'technical'),
+          }}
         />
       </div>
     </div>

@@ -3,19 +3,49 @@ import { ChevronDown, ChevronRight, Pin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/shared/utils/format'
 import { OPEX_COLORS } from '../constants'
-import type { OpexGrupoRow, OpexKpis } from '../types/opex.types'
+import type { OpexGrupoRow, OpexKpis, OpexMesRow } from '../types/opex.types'
+import type { OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import { explicarOpexMediaFixas, explicarOpexProjecaoFixas, type OpexFenixContexto } from '../fenix/opexFenix'
 
 type Props = {
   grupos: OpexGrupoRow[]
   kpis: OpexKpis
   mesAtual: number
+  /** Contexto do Fênix (ano, evolução mensal, orçamento e filtro de plano). */
+  fenix?: {
+    ano: number
+    evolucao: OpexMesRow[]
+    orcamentoImportado: boolean
+    planoFiltro?: OpexPlanoFiltroState
+  }
 }
 
-export function OpexProjecaoFixas({ grupos, kpis, mesAtual }: Props) {
+export function OpexProjecaoFixas({ grupos, kpis, mesAtual, fenix }: Props) {
   const [expandido, setExpandido] = useState(false)
   const fixas = grupos.filter((g) => g.fixo).sort((a, b) => b.projetado_ano - a.projetado_ano)
   const mesesRestantes = Math.max(0, 12 - mesAtual)
   const totalProjetadoFixas = fixas.reduce((s, g) => s + g.projetado_ano, 0)
+
+  const fenixCtx: OpexFenixContexto | null = fenix
+    ? {
+        ano: fenix.ano,
+        mesAtual,
+        mesesFiltro: [],
+        periodo: String(fenix.ano),
+        orcamentoImportado: fenix.orcamentoImportado,
+        evolucao: fenix.evolucao,
+        planoFiltro: fenix.planoFiltro,
+      }
+    : null
+  const fenixTotal = useFenixAlvo(
+    fenixCtx ? 'opex.fixas.total' : undefined,
+    fenixCtx ? () => explicarOpexProjecaoFixas({ ctx: fenixCtx, fixas, total: totalProjetadoFixas }) : undefined,
+  )
+  const fenixMedia = useFenixAlvo(
+    fenixCtx ? 'opex.fixas.media' : undefined,
+    fenixCtx ? () => explicarOpexMediaFixas({ ctx: fenixCtx, media: kpis.media_mensal_fixas }) : undefined,
+  )
 
   return (
     <section className="rounded-xl border border-violet-200/60 bg-gradient-to-br from-violet-50/80 to-white shadow-sm">
@@ -38,7 +68,9 @@ export function OpexProjecaoFixas({ grupos, kpis, mesAtual }: Props) {
             <h2 className="text-sm font-semibold text-slate-900">Projeção de despesas fixas</h2>
             <p className="text-xs text-slate-600">
               Média mensal global das fixas{' '}
-              <strong className="tabular-nums">{formatCurrency(kpis.media_mensal_fixas)}</strong>
+              <strong data-fenix={fenixMedia} className="tabular-nums">
+                {formatCurrency(kpis.media_mensal_fixas)}
+              </strong>
               {mesesRestantes > 0 && (
                 <> · cada grupo extrapola o próprio YTD por <strong>{mesesRestantes}</strong> meses restantes</>
               )}
@@ -48,7 +80,7 @@ export function OpexProjecaoFixas({ grupos, kpis, mesAtual }: Props) {
             </p>
           </div>
         </div>
-        <div className="text-right">
+        <div data-fenix={fenixTotal} className="text-right">
           <p className="text-xs font-medium uppercase tracking-wide text-violet-700/80">Total projetado fixas</p>
           <p className="text-lg font-bold tabular-nums text-violet-900">{formatCurrency(totalProjetadoFixas)}</p>
         </div>

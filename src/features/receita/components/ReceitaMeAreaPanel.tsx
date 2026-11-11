@@ -222,6 +222,7 @@ export function ReceitaMeAreaPanel({
         periodoMe={periodo}
         mesCorrente={mesCorrente}
         metaHint={`Meta do SIOE × ${pctArea.toLocaleString('pt-BR')}% (contribuição da área)`}
+        fenix={{ escopo: receitaMeAreaLabel(areaKey), pctArea, linhas: mesAMes }}
         composicao={{
           recebido: calc.recebido,
           aberto: calc.aberto,

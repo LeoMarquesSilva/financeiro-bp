@@ -1,6 +1,16 @@
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { DollarSign, TrendingUp, AlertTriangle, AlertCircle, ShieldCheck } from 'lucide-react'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import type { DashboardData } from '../services/dashboardService'
+import {
+  TELA_COMITE,
+  explicarClasse,
+  explicarRecuperacaoComite,
+  explicarRecuperacaoMes,
+  explicarTotalEmAbertoOperacional,
+} from '../fenix/inadimplenciaFenix'
 
 const DATA_CORTE_COMITE = '05/02/2026'
 
@@ -16,6 +26,8 @@ interface KPIsHeaderProps {
   followUpVencidos?: number
   followUpAVencer?: number
   loading?: boolean
+  /** Mesmo objeto do dashboard que gerou os números, para o Fênix explicar os cards. */
+  fenixDados?: DashboardData | null
 }
 
 interface KPIItemProps {
@@ -24,11 +36,17 @@ interface KPIItemProps {
   value: string
   iconColor: string
   valueColor?: string
+  /** Explicação do número no Fênix. */
+  fenix?: { chave: string; explicar: FenixExplicar }
 }
 
-function KPIItem({ icon: Icon, label, value, iconColor, valueColor = 'text-slate-900' }: KPIItemProps) {
+function KPIItem({ icon: Icon, label, value, iconColor, valueColor = 'text-slate-900', fenix }: KPIItemProps) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm">
+    <div
+      className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white p-4 shadow-sm"
+      data-fenix={fenixId}
+    >
       <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', iconColor)}>
         <Icon className="h-5 w-5" />
       </div>
@@ -60,6 +78,7 @@ export function KPIsHeader({
   taxaRecuperacao,
   taxaRecuperacaoComite,
   loading,
+  fenixDados,
 }: KPIsHeaderProps) {
   if (loading) {
     return (
@@ -71,6 +90,7 @@ export function KPIsHeader({
 
   const percentualRecuperacao = taxaRecuperacaoComite ?? taxaRecuperacao
   const isComite = taxaRecuperacaoComite !== undefined
+  const d = fenixDados ?? null
 
   return (
     <div className="space-y-2">
@@ -80,6 +100,7 @@ export function KPIsHeader({
           label="Total em aberto"
           value={formatCurrency(totalEmAberto)}
           iconColor="bg-slate-100 text-slate-600"
+          fenix={d ? { chave: 'inadimplencia.comite.total-aberto', explicar: () => explicarTotalEmAbertoOperacional(d) } : undefined}
         />
         <KPIItem
           icon={AlertCircle}
@@ -87,6 +108,7 @@ export function KPIsHeader({
           value={formatCurrency(totalClasseA)}
           iconColor="bg-blue-50 text-blue-600"
           valueColor="text-blue-800"
+          fenix={d ? { chave: 'inadimplencia.comite.classe-a', explicar: () => explicarClasse(d, 'A') } : undefined}
         />
         <KPIItem
           icon={AlertTriangle}
@@ -94,6 +116,7 @@ export function KPIsHeader({
           value={formatCurrency(totalClasseB)}
           iconColor="bg-amber-50 text-amber-600"
           valueColor="text-amber-800"
+          fenix={d ? { chave: 'inadimplencia.comite.classe-b', explicar: () => explicarClasse(d, 'B') } : undefined}
         />
         <KPIItem
           icon={ShieldCheck}
@@ -101,6 +124,7 @@ export function KPIsHeader({
           value={formatCurrency(totalClasseC)}
           iconColor="bg-red-50 text-red-600"
           valueColor="text-red-800"
+          fenix={d ? { chave: 'inadimplencia.comite.classe-c', explicar: () => explicarClasse(d, 'C') } : undefined}
         />
         <KPIItem
           icon={TrendingUp}
@@ -108,6 +132,15 @@ export function KPIsHeader({
           value={formatPercent(percentualRecuperacao)}
           iconColor="bg-emerald-50 text-emerald-600"
           valueColor="text-emerald-800"
+          fenix={
+            d
+              ? {
+                  chave: 'inadimplencia.comite.recuperacao',
+                  explicar: () =>
+                    isComite ? explicarRecuperacaoComite(d, TELA_COMITE) : explicarRecuperacaoMes(d, TELA_COMITE),
+                }
+              : undefined
+          }
         />
       </div>
       {isComite && (

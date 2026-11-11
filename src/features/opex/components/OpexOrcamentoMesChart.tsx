@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
 import { MESES_CURTOS, OPEX_COLORS } from '../constants'
 import type { OpexOrcamentoLinha } from '../types/opex.types'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+import { explicarGraficoOpexOrcamento } from '../fenix/opexGraficosFenix'
 
 type MesTotal = {
   mes: number
@@ -27,6 +29,8 @@ type Props = {
   onMesSelect: (mes: number | null) => void
   compact?: boolean
   className?: string
+  /** Fênix: explica o mês sob o mouse (ou o gráfico inteiro). */
+  fenix?: { chave: string; ano: number; grupo?: string | null; busca?: string }
 }
 
 function formatAxis(value: number): string {
@@ -90,10 +94,28 @@ export function OpexOrcamentoMesChart({
   onMesSelect,
   compact = false,
   className,
+  fenix,
 }: Props) {
   const chartData = useMemo(() => buildTotaisPorMes(linhas), [linhas])
   const maxTotal = useMemo(() => Math.max(...chartData.map((d) => d.total), 0), [chartData])
   const chartHeight = compact ? 132 : 220
+  const fenixGrafico = useFenixGrafico(
+    fenix && maxTotal ? fenix.chave : undefined,
+    fenix && maxTotal
+      ? (ponto) =>
+          explicarGraficoOpexOrcamento(
+            {
+              ano: fenix.ano,
+              linhas,
+              data: chartData,
+              grupo: fenix.grupo,
+              busca: fenix.busca,
+              mesSelecionado,
+            },
+            ponto,
+          )
+      : undefined,
+  )
 
   if (!maxTotal) {
     return (
@@ -108,10 +130,13 @@ export function OpexOrcamentoMesChart({
       className={cn('w-full min-w-0', className)}
       role="group"
       aria-label="Distribuição mensal do orçamento"
+      data-fenix={fenixGrafico.fenixId}
     >
       <ResponsiveContainer width="100%" height={chartHeight}>
         <LineChart
           data={chartData}
+          onMouseMove={fenixGrafico.onMouseMove}
+          onMouseLeave={fenixGrafico.onMouseLeave}
           margin={{
             top: compact ? 12 : 24,
             right: 8,
