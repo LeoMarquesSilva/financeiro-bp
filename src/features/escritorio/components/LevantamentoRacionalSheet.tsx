@@ -18,12 +18,39 @@ import {
   type LevantamentoFiltros,
   type LevantamentoRacional,
 } from '../services/escritorioLevantamentoService'
-import { exportLevantamentoRacionalExcel, formatRacionalCell } from '../utils/levantamentoExport'
+import { cn } from '@/lib/utils'
+import {
+  exportLevantamentoRacionalExcel,
+  formatRacionalCell,
+  isRacionalTextoLongo,
+} from '../utils/levantamentoExport'
 
 type Props = {
   bloco: LevantamentoBloco | null
   filtros: LevantamentoFiltros
   onClose: () => void
+}
+
+/** Texto longo (ex.: síntese do processo): 3 linhas, clique para ver tudo. */
+function TextoLongoCell({ texto }: { texto: string }) {
+  const [aberto, setAberto] = useState(false)
+  return (
+    <td className="min-w-[24rem] max-w-[32rem] px-3 py-1.5 align-top text-slate-800">
+      {texto ? (
+        <button
+          type="button"
+          onClick={() => setAberto((v) => !v)}
+          title={aberto ? 'Clique para recolher' : 'Clique para ver a síntese completa'}
+          className={cn(
+            'w-full whitespace-normal text-left leading-snug hover:text-slate-950',
+            !aberto && 'line-clamp-3',
+          )}
+        >
+          {texto}
+        </button>
+      ) : null}
+    </td>
+  )
 }
 
 export function LevantamentoRacionalSheet({ bloco, filtros, onClose }: Props) {
@@ -126,11 +153,14 @@ export function LevantamentoRacionalSheet({ bloco, filtros, onClose }: Props) {
                   <tr key={i} className="border-t border-slate-100 odd:bg-white even:bg-slate-50/40">
                     {data.colunas.map((c: LevantamentoColuna) => {
                       const texto = formatRacionalCell(row[c.key], bloco ?? undefined, c.key)
+                      if (isRacionalTextoLongo(c.key)) {
+                        return <TextoLongoCell key={c.key} texto={texto} />
+                      }
                       return (
                         <td
                           key={c.key}
                           title={texto}
-                          className="max-w-[16rem] truncate px-3 py-1.5 text-slate-800"
+                          className="max-w-[16rem] truncate px-3 py-1.5 align-top text-slate-800"
                         >
                           {texto}
                         </td>
