@@ -43,8 +43,11 @@ export function fenixReceitaAno(i: {
   porMes: readonly number[]
   projetado?: readonly boolean[]
   meses?: readonly number[]
+  /** Ajuste provisório (controle financeiro − VIOS) já incluído em `porMes`. */
+  ajuste?: readonly number[] | null
 }): FenixExplicacao {
   const meses = i.meses ?? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  const ajuste = i.ajuste ? soma(i.ajuste.map((v, idx) => (meses.includes(idx + 1) ? v : 0))) : 0
   const valores = i.porMes.map((v, idx) => (meses.includes(idx + 1) ? v : 0))
   const total = soma(valores)
   const temMe = (i.projetado ?? []).some((p, idx) => p && meses.includes(idx + 1) && valores[idx] !== 0)
@@ -67,6 +70,11 @@ export function fenixReceitaAno(i: {
         : []),
       ...(i.ano === 2025
         ? ['Em 2025, títulos lançados em Facilities, Financeiro ou BP entram na área escolhida na classificação por cliente.']
+        : []),
+      ...(i.ajuste
+        ? [
+            `Provisório: inclui ${moeda(ajuste)} de ajuste do controle financeiro (o VIOS ainda não tem toda a receita de ${i.ano}). O total do escritório por mês é o do controle; a diferença foi para a área de cada recebimento.`,
+          ]
         : []),
     ],
     fonte: FONTE_RECEITA,

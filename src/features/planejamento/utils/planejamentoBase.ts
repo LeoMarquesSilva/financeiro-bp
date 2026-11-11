@@ -10,8 +10,8 @@
  *
  * Funções puras (imports com .ts) para rodar com `node --test`.
  */
-import { AREA_KEYS, SEM_AREA_KEY, soma, zeros12, type AreaKey } from './areasPlanejamento.ts'
-import type { PlanMargemRow, PlanOpexBlocosRow } from '../types.ts'
+import { AREA_KEYS, SEM_AREA_KEY, areaEncerrada, soma, zeros12, type AreaKey } from './areasPlanejamento.ts'
+import type { PlanMargemRow, PlanOpexBlocosRow, PlanReceitaAjusteRow } from '../types.ts'
 
 export type BaseArea = {
   receita: number[]
@@ -43,6 +43,19 @@ export type BaseAno = {
   impostoEstimado: boolean
   /** Origem do % da Controladoria por mês (ex.: "legal_ops", "herdado 01/2026"). */
   origemControladoria: string[]
+  /**
+   * Ajuste provisório da receita (controle financeiro − VIOS), já somado em `receita`/`semArea`.
+   * Existe em 2025 até o VIOS ser corrigido; nulo quando não há ajuste.
+   */
+  ajusteReceita?: AjusteReceita | null
+}
+
+export type AjusteReceita = {
+  areas: Record<AreaKey, number[]>
+  semArea: number[]
+  /** Soma das áreas e do sem área, por mês. */
+  total: number[]
+  fonte: string
 }
 
 function baseAreaVazia(): BaseArea {
@@ -102,6 +115,32 @@ export function montarBaseRealizada(ano: number, margem: readonly PlanMargemRow[
     projetado: Array.from({ length: 12 }, () => false),
     impostoEstimado: false,
     origemControladoria,
+  }
+}
+
+/**
+ * Soma o ajuste provisório da receita (controle financeiro − VIOS) na base do ano.
+ * Chamar antes de `estimarImpostoPelaTaxa`, para o imposto estimado seguir a receita ajustada.
+ */
+export function aplicarAjusteReceita(base: BaseAno, ajustes: readonly PlanReceitaAjusteRow[]): BaseAno {
+  if (ajustes.length === 0) return { ...base, ajusteReceita: null }
+  const porArea = Object.fromEntries(AREA_KEYS.map((k) => [k, zeros12()])) as Record<AreaKey, number[]>
+  const semArea = zeros12()
+  for (const r of ajustes) {
+    const i = r.mes - 1
+    if (i < 0 || i > 11) continue
+    if (r.area_key === SEM_AREA_KEY) semArea[i] += r.valor
+    else if (porArea[r.area_key as AreaKey]) porArea[r.area_key as AreaKey][i] += r.valor
+    else semArea[i] += r.valor
+  }
+  const areas = { ...base.areas }
+  for (const k of AREA_KEYS) areas[k] = { ...base.areas[k], receita: base.areas[k].receita.map((v, i) => v + porArea[k][i]) }
+  const total = zeros12().map((_, i) => semArea[i] + soma(AREA_KEYS.map((k) => porArea[k][i])))
+  return {
+    ...base,
+    areas,
+    semArea: base.semArea.map((v, i) => v + semArea[i]),
+    ajusteReceita: { areas: porArea, semArea, total, fonte: ajustes[0]?.fonte ?? '' },
   }
 }
 
@@ -167,15 +206,19 @@ export function mePorAreaPlanejamento(
       for (const [m, v] of Object.entries(porMes)) out[k][Number(m)] = (out[k][Number(m)] ?? 0) + (Number(v) || 0)
     }
   }
+  // "Outras" da ME = áreas sem ME própria (ADD e Tributário). Área encerrada não recebe ME:
+  // ADD parou de faturar em mai/26 e ganharia ME só pela receita de jan–mai.
   const outras = mePorReceitaKey.outras ?? {}
-  const recAdd = soma(mesesFechados.map((m) => base.areas.add.receita[m - 1] ?? 0))
-  const recTrib = soma(mesesFechados.map((m) => base.areas.tributario.receita[m - 1] ?? 0))
-  const total = recAdd + recTrib
-  const pctAdd = total > 0 ? recAdd / total : 0.5
+  const destinos = (['add', 'tributario'] as const).filter((k) => !areaEncerrada(k))
+  if (destinos.length === 0) return out
+  const rec = destinos.map((k) => soma(mesesFechados.map((m) => base.areas[k].receita[m - 1] ?? 0)))
+  const total = soma(rec)
+  const pesos = rec.map((r) => (total > 0 ? r / total : 1 / destinos.length))
   for (const [m, v] of Object.entries(outras)) {
     const valor = Number(v) || 0
-    out.add[Number(m)] = (out.add[Number(m)] ?? 0) + valor * pctAdd
-    out.tributario[Number(m)] = (out.tributario[Number(m)] ?? 0) + valor * (1 - pctAdd)
+    destinos.forEach((k, i) => {
+      out[k][Number(m)] = (out[k][Number(m)] ?? 0) + valor * pesos[i]
+    })
   }
   return out
 }

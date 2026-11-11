@@ -8,6 +8,7 @@ import type {
   PlanMargemRow,
   PlanOpexBlocosRow,
   PlanPessoasRow,
+  PlanReceitaAjusteRow,
   PlanReceitaRow,
   PlanReceitaSemAreaRow,
   PlanTimesheetRow,
@@ -100,6 +101,21 @@ export const planejamentoService = {
       ano: n(r.ano),
       titulos: n(r.titulos),
       total: n(r.total),
+    }))
+  },
+
+  /** Ajuste provisório da receita do ano (vazio quando o VIOS está certo). */
+  async receitaAjustes(ano: number): Promise<PlanReceitaAjusteRow[]> {
+    const { data, error } = await supabase
+      .from('planejamento_receita_ajuste' as never)
+      .select('mes, area_key, valor, fonte')
+      .eq('ano' as never, ano as never)
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+      mes: n(r.mes),
+      area_key: String(r.area_key),
+      valor: n(r.valor),
+      fonte: String(r.fonte ?? ''),
     }))
   },
 
