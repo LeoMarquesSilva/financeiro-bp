@@ -283,3 +283,24 @@ test('pessoas: várias contratações por área, reajuste e ajustes na equipe at
   const antigo = normalizarPremissas({ areas: { civel: { contratacoes: 2, custoContratacao: 10_000, mesInicioContratacao: 4 } } }, pad)
   assert.deepEqual(antigo.areas.civel.contratacoes, [{ descricao: '', qtd: 2, custoMensal: 10_000, mesInicio: 4 }])
 })
+
+test('cenários prontos: múltiplos do crescimento 25→26, áreas no automático e pessoas na proporção de 2026', async () => {
+  const { historico25a26, modelosCenario } = await import('../src/features/planejamento/utils/planejamentoModelos.ts')
+  const b25 = montarBaseRealizada(2025, [margemRow('civel', 1, { receita_bruta: 100_000, desp_pessoas: 40_000 })], [])
+  const b26 = montarBaseRealizada(2026, [margemRow('civel', 1, { receita_bruta: 125_000, desp_pessoas: 44_000 })], [])
+  const h = historico25a26(b25, b26)
+  assert.ok(Math.abs((h.receitaPct ?? 0) - 25) < 1e-9)
+  assert.ok(Math.abs((h.pessoasPct ?? 0) - 10) < 1e-9)
+  assert.ok(Math.abs(h.proporcaoPessoas - 0.4) < 1e-9)
+  const ms = modelosCenario(h, premissasPadrao({ aliquotaPct: 6, inadimplenciaMetaPct: 10 }))
+  assert.deepEqual(ms.map((m) => [m.id, m.crescimentoPct]), [['consolidar', 15], ['ritmo', 25], ['acelerar', 33]])
+  const ritmo = ms[1]
+  assert.equal(ritmo.nome, 'Manter o ritmo (+25%)')
+  assert.equal(ritmo.premissas.escritorio.crescimentoReceitaPct, 25)
+  assert.ok(AREA_KEYS_2027.every((k) => ritmo.premissas.areas[k].crescimentoPct === null))
+  // Pessoas sobem 0,4 × 25% = 10%: reajuste de 5% + capacidade de ~4,8% (arredondada para 5%).
+  assert.equal(ritmo.premissas.escritorio.reajustePct, 5)
+  assert.equal(ritmo.premissas.areas.civel.variacaoPessoasPct, 5)
+  const r = simular(b26, ritmo.premissas)
+  assert.ok(Math.abs(r.escritorio.receitaAno - 125_000 * 1.25) < 1e-6)
+})

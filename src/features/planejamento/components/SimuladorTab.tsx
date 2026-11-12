@@ -1,12 +1,13 @@
-import { useState } from 'react'
-import { BadgeCheck, Copy, Download, FilePlus2, Save, Trash2 } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { BadgeCheck, Copy, Download, FilePlus2, Save, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/shared/utils/format'
 import { useFenixAlvo } from '@/shared/fenix/useFenix'
 import { AREAS_2027, MESES_ABREV, areaNome, soma, variacaoPct, type AreaKey } from '../utils/areasPlanejamento'
 import { controladoriaNaoRateada, taxaEfetivaEscritorio, totaisArea, somarAreas, type BaseAno } from '../utils/planejamentoBase'
-import type { PremissaArea, Premissas, PremissasEscritorio, ResultadoSimulacao } from '../utils/planejamentoCalc'
+import { simular, type PremissaArea, type Premissas, type PremissasEscritorio, type ResultadoSimulacao } from '../utils/planejamentoCalc'
+import { INFLACAO_MODELOS_PCT, REAJUSTE_MODELOS_PCT, type Historico, type ModeloCenario } from '../utils/planejamentoModelos'
 import type { PlanCenarioRow } from '../types'
 import { useIndicadoresOperacionais } from '../hooks/useIndicadores'
 import { usePlanPessoas } from '../hooks/usePlanejamento'
@@ -38,6 +39,46 @@ type Props = {
   onOficializar: () => void
   onExportar: () => void
   exportando: boolean
+  modelos: ModeloCenario[]
+  historico: Historico | null
+  onAplicarModelo: (m: ModeloCenario) => void
+}
+
+const sinalPct = (v: number | null | undefined) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${pct(v)}`)
+
+function CartaoModelo({ m, ativo, base2026, onClick }: { m: ModeloCenario; ativo: boolean; base2026: BaseAno; onClick: () => void }) {
+  const r = useMemo(() => simular(base2026, m.premissas).escritorio, [base2026, m.premissas])
+  const item = (rotulo: string, valor: ReactNode, tom?: string) => (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">{rotulo}</p>
+      <p className={cn('text-xs font-semibold tabular-nums text-slate-800', tom)}>{valor}</p>
+    </div>
+  )
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativo}
+      className={cn(
+        'rounded-lg border p-3 text-left transition-colors',
+        ativo ? 'border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500' : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/30',
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-900">{m.rotulo}</span>
+        <span className={cn('text-lg font-bold tabular-nums', m.crescimentoPct >= 0 ? 'text-indigo-700' : 'text-red-700')}>
+          {m.crescimentoPct >= 0 ? '+' : ''}
+          {m.crescimentoPct}%
+        </span>
+      </div>
+      <p className="mt-0.5 min-h-[30px] text-[11px] leading-snug text-slate-500">{m.descricao}</p>
+      <div className="mt-2 grid grid-cols-3 gap-2 border-t border-slate-100 pt-2">
+        {item('Receita', moedaCurta(r.receitaAno))}
+        {item('Margem', moedaCurta(r.margemAno))}
+        {item('Resultado', moedaCurta(r.resultadoAno), r.resultadoAno < 0 ? 'text-red-700' : 'text-emerald-700')}
+      </div>
+    </button>
+  )
 }
 
 function CelulaMeta({ area, p, e, r }: { area: AreaKey; p: PremissaArea; e: PremissasEscritorio; r: ResultadoSimulacao }) {
@@ -71,7 +112,6 @@ export function SimuladorTab(props: Props) {
         Object.entries(premissas.areas).map(([k, v]) => [k, { ...v, crescimentoPct: null }]),
       ) as Record<AreaKey, PremissaArea>,
     })
-  const receita2025 = soma(Object.values(base2025.areas).map((a) => soma(a.receita))) + soma(base2025.semArea)
   const setMetaOp = (indicador: string, area: string | null, valor: number | null) => {
     const atualOp = premissas.operacionais[indicador] ?? { escritorio: null, areas: {} }
     const novo = area == null ? { ...atualOp, escritorio: valor } : { ...atualOp, areas: { ...atualOp.areas, [area]: valor } }
@@ -192,13 +232,41 @@ export function SimuladorTab(props: Props) {
             </Button>
           </div>
         </div>
+        {props.modelos.length > 0 && (
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <Sparkles className="h-3.5 w-3.5 text-indigo-600" aria-hidden />
+              Cenários prontos
+              <span className="font-normal text-slate-500">
+                — a partir do crescimento de 2025 para 2026 ({sinalPct(props.historico?.receitaPct)} na receita). Clique para carregar, ajuste o que
+                quiser e salve.
+              </span>
+            </p>
+            <div className="mt-2 grid gap-2 md:grid-cols-3">
+              {props.modelos.map((m) => (
+                <CartaoModelo
+                  key={m.id}
+                  m={m}
+                  base2026={base2026}
+                  ativo={JSON.stringify(m.premissas) === JSON.stringify(premissas)}
+                  onClick={() => props.onAplicarModelo(m)}
+                />
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">
+              Nos três: áreas no automático; reajuste salarial de {REAJUSTE_MODELOS_PCT}% em janeiro; custo de pessoas crescendo na mesma proporção de
+              25→26 (pessoas das áreas {sinalPct(props.historico?.pessoasPct)} para receita {sinalPct(props.historico?.receitaPct)}), com o que passa do
+              reajuste em &quot;ajustes na equipe atual&quot;; demais despesas, Controladoria e estrutura +{INFLACAO_MODELOS_PCT}% (Acelerar: 10%, 8% e 8%).
+            </p>
+          </div>
+        )}
       </Secao>
 
       <MetaCrescimento
         resultado={resultado}
         crescimentoPct={e.crescimentoReceitaPct}
         onCrescimento={(v) => setE('crescimentoReceitaPct', v)}
-        receita2025={receita2025}
+        historicoPct={props.historico?.receitaPct ?? null}
       />
 
       <div className="grid gap-3 sm:grid-cols-3">

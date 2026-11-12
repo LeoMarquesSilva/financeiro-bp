@@ -66,13 +66,13 @@ export function MetaCrescimento({
   resultado,
   crescimentoPct,
   onCrescimento,
-  receita2025,
+  historicoPct,
 }: {
   resultado: ResultadoSimulacao
   crescimentoPct: number | null
   onCrescimento: (v: number) => void
-  /** Receita 2025 do escritório (áreas + sem área), para mostrar o crescimento 25→26 como referência. */
-  receita2025: number
+  /** Crescimento da receita do escritório 2025→2026 (áreas + sem área), como referência. */
+  historicoPct: number | null
 }) {
   const d = resultado.desdobramento
   const esc = resultado.escritorio
@@ -80,7 +80,7 @@ export function MetaCrescimento({
   const efetivo = d.receitaBase > 0 ? (somaAreas / d.receitaBase - 1) * 100 : 0
   const valor = crescimentoPct ?? efetivo
   const meta = d.metaReceita ?? somaAreas
-  const hist = receita2025 > 0 ? (d.receitaBase / receita2025 - 1) * 100 : null
+  const hist = historicoPct
   const max = Math.max(60, Math.ceil(((hist ?? 0) + 10) / 10) * 10)
   const encerradas = AREAS_PLANEJAMENTO.filter((a) => a.encerrada)
   const receitaEncerradas = soma(encerradas.map((a) => resultado.areas[a.key].receitaBaseAno))
