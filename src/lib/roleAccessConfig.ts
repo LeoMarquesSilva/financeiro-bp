@@ -1,5 +1,5 @@
 import type { AppRole } from '@/lib/database.types'
-import { EFICIENCIA_PROTOCOLOS_MODULE, type ModuleKey } from '@/lib/moduleAccess'
+import { hasEficienciaModule, type ModuleKey } from '@/lib/moduleAccess'
 import { NAV_ACCESS_ITEMS, type NavAccessItem } from '@/lib/navAccessItems'
 
 /** Rotas liberadas por perfil (paths do menu / ProtectedRoute). */
@@ -87,8 +87,7 @@ export function canAccessRoutePath(input: {
   const hasModule =
     !!input.moduleKey &&
     (input.moduleAccess.includes(input.moduleKey) ||
-      (input.moduleKey === 'eficiencia' &&
-        input.moduleAccess.includes(EFICIENCIA_PROTOCOLOS_MODULE)))
+      (input.moduleKey === 'eficiencia' && hasEficienciaModule(input.moduleAccess)))
   if (hasModule) return true
 
   if (!input.role) return false
