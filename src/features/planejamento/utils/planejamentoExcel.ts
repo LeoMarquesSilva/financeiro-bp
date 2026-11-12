@@ -11,6 +11,8 @@ import { controladoriaNaoRateada, type BaseAno, type BaseArea } from './planejam
 import type { Premissas, ResultadoSimulacao } from './planejamentoCalc.ts'
 import { INDICADORES, metaEfetivaArea, type IndicadorId, type ValorIndicador } from './indicadoresOperacionais.ts'
 
+const fmtMoeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
 export type PlanilhaInput = {
   geradoEm: Date
   cenarioNome: string
@@ -480,6 +482,11 @@ function abaLeia(wb: ExcelJS.Workbook, input: PlanilhaInput) {
     '• Premissas — alíquota, reajuste, variações, inadimplência, distribuição mensal e premissas por área.',
     '• Base 2026 — realizado do SIOE até o último mês fechado + Melhor Estimativa (receita) e repetição do último mês fechado (custos) em nov–dez.',
     '• Base 2025 — realizado de 2025 para comparação (imposto estimado pela taxa efetiva de 2026; folha de Facilities reclassificada pela pessoa).',
+    ...(input.base2025.ajusteReceita
+      ? [
+          `• Receita 2025 provisória: total mensal do controle financeiro; inclui ${fmtMoeda(soma(input.base2025.ajusteReceita.total))} de ajuste (controle − VIOS) distribuído por área até o VIOS ser corrigido.`,
+        ]
+      : []),
     '• Receita 2027 — meta de receita por área e mês (fórmulas).',
     '• Margem 2027 — margem de contribuição por área e resultado do escritório (fórmulas).',
     '• Resumo — 2025 × 2026 × 2027 por área.',
@@ -508,7 +515,16 @@ export function montarPlanilhaPlanejamento(wb: ExcelJS.Workbook, input: Planilha
   abaReceita(wb, input)
   abaMargem(wb, input)
   abaBase(wb, ABAS.base26, input.base2026, 'Valores do SIOE. Linha "Mês projetado" marca nov–dez (Melhor Estimativa / repetição do último mês fechado).')
-  abaBase(wb, ABAS.base25, input.base2025, 'Valores do SIOE. Imposto estimado pela taxa efetiva de 2026 da área (o VIOS não tem número de NF em 2025).')
+  abaBase(
+    wb,
+    ABAS.base25,
+    input.base2025,
+    `Valores do SIOE. Imposto estimado pela taxa efetiva de 2026 da área (o VIOS não tem número de NF em 2025).${
+      input.base2025.ajusteReceita
+        ? ` Receita provisória: inclui ${fmtMoeda(soma(input.base2025.ajusteReceita.total))} do controle financeiro que ainda não está no VIOS.`
+        : ''
+    }`,
+  )
   abaOperacionais(wb, input)
   // Recalcula ao abrir no Excel.
   ;(wb as unknown as { calcProperties: { fullCalcOnLoad: boolean } }).calcProperties = { fullCalcOnLoad: true }

@@ -34,6 +34,14 @@ function receitaDe(base: BaseAno, sel: string): number[] {
   return base.areas[sel as AreaKey]?.receita.slice() ?? Array(12).fill(0)
 }
 
+/** Ajuste provisório da receita (controle financeiro − VIOS) do filtro escolhido; nulo sem ajuste. */
+function ajusteDe(base: BaseAno, sel: string): number[] | null {
+  const aj = base.ajusteReceita
+  if (!aj) return null
+  if (sel === 'escritorio') return aj.total.slice()
+  return aj.areas[sel as AreaKey]?.slice() ?? null
+}
+
 function metaDe(sel: string, metaBasePorMes: Record<number, number>, contribuicao: Record<string, number>): (number | null)[] {
   const area = AREAS_PLANEJAMENTO.find((a) => a.key === sel)
   const fator = sel === 'escritorio' ? 1 : area && area.receitaKey !== 'outras' ? (contribuicao[area.receitaKey] ?? 0) / 100 : 0
@@ -41,6 +49,15 @@ function metaDe(sel: string, metaBasePorMes: Record<number, number>, contribuica
     const m = metaBasePorMes[i + 1]
     return m && fator > 0 ? m * fator : null
   })
+}
+
+/** "jun–dez" para meses seguidos; senão a lista ("jan, mar, jun"). */
+function rotuloPeriodo(meses: readonly number[]): string {
+  if (meses.length === 0) return ''
+  const seguidos = meses.every((m, i) => i === 0 || m === meses[i - 1] + 1)
+  const nome = (m: number) => MESES_ABREV[m - 1].toLowerCase()
+  if (meses.length === 1) return nome(meses[0])
+  return seguidos ? `${nome(meses[0])}–${nome(meses[meses.length - 1])}` : meses.map(nome).join(', ')
 }
 
 function acumulado(valores: readonly (number | null)[]): (number | null)[] {
@@ -59,6 +76,10 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
   const previsto2027 = usePlanPrevisto(2027)
   const nomeSel = sel === 'escritorio' ? 'Escritório' : areaNome(sel)
   const fechados = Array.from({ length: ultimoMesFechado }, (_, i) => i + 1)
+  // A meta de 2026 só existe em parte do ano (jun–dez): atingimento e gap comparam esses meses.
+  const mesesMetaAno = Array.from({ length: 12 }, (_, i) => i + 1).filter((m) => (metaBasePorMes[m] ?? 0) > 0)
+  const periodoMeta = rotuloPeriodo(mesesMetaAno)
+  const periodoSemMeta = rotuloPeriodo(Array.from({ length: Math.max(0, (mesesMetaAno[0] ?? 1) - 1) }, (_, i) => i + 1))
 
   const r25 = useMemo(() => receitaDe(base2025, sel), [base2025, sel])
   const r26 = useMemo(() => receitaDe(base2026, sel), [base2026, sel])
@@ -77,6 +98,11 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
   const metaTotal = soma(meta26.map((v) => v ?? 0))
   const realMeta = soma(mesesMeta.map((m) => r26[m - 1]))
   const semArea2025 = soma(base2025.semArea)
+  // O aviso de "sem área" fala do VIOS (o que dá para classificar por cliente), sem o ajuste do controle.
+  const semArea2025Vios = semArea2025 - soma(base2025.ajusteReceita?.semArea ?? [])
+  const aj25 = useMemo(() => ajusteDe(base2025, sel), [base2025, sel])
+  const ajusteTotal2025 = soma(base2025.ajusteReceita?.total ?? [])
+  const receitaEscritorio2025 = soma(receitaDe(base2025, 'escritorio'))
 
   const dadosGrafico = useMemo(() => {
     const a25 = acumulado(r25)
@@ -114,11 +140,12 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
         const rr25 = base2025.areas[a.key].receita
         const rr26 = base2026.areas[a.key].receita
         const m26 = metaDe(a.key, metaBasePorMes, contribuicaoMeta)
-        const mm = m26.map((v, i) => (v != null ? i + 1 : 0)).filter(Boolean)
         const ytdReal = soma(fechados.map((m) => rr26[m - 1]))
         const me = soma(rr26.filter((_, i) => i + 1 > ultimoMesFechado))
         const metaA = soma(m26.map((v) => v ?? 0))
-        const realNaMeta = soma(mm.map((m) => rr26[m - 1]))
+        // Realizado + ME só nos meses com meta (jun–dez), para todas as áreas — as sem meta própria
+        // (Tributário, ADD) também contam na meta do escritório.
+        const realNaMeta = soma(mesesMetaAno.map((m) => rr26[m - 1]))
         return {
           a,
           ano25: soma(rr25),
@@ -126,12 +153,13 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
           ytdReal,
           me,
           fechamento: soma(rr26),
+          realNaMeta,
           meta: metaA,
           atingimento: metaA > 0 ? (realNaMeta / metaA) * 100 : null,
           gap: metaA > 0 ? realNaMeta - metaA : null,
         }
       }),
-    [base2025, base2026, metaBasePorMes, contribuicaoMeta, fechados, ultimoMesFechado],
+    [base2025, base2026, metaBasePorMes, contribuicaoMeta, fechados, mesesMetaAno, ultimoMesFechado],
   )
 
   const carteira2027 = useMemo(() => {
@@ -156,9 +184,19 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
         </Button>
       </div>
 
-      {semArea2025 > 0 && (
+      {base2025.ajusteReceita && (
         <Aviso>
-          Em 2025, {moeda(semArea2025)} de honorários estão em departamentos que não são área no VIOS (Facilities, Financeiro, BP…).
+          <strong>Receita 2025 provisória.</strong> O VIOS ainda não tem toda a receita de 2025: o painel usa o total mensal do controle
+          financeiro ({moeda(receitaEscritorio2025)}), e o VIOS tem {moeda(receitaEscritorio2025 - ajusteTotal2025)}. A diferença de{' '}
+          {moeda(ajusteTotal2025)} foi para a área de cada recebimento: ligado a um título do VIOS, a área do título; sem título, o rateio
+          ou o centro de custo do controle; o que não tem área, pela proporção do VIOS no mês.
+          {sel !== 'escritorio' && aj25 && ` Nesta área: ${moeda(soma(aj25))}.`} O ajuste sai quando o VIOS for corrigido.
+        </Aviso>
+      )}
+
+      {semArea2025Vios > 0 && (
+        <Aviso>
+          Em 2025, {moeda(semArea2025Vios)} de honorários estão em departamentos que não são área no VIOS (Facilities, Financeiro, BP…).
           Esse valor entra no total do escritório, mas fica fora das áreas até ser classificado em “Classificar receita sem área”.
         </Aviso>
       )}
@@ -169,7 +207,7 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
           valor={moedaCurta(ano25)}
           sub={moeda(ano25)}
           fenixChave="planejamento.receita.2025"
-          explicar={() => fenixReceitaAno({ titulo: `Receita 2025 — ${nomeSel}`, ano: 2025, areaNome: nomeSel, porMes: r25 })}
+          explicar={() => fenixReceitaAno({ titulo: `Receita 2025 — ${nomeSel}`, ano: 2025, areaNome: nomeSel, porMes: r25, ajuste: aj25 })}
         />
         <PlanKpi
           rotulo={`Realizado 2026 (jan–${rotuloFechado.toLowerCase()})`}
@@ -214,7 +252,11 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
         <PlanKpi
           rotulo="Meta 2026 (meses com meta)"
           valor={metaTotal > 0 ? moedaCurta(metaTotal) : '—'}
-          sub={metaTotal > 0 ? `${mesesMeta.length} meses · realizado + ME: ${moedaCurta(realMeta)}` : 'Área sem meta na Receita'}
+          sub={
+            metaTotal > 0
+              ? `${rotuloPeriodo(mesesMeta)} (${mesesMeta.length} meses) · realizado + ME no período: ${moedaCurta(realMeta)}`
+              : 'Área sem meta na Receita'
+          }
         />
         <PlanKpi
           rotulo="Atingimento projetado da meta"
@@ -227,14 +269,15 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
               tela: 'Receita',
               titulo: `Atingimento projetado da meta 2026 — ${nomeSel}`,
               valor: metaTotal > 0 ? pct((realMeta / metaTotal) * 100) : '—',
-              resumo: 'Realizado nos meses fechados + Melhor Estimativa nos meses abertos, só nos meses que têm meta, dividido pela meta desses meses.',
-              formula: 'Atingimento = (realizado + ME nos meses com meta) ÷ meta × 100',
+              resumo: `A meta de 2026 vale só de ${periodoMeta}. Realizado nos meses fechados + Melhor Estimativa nos meses abertos, só nesses meses, dividido pela meta desses meses.`,
+              formula: `Atingimento = (realizado + ME de ${periodoMeta}) ÷ meta de ${periodoMeta} × 100`,
               conta: [
-                { rotulo: 'Realizado + ME (meses com meta)', valor: moeda(realMeta), numero: realMeta },
-                { rotulo: 'Meta', valor: moeda(metaTotal), numero: metaTotal, operador: '÷' },
+                { rotulo: `Realizado + ME (${periodoMeta})`, valor: moeda(realMeta), numero: realMeta },
+                { rotulo: `Meta (${periodoMeta})`, valor: moeda(metaTotal), numero: metaTotal, operador: '÷' },
               ],
               regras: [
                 'Meta = meta mensal da Receita (Configurações › Metas); por área, × a contribuição da área na meta.',
+                'A receita de jan–mai não entra no atingimento: nesses meses não havia meta.',
                 'ADD e Tributário não têm meta própria na Receita.',
               ],
               fonteTecnica: 'app_settings.receita_metas × RECEITA_META_CONTRIBUICAO_AREA',
@@ -279,6 +322,7 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
         <TabelaMeses
           linhas={[
             { rotulo: 'Receita 2025', valores: r25 },
+            ...(aj25 ? [{ rotulo: 'dos quais: ajuste do controle', valores: aj25, sub: true }] : []),
             { rotulo: 'Receita 2026', valores: r26, projetado: base2026.projetado, destaque: true },
             { rotulo: 'Meta 2026', valores: meta26 },
             {
@@ -294,17 +338,18 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
 
       <Secao
         titulo="Meta × Melhor Estimativa × Realizado por área — 2026"
-        subtitulo={`Realizado até ${rotuloFechado.toLowerCase()}; ME nos meses abertos. Atingimento e gap só nos meses com meta.`}
+        subtitulo={`Realizado até ${rotuloFechado.toLowerCase()}; ME nos meses abertos. A meta de 2026 vale só de ${periodoMeta}: atingimento e gap comparam o realizado + ME desses meses com a meta desses meses${periodoSemMeta ? ` (${periodoSemMeta} fica fora)` : ''}.`}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-xs">
+          <table className="w-full min-w-[960px] text-xs">
             <thead className="border-b border-slate-200 text-slate-500">
               <tr>
                 <th className="px-2 py-1.5 text-left font-medium">Área</th>
-                <th className="px-2 py-1.5 text-right font-medium">Realizado YTD</th>
+                <th className="px-2 py-1.5 text-right font-medium">Realizado jan–{rotuloFechado.toLowerCase()}</th>
                 <th className="px-2 py-1.5 text-right font-medium">Melhor Estimativa</th>
                 <th className="px-2 py-1.5 text-right font-medium">Fechamento 2026</th>
-                <th className="px-2 py-1.5 text-right font-medium">Meta</th>
+                <th className="border-l border-slate-200 px-2 py-1.5 text-right font-medium">Realizado + ME {periodoMeta}</th>
+                <th className="px-2 py-1.5 text-right font-medium">Meta {periodoMeta}</th>
                 <th className="px-2 py-1.5 text-right font-medium">Atingimento</th>
                 <th className="px-2 py-1.5 text-right font-medium">Gap</th>
               </tr>
@@ -315,7 +360,8 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
                   <td className="px-2 py-1.5 text-slate-800">{l.a.nome}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{moeda(l.ytdReal)}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums italic text-indigo-700">{moeda(l.me)}</td>
-                  <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{moeda(l.fechamento)}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{moeda(l.fechamento)}</td>
+                  <td className="border-l border-slate-200 px-2 py-1.5 text-right font-semibold tabular-nums">{moeda(l.realNaMeta)}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{l.meta > 0 ? moeda(l.meta) : '—'}</td>
                   <td
                     className={cn(
@@ -328,18 +374,34 @@ export function ReceitaTab({ base2025, base2026, ultimoMesFechado, metaBasePorMe
                   <td className="px-2 py-1.5 text-right tabular-nums">{l.gap != null ? moeda(l.gap) : '—'}</td>
                 </tr>
               ))}
-              <tr className="bg-slate-50 font-semibold">
-                <td className="px-2 py-1.5">Total das áreas</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(linhasArea.map((l) => l.ytdReal)))}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(linhasArea.map((l) => l.me)))}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(linhasArea.map((l) => l.fechamento)))}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(linhasArea.map((l) => l.meta)))}</td>
-                <td className="px-2 py-1.5" />
-                <td className="px-2 py-1.5" />
-              </tr>
+              {(() => {
+                const realTot = soma(linhasArea.map((l) => l.realNaMeta))
+                const metaTot = soma(linhasArea.map((l) => l.meta))
+                const ating = metaTot > 0 ? (realTot / metaTot) * 100 : null
+                return (
+                  <tr className="bg-slate-50 font-semibold">
+                    <td className="px-2 py-1.5">Total das áreas</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(linhasArea.map((l) => l.ytdReal)))}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(linhasArea.map((l) => l.me)))}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(linhasArea.map((l) => l.fechamento)))}</td>
+                    <td className="border-l border-slate-200 px-2 py-1.5 text-right tabular-nums">{moeda(realTot)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{metaTot > 0 ? moeda(metaTot) : '—'}</td>
+                    <td
+                      className={cn('px-2 py-1.5 text-right tabular-nums', ating != null && (ating >= 100 ? 'text-emerald-700' : 'text-red-700'))}
+                    >
+                      {pct(ating)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{metaTot > 0 ? moeda(realTot - metaTot) : '—'}</td>
+                  </tr>
+                )
+              })()}
             </tbody>
           </table>
         </div>
+        <p className="mt-2 text-[11px] text-slate-500">
+          Tributário e Distressed Deals não têm meta própria (a meta do escritório é dividida entre as outras cinco áreas), mas a
+          receita delas de {periodoMeta} conta no total do escritório — por isso o total bate com o atingimento do painel da Receita.
+        </p>
       </Secao>
 
       <div className="grid gap-4 lg:grid-cols-2">

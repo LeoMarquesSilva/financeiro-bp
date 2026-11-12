@@ -15,6 +15,14 @@ export type PlanReceitaSemAreaRow = {
   classificado_em: string | null
 }
 
+/** Ajuste provisório da receita (controle financeiro − VIOS) por mês e área. */
+export type PlanReceitaAjusteRow = {
+  mes: number
+  area_key: string
+  valor: number
+  fonte: string
+}
+
 export type PlanMargemRow = {
   area_key: string
   mes: number

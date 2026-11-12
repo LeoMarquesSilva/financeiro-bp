@@ -19,12 +19,14 @@ import type {
   PlanMargemRow,
   PlanOpexBlocosRow,
   PlanPessoasRow,
+  PlanReceitaAjusteRow,
   PlanReceitaRow,
   PlanReceitaSemAreaRow,
   PlanTimesheetRow,
   PlanTituloSemAreaRow,
 } from '../types'
 import {
+  aplicarAjusteReceita,
   estimarImpostoPelaTaxa,
   mePorAreaPlanejamento,
   montarBaseRealizada,
@@ -86,6 +88,10 @@ export function usePlanTitulosCliente(ano: number, cliente: string | null): {
 
 export function usePlanMargem(ano: number): Q<PlanMargemRow[]> {
   return useQuery({ queryKey: [...K, 'margem', ano], queryFn: () => planejamentoService.margemMensal(ano), staleTime: STALE })
+}
+
+export function usePlanReceitaAjustes(ano: number): Q<PlanReceitaAjusteRow[]> {
+  return useQuery({ queryKey: [...K, 'receita-ajuste', ano], queryFn: () => planejamentoService.receitaAjustes(ano), staleTime: STALE })
 }
 
 export function usePlanOpexBlocos(ano: number): Q<PlanOpexBlocosRow[]> {
@@ -231,20 +237,23 @@ export function usePlanBases() {
   const m26 = usePlanMargem(ANO_ATUAL)
   const o25 = usePlanOpexBlocos(ANO_ANTERIOR)
   const o26 = usePlanOpexBlocos(ANO_ATUAL)
+  // Ajuste provisório da receita 2025 (controle financeiro − VIOS) até o VIOS ser corrigido.
+  const aj25 = usePlanReceitaAjustes(ANO_ANTERIOR)
   const me = usePlanMe2026()
   const fechado = ultimoMesFechado(ANO_ATUAL)
 
   const bases = useMemo(() => {
-    if (!m25.data || !m26.data || !o25.data || !o26.data) return null
+    if (!m25.data || !m26.data || !o25.data || !o26.data || !aj25.data) return null
     const real26 = montarBaseRealizada(ANO_ATUAL, m26.data, o26.data)
     const fechados = Array.from({ length: fechado }, (_, i) => i + 1)
     const mePlan: Record<AreaKey, Record<number, number>> = mePorAreaPlanejamento(me.mePorReceitaKey, real26, fechados)
     const base2026: BaseAno = projetarAno(real26, fechado, mePlan)
-    const base2025 = estimarImpostoPelaTaxa(montarBaseRealizada(ANO_ANTERIOR, m25.data, o25.data), real26, fechados)
+    const real25 = aplicarAjusteReceita(montarBaseRealizada(ANO_ANTERIOR, m25.data, o25.data), aj25.data)
+    const base2025 = estimarImpostoPelaTaxa(real25, real26, fechados)
     return { base2025, base2026, real2026: real26, mePlan, fechados }
-  }, [m25.data, m26.data, o25.data, o26.data, me.mePorReceitaKey, fechado])
+  }, [m25.data, m26.data, o25.data, o26.data, aj25.data, me.mePorReceitaKey, fechado])
 
-  const consultas = [m25, m26, o25, o26]
+  const consultas = [m25, m26, o25, o26, aj25]
   return {
     ...bases,
     me,

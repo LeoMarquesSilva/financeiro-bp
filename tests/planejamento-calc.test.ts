@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { AREA_KEYS_2027, soma } from '../src/features/planejamento/utils/areasPlanejamento.ts'
 import {
+  aplicarAjusteReceita,
   estimarImpostoPelaTaxa,
   mePorAreaPlanejamento,
   montarBaseRealizada,
@@ -71,12 +72,12 @@ test('projeção 2026: receita pela ME, imposto pela taxa efetiva, custos repete
   assert.deepEqual(p.projetado.slice(9), [false, true, true])
 })
 
-test('ME de "outras" vai para ADD e Tributário pela receita realizada de cada uma', () => {
+test('ME de "outras" vai toda para Tributário: Distressed Deals está encerrada e não recebe ME', () => {
   const rows = [margemRow('add', 1, { receita_bruta: 300 }), margemRow('tributario', 1, { receita_bruta: 100 })]
   const base = montarBaseRealizada(2026, rows, [])
   const me = mePorAreaPlanejamento({ outras: { 11: 1000 } }, base, [1])
-  assert.equal(me.add[11], 750)
-  assert.equal(me.tributario[11], 250)
+  assert.equal(me.add[11] ?? 0, 0)
+  assert.equal(me.tributario[11], 1000)
 })
 
 test('imposto 2025 estimado pela taxa efetiva de 2026 da área', () => {
@@ -86,6 +87,30 @@ test('imposto 2025 estimado pela taxa efetiva de 2026 da área', () => {
   assert.ok(est.impostoEstimado)
   assert.ok(Math.abs(est.areas.civel.impostos[0] - 50_000 * 0.08) < 1e-6)
   assert.equal(est.areas.civel.impostosNf[0], 0)
+})
+
+test('ajuste provisório da receita 2025 soma por área e no sem área, e o imposto estimado segue a receita ajustada', () => {
+  const b26 = baseUmaArea()
+  const b25 = montarBaseRealizada(
+    2025,
+    [margemRow('civel', 9, { receita_bruta: 50_000, impostos: 0 }), margemRow('sem_area', 9, { receita_bruta: 4_000 })],
+    [],
+  )
+  const fonte = 'controle'
+  const ajustada = aplicarAjusteReceita(b25, [
+    { mes: 9, area_key: 'civel', valor: 195_700, fonte },
+    { mes: 9, area_key: 'insolvencia', valor: -10_000, fonte },
+    { mes: 9, area_key: 'sem_area', valor: -1_000, fonte },
+  ])
+  assert.equal(ajustada.areas.civel.receita[8], 245_700)
+  assert.equal(ajustada.areas.insolvencia.receita[8], -10_000)
+  assert.equal(ajustada.semArea[8], 3_000)
+  assert.equal(ajustada.ajusteReceita?.total[8], 184_700)
+  assert.equal(b25.areas.civel.receita[8], 50_000, 'não altera a base original')
+  const est = estimarImpostoPelaTaxa(ajustada, b26, [1, 2, 3])
+  assert.ok(Math.abs(est.areas.civel.impostos[8] - 245_700 * 0.08) < 1e-6)
+  assert.ok(est.ajusteReceita, 'o ajuste continua marcado depois de estimar o imposto')
+  assert.equal(aplicarAjusteReceita(b25, []).ajusteReceita, null)
 })
 
 test('simulador: crescimento, receita nova, sazonalidade, alíquota, reajuste e contratações', () => {

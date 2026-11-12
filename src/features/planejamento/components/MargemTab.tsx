@@ -75,6 +75,12 @@ export function MargemTab({ base2025, base2026, ultimoMesFechado }: Props) {
         É o resultado do DL antes do rateio da estrutura (Facilities, Financeiro, RH, TI, Marketing, Comercial). Margem % = margem ÷
         receita líquida, como no DL.
       </Aviso>
+      {base2025.ajusteReceita && (
+        <Aviso>
+          Receita 2025 provisória: inclui {moeda(soma(base2025.ajusteReceita.total))} do controle financeiro que ainda não está no VIOS
+          (detalhe na aba Receita). O imposto de 2025 é estimado sobre a receita ajustada.
+        </Aviso>
+      )}
 
       <Secao titulo="Margem de contribuição por área — 2025 × 2026" subtitulo={`2026 = realizado até ${rotuloFechado} + projeção de nov–dez.`}>
         <div className="overflow-x-auto">
