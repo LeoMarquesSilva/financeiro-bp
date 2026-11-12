@@ -19,6 +19,7 @@ import type {
   PlanMargemRow,
   PlanOpexBlocosRow,
   PlanPessoasRow,
+  PlanRateioTituloRow,
   PlanReceitaAjusteRow,
   PlanReceitaRow,
   PlanReceitaSemAreaRow,
@@ -34,6 +35,7 @@ import {
   type BaseAno,
 } from '../utils/planejamentoBase'
 import type { AreaKey } from '../utils/areasPlanejamento'
+import type { LinhaRateio } from '../utils/rateioTitulo'
 import type { DadosOpsLegais } from '../utils/indicadoresOperacionais'
 
 /** `src/vite-env.d.ts` declara o react-query sem tipos: os retornos são tipados aqui. */
@@ -84,6 +86,30 @@ export function usePlanTitulosCliente(ano: number, cliente: string | null): {
     staleTime: STALE,
   })
   return { titulos, historico }
+}
+
+/** Rateio por % dos títulos (só os que têm rateio). */
+export function usePlanRateiosTitulos(titulos: readonly number[]): Q<PlanRateioTituloRow[]> {
+  const ids = [...new Set(titulos)].sort((a, b) => a - b)
+  return useQuery({
+    queryKey: [...K, 'rateio-titulos', ids.join(',')],
+    queryFn: () => planejamentoService.rateiosTitulos(ids),
+    enabled: ids.length > 0,
+    staleTime: STALE,
+  })
+}
+
+export function useSalvarRateioTitulos() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { titulos: number[]; linhas: LinhaRateio[] }) => planejamentoService.salvarRateioTitulos(v.titulos, v.linhas),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...K, 'rateio-titulos'] })
+      void qc.invalidateQueries({ queryKey: [...K, 'sem-area'] })
+      void qc.invalidateQueries({ queryKey: [...K, 'receita'] })
+      void qc.invalidateQueries({ queryKey: [...K, 'margem'] })
+    },
+  }) as { mutateAsync: (v: { titulos: number[]; linhas: LinhaRateio[] }) => Promise<void>; isPending: boolean }
 }
 
 export function usePlanMargem(ano: number): Q<PlanMargemRow[]> {
