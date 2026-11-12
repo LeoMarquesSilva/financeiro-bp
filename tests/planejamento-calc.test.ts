@@ -10,6 +10,7 @@ import {
   totaisArea,
 } from '../src/features/planejamento/utils/planejamentoBase.ts'
 import {
+  desdobrarCrescimento,
   linhasMetasOficiais,
   normalizarPremissas,
   premissasPadrao,
@@ -153,7 +154,9 @@ test('premissas salvas incompletas são completadas com o padrão', () => {
   const pad = premissasPadrao({ aliquotaPct: 6, inadimplenciaMetaPct: 10 })
   const p = normalizarPremissas({ areas: { civel: { crescimentoPct: '12' } }, operacionais: { sla_protocolo: { escritorio: 90, areas: { Cível: '' } } } }, pad)
   assert.equal(p.areas.civel.crescimentoPct, 12)
-  assert.equal(p.areas.trabalhista.crescimentoPct, 0)
+  assert.equal(p.areas.trabalhista.crescimentoPct, null, 'área sem % salvo fica no automático')
+  assert.equal(p.escritorio.crescimentoReceitaPct, null, 'cenário antigo com % por área: sem meta do escritório')
+  assert.equal(normalizarPremissas({}, pad).escritorio.crescimentoReceitaPct, 0)
   assert.equal(p.escritorio.aliquotaPct, 6)
   assert.equal(p.operacionais.sla_protocolo.escritorio, 90)
   assert.equal(p.operacionais.sla_protocolo.areas['Cível'], null)
@@ -198,7 +201,7 @@ test('indicadores jurídicos: acumulado é a soma das razões, não a média dos
   assert.equal(v.retencao?.acumulado, null)
 })
 
-test('área encerrada (Distressed Deals) não tem projeção em 2027, mas a receita 2026 fica na base do escritório', () => {
+test('área encerrada (Distressed Deals) não tem projeção em 2027; com meta de 0% as automáticas cobrem a receita dela', () => {
   const rows = [margemRow('add', 1, { receita_bruta: 50_000 }), margemRow('civel', 1, { receita_bruta: 100_000 })]
   const base = montarBaseRealizada(2026, rows, [])
   const p = premissasPadrao({ aliquotaPct: 10, inadimplenciaMetaPct: 10 })
@@ -209,5 +212,74 @@ test('área encerrada (Distressed Deals) não tem projeção em 2027, mas a rece
   assert.equal(soma(r.areas.add.margem), 0)
   assert.equal(r.areas.add.receitaBaseAno, 50_000)
   assert.equal(r.escritorio.receitaBaseAno, 150_000)
-  assert.equal(r.escritorio.receitaAno, 100_000)
+  // Meta de 0%: o escritório mantém 150 mil, então o Cível (automático) cresce 50%.
+  assert.ok(Math.abs(r.escritorio.receitaAno - 150_000) < 1e-6)
+  assert.ok(Math.abs((r.areas.civel.crescimentoOrganicoPct ?? 0) - 50) < 1e-9)
+  // Sem meta do escritório (cenário antigo), o total é a soma das áreas.
+  p.escritorio.crescimentoReceitaPct = null
+  assert.equal(simular(base, p).escritorio.receitaAno, 100_000)
+})
+
+test('desdobramento: automáticas crescem o mesmo % e fecham a meta; sem automática, mostra a diferença', () => {
+  const rows = [
+    margemRow('civel', 1, { receita_bruta: 100_000 }),
+    margemRow('trabalhista', 1, { receita_bruta: 300_000 }),
+    margemRow('insolvencia', 1, { receita_bruta: 600_000 }),
+  ]
+  const base = montarBaseRealizada(2026, rows, [])
+  const p = premissasPadrao({ aliquotaPct: 10, inadimplenciaMetaPct: 10 })
+  p.escritorio.crescimentoReceitaPct = 10
+  p.areas.insolvencia.crescimentoPct = 20
+  p.areas.civel.receitaNova = 10_000
+  const d = desdobrarCrescimento(base, p)
+  assert.equal(d.metaReceita, 1_100_000)
+  // Insolvência fixa em 720 mil; Cível e Trabalhista (400 mil de base + 10 mil de receita nova) fecham 380 mil.
+  assert.ok(Math.abs(d.crescimentoAutomaticoPct - ((380_000 - 10_000) / 400_000 - 1) * 100) < 1e-9)
+  assert.deepEqual(d.areasAutomaticas.filter((k) => ['civel', 'trabalhista', 'insolvencia'].includes(k)), ['trabalhista', 'civel'])
+  assert.ok(Math.abs(d.diferenca) < 1e-6)
+  const r = simular(base, p)
+  assert.ok(Math.abs(r.escritorio.receitaAno - 1_100_000) < 1e-6)
+  assert.equal(r.areas.insolvencia.automatico, false)
+  assert.equal(r.areas.civel.automatico, true)
+  // Todas fixadas: a soma não fecha e a diferença aparece.
+  for (const k of AREA_KEYS_2027) p.areas[k].crescimentoPct = 0
+  const d2 = desdobrarCrescimento(base, p)
+  assert.equal(d2.areasAutomaticas.length, 0)
+  assert.ok(Math.abs(d2.diferenca - (1_010_000 - 1_100_000)) < 1e-6)
+})
+
+test('pessoas: várias contratações por área, reajuste e ajustes na equipe atual; ponte soma o custo 2027', () => {
+  const base = baseUmaArea()
+  const pad = premissasPadrao({ aliquotaPct: 10, inadimplenciaMetaPct: 10 })
+  const p = normalizarPremissas(
+    {
+      escritorio: { reajustePct: 5, mesReajuste: 5 },
+      areas: {
+        civel: {
+          variacaoPessoasPct: -10,
+          contratacoes: [
+            { descricao: 'Advogado pleno', qtd: 2, custoMensal: 9_000, mesInicio: 3 },
+            { descricao: 'Estagiário', qtd: 1, custoMensal: 2_000, mesInicio: 8 },
+          ],
+        },
+      },
+    },
+    pad,
+  )
+  const a = simular(base, p).areas.civel
+  assert.equal(a.novasPessoas[1], 0)
+  assert.equal(a.novasPessoas[2], 2)
+  assert.equal(a.novasPessoas[11], 3)
+  assert.equal(a.contratacoes[7], 20_000)
+  assert.ok(Math.abs(a.pessoas[0] - 27_000) < 1e-9)
+  assert.ok(Math.abs(a.pessoas[5] - (27_000 * 1.05 + 18_000)) < 1e-9)
+  const ponte = a.pontePessoas
+  assert.equal(ponte.base, 360_000)
+  assert.ok(Math.abs(ponte.ajustes + 36_000) < 1e-9)
+  assert.ok(Math.abs(ponte.reajuste - 27_000 * 0.05 * 8) < 1e-9)
+  assert.equal(ponte.contratacoes, 18_000 * 10 + 2_000 * 5)
+  assert.ok(Math.abs(ponte.base + ponte.ajustes + ponte.reajuste + ponte.contratacoes - soma(a.pessoas)) < 1e-6)
+  // Formato antigo (uma contratação por área) vira uma linha da lista.
+  const antigo = normalizarPremissas({ areas: { civel: { contratacoes: 2, custoContratacao: 10_000, mesInicioContratacao: 4 } } }, pad)
+  assert.deepEqual(antigo.areas.civel.contratacoes, [{ descricao: '', qtd: 2, custoMensal: 10_000, mesInicio: 4 }])
 })

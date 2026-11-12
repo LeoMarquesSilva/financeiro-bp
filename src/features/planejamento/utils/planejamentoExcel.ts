@@ -53,8 +53,38 @@ export const LINHA_BASE_ESTRUTURA = 5 + AREAS_PLANEJAMENTO.length * BASE_LINHAS.
 export const LINHA_BASE_CTRL_NR = LINHA_BASE_ESTRUTURA + 1
 const LINHA_BASE_PROJ = LINHA_BASE_ESTRUTURA + 2
 
+/** Aba Premissas: nome definido → linha (coluna B). As oito primeiras são editáveis. */
+export const LINHAS_PREMISSAS_ESCRITORIO = [
+  ['cresc_escritorio', 4],
+  ['aliquota', 5],
+  ['reajuste', 6],
+  ['mes_reajuste', 7],
+  ['var_controladoria', 8],
+  ['var_estrutura', 9],
+  ['inadimplencia', 10],
+  ['distribuicao', 11],
+] as const
+const LINHAS_CALCULADAS = [
+  ['receita_2026_total', 13],
+  ['cresc_auto', 14],
+] as const
+/** Todos os nomes definidos da aba Premissas (para conferir a planilha fora do Excel). */
+export const NOMES_PREMISSAS: Record<string, string> = Object.fromEntries(
+  [...LINHAS_PREMISSAS_ESCRITORIO, ...LINHAS_CALCULADAS].map(([n, r]) => [n, `'Premissas'!$B$${r}`]),
+)
+const linhaNome = (nome: string) =>
+  [...LINHAS_PREMISSAS_ESCRITORIO, ...LINHAS_CALCULADAS].find(([n]) => n === nome)?.[1] ?? 0
+export const MODO_AUTO = 'Automático'
+export const MODO_DEFINIDO = 'Definido'
+
 /** Premissas, Receita 2027 e Margem 2027: índice em AREAS_2027 (só áreas ativas). */
-export const LINHA_PREMISSA_AREA = (iArea: number) => 14 + iArea
+export const LINHA_PREMISSA_AREA = (iArea: number) => 20 + iArea
+/** Linhas da tabela de contratações na aba Premissas (sobra espaço para a pessoa incluir mais). */
+export function faixaContratacoes(p: Premissas): [number, number] {
+  const ini = LINHA_PREMISSA_AREA(AREAS_PLANEJAMENTO.length) + 3
+  const n = soma(AREAS_2027.map((a) => p.areas[a.key].contratacoes.length))
+  return [ini, ini + Math.max(30, n + 10) - 1]
+}
 export const linhaReceita = (iArea: number) => 5 + iArea
 const ENCERRADAS = AREAS_PLANEJAMENTO.filter((a) => a.encerrada)
 const LINHA_RECEITA_TOTAL = 5 + AREAS_2027.length + ENCERRADAS.length
@@ -121,62 +151,134 @@ function linhaTotal(ws: ExcelJS.Worksheet, linha: number, ate: number) {
   }
 }
 
-function abaPremissas(wb: ExcelJS.Workbook, p: Premissas) {
-  const ws = wb.addWorksheet(ABAS.premissas, { views: [{ state: 'frozen', ySplit: 13 }] })
+function abaPremissas(wb: ExcelJS.Workbook, input: PlanilhaInput) {
+  const p = input.premissas
+  const ws = wb.addWorksheet(ABAS.premissas, { views: [{ state: 'frozen', ySplit: 2 }] })
   titulo(ws, 'Premissas do cenário', 'Células em amarelo são editáveis: mude e as outras abas recalculam. Percentuais em pontos (10 = 10%).')
   ws.getCell('A3').value = 'Escritório'
   ws.getCell('A3').font = { bold: true }
   const e = p.escritorio
-  const linhas: [string, number | string, string, string | undefined][] = [
-    ['Alíquota de imposto 2027 sobre a receita (%)', e.aliquotaPct, 'aliquota', FMT_PCT_NUM],
-    ['Reajuste da folha (%)', e.reajustePct, 'reajuste', FMT_PCT_NUM],
-    ['Mês do reajuste (1 a 12)', e.mesReajuste, 'mes_reajuste', '0'],
-    ['Variação da Controladoria (%)', e.variacaoControladoriaPct, 'var_controladoria', FMT_PCT_NUM],
-    ['Variação da estrutura (%)', e.variacaoEstruturaPct, 'var_estrutura', FMT_PCT_NUM],
-    ['Meta de inadimplência (%)', e.inadimplenciaMetaPct, 'inadimplencia', FMT_PCT_NUM],
-    ['Distribuição mensal (sazonal ou linear)', e.distribuicao, 'distribuicao', undefined],
-  ]
-  linhas.forEach(([rot, v, nome, fmt], i) => {
-    const r = 4 + i
-    ws.getCell(`A${r}`).value = rot
-    editavel(ws.getCell(`B${r}`), v, fmt)
+  const d = input.resultado.desdobramento
+  // Cenário sem meta do escritório: a planilha usa o crescimento que resulta da soma das áreas (dá o mesmo resultado).
+  const cresc = e.crescimentoReceitaPct ?? (d.receitaBase > 0 ? (input.resultado.escritorio.receitaAno / d.receitaBase - 1) * 100 : 0)
+  const valores: Record<string, number | string> = {
+    cresc_escritorio: cresc,
+    aliquota: e.aliquotaPct,
+    reajuste: e.reajustePct,
+    mes_reajuste: e.mesReajuste,
+    var_controladoria: e.variacaoControladoriaPct,
+    var_estrutura: e.variacaoEstruturaPct,
+    inadimplencia: e.inadimplenciaMetaPct,
+    distribuicao: e.distribuicao,
+  }
+  const rotulos: Record<string, [string, string | undefined]> = {
+    cresc_escritorio: ['Meta de crescimento da receita do escritório (%) — sobre 2026 (realizado + ME)', FMT_PCT_NUM],
+    aliquota: ['Alíquota de imposto 2027 sobre a receita (%)', FMT_PCT_NUM],
+    reajuste: ['Reajuste salarial da equipe atual (%)', FMT_PCT_NUM],
+    mes_reajuste: ['Mês do reajuste (1 a 12)', '0'],
+    var_controladoria: ['Variação da Controladoria (%)', FMT_PCT_NUM],
+    var_estrutura: ['Variação da estrutura (%)', FMT_PCT_NUM],
+    inadimplencia: ['Meta de inadimplência (%)', FMT_PCT_NUM],
+    distribuicao: ['Distribuição mensal (sazonal ou linear)', undefined],
+  }
+  for (const [nome, r] of LINHAS_PREMISSAS_ESCRITORIO) {
+    ws.getCell(`A${r}`).value = rotulos[nome][0]
+    editavel(ws.getCell(`B${r}`), valores[nome], rotulos[nome][1])
     wb.definedNames.add(`${q(ABAS.premissas)}!$B$${r}`, nome)
-  })
-  ws.getCell('B10').dataValidation = { type: 'list', allowBlank: false, formulae: ['"sazonal,linear"'] }
-  ws.getCell('B6').dataValidation = { type: 'whole', operator: 'between', allowBlank: false, formulae: [1, 12] }
+  }
+  ws.getCell(`B${linhaNome('distribuicao')}`).dataValidation = { type: 'list', allowBlank: false, formulae: ['"sazonal,linear"'] }
+  ws.getCell(`B${linhaNome('mes_reajuste')}`).dataValidation = { type: 'whole', operator: 'between', allowBlank: false, formulae: [1, 12] }
 
-  ws.getCell('A12').value = 'Por área'
-  ws.getCell('A12').font = { bold: true }
-  cabecalho(ws, 13, [
+  // Desdobramento da meta: áreas no automático crescem o mesmo % e fecham a meta do escritório.
+  const a0 = LINHA_PREMISSA_AREA(0)
+  const a1 = LINHA_PREMISSA_AREA(AREAS_2027.length - 1)
+  const rng = (L: string) => `$${L}$${a0}:$${L}$${a1}`
+  const b26 = `${q(ABAS.base26)}!`
+  const rTotal = linhaNome('receita_2026_total')
+  const rAuto = linhaNome('cresc_auto')
+  ws.getCell(`A${rTotal}`).value = 'Receita 2026 do escritório (todas as áreas, inclusive encerradas)'
+  formula(ws, `B${rTotal}`, AREAS_PLANEJAMENTO.map((_, i) => `${b26}O${linhaBase(i, 0)}`).join('+'), d.receitaBase, FMT_MOEDA)
+  wb.definedNames.add(`${q(ABAS.premissas)}!$B$${rTotal}`, 'receita_2026_total')
+  ws.getCell(`A${rAuto}`).value = 'Crescimento das áreas no automático (%) — calculado para fechar a meta'
+  formula(
+    ws,
+    `B${rAuto}`,
+    `IF(SUMIF(${rng('B')},"${MODO_AUTO}",${rng('E')})<=0,0,MAX(-100,((receita_2026_total*(1+cresc_escritorio/100)-SUM(${rng('J')})-SUMIF(${rng('B')},"${MODO_AUTO}",${rng('D')}))/SUMIF(${rng('B')},"${MODO_AUTO}",${rng('E')})-1)*100))`,
+    d.crescimentoAutomaticoPct,
+    FMT_PCT_NUM,
+  )
+  wb.definedNames.add(`${q(ABAS.premissas)}!$B$${rAuto}`, 'cresc_auto')
+  ws.getCell(`A${rAuto + 1}`).value = 'Meta de receita 2027 do escritório'
+  formula(ws, `B${rAuto + 1}`, `receita_2026_total*(1+cresc_escritorio/100)`, d.metaReceita ?? input.resultado.escritorio.receitaAno, FMT_MOEDA)
+  ws.getCell(`A${rAuto + 2}`).value = 'Soma das áreas − meta (0 = as áreas fecham a meta)'
+  formula(ws, `B${rAuto + 2}`, `SUM(${rng('G')})-B${rAuto + 1}`, d.diferenca, FMT_MOEDA)
+
+  const rArea = a0 - 2
+  ws.getCell(`A${rArea}`).value = 'Por área'
+  ws.getCell(`A${rArea}`).font = { bold: true }
+  cabecalho(ws, a0 - 1, [
     'Área',
-    'Crescimento da receita (%)',
+    'Crescimento: Automático ou Definido',
+    'Crescimento definido (%)',
     'Receita nova (R$/ano)',
-    'Variação pessoas (%)',
+    'Receita 2026',
+    'Crescimento usado (%)',
+    'Meta de receita 2027',
+    'Ajustes na equipe atual (%)',
     'Variação demais despesas (%)',
-    'Contratações (qtd)',
-    'Custo mensal por contratação (R$)',
-    'Mês de início (1 a 12)',
+    '(apoio) meta das áreas com % definido',
   ])
   AREAS_2027.forEach((a, i) => {
     const r = LINHA_PREMISSA_AREA(i)
     const pa = p.areas[a.key]
+    const ra = input.resultado.areas[a.key]
     ws.getCell(`A${r}`).value = a.nome
-    editavel(ws.getCell(`B${r}`), pa.crescimentoPct, FMT_PCT_NUM)
-    editavel(ws.getCell(`C${r}`), pa.receitaNova, FMT_MOEDA)
-    editavel(ws.getCell(`D${r}`), pa.variacaoPessoasPct, FMT_PCT_NUM)
-    editavel(ws.getCell(`E${r}`), pa.variacaoDemaisPct, FMT_PCT_NUM)
-    editavel(ws.getCell(`F${r}`), pa.contratacoes, '0')
-    editavel(ws.getCell(`G${r}`), pa.custoContratacao, FMT_MOEDA)
-    editavel(ws.getCell(`H${r}`), pa.mesInicioContratacao, '0')
+    editavel(ws.getCell(`B${r}`), pa.crescimentoPct == null ? MODO_AUTO : MODO_DEFINIDO)
+    ws.getCell(`B${r}`).dataValidation = { type: 'list', allowBlank: false, formulae: [`"${MODO_AUTO},${MODO_DEFINIDO}"`] }
+    editavel(ws.getCell(`C${r}`), pa.crescimentoPct, FMT_PCT_NUM)
+    editavel(ws.getCell(`D${r}`), pa.receitaNova, FMT_MOEDA)
+    formula(ws, `E${r}`, `${b26}O${linhaBase(idxBase(a.key), 0)}`, ra.receitaBaseAno, FMT_MOEDA)
+    formula(ws, `F${r}`, `IF(B${r}="${MODO_DEFINIDO}",C${r},cresc_auto)`, ra.crescimentoOrganicoPct ?? 0, FMT_PCT_NUM)
+    formula(ws, `G${r}`, `E${r}*(1+F${r}/100)+D${r}`, ra.receitaAno, FMT_MOEDA)
+    editavel(ws.getCell(`H${r}`), pa.variacaoPessoasPct, FMT_PCT_NUM)
+    editavel(ws.getCell(`I${r}`), pa.variacaoDemaisPct, FMT_PCT_NUM)
+    formula(
+      ws,
+      `J${r}`,
+      `IF(B${r}="${MODO_DEFINIDO}",E${r}*(1+C${r}/100)+D${r},0)`,
+      pa.crescimentoPct == null ? 0 : ra.receitaAno,
+      FMT_MOEDA,
+    )
+    ws.getCell(`J${r}`).font = { color: { argb: 'FF94A3B8' } }
   })
   ENCERRADAS.forEach((a, j) => {
     const r = LINHA_PREMISSA_AREA(AREAS_2027.length + j)
     ws.getCell(`A${r}`).value = a.nome
     ws.getCell(`B${r}`).value = 'Área encerrada: sem projeção em 2027'
     ws.getCell(`B${r}`).font = { italic: true, color: { argb: 'FF94A3B8' } }
+    formula(ws, `E${r}`, `${b26}O${linhaBase(idxBase(a.key), 0)}`, input.resultado.areas[a.key].receitaBaseAno, FMT_MOEDA)
   })
+
+  // Contratações 2027: uma linha por cargo; entram no custo de pessoas da área a partir do mês de início.
+  const [c0, c1] = faixaContratacoes(p)
+  ws.getCell(`A${c0 - 2}`).value = 'Contratações 2027 (custo mensal por pessoa com salário, encargos e benefícios, já no valor de 2027)'
+  ws.getCell(`A${c0 - 2}`).font = { bold: true }
+  cabecalho(ws, c0 - 1, ['Área', 'Cargo / descrição', 'Quantidade', 'Custo mensal por pessoa (R$)', 'Mês de início (1 a 12)', 'Custo mensal total (R$)'])
+  const lista = AREAS_2027.flatMap((a) => p.areas[a.key].contratacoes.map((c) => ({ area: a.nome, c })))
+  const nomesAreas = AREAS_2027.map((a) => a.nome).join(',')
+  for (let r = c0; r <= c1; r++) {
+    const item = lista[r - c0]
+    editavel(ws.getCell(`A${r}`), item?.area ?? null)
+    ws.getCell(`A${r}`).dataValidation = { type: 'list', allowBlank: true, formulae: [`"${nomesAreas}"`] }
+    editavel(ws.getCell(`B${r}`), item?.c.descricao || null)
+    editavel(ws.getCell(`C${r}`), item?.c.qtd ?? null, '0')
+    editavel(ws.getCell(`D${r}`), item?.c.custoMensal ?? null, FMT_MOEDA)
+    editavel(ws.getCell(`E${r}`), item?.c.mesInicio ?? null, '0')
+    ws.getCell(`E${r}`).dataValidation = { type: 'whole', operator: 'between', allowBlank: true, formulae: [1, 12] }
+    formula(ws, `F${r}`, `C${r}*D${r}`, item ? item.c.qtd * item.c.custoMensal : 0, FMT_MOEDA)
+  }
   ws.getColumn(1).width = 46
-  for (let c = 2; c <= 8; c++) ws.getColumn(c).width = 20
+  for (let c = 2; c <= 10; c++) ws.getColumn(c).width = 20
 }
 
 function abaBase(wb: ExcelJS.Workbook, nome: string, base: BaseAno, sub: string) {
@@ -221,7 +323,7 @@ function abaReceita(wb: ExcelJS.Workbook, input: PlanilhaInput) {
   titulo(
     ws,
     'Meta de receita 2027',
-    'Meta do ano = receita 2026 × (1 + crescimento) + receita nova. Mês = meta do ano × peso do mês (sazonalidade 2026 da área ou 1/12).',
+    'Meta do ano = receita 2026 × (1 + crescimento usado) + receita nova (aba Premissas). Mês = meta do ano × peso do mês (sazonalidade 2026 da área ou 1/12).',
   )
   cabecalho(ws, 4, ['Área', 'Receita 2026', 'Meta 2027 (ano)', ...MESES_ABREV, 'Total', 'Crescimento'])
   const b26 = `${q(ABAS.base26)}!`
@@ -232,7 +334,7 @@ function abaReceita(wb: ExcelJS.Workbook, input: PlanilhaInput) {
     const ra = input.resultado.areas[a.key]
     ws.getCell(`A${r}`).value = a.nome
     formula(ws, `B${r}`, `${b26}O${rb}`, ra.receitaBaseAno, FMT_MOEDA)
-    formula(ws, `C${r}`, `B${r}*(1+${q(ABAS.premissas)}!$B$${pr}/100)+${q(ABAS.premissas)}!$C$${pr}`, ra.receitaAno, FMT_MOEDA)
+    formula(ws, `C${r}`, `B${r}*(1+${q(ABAS.premissas)}!$F$${pr}/100)+${q(ABAS.premissas)}!$D$${pr}`, ra.receitaAno, FMT_MOEDA)
     for (let m = 1; m <= 12; m++) {
       formula(
         ws,
@@ -281,6 +383,8 @@ function abaMargem(wb: ExcelJS.Workbook, input: PlanilhaInput) {
   const b26 = `${q(ABAS.base26)}!`
   const prem = `${q(ABAS.premissas)}!`
   const rotulos = ['Receita', '(−) Imposto', '(−) Pessoas', '(−) Demais despesas', '(−) Controladoria', '(=) Margem de contribuição']
+  const [c0, c1] = faixaContratacoes(input.premissas)
+  const contrat = (L: string) => `${prem}$${L}$${c0}:$${L}$${c1}`
   AREAS_2027.forEach((a, i) => {
     const ra = input.resultado.areas[a.key]
     const pr = LINHA_PREMISSA_AREA(i)
@@ -296,8 +400,8 @@ function abaMargem(wb: ExcelJS.Workbook, input: PlanilhaInput) {
         const f = [
           `${q(ABAS.receita)}!${cMesRec(m)}${linhaReceita(i)}`,
           `${X}${r0}*aliquota/100`,
-          `${b26}${X}${linhaBase(ib, 2)}*(1+${prem}$D$${pr}/100)*IF(${m}>=mes_reajuste,1+reajuste/100,1)+IF(${m}>=${prem}$H$${pr},${prem}$F$${pr}*${prem}$G$${pr},0)`,
-          `${b26}${X}${linhaBase(ib, 3)}*(1+${prem}$E$${pr}/100)`,
+          `${b26}${X}${linhaBase(ib, 2)}*(1+${prem}$H$${pr}/100)*IF(${m}>=mes_reajuste,1+reajuste/100,1)+SUMIFS(${contrat('F')},${contrat('A')},${prem}$A$${pr},${contrat('E')},"<="&${m})`,
+          `${b26}${X}${linhaBase(ib, 3)}*(1+${prem}$I$${pr}/100)`,
           `${b26}${X}${linhaBase(ib, 4)}*(1+var_controladoria/100)`,
           `${X}${r0}-${X}${r0 + 1}-${X}${r0 + 2}-${X}${r0 + 3}-${X}${r0 + 4}`,
         ][j]
@@ -479,7 +583,7 @@ function abaLeia(wb: ExcelJS.Workbook, input: PlanilhaInput) {
     'Como usar: mude as células amarelas da aba "Premissas" (e as metas operacionais) — Receita 2027, Margem 2027 e Resumo recalculam.',
     '',
     'Abas:',
-    '• Premissas — alíquota, reajuste, variações, inadimplência, distribuição mensal e premissas por área.',
+    '• Premissas — meta de crescimento do escritório e o desdobramento por área, alíquota, reajuste, variações, inadimplência, distribuição mensal e contratações.',
     '• Base 2026 — realizado do SIOE até o último mês fechado + Melhor Estimativa (receita) e repetição do último mês fechado (custos) em nov–dez.',
     '• Base 2025 — realizado de 2025 para comparação (imposto estimado pela taxa efetiva de 2026; folha de Facilities reclassificada pela pessoa).',
     ...(input.base2025.ajusteReceita
@@ -497,7 +601,8 @@ function abaLeia(wb: ExcelJS.Workbook, input: PlanilhaInput) {
     '• Receita: honorários recebidos (base caixa, sem juros), por área do VIOS; títulos de 2025 sem área seguem a classificação por cliente feita no SIOE.',
     '• Margem de contribuição = receita − imposto − pessoas − demais despesas da área − rateio da Controladoria (Operações Legais por % de horas da Ops). Margem % sobre a receita líquida, como no DL.',
     '• Estrutura = Facilities, Financeiro, Marketing, RH, TI e Comercial. Sócios e distribuição de lucros ficam fora.',
-    '• Pessoas 2027 = pessoas 2026 do mês × (1 + variação da área) × (1 + reajuste a partir do mês) + contratações × custo mensal a partir do mês de início.',
+    '• Desdobramento da meta: área "Definido" usa o % dela; as áreas "Automático" crescem todas o mesmo %, calculado para a soma das áreas bater a meta do escritório (receita 2026 de todas as áreas × (1 + meta %)).',
+    '• Pessoas 2027 = pessoas 2026 do mês × (1 + ajustes na equipe atual) × (1 + reajuste a partir do mês) + Σ contratações (quantidade × custo mensal por pessoa) a partir do mês de início.',
   ]
   linhas.forEach((t, i) => {
     ws.getCell(`A${3 + i}`).value = t
@@ -510,7 +615,7 @@ export function montarPlanilhaPlanejamento(wb: ExcelJS.Workbook, input: Planilha
   wb.creator = 'SIOE'
   wb.created = input.geradoEm
   abaLeia(wb, input)
-  abaPremissas(wb, input.premissas)
+  abaPremissas(wb, input)
   abaResumo(wb, input)
   abaReceita(wb, input)
   abaMargem(wb, input)
