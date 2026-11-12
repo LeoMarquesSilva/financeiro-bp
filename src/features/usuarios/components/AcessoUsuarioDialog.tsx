@@ -23,10 +23,15 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import {
+  EFICIENCIA_AREA_MODULE,
   EFICIENCIA_PROTOCOLOS_MODULE,
   MODULE_KEY_OPTIONS,
+  eficienciaEscopoFromModules,
+  withEficienciaEscopo,
+  type EficienciaEscopo,
   type ModuleKey,
 } from '@/lib/moduleAccess'
+import { resolveAreaEficienciaPessoa } from '@/features/eficiencia/utils/eficienciaAccess'
 import type { AppRole, TeamMember } from '@/lib/database.types'
 import {
   teamMembersService,
@@ -44,6 +49,24 @@ const ROLE_OPTIONS: { value: '' | AppRole; label: string }[] = [
   { value: 'financeiro', label: 'Financeiro' },
   { value: 'comite', label: 'Comitê' },
   { value: 'coordenador', label: 'Coordenador' },
+]
+
+const ESCOPO_EFICIENCIA_OPTIONS: { value: EficienciaEscopo; label: string; hint: string }[] = [
+  {
+    value: 'completa',
+    label: 'Visão completa (escritório geral)',
+    hint: 'Todas as abas e todas as áreas',
+  },
+  {
+    value: 'area',
+    label: 'Visão completa (somente área)',
+    hint: 'Todas as abas, só da área da pessoa',
+  },
+  {
+    value: 'protocolos',
+    label: 'Somente protocolos',
+    hint: 'SLA Protocolo, Eficiência Protocolo e SLA Ciência de Agendamentos',
+  },
 ]
 
 export function AcessoUsuarioDialog({
@@ -113,15 +136,18 @@ export function AcessoUsuarioDialog({
       await teamMembersService.updateRole(member.id, role || null)
       await teamMembersService.updateActive(member.id, loginAtivo)
 
-      // Coordenador vê o módulo inteiro, salvo quando a subcategoria de protocolos está marcada.
-      const next = new Set(modules)
-      if (role === 'coordenador' && !next.has(EFICIENCIA_PROTOCOLOS_MODULE)) {
-        next.add('eficiencia')
-      }
-      if (next.has(EFICIENCIA_PROTOCOLOS_MODULE)) next.delete('eficiencia')
+      // Coordenador sem recorte escolhido vê o módulo inteiro.
+      // Resultado Metas grava uma chave só (completa / somente área / somente protocolos).
+      const escopo =
+        eficienciaEscopoFromModules(modules) ?? (role === 'coordenador' ? 'completa' : null)
+      const next = withEficienciaEscopo(modules, escopo)
 
       const current = new Set(grantedModules)
-      const keys = [...MODULE_KEY_OPTIONS.map((m) => m.value), EFICIENCIA_PROTOCOLOS_MODULE]
+      const keys = [
+        ...MODULE_KEY_OPTIONS.map((m) => m.value),
+        EFICIENCIA_AREA_MODULE,
+        EFICIENCIA_PROTOCOLOS_MODULE,
+      ]
       for (const key of keys) {
         const was = current.has(key)
         const now = next.has(key)
@@ -184,36 +210,26 @@ export function AcessoUsuarioDialog({
 
   const toggleModule = (key: ModuleKey, grant: boolean) => {
     setModules((prev) => {
+      if (key === 'eficiencia') return withEficienciaEscopo(prev, grant ? 'completa' : null)
       const next = new Set(prev)
-      if (key === 'eficiencia') {
-        if (grant) {
-          next.add('eficiencia')
-          next.delete(EFICIENCIA_PROTOCOLOS_MODULE)
-        } else {
-          next.delete('eficiencia')
-          next.delete(EFICIENCIA_PROTOCOLOS_MODULE)
-        }
-        return next
-      }
       if (grant) next.add(key)
       else next.delete(key)
       return next
     })
   }
 
-  const setEscopoEficiencia = (somenteProtocolos: boolean) => {
-    setModules((prev) => {
-      const next = new Set(prev)
-      if (somenteProtocolos) {
-        next.delete('eficiencia')
-        next.add(EFICIENCIA_PROTOCOLOS_MODULE)
-      } else {
-        next.add('eficiencia')
-        next.delete(EFICIENCIA_PROTOCOLOS_MODULE)
-      }
-      return next
-    })
+  const setEscopoEficiencia = (escopo: EficienciaEscopo) => {
+    setModules((prev) => withEficienciaEscopo(prev, escopo))
   }
+
+  const escopoEficiencia = eficienciaEscopoFromModules(modules)
+  const areaEficiencia = usuario
+    ? resolveAreaEficienciaPessoa({
+        email: email || usuario.email,
+        colaboradorArea: usuario.colaborador?.area,
+        teamMemberArea: usuario.teamMember?.area,
+      })
+    : null
 
   const pending = saveMutation.isPending || resetMutation.isPending
 
@@ -429,7 +445,11 @@ export function AcessoUsuarioDialog({
                     const nextRole = e.target.value as '' | AppRole
                     setRole(nextRole)
                     if (nextRole === 'coordenador') {
-                      setModules((prev) => new Set(prev).add('eficiencia'))
+                      setModules((prev) =>
+                        eficienciaEscopoFromModules(prev)
+                          ? prev
+                          : withEficienciaEscopo(prev, 'completa'),
+                      )
                     }
                   }}
                   disabled={pending}
@@ -446,11 +466,7 @@ export function AcessoUsuarioDialog({
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {MODULE_KEY_OPTIONS.map((m) => {
                   const checked =
-                    m.value === 'eficiencia'
-                      ? modules.has('eficiencia') || modules.has(EFICIENCIA_PROTOCOLOS_MODULE)
-                      : modules.has(m.value)
-                  const somenteProtocolos =
-                    modules.has(EFICIENCIA_PROTOCOLOS_MODULE) && !modules.has('eficiencia')
+                    m.value === 'eficiencia' ? escopoEficiencia != null : modules.has(m.value)
                   return (
                     <div
                       key={m.value}
@@ -488,44 +504,51 @@ export function AcessoUsuarioDialog({
                         <span className="leading-snug">{m.label}</span>
                       </div>
                       {m.value === 'eficiencia' && checked ? (
-                        <div
-                          className="mt-2 grid gap-2 sm:grid-cols-2"
-                          role="radiogroup"
-                          aria-label="Recorte de Resultado Metas"
-                        >
-                          <button
-                            type="button"
-                            role="radio"
-                            aria-checked={!somenteProtocolos}
-                            disabled={pending}
-                            onClick={() => setEscopoEficiencia(false)}
-                            className={cn(
-                              'rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors',
-                              !somenteProtocolos
-                                ? 'border-teal-300 bg-white text-slate-800 shadow-sm'
-                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
-                            )}
+                        <div className="mt-2 space-y-2">
+                          <div
+                            className="grid gap-2 sm:grid-cols-3"
+                            role="radiogroup"
+                            aria-label="Recorte de Resultado Metas"
                           >
-                            Visão completa
-                          </button>
-                          <button
-                            type="button"
-                            role="radio"
-                            aria-checked={somenteProtocolos}
-                            disabled={pending}
-                            onClick={() => setEscopoEficiencia(true)}
-                            className={cn(
-                              'rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors',
-                              somenteProtocolos
-                                ? 'border-teal-300 bg-white text-slate-800 shadow-sm'
-                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
-                            )}
-                          >
-                            <span className="block font-medium">Somente protocolos</span>
-                            <span className="mt-0.5 block text-xs leading-snug text-slate-500">
-                              SLA Protocolo, Eficiência Protocolo e SLA Ciência de Agendamentos
-                            </span>
-                          </button>
+                            {ESCOPO_EFICIENCIA_OPTIONS.map((opt) => {
+                              const selected = escopoEficiencia === opt.value
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selected}
+                                  disabled={pending}
+                                  onClick={() => setEscopoEficiencia(opt.value)}
+                                  className={cn(
+                                    'rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors',
+                                    selected
+                                      ? 'border-teal-300 bg-white text-slate-800 shadow-sm'
+                                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                                  )}
+                                >
+                                  <span className="block font-medium">{opt.label}</span>
+                                  <span className="mt-0.5 block text-xs leading-snug text-slate-500">
+                                    {opt.hint}
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                          {escopoEficiencia === 'area' || escopoEficiencia === 'protocolos' ? (
+                            areaEficiencia ? (
+                              <p className="text-xs text-slate-500">
+                                Área considerada:{' '}
+                                <span className="font-medium text-slate-700">{areaEficiencia}</span>
+                              </p>
+                            ) : (
+                              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                Sem área do jurídico no cadastro desta pessoa (Cível, Contratos,
+                                Recuperação de Crédito, Reestruturação ou Trabalhista). Com esse
+                                recorte ela não verá dados até a área ser ajustada.
+                              </p>
+                            )
+                          ) : null}
                         </div>
                       ) : null}
                     </div>

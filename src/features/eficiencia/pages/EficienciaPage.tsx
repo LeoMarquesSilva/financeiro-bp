@@ -152,25 +152,30 @@ export function EficienciaPage() {
   const [mesFiltro, setMesFiltro] = useState<MesFiltroEficiencia>(null)
   const [responsavel, setResponsavel] = useState<string | null>(null)
 
-  // Overview: admin/sócio filtram qualquer área; coordenador só Todas ↔ área dele.
+  // Overview: admin/sócio filtram qualquer área; coordenador só Todas ↔ área dele;
+  // “somente área” fica preso na área dele (sem Todas).
   const overviewAllowedAreas = access.canFilterAreas
     ? null
     : access.lockedArea
       ? [access.lockedArea]
       : []
   const showOverviewAreaFilter =
-    access.canFilterAreas || access.profile === 'coordenador'
-  const areaOverviewData =
-    access.profile === 'coordenador' &&
-    areaOverview != null &&
-    areaOverview !== access.lockedArea
+    access.canFilterAreas ||
+    access.profile === 'coordenador' ||
+    access.profile === 'somente_area'
+  const areaOverviewData = access.overviewSomenteArea
+    ? access.lockedArea
+    : access.profile === 'coordenador' &&
+        areaOverview != null &&
+        areaOverview !== access.lockedArea
       ? null
       : areaOverview
+  const semAreaVinculada = access.profile === 'somente_area' && !access.lockedArea
   const tabsVisiveis = visibleEficienciaTabs(areaOverviewData, somenteProtocolos)
   const { data: overview, loading: loadingOverview } = useEficienciaOverview(
     ano,
     areaOverviewData,
-    !somenteProtocolos,
+    !somenteProtocolos && !semAreaVinculada,
   )
 
   useEffect(() => {
@@ -200,6 +205,7 @@ export function EficienciaPage() {
   const row2 = demais.slice(ROW1_AFTER_OVERVIEW)
 
   const handleAreaChange = (area: string | null) => {
+    if (access.overviewSomenteArea) return
     if (access.canFilterAreas) {
       setAreaOverview(area)
       return
@@ -213,6 +219,18 @@ export function EficienciaPage() {
       <div className="space-y-6">
         <div className="h-10 max-w-md animate-pulse rounded-lg bg-slate-100" />
         <div className="h-64 animate-pulse rounded-lg bg-slate-100" />
+      </div>
+    )
+  }
+
+  if (semAreaVinculada) {
+    return (
+      <div className="mx-auto mt-10 max-w-lg rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+        <p className="font-semibold">Sem área vinculada</p>
+        <p className="mt-1 text-amber-800">
+          Seu acesso a Resultado Metas é por área, mas o seu cadastro não tem uma área do
+          jurídico. Peça para a Controladoria ajustar a sua área.
+        </p>
       </div>
     )
   }
@@ -292,7 +310,7 @@ export function EficienciaPage() {
               onAreaChange={handleAreaChange}
               mesFiltro={mesFiltro}
               showAreaFilter={showOverviewAreaFilter}
-              allowTodasAreas
+              allowTodasAreas={!access.overviewSomenteArea}
               allowedAreas={overviewAllowedAreas}
             />
           </TabsContent>
