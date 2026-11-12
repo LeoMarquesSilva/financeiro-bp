@@ -3,6 +3,9 @@
  *
  * ME do mês = recebido no caixa (só o mês corrente) + em aberto que conta
  *           − fora da estimativa + novas receitas (chance alta/média).
+ * Nova receita que virou título: o título novo no VIOS (do mesmo grupo e mês, depois do que o
+ * gerente já tinha visto) é descontado da nova receita automaticamente, até o valor estimado, para
+ * não contar duas vezes. "São receitas diferentes" marca o título como visto e o desconto some.
  * Meses fechados entram pelo realizado; estimativas antigas somem sozinhas.
  * Título vencido sem pagamento no mês corrente fica fora por padrão (como nas
  * planilhas das áreas); o gerente pode marcar "vai pagar".
@@ -77,8 +80,20 @@ export type ReceitaMeNovidadeNovo = {
   id: string
   grupo: string
   meses: Array<{ mes: number; incremento: number; previsto: number; aberto: number }>
-  /** Nova receita estimada que parece ter virado este título. */
-  duplicidade: { novaReceitaId: string; nome: string; meses: number[] } | null
+  /**
+   * Nova receita estimada que parece ter virado este título. `compensado` = quanto do título novo já
+   * foi descontado da nova receita automaticamente (0 = só aviso).
+   */
+  duplicidade: { novaReceitaId: string; nome: string; meses: number[]; compensado: number } | null
+}
+
+/** Parte de uma nova receita descontada porque virou título no VIOS. */
+export type ReceitaMeCompensacao = {
+  novaReceitaId: string
+  nome: string
+  grupo: string
+  mes: number
+  valor: number
 }
 
 export type ReceitaMeNovidadePagou = {
@@ -112,6 +127,10 @@ export type ReceitaMeAreaCalc = {
   mePorMes: Record<number, number>
   foraPorMes: Record<number, number>
   novasPorMes: Record<number, number>
+  /** Nova receita (chance alta/média) descontada por já estar no VIOS como título. */
+  compensadoPorMes: Record<number, number>
+  compensado: number
+  compensacoes: ReceitaMeCompensacao[]
   meTotal: number
   novidades: ReceitaMeNovidade[]
 }
@@ -276,10 +295,12 @@ export function calcularAreaMe(input: {
   const mePorMes: Record<number, number> = {}
   const foraPorMes: Record<number, number> = {}
   const novasPorMes: Record<number, number> = {}
+  const compensadoPorMes: Record<number, number> = {}
   for (const m of meses) {
     mePorMes[m] = 0
     foraPorMes[m] = 0
     novasPorMes[m] = 0
+    compensadoPorMes[m] = 0
   }
 
   let foraAtraso = 0
@@ -330,22 +351,8 @@ export function calcularAreaMe(input: {
     })
   }
 
-  const novasArea = input.novasReceitas.filter((n) => n.area_key === areaKey)
-  let potencial = 0
-  for (const nr of novasArea) {
-    const porMes = valorNovaReceitaPorMes(nr, meses)
-    for (const [mStr, v] of Object.entries(porMes)) {
-      if (nr.chance === 'baixa') {
-        potencial += v
-        continue
-      }
-      const m = Number(mStr)
-      novasPorMes[m] += v
-      mePorMes[m] += v
-    }
-  }
-
-  const novidades: ReceitaMeNovidade[] = []
+  // Títulos novos no VIOS desde o que o gerente viu (só depois de confirmar a área).
+  const incrementoPorCelula = new Map<string, number>()
   if (input.confirmada) {
     const vistoPorCelula = new Map(
       input.vistos
@@ -353,25 +360,76 @@ export function calcularAreaMe(input: {
         .map((v) => [chaveCelula(v.grupo, v.mes), Number(v.valor_visto) || 0]),
     )
     for (const linha of linhas) {
+      for (const m of meses) {
+        const k = chaveCelula(linha.grupo, m)
+        const incremento = linha.celulas[m].previsto - (vistoPorCelula.get(k) ?? 0)
+        if (incremento > RECEITA_ME_TOLERANCIA) incrementoPorCelula.set(k, incremento)
+      }
+    }
+  }
+
+  // Nova receita que virou título: o título novo do mesmo grupo e mês desconta a estimativa (até o
+  // valor dela). Chance alta e média primeiro; o que sobrar do título pode descontar a de chance baixa.
+  const novasArea = input.novasReceitas.filter((n) => n.area_key === areaKey)
+  const ordemChance: Record<string, number> = { alta: 0, media: 1, baixa: 2 }
+  const novasOrdenadas = [...novasArea].sort((a, b) => (ordemChance[a.chance] ?? 3) - (ordemChance[b.chance] ?? 3))
+  const disponivel = new Map(incrementoPorCelula)
+  const compensacoes: ReceitaMeCompensacao[] = []
+  let potencial = 0
+  for (const nr of novasOrdenadas) {
+    const porMes = valorNovaReceitaPorMes(nr, meses)
+    const gruposNr = linhas.filter((l) => novaReceitaCorrespondeGrupo(nr, l.grupo)).map((l) => l.grupo)
+    for (const [mStr, v] of Object.entries(porMes)) {
+      const m = Number(mStr)
+      let resto = v
+      for (const g of gruposNr) {
+        if (resto <= RECEITA_ME_TOLERANCIA) break
+        const k = chaveCelula(g, m)
+        const disp = disponivel.get(k) ?? 0
+        if (disp <= RECEITA_ME_TOLERANCIA) continue
+        const c = Math.min(resto, disp)
+        disponivel.set(k, disp - c)
+        resto -= c
+        compensacoes.push({ novaReceitaId: nr.id, nome: nr.nome, grupo: g, mes: m, valor: arred(c) })
+      }
+      if (nr.chance === 'baixa') {
+        potencial += resto
+        continue
+      }
+      compensadoPorMes[m] += v - resto
+      novasPorMes[m] += resto
+      mePorMes[m] += resto
+    }
+  }
+
+  const novidades: ReceitaMeNovidade[] = []
+  if (input.confirmada) {
+    for (const linha of linhas) {
       const mesesNovos: ReceitaMeNovidadeNovo['meses'] = []
       for (const m of meses) {
-        const cel = linha.celulas[m]
-        const visto = vistoPorCelula.get(chaveCelula(linha.grupo, m)) ?? 0
-        const incremento = cel.previsto - visto
-        if (incremento > RECEITA_ME_TOLERANCIA) {
+        const incremento = incrementoPorCelula.get(chaveCelula(linha.grupo, m))
+        if (incremento != null) {
+          const cel = linha.celulas[m]
           mesesNovos.push({ mes: m, incremento: arred(incremento), previsto: cel.previsto, aberto: cel.aberto })
         }
       }
       if (mesesNovos.length === 0) continue
       const mesesNovosSet = new Set(mesesNovos.map((x) => x.mes))
+      // Prefere a nova receita que foi descontada por este grupo; senão, a primeira que coincide no mês.
+      const descontadas = compensacoes.filter((c) => c.grupo === linha.grupo)
+      const candidatas = [
+        ...novasArea.filter((nr) => descontadas.some((c) => c.novaReceitaId === nr.id)),
+        ...novasArea.filter((nr) => !descontadas.some((c) => c.novaReceitaId === nr.id)),
+      ]
       let duplicidade: ReceitaMeNovidadeNovo['duplicidade'] = null
-      for (const nr of novasArea) {
+      for (const nr of candidatas) {
         if (!novaReceitaCorrespondeGrupo(nr, linha.grupo)) continue
         const coincidentes = Object.keys(valorNovaReceitaPorMes(nr, meses))
           .map(Number)
           .filter((m) => mesesNovosSet.has(m))
         if (coincidentes.length > 0) {
-          duplicidade = { novaReceitaId: nr.id, nome: nr.nome, meses: coincidentes }
+          const compensado = descontadas.filter((c) => c.novaReceitaId === nr.id).reduce((s, c) => s + c.valor, 0)
+          duplicidade = { novaReceitaId: nr.id, nome: nr.nome, meses: coincidentes, compensado: arred(compensado) }
           break
         }
       }
@@ -417,6 +475,7 @@ export function calcularAreaMe(input: {
     mePorMes[m] = arred(mePorMes[m])
     foraPorMes[m] = arred(foraPorMes[m])
     novasPorMes[m] = arred(novasPorMes[m])
+    compensadoPorMes[m] = arred(compensadoPorMes[m])
   }
 
   return {
@@ -434,6 +493,9 @@ export function calcularAreaMe(input: {
     mePorMes,
     foraPorMes,
     novasPorMes,
+    compensadoPorMes,
+    compensado: arred(soma(compensadoPorMes)),
+    compensacoes,
     meTotal: arred(soma(mePorMes)),
     novidades,
   }

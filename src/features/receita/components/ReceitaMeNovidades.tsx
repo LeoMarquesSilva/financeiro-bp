@@ -29,6 +29,9 @@ function textoNovo(ano: number, n: ReceitaMeNovidadeNovo): string {
   const aumentouExistente = n.meses.some((m) => m.previsto - m.incremento > 1)
   if (n.duplicidade) {
     const meses = n.duplicidade.meses.map((m) => receitaMeMesRotulo(ano, m)).join(', ')
+    if (n.duplicidade.compensado > 0) {
+      return `Título novo de ${n.grupo} (${mesesValores(ano, n)}) bate com a nova receita "${n.duplicidade.nome}" estimada para ${meses}. Já descontamos ${formatCurrencyCompact(n.duplicidade.compensado)} da nova receita para não contar duas vezes. Se forem receitas diferentes, desfaça.`
+    }
     return `Título novo de ${n.grupo} (${mesesValores(ano, n)}) bate com a nova receita "${n.duplicidade.nome}" estimada para ${meses}. Pode estar contado duas vezes.`
   }
   if (aumentouExistente) {
@@ -77,10 +80,23 @@ export function ReceitaMeNovidades({
             <span className="min-w-0 flex-1">{n.tipo === 'novo' ? textoNovo(ano, n) : textoPagou(ano, n)}</span>
             {podeEditar && n.tipo === 'novo' && n.duplicidade && (
               <>
-                <Button type="button" size="sm" className="h-7 text-xs" onClick={() => onBaixarEstimativa(n)}>
-                  Baixar estimativa
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => onBaixarEstimativa(n)}
+                  title="Tira estes meses da nova receita (o título do VIOS passa a valer sozinho)"
+                >
+                  {n.duplicidade.compensado > 0 ? 'Confirmar: é a mesma' : 'Baixar estimativa'}
                 </Button>
-                <Button type="button" size="sm" variant="outline" className="h-7 bg-white text-xs" onClick={() => onManter(n)}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 bg-white text-xs"
+                  onClick={() => onManter(n)}
+                  title="Conta o título e a nova receita juntos"
+                >
                   São receitas diferentes
                 </Button>
               </>

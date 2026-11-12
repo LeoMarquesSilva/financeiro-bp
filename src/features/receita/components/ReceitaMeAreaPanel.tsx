@@ -261,6 +261,7 @@ export function ReceitaMeAreaPanel({
             areaKey={areaKey}
             meses={meses}
             novasReceitas={novasReceitas}
+            compensacoes={calc.compensacoes}
             gruposConhecidos={gruposConhecidos}
             podeEditar={podeEditar}
             salvando={mutations.salvandoNova}

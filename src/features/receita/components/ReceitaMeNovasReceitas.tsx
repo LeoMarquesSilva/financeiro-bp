@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatCurrencyCompact } from '@/shared/utils/format'
-import { valorNovaReceitaPorMes } from '../utils/receitaMeCalc'
+import { valorNovaReceitaPorMes, type ReceitaMeCompensacao } from '../utils/receitaMeCalc'
 import {
   RECEITA_ME_CHANCE_CLASS,
   RECEITA_ME_CHANCE_LABELS,
@@ -39,6 +39,8 @@ type Props = {
   areaKey: string
   meses: number[]
   novasReceitas: ReceitaMeNovaReceita[]
+  /** Parte das novas receitas descontada por já estar no VIOS como título. */
+  compensacoes?: ReceitaMeCompensacao[]
   gruposConhecidos: string[]
   podeEditar: boolean
   salvando: boolean
@@ -93,6 +95,7 @@ export function ReceitaMeNovasReceitas({
   areaKey,
   meses,
   novasReceitas,
+  compensacoes,
   gruposConhecidos,
   podeEditar,
   salvando,
@@ -114,9 +117,17 @@ export function ReceitaMeNovasReceitas({
         .filter((n) => n.area_key === areaKey)
         .map((n) => {
           const porMes = valorNovaReceitaPorMes(n, meses)
-          return { nr: n, noHorizonte: Object.values(porMes).reduce((s, v) => s + v, 0) }
+          const desc = (compensacoes ?? []).filter((c) => c.novaReceitaId === n.id)
+          const descontado = desc.reduce((s, c) => s + c.valor, 0)
+          const mesesDescontados = [...new Set(desc.map((c) => c.mes))].sort((a, b) => a - b)
+          return {
+            nr: n,
+            noHorizonte: Object.values(porMes).reduce((s, v) => s + v, 0) - descontado,
+            descontado,
+            mesesDescontados,
+          }
         }),
-    [novasReceitas, areaKey, meses],
+    [novasReceitas, areaKey, meses, compensacoes],
   )
   const totalMe = linhas.filter((l) => l.nr.chance !== 'baixa').reduce((s, l) => s + l.noHorizonte, 0)
   const potencial = linhas.filter((l) => l.nr.chance === 'baixa').reduce((s, l) => s + l.noHorizonte, 0)
@@ -229,7 +240,7 @@ export function ReceitaMeNovasReceitas({
               </tr>
             </thead>
             <tbody>
-              {linhas.map(({ nr, noHorizonte }) => (
+              {linhas.map(({ nr, noHorizonte, descontado, mesesDescontados }) => (
                 <tr key={nr.id} className="border-b border-slate-100 last:border-0">
                   <td className="max-w-[240px] px-3 py-2 text-slate-800">
                     <p className="truncate" title={nr.nome}>{nr.nome}</p>
@@ -245,6 +256,11 @@ export function ReceitaMeNovasReceitas({
                     {nr.meses_baixados.length > 0 && (
                       <p className="text-[11px] text-slate-500">
                         Virou título em {nr.meses_baixados.map((m) => receitaMeMesRotulo(ano, m)).join(', ')}
+                      </p>
+                    )}
+                    {descontado > 0 && (
+                      <p className="text-[11px] font-medium text-amber-700" title="O título já está no VIOS; esta parte saiu da nova receita para não contar duas vezes">
+                        Já no VIOS em {mesesDescontados.map((m) => receitaMeMesRotulo(ano, m)).join(', ')}: −{formatCurrencyCompact(descontado)}
                       </p>
                     )}
                   </td>
