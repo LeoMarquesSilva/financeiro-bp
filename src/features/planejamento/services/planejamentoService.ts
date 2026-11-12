@@ -8,12 +8,14 @@ import type {
   PlanMargemRow,
   PlanOpexBlocosRow,
   PlanPessoasRow,
+  PlanRateioTituloRow,
   PlanReceitaAjusteRow,
   PlanReceitaRow,
   PlanReceitaSemAreaRow,
   PlanTimesheetRow,
   PlanTituloSemAreaRow,
 } from '../types'
+import type { LinhaRateio } from '../utils/rateioTitulo'
 
 const n = (v: unknown) => Number(v) || 0
 const s = (v: unknown) => (v == null ? null : String(v))
@@ -73,7 +75,33 @@ export const planejamentoService = {
       area_key: s(r.area_key),
       classificado_por_email: s(r.classificado_por_email),
       classificado_em: s(r.classificado_em),
+      pendente: n(r.pendente),
+      rateado: n(r.rateado),
+      titulos_rateados: n(r.titulos_rateados),
     }))
+  },
+
+  /** Rateio por % dos títulos informados (títulos sem rateio não aparecem). */
+  async rateiosTitulos(titulos: number[]): Promise<PlanRateioTituloRow[]> {
+    if (titulos.length === 0) return []
+    const { data, error } = await supabase
+      .from('planejamento_receita_rateio_titulo' as never)
+      .select('ci_titulo, area_key, pct, classificado_por_email, classificado_em')
+      .in('ci_titulo' as never, titulos as never)
+      .order('pct' as never, { ascending: false })
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+      ci_titulo: n(r.ci_titulo),
+      area_key: String(r.area_key),
+      pct: n(r.pct),
+      classificado_por_email: s(r.classificado_por_email),
+      classificado_em: s(r.classificado_em),
+    }))
+  },
+
+  /** Grava o mesmo rateio nos títulos (substitui o anterior); lista vazia apaga o rateio. */
+  async salvarRateioTitulos(titulos: number[], linhas: LinhaRateio[]): Promise<void> {
+    await rpc('planejamento_rateio_titulos_salvar', { p_titulos: titulos, p_linhas: linhas })
   },
 
   async titulosSemArea(ano: number, cliente: string): Promise<PlanTituloSemAreaRow[]> {
