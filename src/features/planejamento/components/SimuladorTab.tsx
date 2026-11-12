@@ -13,6 +13,7 @@ import { useIndicadoresOperacionais } from '../hooks/useIndicadores'
 import { usePlanPessoas } from '../hooks/usePlanejamento'
 import { fenixResultadoEscritorio, fenixSimulacaoArea } from '../fenix/planejamentoFenix'
 import { NumInput } from './NumInput'
+import type { ResumoInadimplencia } from '../utils/inadimplenciaResumo'
 import { AreaChips, Aviso, CarregandoBloco, PlanKpi, Secao, TabelaMeses, VarPct, moeda, moedaCurta, pct } from './PlanUi'
 import { DesdobramentoAreas, MetaCrescimento } from './SimuladorReceita'
 import { SimuladorPessoas } from './SimuladorPessoas'
@@ -42,6 +43,8 @@ type Props = {
   modelos: ModeloCenario[]
   historico: Historico | null
   onAplicarModelo: (m: ModeloCenario) => void
+  /** Inadimplência de 2026 (e 2025) como referência para a meta de 2027. */
+  inadimplencia?: { r26: ResumoInadimplencia; r25: ResumoInadimplencia } | null
 }
 
 const sinalPct = (v: number | null | undefined) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${pct(v)}`)
@@ -88,6 +91,46 @@ function CelulaMeta({ area, p, e, r }: { area: AreaKey; p: PremissaArea; e: Prem
     <span data-fenix={id} className="font-semibold tabular-nums text-slate-900">
       {moeda(ra.receitaAno)}
     </span>
+  )
+}
+
+/** Inadimplência de 2026 ao lado da meta de 2027, com atalho para usar o valor. */
+function ReferenciaInadimplencia({
+  dados,
+  onUsar,
+}: {
+  dados: { r26: ResumoInadimplencia; r25: ResumoInadimplencia } | null
+  onUsar: (v: number) => void
+}) {
+  if (!dados || dados.r26.meses.length === 0) {
+    return <span className="block text-[10px] text-slate-400">Carregando a inadimplência de 2026…</span>
+  }
+  const { r26, r25 } = dados
+  const ate = (MESES_ABREV[Math.max(...r26.meses) - 1] ?? '').toLowerCase()
+  const usar = (v: number | null) =>
+    v == null ? null : (
+      <button
+        type="button"
+        onClick={() => onUsar(Math.round(v * 10) / 10)}
+        className="ml-1 rounded px-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-50"
+        title="Usar este valor como meta de 2027"
+      >
+        usar
+      </button>
+    )
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] leading-5 text-slate-600">
+      <p className="font-medium text-slate-700">Inadimplência 2026 (jan–{ate})</p>
+      <p title={`Σ do que estava em aberto no fechamento de cada mês ÷ Σ previsto. Média simples dos meses: ${pct(r26.mediaSimplesPct)}.`}>
+        Média no fechamento do mês: <strong className="tabular-nums text-slate-900">{pct(r26.mediaFechamentoPct)}</strong>
+        {usar(r26.mediaFechamentoPct)}
+      </p>
+      <p title="Títulos vencidos no período que ainda não foram pagos hoje (acumulado do painel de Inadimplência). É menor porque parte do atraso é paga depois.">
+        Ainda em aberto hoje: <strong className="tabular-nums text-slate-900">{pct(r26.emAbertoHojePct)}</strong>
+        {usar(r26.emAbertoHojePct)}
+        {r25.emAbertoHojePct != null && <span className="text-slate-400"> · 2025: {pct(r25.emAbertoHojePct)}</span>}
+      </p>
+    </div>
   )
 }
 
@@ -294,7 +337,11 @@ export function SimuladorTab(props: Props) {
         <PlanKpi
           rotulo="Faturamento necessário 2027"
           valor={moedaCurta(esc.faturamentoNecessarioAno)}
-          sub={`para receber a meta com ${pct(e.inadimplenciaMetaPct)} de inadimplência`}
+          sub={
+            props.inadimplencia?.r26.mediaFechamentoPct != null
+              ? `para receber a meta com ${pct(e.inadimplenciaMetaPct)} de inadimplência · 2026: ${pct(props.inadimplencia.r26.mediaFechamentoPct)} no fechamento do mês`
+              : `para receber a meta com ${pct(e.inadimplenciaMetaPct)} de inadimplência`
+          }
         />
       </div>
 
@@ -321,11 +368,14 @@ export function SimuladorTab(props: Props) {
                 {pct(taxaEfetivaEscritorio(base2026, Array.from({ length: ultimoMesFechado }, (_, i) => i + 1)) * 100, 2)}. Ajuste para o Lucro Presumido.
               </span>
             </label>
-            <label className="space-y-1 text-xs text-slate-600">
-              <span className="block font-medium">Meta de inadimplência</span>
-              <NumInput value={e.inadimplenciaMetaPct} onChange={(v) => setE('inadimplenciaMetaPct', v)} sufixo="%" min={0} max={99} />
-              <span className="block text-[10px] text-slate-400">Usada no faturamento necessário.</span>
-            </label>
+            <div className="space-y-1 text-xs text-slate-600">
+              <label className="block space-y-1">
+                <span className="block font-medium">Meta de inadimplência</span>
+                <NumInput value={e.inadimplenciaMetaPct} onChange={(v) => setE('inadimplenciaMetaPct', v)} sufixo="%" min={0} max={99} />
+                <span className="block text-[10px] text-slate-400">Usada no faturamento necessário.</span>
+              </label>
+              <ReferenciaInadimplencia dados={props.inadimplencia ?? null} onUsar={(v) => setE('inadimplenciaMetaPct', v)} />
+            </div>
             <label className="space-y-1 text-xs text-slate-600">
               <span className="block font-medium">Variação da Controladoria (Ops Legais)</span>
               <NumInput value={e.variacaoControladoriaPct} onChange={(v) => setE('variacaoControladoriaPct', v)} sufixo="%" />
