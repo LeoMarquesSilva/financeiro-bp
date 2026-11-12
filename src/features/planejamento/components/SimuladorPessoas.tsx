@@ -51,20 +51,28 @@ function Linha({ rotulo, valor, sinal, forte, children }: { rotulo: ReactNode; v
 
 function ContratacaoLinha({ c, onChange, onRemover, area }: { c: Contratacao; onChange: (c: Contratacao) => void; onRemover: () => void; area: string }) {
   return (
-    <div className="grid grid-cols-[52px_minmax(0,1fr)_96px_auto_auto] items-center gap-1.5">
-      <NumInput value={c.qtd} onChange={(v) => onChange({ ...c, qtd: Math.max(0, Math.round(v)) })} casas={0} min={0} ariaLabel={`Quantidade ${area}`} />
-      <input
-        value={c.descricao}
-        onChange={(ev) => onChange({ ...c, descricao: ev.target.value })}
-        placeholder="cargo (ex.: advogado pleno)"
-        className="h-7 min-w-0 rounded-md border border-amber-300 bg-amber-50 px-1.5 text-xs"
-        aria-label={`Cargo ${area}`}
-      />
-      <NumInput value={c.custoMensal} onChange={(v) => onChange({ ...c, custoMensal: v })} casas={0} min={0} ariaLabel={`Custo mensal por pessoa ${area}`} />
-      <SeletorMes value={c.mesInicio} onChange={(m) => onChange({ ...c, mesInicio: m })} ariaLabel={`Mês de início ${area}`} prefixo="a partir de " />
-      <button type="button" onClick={onRemover} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remover contratação ${area}`}>
-        <Trash2 className="h-3.5 w-3.5" aria-hidden />
-      </button>
+    <div className="space-y-1 rounded-md border border-slate-200 bg-white p-1.5">
+      <div className="flex items-center gap-1.5">
+        <NumInput value={c.qtd} onChange={(v) => onChange({ ...c, qtd: Math.max(0, Math.round(v)) })} casas={0} min={0} className="w-12" ariaLabel={`Quantidade ${area}`} />
+        <span className="text-xs text-slate-400">×</span>
+        <input
+          value={c.descricao}
+          onChange={(ev) => onChange({ ...c, descricao: ev.target.value })}
+          placeholder="cargo (ex.: advogado pleno)"
+          className="h-7 min-w-0 flex-1 rounded-md border border-amber-300 bg-amber-50 px-1.5 text-xs"
+          aria-label={`Cargo ${area}`}
+        />
+        <button type="button" onClick={onRemover} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remover contratação ${area}`}>
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+        <span>custo/mês por pessoa</span>
+        <NumInput value={c.custoMensal} onChange={(v) => onChange({ ...c, custoMensal: v })} casas={0} min={0} className="w-24" ariaLabel={`Custo mensal por pessoa ${area}`} />
+        <span>início</span>
+        <SeletorMes value={c.mesInicio} onChange={(m) => onChange({ ...c, mesInicio: m })} ariaLabel={`Mês de início ${area}`} />
+        <span className="ml-auto tabular-nums text-slate-600">= {moeda(c.qtd * c.custoMensal)}/mês</span>
+      </div>
     </div>
   )
 }
@@ -196,10 +204,7 @@ export function SimuladorPessoas({
               <p className="mt-1 text-[10px] text-slate-400">Ajustes na equipe atual: promoções, mérito ou saídas, além do reajuste (negativo reduz o custo).</p>
 
               <div className="mt-2.5 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold text-slate-700">Contratações 2027</p>
-                  {p.contratacoes.length > 0 && <p className="text-[10px] text-slate-400">qtd · cargo · custo/mês por pessoa · início</p>}
-                </div>
+                <p className="text-[11px] font-semibold text-slate-700">Contratações 2027</p>
                 {p.contratacoes.length === 0 && <p className="text-[11px] text-slate-400">Nenhuma contratação prevista.</p>}
                 {p.contratacoes.map((c, idx) => (
                   <ContratacaoLinha

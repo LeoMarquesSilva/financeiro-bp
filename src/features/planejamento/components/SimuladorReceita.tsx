@@ -184,7 +184,7 @@ export function MetaCrescimento({
             <p className="flex items-start gap-1.5 text-[11px] font-medium text-emerald-700">
               <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
               As áreas fecham a meta
-              {d.areasAutomaticas.length > 0 ? ` (automáticas crescendo ${pct(d.crescimentoAutomaticoPct)})` : ''}.
+              {d.areasAutomaticas.length > 0 ? ` (áreas no automático com ${d.crescimentoAutomaticoPct >= 0 ? '+' : ''}${pct(d.crescimentoAutomaticoPct)})` : ''}.
             </p>
           ) : (
             <p className="flex items-start gap-1.5 text-[11px] font-medium text-amber-800">
@@ -236,8 +236,8 @@ export function DesdobramentoAreas({
       }
     >
       <div className="overflow-x-auto">
-        <div className="min-w-[920px]">
-          <div className="grid grid-cols-[minmax(190px,1.2fr)_minmax(220px,2fr)_170px_130px_minmax(170px,1fr)] gap-3 border-b border-slate-200 px-2 pb-1.5 text-[11px] font-medium text-slate-500">
+        <div className="min-w-[660px]">
+          <div className="grid grid-cols-[minmax(140px,1.1fr)_minmax(110px,1.5fr)_160px_92px_minmax(128px,1fr)] gap-2 border-b border-slate-200 px-2 pb-1.5 text-[11px] font-medium text-slate-500">
             <span>Área · receita 2026</span>
             <span>Crescimento 2027</span>
             <span />
@@ -258,7 +258,7 @@ export function DesdobramentoAreas({
               <div
                 key={a.key}
                 className={cn(
-                  'grid grid-cols-[minmax(190px,1.2fr)_minmax(220px,2fr)_170px_130px_minmax(170px,1fr)] items-center gap-3 border-b border-slate-100 px-2 py-2.5',
+                  'grid grid-cols-[minmax(140px,1.1fr)_minmax(110px,1.5fr)_160px_92px_minmax(128px,1fr)] items-center gap-2 border-b border-slate-100 px-2 py-2.5',
                   fixada && 'bg-amber-50/40',
                 )}
               >
@@ -285,14 +285,14 @@ export function DesdobramentoAreas({
                     value={Math.round(valor * 100) / 100}
                     onChange={(v) => onArea(a.key, { crescimentoPct: v })}
                     sufixo="%"
-                    className="w-20"
+                    className="w-[72px]"
                     ariaLabel={`Crescimento % ${a.nome}`}
                   />
                   <button
                     type="button"
                     onClick={() => onArea(a.key, { crescimentoPct: fixada ? null : Math.round(valor * 100) / 100 })}
                     className={cn(
-                      'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+                      'inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold',
                       fixada ? 'border-amber-300 bg-amber-100 text-amber-800' : 'border-slate-200 bg-white text-slate-500 hover:border-indigo-300',
                     )}
                     title={fixada ? 'Voltar ao automático (a área passa a fechar a meta)' : 'Fixar este %'}
@@ -303,7 +303,7 @@ export function DesdobramentoAreas({
                 </div>
                 <NumInput value={p.receitaNova} onChange={(v) => onArea(a.key, { receitaNova: v })} casas={0} ariaLabel={`Receita nova ${a.nome}`} />
                 <div className="text-right">
-                  <p className="text-sm font-semibold tabular-nums text-slate-900">{moeda(ra.receitaAno)}</p>
+                  <p className="text-[13px] font-semibold tabular-nums text-slate-900">{moeda(ra.receitaAno)}</p>
                   <p className={cn('text-[11px] tabular-nums', delta >= 0 ? 'text-emerald-700' : 'text-red-700')}>
                     {delta >= 0 ? '+' : '−'}
                     {moedaCurta(Math.abs(delta))} vs. 2026
@@ -319,7 +319,7 @@ export function DesdobramentoAreas({
           {AREAS_PLANEJAMENTO.filter((a) => a.encerrada).map((a) => (
             <div
               key={a.key}
-              className="grid grid-cols-[minmax(190px,1.2fr)_minmax(220px,2fr)_170px_130px_minmax(170px,1fr)] items-center gap-3 border-b border-slate-100 px-2 py-2 text-slate-400"
+              className="grid grid-cols-[minmax(140px,1.1fr)_minmax(110px,1.5fr)_160px_92px_minmax(128px,1fr)] items-center gap-2 border-b border-slate-100 px-2 py-2 text-slate-400"
             >
               <div>
                 <p className="text-sm">{a.nome}</p>
@@ -329,7 +329,7 @@ export function DesdobramentoAreas({
               <p className="text-right text-sm tabular-nums">{moeda(0)}</p>
             </div>
           ))}
-          <div className="grid grid-cols-[minmax(190px,1.2fr)_minmax(220px,2fr)_170px_130px_minmax(170px,1fr)] items-center gap-3 bg-slate-50 px-2 py-2.5 text-sm font-semibold">
+          <div className="grid grid-cols-[minmax(140px,1.1fr)_minmax(110px,1.5fr)_160px_92px_minmax(128px,1fr)] items-center gap-2 bg-slate-50 px-2 py-2.5 text-sm font-semibold">
             <div>
               Escritório
               <p className="text-[11px] font-normal text-slate-500">{moedaCurta(d.receitaBase)} em 2026</p>
