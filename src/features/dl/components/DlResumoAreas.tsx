@@ -26,7 +26,13 @@ type Props = {
 type FenixAlvo = { chave: string; explicar: FenixExplicar }
 
 function fenixArea(a: DlArea): DlFenixArea {
-  return { key: a.area_key, nome: a.nome, departamento: a.departamento, referencia: a.referencia_mercado }
+  return {
+    key: a.area_key,
+    nome: a.nome,
+    departamento: a.departamento,
+    referencia: a.referencia_mercado,
+    regra_negativo: a.regra_negativo,
+  }
 }
 
 function Kpi({

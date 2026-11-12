@@ -80,20 +80,33 @@ const linha = (area_key: string, mes: number, over: Partial<DlMesRow> = {}): DlM
   pct_controladoria: 12.5,
   parametro_herdado: false,
   socios_prolabore: 120_000,
+  liberacao_recursos: 0,
+  aliquota: 16.0587,
+  aliquota_herdada: false,
+  origem_profissionais: 'cadastro_rh',
+  origem_controladoria: 'legal_ops',
+  fechado: false,
   ...over,
 })
 
 const rows: DlMesRow[] = [
-  linha('civel', 9),
-  linha('civel', 10, { receita_bruta: 80_000, impostos: 9_000 }),
-  linha('civel', 11, { parametro_herdado: true, profissionais: 6 }),
-  linha('contratos', 9, { profissionais: 3, pct_controladoria: 20 }),
-  linha('contratos', 10, { profissionais: 3, pct_controladoria: 20 }),
+  linha('civel', 9, { fechado: true, liberacao_recursos: 30_000 }),
+  linha('civel', 10, { receita_bruta: 80_000, impostos: 9_000, aliquota: 20.87, aliquota_herdada: true }),
+  linha('civel', 11, {
+    parametro_herdado: true,
+    profissionais: 6,
+    origem_profissionais: 'manual',
+    origem_controladoria: 'legal_ops_herdado',
+  }),
+  linha('contratos', 9, { profissionais: 3, pct_controladoria: 20, fechado: true }),
+  linha('contratos', 10, { profissionais: 3, pct_controladoria: 20, aliquota: 20.87, aliquota_herdada: true }),
   linha('contratos', 11, { profissionais: 3, pct_controladoria: 20, desp_operacionais: 90_000 }),
 ]
 const gestores: DlGestor[] = [
   { id: 'g1', ano: 2026, area_key: 'civel', nome: 'Gestor A', pct: 5, mes_inicio: 1, mes_fim: 12 },
   { id: 'g2', ano: 2026, area_key: 'contratos', nome: 'Gestor B', pct: 10, mes_inicio: 1, mes_fim: 12 },
+  // Saiu em abril: não pode aparecer em set–nov.
+  { id: 'g3', ano: 2026, area_key: 'civel', nome: 'Gestor C', pct: 3, mes_inicio: 1, mes_fim: 4 },
 ]
 const gestorMes: DlGestorMes[] = [
   { gestor_id: 'g1', mes: 9, clientes: 3, liquido_clientes: 50_000, resultado_clientes: 20_000, dl: 1_000.33 },
@@ -133,10 +146,14 @@ test('DL › Receita bruta: meses somam o total da tabela e regras de honorário
   serializavel(exp)
 })
 
-test('DL › Impostos: alíquota da planilha, só com nota fiscal, e % efetivo como info', () => {
+test('DL › Impostos: alíquota de cada mês, só com nota fiscal, e % efetivo como info', () => {
   const exp = explicarDlLinha('impostos', demoArea, totalArea, ctxArea)
-  perto(somaComSinal(parcelas(exp.conta)), totalArea.impostos)
-  assert.ok(exp.regras?.some((r) => r.includes('16,0587%') && r.includes('nota fiscal')))
+  const p = parcelas(exp.conta)
+  perto(somaComSinal(p), totalArea.impostos)
+  assert.ok(exp.regras?.some((r) => r.includes('alíquota do mês') && r.includes('nota fiscal') && r.includes('Parâmetros')))
+  assert.match(p[0]?.detalhe ?? '', /alíquota 16,0587%/)
+  assert.match(p[1]?.detalhe ?? '', /alíquota 20,87% \(do último mês cadastrado\)/)
+  assert.match(exp.formula ?? '', /alíquota do mês/)
   const efetivo = infos(exp.conta).find((l) => l.rotulo.startsWith('Imposto ÷'))
   perto(efetivo?.numero ?? 0, (totalArea.impostos / totalArea.receita_bruta) * 100, 1e-9)
   assert.ok(DL_ALIQUOTA_IMPOSTO_PCT > 16 && DL_ALIQUOTA_IMPOSTO_PCT < 17)
@@ -182,7 +199,8 @@ test('DL › Controladoria e Indiretas: % e profissionais reais de cada mês no 
   const p = parcelas(ctrl.conta)
   perto(somaComSinal(p), totalArea.desp_controladoria)
   assert.match(p[0]?.detalhe ?? '', /12,5% das despesas de Operações Legais/)
-  assert.match(p[2]?.detalhe ?? '', /herdados/)
+  assert.match(p[0]?.detalhe ?? '', /do Fechamento Legal Ops do mês/)
+  assert.match(p[2]?.detalhe ?? '', /último Fechamento Legal Ops/)
   assert.ok(ctrl.regras?.some((r) => r.includes('Operações Legais') && r.includes('%')))
 
   const ctrlGeral = explicarDlLinha('desp_controladoria', demoGeral, totalGeral, ctxGeral)
@@ -204,6 +222,26 @@ test('DL › DL Gestor: soma dos meses, gestor no detalhe, mês negativo zerado'
   assert.match(p[2]?.detalhe ?? '', /zero/)
   assert.ok(exp.regras?.some((r) => r.includes('negativo') && r.includes('zero')))
   assert.ok(exp.regras?.some((r) => r.includes('não é despesa da área')))
+  assert.ok(exp.regras?.some((r) => r.includes('ajuste')))
+  assert.ok(exp.regras?.some((r) => r.startsWith('Set está fechado')))
+  assert.doesNotMatch(p.map((l) => l.detalhe ?? '').join(' '), /Gestor C/)
+
+  const acum = explicarDlLinha('dl_gestor', demoArea, totalArea, {
+    ...ctxArea,
+    area: { ...civel, regra_negativo: 'acumulado' },
+  })
+  assert.ok(acum.regras?.some((r) => r.includes('acumulado no ano')))
+  assert.ok(!acum.regras?.some((r) => r.includes('não compensa com outros meses')))
+})
+
+test('DL › Liberação de Recursos: recebimentos do BB dentro da receita bruta', () => {
+  const exp = explicarDlLinha('liberacao_recursos', demoArea, totalArea, ctxArea)
+  perto(somaComSinal(parcelas(exp.conta)), 30_000)
+  assert.equal(totalArea.liberacao_recursos, 30_000)
+  assert.ok(exp.regras?.some((r) => r.includes('Banco do Brasil') && r.includes('Receita Bruta')))
+  const parte = infos(exp.conta).find((l) => l.rotulo === 'Parte da receita bruta')
+  perto(parte?.numero ?? 0, (30_000 / totalArea.receita_bruta) * 100, 1e-9)
+  serializavel(exp)
 })
 
 test('DL › Profissionais: média = soma ÷ meses com profissionais', () => {
@@ -213,6 +251,8 @@ test('DL › Profissionais: média = soma ÷ meses com profissionais', () => {
   perto(soma / n, totais(exp.conta)[0]?.numero ?? 0, 1e-9)
   assert.equal(totalArea.profissionais, 16 / 3)
   assert.equal(exp.valor, '5,3 (média)')
+  assert.match(parcelas(exp.conta)[2]?.detalhe ?? '', /digitado na aba Parâmetros/)
+  assert.ok(exp.regras?.some((r) => r.includes('cadastro do RH')))
 })
 
 test('DL › Custo hora: custo ÷ horas com as premissas de dlCalc', () => {
@@ -235,6 +275,7 @@ test('DL › Card DL Gestores: áreas somam o total, com os gestores de cada uma
   const exp = explicarDlGestoresResumo(porArea, totalGeral.dl_gestor, ctxGeral)
   perto(somaComSinal(parcelas(exp.conta)), totalGeral.dl_gestor)
   assert.match(parcelas(exp.conta)[1]?.detalhe ?? '', /Gestor B 10%/)
+  assert.doesNotMatch(parcelas(exp.conta)[0]?.detalhe ?? '', /Gestor C/)
   serializavel(exp)
 })
 

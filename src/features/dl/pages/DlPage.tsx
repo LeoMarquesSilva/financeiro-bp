@@ -9,8 +9,18 @@ import { useDlAreas, useDlGestorMensal, useDlGestores, useDlResultado } from '..
 import { DlDemonstrativoTable } from '../components/DlDemonstrativoTable'
 import { DlResumoAreas } from '../components/DlResumoAreas'
 import { DlParametros } from '../components/DlParametros'
+import { DlGestoresTable } from '../components/DlGestoresTable'
+import { DlFechamentoBar } from '../components/DlFechamentoBar'
 import type { DlArea, DlGestor, DlMesRow } from '../types/dl.types'
-import { DL_REFERENCIA_GERAL, calcularDemonstrativo, dlGestorPorArea, intervaloMeses, mesAtualDl } from '../utils/dlCalc'
+import {
+  DL_REFERENCIA_GERAL,
+  calcularDemonstrativo,
+  dlGestorPorArea,
+  dlGestorTabela,
+  gestorVigenteNoPeriodo,
+  intervaloMeses,
+  mesAtualDl,
+} from '../utils/dlCalc'
 
 const ANOS = [2026, 2027]
 
@@ -67,6 +77,12 @@ export function DlPage() {
     () => calcularDemonstrativo(rows, [areaSel], meses, dlGestor),
     [rows, areaSel, meses, dlGestor],
   )
+  const tabelaGestores = useMemo(
+    () => dlGestorTabela(gestores, gestorMesData ?? [], meses),
+    [gestores, gestorMesData, meses],
+  )
+  // Só quem estava na área em algum mês do período (saída ou mudança de área encerram a vigência).
+  const gestoresDaArea = gestores.filter((g) => g.area_key === areaSel && gestorVigenteNoPeriodo(g, meses))
 
   const erro = error ?? erroAreas ?? erroGestor
 
@@ -80,6 +96,7 @@ export function DlPage() {
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Fechamento por área calculado direto do SIOE (VIOS), base caixa: receita, despesas, rateios e DL dos gestores.
+            Mês fechado fica gravado; mudanças posteriores no VIOS entram como ajuste no mês seguinte.
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -118,6 +135,8 @@ export function DlPage() {
           Erro ao carregar o DL: {erro instanceof Error ? erro.message : 'verifique a função dl_resultado_mensal no Supabase'}.
         </p>
       )}
+
+      {aba !== 'caixa' && <DlFechamentoBar ano={ano} />}
 
       <Tabs value={aba} onValueChange={setAba}>
         <TabsList className="inline-flex h-auto flex-row flex-wrap items-stretch gap-0.5 p-1">
@@ -162,6 +181,7 @@ export function DlPage() {
                   },
                 }}
               />
+              <DlGestoresTable titulo="DL por gestor" linhas={tabelaGestores} meses={meses} areas={areas} comArea />
             </>
           )}
         </TabsContent>
@@ -187,36 +207,42 @@ export function DlPage() {
           {isLoading ? (
             <div className="h-80 animate-pulse rounded-xl bg-slate-100" />
           ) : (
-            <DlDemonstrativoTable
-              titulo={`DL mensal — ${areaInfo?.nome ?? areaSel}`}
-              subtitulo={
-                gestores.filter((g) => g.area_key === areaSel).length > 0
-                  ? `Gestores: ${gestores
-                      .filter((g) => g.area_key === areaSel)
-                      .map((g) => `${g.nome} ${g.pct.toLocaleString('pt-BR')}%`)
-                      .join(' · ')}`
-                  : 'Sem gestor com DL cadastrado'
-              }
-              meses={porArea}
-              referencia={areaInfo?.referencia_mercado ?? null}
-              mesParcial={mesParcial}
-              fenix={{
-                chave: 'dl.area',
-                contexto: {
-                  ano,
-                  meses,
-                  area: {
-                    key: areaSel,
-                    nome: areaInfo?.nome ?? areaSel,
-                    departamento: areaInfo?.departamento ?? areaSel,
-                    referencia: areaInfo?.referencia_mercado ?? null,
+            <>
+              <DlDemonstrativoTable
+                titulo={`DL mensal — ${areaInfo?.nome ?? areaSel}`}
+                subtitulo={
+                  gestoresDaArea.length > 0
+                    ? `Gestores: ${gestoresDaArea.map((g) => `${g.nome} ${g.pct.toLocaleString('pt-BR')}%`).join(' · ')}`
+                    : 'Sem gestor com DL no período'
+                }
+                meses={porArea}
+                referencia={areaInfo?.referencia_mercado ?? null}
+                mesParcial={mesParcial}
+                fenix={{
+                  chave: 'dl.area',
+                  contexto: {
+                    ano,
+                    meses,
+                    area: {
+                      key: areaSel,
+                      nome: areaInfo?.nome ?? areaSel,
+                      departamento: areaInfo?.departamento ?? areaSel,
+                      referencia: areaInfo?.referencia_mercado ?? null,
+                      regra_negativo: areaInfo?.regra_negativo,
+                    },
+                    mesParcial,
+                    rows,
+                    gestores,
                   },
-                  mesParcial,
-                  rows,
-                  gestores,
-                },
-              }}
-            />
+                }}
+              />
+              <DlGestoresTable
+                titulo={`DL por gestor — ${areaInfo?.nome ?? areaSel}`}
+                linhas={tabelaGestores.filter((l) => l.gestor.area_key === areaSel)}
+                meses={meses}
+                areas={areas}
+              />
+            </>
           )}
         </TabsContent>
 

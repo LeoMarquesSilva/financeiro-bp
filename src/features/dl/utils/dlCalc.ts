@@ -1,4 +1,12 @@
-import type { DlGestor, DlGestorAreaMes, DlGestorMes, DlLinhaKey, DlMesCalculado, DlMesRow } from '../types/dl.types'
+import type {
+  DlGestor,
+  DlGestorAreaMes,
+  DlGestorLinha,
+  DlGestorMes,
+  DlLinhaKey,
+  DlMesCalculado,
+  DlMesRow,
+} from '../types/dl.types'
 
 /** Horas úteis por profissional no mês (8h × 21 dias) e eficiência usada na planilha oficial. */
 export const DL_HORAS_DIA = 8
@@ -30,11 +38,30 @@ export function dlGestorPorArea(gestores: DlGestor[], gestorMes: DlGestorMes[]):
   })
 }
 
+/** Gestor com vigência em algum dos meses (quem saiu ou mudou de área some dos meses seguintes). */
+export function gestorVigenteNoPeriodo(g: DlGestor, meses: number[]): boolean {
+  return meses.some((m) => m >= g.mes_inicio && m <= g.mes_fim)
+}
+
+/** DL de cada gestor mês a mês (com o ajuste de meses fechados), para conferência e pagamento. */
+export function dlGestorTabela(gestores: DlGestor[], gestorMes: DlGestorMes[], meses: number[]): DlGestorLinha[] {
+  return gestores.filter((g) => gestorVigenteNoPeriodo(g, meses)).map((gestor) => {
+    const linhas = meses.map((mes) => {
+      const g = gestorMes.find((x) => x.gestor_id === gestor.id && x.mes === mes)
+      return g ? { mes, dl: g.dl, dl_calculado: g.dl_calculado, ajuste: g.ajuste, fechado: g.fechado } : null
+    })
+    return { gestor, meses: linhas, total: linhas.reduce((s, l) => s + (l?.dl ?? 0), 0) }
+  })
+}
+
 function vazio(mes: number): DlMesCalculado {
   return {
     mes,
     herdado: false,
+    aliquota_herdada: false,
+    fechado: false,
     receita_bruta: 0,
+    liberacao_recursos: 0,
     impostos: 0,
     receita_liquida: 0,
     desp_operacionais: 0,
@@ -77,6 +104,7 @@ export function calcularDemonstrativo(
       const a = derivar({
         ...vazio(mes),
         receita_bruta: r.receita_bruta,
+        liberacao_recursos: r.liberacao_recursos,
         impostos: r.impostos,
         desp_operacionais: r.desp_operacionais,
         desp_controladoria: r.desp_controladoria,
@@ -84,6 +112,7 @@ export function calcularDemonstrativo(
         profissionais: r.profissionais,
       })
       out.receita_bruta += a.receita_bruta
+      out.liberacao_recursos += a.liberacao_recursos
       out.impostos += a.impostos
       out.desp_operacionais += a.desp_operacionais
       out.desp_controladoria += a.desp_controladoria
@@ -93,6 +122,8 @@ export function calcularDemonstrativo(
         .filter((g) => g.area_key === area && g.mes === mes)
         .reduce((s, g) => s + g.dl, 0)
       out.herdado ||= r.parametro_herdado
+      out.aliquota_herdada ||= r.aliquota_herdada
+      out.fechado ||= r.fechado
     }
     const dl = out.dl_gestor
     return { ...derivar(out), dl_gestor: dl }
@@ -104,6 +135,7 @@ export function totalDemonstrativo(meses: DlMesCalculado[]): DlMesCalculado {
   const t = vazio(0)
   for (const m of meses) {
     t.receita_bruta += m.receita_bruta
+    t.liberacao_recursos += m.liberacao_recursos
     t.impostos += m.impostos
     t.desp_operacionais += m.desp_operacionais
     t.desp_controladoria += m.desp_controladoria
@@ -128,6 +160,7 @@ export const DL_LINHAS: Array<{
   tipo: 'valor' | 'saida' | 'resultado' | 'pct' | 'info'
 }> = [
   { key: 'receita_bruta', label: 'Receita Bruta', tipo: 'valor' },
+  { key: 'liberacao_recursos', label: 'dos quais Liberação de Recursos (BB)', tipo: 'info' },
   { key: 'impostos', label: '(−) Impostos', tipo: 'saida' },
   { key: 'receita_liquida', label: '(=) Receita Líquida', tipo: 'resultado' },
   { key: 'desp_operacionais', label: '(−) Desp. Operacionais', tipo: 'saida' },
