@@ -2,7 +2,12 @@
 
 export type PlanAreaRow = { area_key: string; nome: string; departamento: string; ordem: number }
 
-export type PlanReceitaRow = { mes: number; area_key: string; origem: 'departamento' | 'classificado' | 'sem_area'; recebido: number }
+export type PlanReceitaRow = {
+  mes: number
+  area_key: string
+  origem: 'departamento' | 'rateio_titulo' | 'classificado' | 'sem_area'
+  recebido: number
+}
 
 export type PlanReceitaSemAreaRow = {
   cliente: string
@@ -11,6 +16,20 @@ export type PlanReceitaSemAreaRow = {
   titulos: number
   sugestao_area_key: string | null
   area_key: string | null
+  classificado_por_email: string | null
+  classificado_em: string | null
+  /** Ainda sem área (sem rateio do título e sem classificação do cliente). */
+  pendente: number
+  /** Valor dos títulos rateados por % entre áreas. */
+  rateado: number
+  titulos_rateados: number
+}
+
+/** % de uma área num título de receita sem área (planejamento_receita_rateio_titulo). */
+export type PlanRateioTituloRow = {
+  ci_titulo: number
+  area_key: string
+  pct: number
   classificado_por_email: string | null
   classificado_em: string | null
 }
