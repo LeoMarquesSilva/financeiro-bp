@@ -7,11 +7,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ModalConfirmacao } from '@/components/ui/modal-confirmacao'
 import { cn } from '@/lib/utils'
 import { RECEITA_META_INADIMPLENCIA_PCT } from '@/features/receita/constants'
-import { ANO_ALVO, useCenarioMutations, usePlanBases, usePlanCenarios } from '../hooks/usePlanejamento'
+import {
+  ANO_ALVO,
+  useCenarioMutations,
+  usePlanBases,
+  usePlanCenarios,
+  usePlanInadimplencia,
+  usePlanInadimplenciaPeriodo,
+} from '../hooks/usePlanejamento'
 import { carregarIndicadoresEscritorio } from '../hooks/useIndicadores'
 import { taxaEfetivaEscritorio } from '../utils/planejamentoBase'
 import { normalizarPremissas, premissasPadrao, simular, linhasMetasOficiais, type Premissas } from '../utils/planejamentoCalc'
 import { historico25a26, modelosCenario, type ModeloCenario } from '../utils/planejamentoModelos'
+import { resumoInadimplencia } from '../utils/inadimplenciaResumo'
 import { linhasMetasOperacionais } from '../utils/indicadoresOperacionais'
 import { exportarPlanejamentoExcel } from '../utils/planejamentoExcelExport'
 import type { PlanCenarioRow } from '../types'
@@ -32,6 +40,19 @@ type Confirmacao = { titulo: string; texto: string; rotulo: string; destrutivo?:
 export function PlanejamentoPage() {
   const qc = useQueryClient()
   const bases = usePlanBases()
+  const inadMes26 = usePlanInadimplencia(2026)
+  const inadPer26 = usePlanInadimplenciaPeriodo(2026)
+  const inadPer25 = usePlanInadimplenciaPeriodo(2025)
+  const inadimplencia = useMemo(
+    () =>
+      inadMes26.data && inadPer26.data
+        ? {
+            r26: resumoInadimplencia(inadMes26.data, inadPer26.data, bases.ultimoMesFechado),
+            r25: resumoInadimplencia(undefined, inadPer25.data, 12),
+          }
+        : null,
+    [inadMes26.data, inadPer26.data, inadPer25.data, bases.ultimoMesFechado],
+  )
   const cenariosQ = usePlanCenarios(ANO_ALVO)
   const mut = useCenarioMutations(ANO_ALVO)
   const cenarios: PlanCenarioRow[] = useMemo(() => cenariosQ.data ?? [], [cenariosQ.data])
@@ -218,6 +239,7 @@ export function PlanejamentoPage() {
         ultimoMesFechado: bases.ultimoMesFechado,
         resultado,
         indicadores,
+        inadimplencia,
       })
     } catch (e) {
       toast.error(`Não foi possível gerar o Excel: ${e instanceof Error ? e.message : String(e)}`)
@@ -329,6 +351,7 @@ export function PlanejamentoPage() {
               modelos={modelos}
               historico={historico}
               onAplicarModelo={aplicarModelo}
+              inadimplencia={inadimplencia}
             />
           </TabsContent>
         </Tabs>

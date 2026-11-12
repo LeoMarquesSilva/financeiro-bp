@@ -10,6 +10,7 @@ import { AREAS_2027, AREAS_PLANEJAMENTO, MESES_ABREV, soma } from './areasPlanej
 import { controladoriaNaoRateada, type BaseAno, type BaseArea } from './planejamentoBase.ts'
 import type { Premissas, ResultadoSimulacao } from './planejamentoCalc.ts'
 import { INDICADORES, metaEfetivaArea, type IndicadorId, type ValorIndicador } from './indicadoresOperacionais.ts'
+import type { ResumoInadimplencia } from './inadimplenciaResumo.ts'
 
 const fmtMoeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -23,6 +24,8 @@ export type PlanilhaInput = {
   ultimoMesFechado: number
   resultado: ResultadoSimulacao
   indicadores: { v25: Partial<Record<IndicadorId, ValorIndicador>>; v26: Partial<Record<IndicadorId, ValorIndicador>> }
+  /** Referência para a meta de inadimplência (só texto na aba Premissas). */
+  inadimplencia?: { r26: ResumoInadimplencia; r25: ResumoInadimplencia } | null
 }
 
 export const ABAS = {
@@ -151,6 +154,16 @@ function linhaTotal(ws: ExcelJS.Worksheet, linha: number, ate: number) {
   }
 }
 
+const pctTxt = (v: number | null) => (v == null ? '—' : `${v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`)
+
+/** Referência 2026 (e 2025) para a meta de inadimplência. */
+export function textoReferenciaInadimplencia(input: Pick<PlanilhaInput, 'inadimplencia' | 'ultimoMesFechado'>): string | null {
+  const i = input.inadimplencia
+  if (!i || i.r26.meses.length === 0) return null
+  const ate = (MESES_ABREV[Math.max(...i.r26.meses) - 1] ?? '').toLowerCase()
+  return `Referência 2026 (jan–${ate}): média no fechamento do mês ${pctTxt(i.r26.mediaFechamentoPct)}; ainda em aberto hoje ${pctTxt(i.r26.emAbertoHojePct)}. 2025 ainda em aberto hoje: ${pctTxt(i.r25.emAbertoHojePct)}.`
+}
+
 function abaPremissas(wb: ExcelJS.Workbook, input: PlanilhaInput) {
   const p = input.premissas
   const ws = wb.addWorksheet(ABAS.premissas, { views: [{ state: 'frozen', ySplit: 2 }] })
@@ -187,6 +200,12 @@ function abaPremissas(wb: ExcelJS.Workbook, input: PlanilhaInput) {
     wb.definedNames.add(`${q(ABAS.premissas)}!$B$${r}`, nome)
   }
   ws.getCell(`B${linhaNome('distribuicao')}`).dataValidation = { type: 'list', allowBlank: false, formulae: ['"sazonal,linear"'] }
+  const ref = textoReferenciaInadimplencia(input)
+  if (ref) {
+    const c = ws.getCell(`C${linhaNome('inadimplencia')}`)
+    c.value = ref
+    c.font = { italic: true, size: 9, color: { argb: 'FF64748B' } }
+  }
   ws.getCell(`B${linhaNome('mes_reajuste')}`).dataValidation = { type: 'whole', operator: 'between', allowBlank: false, formulae: [1, 12] }
 
   // Desdobramento da meta: áreas no automático crescem o mesmo % e fecham a meta do escritório.
