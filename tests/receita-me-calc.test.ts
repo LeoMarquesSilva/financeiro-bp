@@ -250,3 +250,60 @@ test('meta variável no mês, meta anual no acumulado e no gap', () => {
   assert.equal(gap.necessarioPorMes, 1_150)
   assert.equal(gap.gap, 0)
 })
+
+test('nova receita que virou título é descontada sozinha (caso Inconel), e "são diferentes" desfaz', () => {
+  const area = 'insolvencia'
+  const p = (mes: number, valor: number) => ({ areaKey: area, grupo: 'Grupo Inconel', mes, valor, pago: false, vencido: false })
+  // Gerente viu R$ 5 mil por mês; depois entraram os títulos de R$ 200 mil.
+  const previstos = [p(11, 5000), p(11, 200000), p(12, 5000), p(12, 200000)]
+  const vistos = [11, 12].map((mes) => ({ ano: 2026, area_key: area, grupo: 'Grupo Inconel', mes, valor_visto: 5000 }))
+  const nr = nova({ id: 'inc', area_key: area, nome: 'Grupo Inconel', grupo_cliente: 'Grupo Inconel', valor: 200000, mes_inicio: 10, mes_fim: 12, chance: 'alta' })
+  const entrada = { areaKey: area, meses: [11, 12], mesCorrente: 11, previstos, recebidos: [], ajustes: [], novasReceitas: [nr], vistos, confirmada: true }
+
+  const r = calcularAreaMe(entrada)
+  assert.deepEqual(r.novasPorMes, { 11: 0, 12: 0 })
+  assert.deepEqual(r.compensadoPorMes, { 11: 200000, 12: 200000 })
+  assert.equal(r.compensado, 400000)
+  assert.deepEqual(r.mePorMes, { 11: 205000, 12: 205000 }, 'título conta uma vez só')
+  const n = r.novidades.find((x) => x.tipo === 'novo')
+  assert.ok(n && n.tipo === 'novo' && n.duplicidade?.novaReceitaId === 'inc' && n.duplicidade.compensado === 400000)
+  assert.deepEqual(n && n.tipo === 'novo' ? n.duplicidade?.meses : [], [11, 12])
+
+  // "São receitas diferentes" marca o título como visto: o desconto some e os dois contam.
+  const diferentes = calcularAreaMe({ ...entrada, vistos: [11, 12].map((mes) => ({ ...vistos[0], mes, valor_visto: 205000 })) })
+  assert.deepEqual(diferentes.novasPorMes, { 11: 200000, 12: 200000 })
+  assert.deepEqual(diferentes.mePorMes, { 11: 405000, 12: 405000 })
+  assert.equal(diferentes.compensado, 0)
+
+  // "Confirmar: é a mesma" baixa os meses da nova receita: mesma ME do desconto automático.
+  const vistosAtuais = [11, 12].map((mes) => ({ ...vistos[0], mes, valor_visto: 205000 }))
+  const baixada = calcularAreaMe({ ...entrada, novasReceitas: [{ ...nr, meses_baixados: [11, 12] }], vistos: vistosAtuais })
+  assert.deepEqual(baixada.mePorMes, r.mePorMes)
+})
+
+test('desconto automático vai só até o valor do título novo e só depois de confirmar a área', () => {
+  const previstos = [prev('Grupo Lead', 11, 150000)]
+  const nr = nova({ id: 'l', nome: 'Grupo Lead', grupo_cliente: 'Grupo Lead', valor: 200000, mes_inicio: 11, mes_fim: 11, recorrencia: 'pontual', chance: 'media' })
+  const parcial = base({ previstos, novasReceitas: [nr], confirmada: true })
+  assert.equal(parcial.novasPorMes[11], 50000, 'sobra da estimativa que ainda não virou título')
+  assert.equal(parcial.compensadoPorMes[11], 150000)
+  assert.equal(parcial.mePorMes[11], 200000)
+
+  const semConfirmar = base({ previstos, novasReceitas: [nr], confirmada: false })
+  assert.equal(semConfirmar.novasPorMes[11], 200000, 'sem confirmação não há como saber o que é novo')
+  assert.equal(semConfirmar.compensado, 0)
+
+  // Outra área ou outro grupo não descontam.
+  const outroGrupo = base({ previstos: [prev('Grupo Outro', 11, 150000)], novasReceitas: [nr], confirmada: true })
+  assert.equal(outroGrupo.novasPorMes[11], 200000)
+})
+
+test('título novo desconta chance alta/média antes da baixa; o resto desconta o potencial', () => {
+  const previstos = [prev('Grupo X', 12, 1500)]
+  const alta = nova({ id: 'a', nome: 'Grupo X', grupo_cliente: 'Grupo X', valor: 1000, mes_inicio: 12, mes_fim: 12, recorrencia: 'pontual', chance: 'alta' })
+  const baixa = nova({ id: 'b', nome: 'Grupo X', grupo_cliente: 'Grupo X', valor: 800, mes_inicio: 12, mes_fim: 12, recorrencia: 'pontual', chance: 'baixa' })
+  const r = base({ previstos, novasReceitas: [baixa, alta], confirmada: true })
+  assert.equal(r.novasPorMes[12], 0)
+  assert.equal(r.compensadoPorMes[12], 1000)
+  assert.equal(r.potencial, 300, '1.500 do título: 1.000 descontam a alta e 500 descontam a baixa')
+})

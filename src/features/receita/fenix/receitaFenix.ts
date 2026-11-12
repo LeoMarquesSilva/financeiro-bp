@@ -633,7 +633,7 @@ export function explicarMeComposicao(c: ReceitaMeFenixContexto): FenixExplicacao
       'Recebido: só o caixa do mês atual. Meses já fechados entram pelo realizado, na Projeção.',
       'Fora da estimativa: vencido sem pagamento (fora por padrão) e o que o gerente marcou como "não deve pagar".',
       'Novas receitas: lançadas pelo gerente. Chance alta e média entram na ME; chance baixa fica só como potencial.',
-      'Quando uma nova receita vira título no VIOS, aquele mês sai da nova receita para não contar duas vezes.',
+      'Quando uma nova receita vira título no VIOS (mesmo grupo e mês), o valor do título novo é descontado da nova receita automaticamente, até o valor estimado, para não contar duas vezes. "São receitas diferentes" desfaz o desconto.',
     ],
     fonte: 'Carteira de títulos do VIOS, caixa do mês atual e lançamentos dos gerentes no SIOE.',
     fonteTecnica: 'calcularAreaMe (receitaMeCalc.ts) · tabelas receita_me_ajustes e receita_me_novas_receitas',
