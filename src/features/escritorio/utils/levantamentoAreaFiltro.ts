@@ -1,7 +1,10 @@
 import { AREAS_EFICIENCIA_JURIDICO } from '@/features/eficiencia/constants'
 
-/** Áreas do slicer — mesmo conjunto do painel Eficiência Jurídico. */
-export const LEVANTAMENTO_AREA_OPCOES = [...AREAS_EFICIENCIA_JURIDICO] as const
+/**
+ * Áreas do slicer — conjunto do painel Eficiência Jurídico + Tributário
+ * (Tributário não entra no Eficiência, mas tem horas, publicações e contratos no Escritório).
+ */
+export const LEVANTAMENTO_AREA_OPCOES = [...AREAS_EFICIENCIA_JURIDICO, 'Tributário'] as const
 
 const REESTRUTURACAO_RAW_KEYS = new Set([
   'reestruturação',
