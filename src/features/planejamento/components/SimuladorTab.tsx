@@ -1,17 +1,21 @@
-import { useState } from 'react'
-import { BadgeCheck, Copy, Download, FilePlus2, Save, Trash2 } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { BadgeCheck, Copy, Download, FilePlus2, Save, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/shared/utils/format'
 import { useFenixAlvo } from '@/shared/fenix/useFenix'
-import { AREAS_2027, AREAS_PLANEJAMENTO, MESES_ABREV, areaNome, soma, variacaoPct, type AreaKey } from '../utils/areasPlanejamento'
+import { AREAS_2027, MESES_ABREV, areaNome, soma, variacaoPct, type AreaKey } from '../utils/areasPlanejamento'
 import { controladoriaNaoRateada, taxaEfetivaEscritorio, totaisArea, somarAreas, type BaseAno } from '../utils/planejamentoBase'
-import type { PremissaArea, Premissas, PremissasEscritorio, ResultadoSimulacao } from '../utils/planejamentoCalc'
+import { simular, type PremissaArea, type Premissas, type PremissasEscritorio, type ResultadoSimulacao } from '../utils/planejamentoCalc'
+import { INFLACAO_MODELOS_PCT, REAJUSTE_MODELOS_PCT, type Historico, type ModeloCenario } from '../utils/planejamentoModelos'
 import type { PlanCenarioRow } from '../types'
 import { useIndicadoresOperacionais } from '../hooks/useIndicadores'
+import { usePlanPessoas } from '../hooks/usePlanejamento'
 import { fenixResultadoEscritorio, fenixSimulacaoArea } from '../fenix/planejamentoFenix'
 import { NumInput } from './NumInput'
 import { AreaChips, Aviso, CarregandoBloco, PlanKpi, Secao, TabelaMeses, VarPct, moeda, moedaCurta, pct } from './PlanUi'
+import { DesdobramentoAreas, MetaCrescimento } from './SimuladorReceita'
+import { SimuladorPessoas } from './SimuladorPessoas'
 import { TabelaIndicadores } from './TabelaIndicadores'
 
 type Props = {
@@ -35,6 +39,46 @@ type Props = {
   onOficializar: () => void
   onExportar: () => void
   exportando: boolean
+  modelos: ModeloCenario[]
+  historico: Historico | null
+  onAplicarModelo: (m: ModeloCenario) => void
+}
+
+const sinalPct = (v: number | null | undefined) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${pct(v)}`)
+
+function CartaoModelo({ m, ativo, base2026, onClick }: { m: ModeloCenario; ativo: boolean; base2026: BaseAno; onClick: () => void }) {
+  const r = useMemo(() => simular(base2026, m.premissas).escritorio, [base2026, m.premissas])
+  const item = (rotulo: string, valor: ReactNode, tom?: string) => (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-slate-400">{rotulo}</p>
+      <p className={cn('text-xs font-semibold tabular-nums text-slate-800', tom)}>{valor}</p>
+    </div>
+  )
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativo}
+      className={cn(
+        'rounded-lg border p-3 text-left transition-colors',
+        ativo ? 'border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500' : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/30',
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-900">{m.rotulo}</span>
+        <span className={cn('text-lg font-bold tabular-nums', m.crescimentoPct >= 0 ? 'text-indigo-700' : 'text-red-700')}>
+          {m.crescimentoPct >= 0 ? '+' : ''}
+          {m.crescimentoPct}%
+        </span>
+      </div>
+      <p className="mt-0.5 min-h-[30px] text-[11px] leading-snug text-slate-500">{m.descricao}</p>
+      <div className="mt-2 grid grid-cols-3 gap-2 border-t border-slate-100 pt-2">
+        {item('Receita', moedaCurta(r.receitaAno))}
+        {item('Margem', moedaCurta(r.margemAno))}
+        {item('Resultado', moedaCurta(r.resultadoAno), r.resultadoAno < 0 ? 'text-red-700' : 'text-emerald-700')}
+      </div>
+    </button>
+  )
 }
 
 function CelulaMeta({ area, p, e, r }: { area: AreaKey; p: PremissaArea; e: PremissasEscritorio; r: ResultadoSimulacao }) {
@@ -47,20 +91,27 @@ function CelulaMeta({ area, p, e, r }: { area: AreaKey; p: PremissaArea; e: Prem
   )
 }
 
-const MESES_OPC = MESES_ABREV.map((m, i) => ({ v: i + 1, l: m }))
-
 export function SimuladorTab(props: Props) {
   const { base2025, base2026, ultimoMesFechado, premissas, onPremissas, resultado, cenarios, cenarioId } = props
   const e = premissas.escritorio
   const [selRes, setSelRes] = useState('escritorio')
   const [selOp, setSelOp] = useState('escritorio')
   const indicadores = useIndicadoresOperacionais(selOp, ultimoMesFechado)
+  const pessoas26 = usePlanPessoas(2026)
   const atual = cenarios.find((c) => c.id === cenarioId) ?? null
 
   const setE = <K extends keyof PremissasEscritorio>(k: K, v: PremissasEscritorio[K]) =>
     onPremissas({ ...premissas, escritorio: { ...e, [k]: v } })
-  const setA = <K extends keyof PremissaArea>(area: AreaKey, k: K, v: PremissaArea[K]) =>
-    onPremissas({ ...premissas, areas: { ...premissas.areas, [area]: { ...premissas.areas[area], [k]: v } } })
+  const mudarE = (mudanca: Partial<PremissasEscritorio>) => onPremissas({ ...premissas, escritorio: { ...e, ...mudanca } })
+  const mudarA = (area: AreaKey, mudanca: Partial<PremissaArea>) =>
+    onPremissas({ ...premissas, areas: { ...premissas.areas, [area]: { ...premissas.areas[area], ...mudanca } } })
+  const soltarTodas = () =>
+    onPremissas({
+      ...premissas,
+      areas: Object.fromEntries(
+        Object.entries(premissas.areas).map(([k, v]) => [k, { ...v, crescimentoPct: null }]),
+      ) as Record<AreaKey, PremissaArea>,
+    })
   const setMetaOp = (indicador: string, area: string | null, valor: number | null) => {
     const atualOp = premissas.operacionais[indicador] ?? { escritorio: null, areas: {} }
     const novo = area == null ? { ...atualOp, escritorio: valor } : { ...atualOp, areas: { ...atualOp.areas, [area]: valor } }
@@ -181,19 +232,44 @@ export function SimuladorTab(props: Props) {
             </Button>
           </div>
         </div>
+        {props.modelos.length > 0 && (
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <Sparkles className="h-3.5 w-3.5 text-indigo-600" aria-hidden />
+              Cenários prontos
+              <span className="font-normal text-slate-500">
+                — a partir do crescimento de 2025 para 2026 ({sinalPct(props.historico?.receitaPct)} na receita). Clique para carregar, ajuste o que
+                quiser e salve.
+              </span>
+            </p>
+            <div className="mt-2 grid gap-2 md:grid-cols-3">
+              {props.modelos.map((m) => (
+                <CartaoModelo
+                  key={m.id}
+                  m={m}
+                  base2026={base2026}
+                  ativo={JSON.stringify(m.premissas) === JSON.stringify(premissas)}
+                  onClick={() => props.onAplicarModelo(m)}
+                />
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">
+              Nos três: áreas no automático; reajuste salarial de {REAJUSTE_MODELOS_PCT}% em janeiro; custo de pessoas crescendo na mesma proporção de
+              25→26 (pessoas das áreas {sinalPct(props.historico?.pessoasPct)} para receita {sinalPct(props.historico?.receitaPct)}), com o que passa do
+              reajuste em &quot;ajustes na equipe atual&quot;; demais despesas, Controladoria e estrutura +{INFLACAO_MODELOS_PCT}% (Acelerar: 10%, 8% e 8%).
+            </p>
+          </div>
+        )}
       </Secao>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <PlanKpi
-          rotulo="Meta de receita 2027"
-          valor={moedaCurta(esc.receitaAno)}
-          tom="destaque"
-          sub={
-            <>
-              vs. 2026 (real + ME) {moedaCurta(esc.receitaBaseAno)}: <VarPct v={variacaoPct(esc.receitaAno, esc.receitaBaseAno)} />
-            </>
-          }
-        />
+      <MetaCrescimento
+        resultado={resultado}
+        crescimentoPct={e.crescimentoReceitaPct}
+        onCrescimento={(v) => setE('crescimentoReceitaPct', v)}
+        historicoPct={props.historico?.receitaPct ?? null}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-3">
         <PlanKpi
           rotulo="Margem de contribuição 2027"
           valor={moedaCurta(esc.margemAno)}
@@ -222,155 +298,136 @@ export function SimuladorTab(props: Props) {
         />
       </div>
 
-      <Secao titulo="Premissas do escritório" subtitulo="Campos em amarelo são editáveis; tudo recalcula na hora.">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="space-y-1 text-xs text-slate-600">
-            <span className="block font-medium">Alíquota de imposto 2027 (sobre a receita)</span>
-            <NumInput value={e.aliquotaPct} onChange={(v) => setE('aliquotaPct', v)} sufixo="%" min={0} max={99} />
-            <span className="block text-[10px] text-slate-400">
-              Taxa efetiva 2026 jan–{(MESES_ABREV[ultimoMesFechado - 1] ?? '').toLowerCase()} (regra do DL: alíquota × títulos com NF):{' '}
-              {pct(taxaEfetivaEscritorio(base2026, Array.from({ length: ultimoMesFechado }, (_, i) => i + 1)) * 100, 2)}. Ajuste para o
-              Lucro Presumido.
-            </span>
-          </label>
-          <label className="space-y-1 text-xs text-slate-600">
-            <span className="block font-medium">Reajuste da folha</span>
-            <div className="flex gap-2">
-              <NumInput value={e.reajustePct} onChange={(v) => setE('reajustePct', v)} sufixo="%" className="w-24" />
+      <DesdobramentoAreas resultado={resultado} base2025={base2025} areas={premissas.areas} onArea={mudarA} onSoltarTodas={soltarTodas} />
+
+      <SimuladorPessoas
+        resultado={resultado}
+        escritorio={e}
+        areas={premissas.areas}
+        pessoas2026={pessoas26.data}
+        ultimoMesFechado={ultimoMesFechado}
+        onEscritorio={mudarE}
+        onArea={mudarA}
+      />
+
+      <Secao titulo="Outras premissas" subtitulo="Imposto, demais despesas, Controladoria, estrutura e inadimplência. Campos em amarelo são editáveis; tudo recalcula na hora.">
+        <div className="grid gap-4 lg:grid-cols-[1fr_1.1fr]">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-xs text-slate-600">
+              <span className="block font-medium">Alíquota de imposto 2027 (sobre a receita)</span>
+              <NumInput value={e.aliquotaPct} onChange={(v) => setE('aliquotaPct', v)} sufixo="%" min={0} max={99} />
+              <span className="block text-[10px] text-slate-400">
+                Taxa efetiva 2026 jan–{(MESES_ABREV[ultimoMesFechado - 1] ?? '').toLowerCase()}:{' '}
+                {pct(taxaEfetivaEscritorio(base2026, Array.from({ length: ultimoMesFechado }, (_, i) => i + 1)) * 100, 2)}. Ajuste para o Lucro Presumido.
+              </span>
+            </label>
+            <label className="space-y-1 text-xs text-slate-600">
+              <span className="block font-medium">Meta de inadimplência</span>
+              <NumInput value={e.inadimplenciaMetaPct} onChange={(v) => setE('inadimplenciaMetaPct', v)} sufixo="%" min={0} max={99} />
+              <span className="block text-[10px] text-slate-400">Usada no faturamento necessário.</span>
+            </label>
+            <label className="space-y-1 text-xs text-slate-600">
+              <span className="block font-medium">Variação da Controladoria (Ops Legais)</span>
+              <NumInput value={e.variacaoControladoriaPct} onChange={(v) => setE('variacaoControladoriaPct', v)} sufixo="%" />
+            </label>
+            <label className="space-y-1 text-xs text-slate-600">
+              <span className="block font-medium">Variação da estrutura</span>
+              <NumInput value={e.variacaoEstruturaPct} onChange={(v) => setE('variacaoEstruturaPct', v)} sufixo="%" />
+              <span className="block text-[10px] text-slate-400">Facilities, Financeiro, Marketing, RH, TI e Comercial.</span>
+            </label>
+            <label className="space-y-1 text-xs text-slate-600 sm:col-span-2">
+              <span className="block font-medium">Distribuição mensal da receita</span>
               <select
-                value={e.mesReajuste}
-                onChange={(ev) => setE('mesReajuste', Number(ev.target.value))}
-                className="h-7 rounded-md border border-amber-300 bg-amber-50 px-1.5 text-xs"
-                aria-label="Mês do reajuste"
+                value={e.distribuicao}
+                onChange={(ev) => setE('distribuicao', ev.target.value === 'linear' ? 'linear' : 'sazonal')}
+                className="h-7 w-full rounded-md border border-amber-300 bg-amber-50 px-1.5 text-xs"
               >
-                {MESES_OPC.map((m) => (
-                  <option key={m.v} value={m.v}>
-                    a partir de {m.l}
-                  </option>
-                ))}
+                <option value="sazonal">Sazonalidade de 2026 de cada área</option>
+                <option value="linear">Linear (1/12 por mês)</option>
               </select>
-            </div>
-          </label>
-          <label className="space-y-1 text-xs text-slate-600">
-            <span className="block font-medium">Variação da Controladoria (Ops Legais)</span>
-            <NumInput value={e.variacaoControladoriaPct} onChange={(v) => setE('variacaoControladoriaPct', v)} sufixo="%" />
-          </label>
-          <label className="space-y-1 text-xs text-slate-600">
-            <span className="block font-medium">Variação da estrutura</span>
-            <NumInput value={e.variacaoEstruturaPct} onChange={(v) => setE('variacaoEstruturaPct', v)} sufixo="%" />
-            <span className="block text-[10px] text-slate-400">Facilities, Financeiro, Marketing, RH, TI e Comercial.</span>
-          </label>
-          <label className="space-y-1 text-xs text-slate-600">
-            <span className="block font-medium">Meta de inadimplência</span>
-            <NumInput value={e.inadimplenciaMetaPct} onChange={(v) => setE('inadimplenciaMetaPct', v)} sufixo="%" min={0} max={99} />
-          </label>
-          <label className="space-y-1 text-xs text-slate-600">
-            <span className="block font-medium">Distribuição mensal da receita</span>
-            <select
-              value={e.distribuicao}
-              onChange={(ev) => setE('distribuicao', ev.target.value === 'linear' ? 'linear' : 'sazonal')}
-              className="h-7 w-full rounded-md border border-amber-300 bg-amber-50 px-1.5 text-xs"
-            >
-              <option value="sazonal">Sazonalidade de 2026 de cada área</option>
-              <option value="linear">Linear (1/12 por mês)</option>
-            </select>
-          </label>
+            </label>
+          </div>
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-slate-700">Demais despesas por área (tudo que não é pessoas)</p>
+            <table className="w-full text-xs">
+              <thead className="border-b border-slate-200 text-slate-500">
+                <tr>
+                  <th className="px-2 py-1 text-left font-medium">Área</th>
+                  <th className="px-2 py-1 text-right font-medium">2026</th>
+                  <th className="px-2 py-1 text-right font-medium">Variação</th>
+                  <th className="px-2 py-1 text-right font-medium">2027</th>
+                </tr>
+              </thead>
+              <tbody>
+                {AREAS_2027.map((a) => (
+                  <tr key={a.key} className="border-b border-slate-100">
+                    <td className="px-2 py-1 text-slate-800">{a.nome}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{moeda(soma(base2026.areas[a.key].demais))}</td>
+                    <td className="w-24 px-1 py-1">
+                      <NumInput
+                        value={premissas.areas[a.key].variacaoDemaisPct}
+                        onChange={(v) => mudarA(a.key, { variacaoDemaisPct: v })}
+                        sufixo="%"
+                        ariaLabel={`Variação demais despesas ${a.nome}`}
+                      />
+                    </td>
+                    <td className="px-2 py-1 text-right tabular-nums">{moeda(soma(resultado.areas[a.key].demais))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </Secao>
 
-      <Secao
-        titulo="Premissas e metas por área"
-        subtitulo="Base = 2026 (realizado + Melhor Estimativa). Pessoas: variação da área × reajuste do escritório + contratações (quantidade × custo mensal, a partir do mês)."
-      >
+      <Secao titulo="Resultado 2027 por área" subtitulo="Margem de contribuição = receita − imposto − pessoas − demais despesas − Controladoria. Margem % sobre a receita líquida, como no DL.">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1280px] text-xs">
+          <table className="w-full min-w-[980px] text-xs">
             <thead className="border-b border-slate-200 text-slate-500">
               <tr>
                 <th className="px-2 py-1.5 text-left font-medium">Área</th>
-                <th className="px-2 py-1.5 text-right font-medium">Receita 2026</th>
-                <th className="px-2 py-1.5 text-right font-medium">25→26</th>
-                <th className="px-2 py-1.5 text-right font-medium">Crescimento</th>
-                <th className="px-2 py-1.5 text-right font-medium">Receita nova (R$/ano)</th>
-                <th className="px-2 py-1.5 text-right font-medium">Var. pessoas</th>
-                <th className="px-2 py-1.5 text-right font-medium">Var. demais</th>
-                <th className="px-2 py-1.5 text-right font-medium">Contratações</th>
-                <th className="px-2 py-1.5 text-right font-medium">Custo/mês</th>
-                <th className="px-2 py-1.5 text-right font-medium">Início</th>
-                <th className="px-2 py-1.5 text-right font-medium">Meta receita 2027</th>
+                <th className="px-2 py-1.5 text-right font-medium">Receita 2027</th>
+                <th className="px-2 py-1.5 text-right font-medium">Imposto</th>
+                <th className="px-2 py-1.5 text-right font-medium">Pessoas</th>
+                <th className="px-2 py-1.5 text-right font-medium">Demais</th>
+                <th className="px-2 py-1.5 text-right font-medium">Controladoria</th>
                 <th className="px-2 py-1.5 text-right font-medium">Margem 2027</th>
                 <th className="px-2 py-1.5 text-right font-medium">Margem %</th>
+                <th className="px-2 py-1.5 text-right font-medium">Margem 2026</th>
               </tr>
             </thead>
             <tbody>
               {AREAS_2027.map((a) => {
-                const p = premissas.areas[a.key]
                 const ra = resultado.areas[a.key]
-                const r25 = soma(base2025.areas[a.key].receita)
+                const m26 = totaisArea(base2026.areas[a.key])
                 return (
                   <tr key={a.key} className="border-b border-slate-100">
                     <td className="px-2 py-1.5 text-slate-800">{a.nome}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{moedaCurta(ra.receitaBaseAno)}</td>
-                    <td className="px-2 py-1.5 text-right">{r25 > 0 ? <VarPct v={variacaoPct(ra.receitaBaseAno, r25)} /> : <span className="text-slate-400">nova</span>}</td>
-                    <td className="w-24 px-1 py-1">
-                      <NumInput value={p.crescimentoPct} onChange={(v) => setA(a.key, 'crescimentoPct', v)} sufixo="%" ariaLabel={`Crescimento ${a.nome}`} />
-                    </td>
-                    <td className="w-32 px-1 py-1">
-                      <NumInput value={p.receitaNova} onChange={(v) => setA(a.key, 'receitaNova', v)} casas={0} ariaLabel={`Receita nova ${a.nome}`} />
-                    </td>
-                    <td className="w-24 px-1 py-1">
-                      <NumInput value={p.variacaoPessoasPct} onChange={(v) => setA(a.key, 'variacaoPessoasPct', v)} sufixo="%" />
-                    </td>
-                    <td className="w-24 px-1 py-1">
-                      <NumInput value={p.variacaoDemaisPct} onChange={(v) => setA(a.key, 'variacaoDemaisPct', v)} sufixo="%" />
-                    </td>
-                    <td className="w-16 px-1 py-1">
-                      <NumInput value={p.contratacoes} onChange={(v) => setA(a.key, 'contratacoes', Math.round(v))} casas={0} min={0} />
-                    </td>
-                    <td className="w-28 px-1 py-1">
-                      <NumInput value={p.custoContratacao} onChange={(v) => setA(a.key, 'custoContratacao', v)} casas={0} min={0} />
-                    </td>
-                    <td className="px-1 py-1 text-right">
-                      <select
-                        value={p.mesInicioContratacao}
-                        onChange={(ev) => setA(a.key, 'mesInicioContratacao', Number(ev.target.value))}
-                        className="h-7 rounded-md border border-amber-300 bg-amber-50 px-1 text-xs"
-                        aria-label={`Mês de início das contratações ${a.nome}`}
-                      >
-                        {MESES_OPC.map((m) => (
-                          <option key={m.v} value={m.v}>
-                            {m.l}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
                     <td className="px-2 py-1.5 text-right">
-                      <CelulaMeta area={a.key} p={p} e={e} r={resultado} />
-                      <div className="text-[10px]">
-                        <VarPct v={ra.crescimentoReceitaPct} />
-                      </div>
+                      <CelulaMeta area={a.key} p={premissas.areas[a.key]} e={e} r={resultado} />
                     </td>
-                    <td className={cn('px-2 py-1.5 text-right tabular-nums', ra.margemAno < 0 && 'text-red-700')}>{moeda(ra.margemAno)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(ra.impostos))}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(ra.pessoas))}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(ra.demais))}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(ra.controladoria))}</td>
+                    <td className={cn('px-2 py-1.5 text-right font-semibold tabular-nums', ra.margemAno < 0 && 'text-red-700')}>{moeda(ra.margemAno)}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{pct(ra.margemPct)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">
+                      {moeda(m26.margem)} <span className="text-[10px]">({pct(m26.margemPct)})</span>
+                    </td>
                   </tr>
                 )
               })}
-              {AREAS_PLANEJAMENTO.filter((a) => a.encerrada).map((a) => (
-                <tr key={a.key} className="border-b border-slate-100 text-slate-400">
-                  <td className="px-2 py-1.5">{a.nome}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{moedaCurta(resultado.areas[a.key].receitaBaseAno)}</td>
-                  <td colSpan={8} className="px-2 py-1.5 italic">Área encerrada: sem projeção nem meta em 2027.</td>
-                  <td className="px-2 py-1.5 text-right">—</td>
-                  <td className="px-2 py-1.5 text-right">—</td>
-                  <td className="px-2 py-1.5 text-right">—</td>
-                </tr>
-              ))}
               <tr className="bg-slate-50 font-semibold">
-                <td className="px-2 py-1.5">Total</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">{moedaCurta(esc.receitaBaseAno)}</td>
-                <td colSpan={8} />
+                <td className="px-2 py-1.5">Total das áreas</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{moeda(esc.receitaAno)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(esc.impostos))}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(esc.pessoas))}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(esc.demais))}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{moeda(soma(esc.controladoria))}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{moeda(esc.margemAno)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{pct(margem27Pct)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{moeda(t26.margem)}</td>
               </tr>
             </tbody>
           </table>

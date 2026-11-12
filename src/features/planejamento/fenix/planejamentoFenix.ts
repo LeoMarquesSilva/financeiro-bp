@@ -3,9 +3,15 @@
  * Funções puras (imports com .ts) — recebem os mesmos valores que a tela mostra.
  */
 import type { FenixExplicacao, FenixLinha } from '../../../shared/fenix/fenix.types.ts'
-import { mesRotulo, soma } from '../utils/areasPlanejamento.ts'
+import { AREAS_2027, mesRotulo, soma } from '../utils/areasPlanejamento.ts'
 import type { TotaisArea } from '../utils/planejamentoBase.ts'
-import type { PremissaArea, PremissasEscritorio, ResultadoArea, ResultadoEscritorio } from '../utils/planejamentoCalc.ts'
+import type {
+  PremissaArea,
+  PremissasEscritorio,
+  ResultadoArea,
+  ResultadoEscritorio,
+  ResultadoSimulacao,
+} from '../utils/planejamentoCalc.ts'
 
 const TELA = 'Planejamento 2027'
 
@@ -154,6 +160,50 @@ export function fenixMargem(i: {
   }
 }
 
+export function fenixMetaEscritorio(i: { resultado: ResultadoSimulacao; crescimentoPct: number | null }): FenixExplicacao {
+  const d = i.resultado.desdobramento
+  const esc = i.resultado.escritorio
+  const fixadas = AREAS_2027.filter((a) => !i.resultado.areas[a.key].automatico)
+  const conta: FenixLinha[] = [
+    { rotulo: 'Receita 2026 de todas as áreas (realizado + ME)', valor: moeda(d.receitaBase), numero: d.receitaBase },
+  ]
+  if (d.metaReceita != null) {
+    conta.push({ rotulo: `Meta de crescimento ${pct(i.crescimentoPct)}`, valor: moeda(d.metaReceita - d.receitaBase), operador: '+' })
+    conta.push({ rotulo: 'Meta de receita 2027', valor: moeda(d.metaReceita), numero: d.metaReceita, operador: '=', tipo: 'total' })
+  }
+  for (const a of AREAS_2027) {
+    const ra = i.resultado.areas[a.key]
+    conta.push({
+      rotulo: `${a.nome} (${pct(ra.crescimentoOrganicoPct)}${ra.automatico ? ', automático' : ', fixado'})`,
+      valor: moeda(ra.receitaAno),
+      tipo: 'info',
+    })
+  }
+  conta.push({ rotulo: 'Soma das áreas', valor: moeda(esc.receitaAno), numero: esc.receitaAno, tipo: 'total' })
+  return {
+    tela: `${TELA} › Metas 2027`,
+    titulo: 'Meta de crescimento da receita 2027',
+    valor: d.metaReceita == null ? moeda(esc.receitaAno) : moeda(d.metaReceita),
+    resumo:
+      d.metaReceita == null
+        ? 'Cenário sem meta do escritório: a receita 2027 é a soma das metas das áreas.'
+        : 'Meta do escritório desdobrada nas áreas: as áreas com % fixado ficam com ele; as automáticas crescem o mesmo % para a soma bater a meta.',
+    formula:
+      'Meta = receita 2026 × (1 + crescimento %); automático = (meta − metas fixadas − receita nova das automáticas) ÷ receita 2026 das automáticas − 1',
+    conta,
+    regras: [
+      d.areasAutomaticas.length
+        ? `Áreas no automático crescem ${pct(d.crescimentoAutomaticoPct)}.`
+        : 'Nenhuma área no automático: a soma das áreas pode não bater a meta.',
+      ...(fixadas.length ? [`Áreas com % fixado: ${fixadas.map((a) => a.nome).join(', ')}.`] : []),
+      ...(Math.abs(d.diferenca) >= 1 ? [`Diferença entre a soma das áreas e a meta: ${moeda(d.diferenca)}.`] : []),
+      'A receita 2026 inclui as áreas encerradas (Distressed Deals); em 2027 elas não têm receita, então as outras áreas cobrem esse valor.',
+    ],
+    fonte: 'Base 2026 do planejamento e premissas do cenário.',
+    fonteTecnica: 'src/features/planejamento/utils/planejamentoCalc.ts (desdobrarCrescimento)',
+  }
+}
+
 export function fenixSimulacaoArea(i: {
   areaNome: string
   p: PremissaArea
@@ -171,23 +221,38 @@ export function fenixSimulacaoArea(i: {
     formula: 'Meta 2027 = receita 2026 × (1 + crescimento %) + receita nova',
     conta: [
       { rotulo: 'Receita 2026 (realizado + ME)', valor: moeda(r.receitaBaseAno), numero: r.receitaBaseAno },
-      { rotulo: `Crescimento ${pct(p.crescimentoPct)}`, valor: moeda(r.receitaBaseAno * (p.crescimentoPct / 100)), operador: '+' },
+      {
+        rotulo: `Crescimento ${pct(r.crescimentoOrganicoPct)}${r.automatico ? ' (automático)' : ''}`,
+        valor: moeda(r.receitaBaseAno * ((r.crescimentoOrganicoPct ?? 0) / 100)),
+        operador: '+',
+      },
       { rotulo: 'Receita nova', valor: moeda(p.receitaNova), numero: p.receitaNova, operador: '+' },
       { rotulo: 'Meta de receita 2027', valor: moeda(r.receitaAno), numero: r.receitaAno, operador: '=', tipo: 'total' },
       { rotulo: `Imposto (${pct(e.aliquotaPct, 2)})`, valor: moeda(soma(r.impostos)), operador: '−' },
-      { rotulo: 'Pessoas (com reajuste e contratações)', valor: moeda(pessoas), operador: '−', detalhe: contrat ? `inclui ${moeda(contrat)} de contratações` : undefined },
+      {
+        rotulo: 'Pessoas (com reajuste, ajustes e contratações)',
+        valor: moeda(pessoas),
+        operador: '−',
+        detalhe: contrat ? `inclui ${moeda(contrat)} de contratações` : undefined,
+      },
       { rotulo: 'Demais despesas', valor: moeda(soma(r.demais)), operador: '−' },
       { rotulo: 'Controladoria', valor: moeda(soma(r.controladoria)), operador: '−' },
       { rotulo: 'Margem 2027', valor: moeda(r.margemAno), numero: r.margemAno, operador: '=', tipo: 'total' },
     ],
     regras: [
+      r.automatico
+        ? 'Crescimento automático: as áreas sem % fixado crescem o mesmo %, calculado para a soma das áreas bater a meta de crescimento do escritório.'
+        : 'Crescimento fixado na área.',
       e.distribuicao === 'sazonal'
         ? 'Distribuição mensal pela sazonalidade da receita 2026 da área (peso de cada mês no ano).'
         : 'Distribuição mensal linear (1/12 por mês).',
-      `Reajuste da folha de ${pct(e.reajustePct)} a partir de ${mesRotulo(2027, e.mesReajuste)}.`,
-      p.contratacoes > 0
-        ? `${p.contratacoes} contratação(ões) de ${moeda(p.custoContratacao)}/mês a partir de ${mesRotulo(2027, p.mesInicioContratacao)}.`
-        : 'Sem contratações previstas.',
+      `Reajuste salarial da equipe atual de ${pct(e.reajustePct)} a partir de ${mesRotulo(2027, e.mesReajuste)}.`,
+      ...(p.contratacoes.length
+        ? p.contratacoes.map(
+            (c) =>
+              `Contratação: ${c.qtd} × ${c.descricao || 'pessoa'} de ${moeda(c.custoMensal)}/mês a partir de ${mesRotulo(2027, c.mesInicio)}.`,
+          )
+        : ['Sem contratações previstas.']),
     ],
     fonte: 'Base 2026 do planejamento e premissas do cenário.',
     fonteTecnica: 'src/features/planejamento/utils/planejamentoCalc.ts (simular)',

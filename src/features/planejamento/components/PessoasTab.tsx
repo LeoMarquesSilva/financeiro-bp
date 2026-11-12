@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { usePlanPessoas } from '../hooks/usePlanejamento'
 import { AREAS_PLANEJAMENTO, MESES_ABREV, areaEncerrada, areaNome, soma, variacaoPct, zeros12, type AreaKey } from '../utils/areasPlanejamento'
-import type { Premissas } from '../utils/planejamentoCalc'
+import { contratacoesMensais, type Premissas } from '../utils/planejamentoCalc'
 import type { PlanPessoasRow } from '../types'
 import { fenixValor } from '../fenix/planejamentoFenix'
 import { AreaChips, Aviso, CarregandoBloco, ErroBloco, PlanKpi, Secao, TabelaMeses, VarPct, moeda, moedaCurta } from './PlanUi'
@@ -58,7 +58,7 @@ function projetarFolha(s: Serie, mesRefFolha: number, ultimoMesFechado: number):
   }
 }
 
-/** Folha 2027 do cenário: folha 2026 × (1 + variação de pessoas da área) × reajuste + contratações. */
+/** Folha 2027 do cenário: folha 2026 × (1 + ajustes na equipe atual) × reajuste + contratações. */
 function folha2027(s2026: Serie, chave: string, p: Premissas): { folha: number[]; headcount: (number | null)[] } {
   // Área encerrada: sem projeção em 2027.
   if (areaEncerrada(chave)) return { folha: zeros12(), headcount: Array(12).fill(0) }
@@ -66,16 +66,10 @@ function folha2027(s2026: Serie, chave: string, p: Premissas): { folha: number[]
   const area = p.areas[chave as AreaKey]
   const fatorArea = area ? 1 + area.variacaoPessoasPct / 100 : 1
   const dez = s2026.headcount[11] ?? s2026.headcount.filter((v) => v != null).slice(-1)[0] ?? null
+  const novos = contratacoesMensais(area?.contratacoes ?? [])
   return {
-    folha: s2026.folha.map((v, i) => {
-      const contrat = area && i + 1 >= area.mesInicioContratacao ? area.contratacoes * area.custoContratacao : 0
-      return v * fatorArea * (i + 1 >= e.mesReajuste ? 1 + e.reajustePct / 100 : 1) + contrat
-    }),
-    headcount: Array.from({ length: 12 }, (_, i) => {
-      if (dez == null) return null
-      const novos = area && i + 1 >= area.mesInicioContratacao ? area.contratacoes : 0
-      return dez + novos
-    }),
+    folha: s2026.folha.map((v, i) => v * fatorArea * (i + 1 >= e.mesReajuste ? 1 + e.reajustePct / 100 : 1) + novos.custo[i]),
+    headcount: Array.from({ length: 12 }, (_, i) => (dez == null ? null : dez + novos.pessoas[i])),
   }
 }
 

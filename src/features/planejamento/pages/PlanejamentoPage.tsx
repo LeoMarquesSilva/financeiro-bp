@@ -11,6 +11,7 @@ import { ANO_ALVO, useCenarioMutations, usePlanBases, usePlanCenarios } from '..
 import { carregarIndicadoresEscritorio } from '../hooks/useIndicadores'
 import { taxaEfetivaEscritorio } from '../utils/planejamentoBase'
 import { normalizarPremissas, premissasPadrao, simular, linhasMetasOficiais, type Premissas } from '../utils/planejamentoCalc'
+import { historico25a26, modelosCenario, type ModeloCenario } from '../utils/planejamentoModelos'
 import { linhasMetasOperacionais } from '../utils/indicadoresOperacionais'
 import { exportarPlanejamentoExcel } from '../utils/planejamentoExcelExport'
 import type { PlanCenarioRow } from '../types'
@@ -53,6 +54,19 @@ export function PlanejamentoPage() {
     })
   }, [bases.real2026, bases.fechados])
 
+  const historico = useMemo(
+    () => (bases.base2025 && bases.base2026 ? historico25a26(bases.base2025, bases.base2026) : null),
+    [bases.base2025, bases.base2026],
+  )
+  const modelos = useMemo(() => (historico && padrao ? modelosCenario(historico, padrao) : []), [historico, padrao])
+
+  const carregarModelo = useCallback((m: ModeloCenario) => {
+    setCenarioId(null)
+    setNome(m.nome)
+    setPremissas(structuredClone(m.premissas))
+    setSalvo('')
+  }, [])
+
   const abrir = useCallback(
     (c: PlanCenarioRow | null) => {
       if (!padrao) return
@@ -69,10 +83,15 @@ export function PlanejamentoPage() {
   useEffect(() => {
     if (iniciado || !padrao || cenariosQ.isLoading) return
     const inicial = cenarios.find((c) => c.oficial) ?? cenarios[0] ?? null
-    abrir(inicial)
-    if (!inicial) setNome('Cenário base')
+    if (inicial) abrir(inicial)
+    else {
+      // Sem cenário salvo: começa pelo cenário pronto "Manter o ritmo" (repete o crescimento 25→26).
+      const ritmo = modelos.find((m) => m.id === 'ritmo')
+      if (!ritmo) return
+      carregarModelo(ritmo)
+    }
     setIniciado(true)
-  }, [iniciado, padrao, cenariosQ.isLoading, cenarios, abrir])
+  }, [iniciado, padrao, cenariosQ.isLoading, cenarios, abrir, modelos, carregarModelo])
 
   const alterado = premissas != null && JSON.stringify({ n: nome, p: premissas }) !== salvo
   const resultado = useMemo(
@@ -108,6 +127,21 @@ export function PlanejamentoPage() {
         acao: async () => ir(),
       })
     } else ir()
+  }
+
+  const aplicarModelo = (m: ModeloCenario) => {
+    // Só pergunta se há algo a perder: alterações não salvas que não são um cenário pronto intacto.
+    const atual = JSON.stringify(premissas)
+    const intacto = modelos.some((x) => JSON.stringify(x.premissas) === atual)
+    if (alterado && !intacto) {
+      setConfirmacao({
+        titulo: `Carregar o cenário pronto “${m.rotulo}”?`,
+        texto: 'O cenário atual tem alterações não salvas. Carregar o cenário pronto descarta essas alterações.',
+        rotulo: 'Descartar e carregar',
+        destrutivo: true,
+        acao: async () => carregarModelo(m),
+      })
+    } else carregarModelo(m)
   }
 
   const salvar = () =>
@@ -292,6 +326,9 @@ export function PlanejamentoPage() {
               onOficializar={oficializar}
               onExportar={() => void exportar()}
               exportando={exportando}
+              modelos={modelos}
+              historico={historico}
+              onAplicarModelo={aplicarModelo}
             />
           </TabsContent>
         </Tabs>
