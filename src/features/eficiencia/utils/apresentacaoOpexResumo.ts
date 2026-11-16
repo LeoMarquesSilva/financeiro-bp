@@ -40,6 +40,9 @@ export type ApresentacaoOpexPeriodoData = {
   projecaoAno: number | null
   projecaoVsOrcAnoPct: number | null
   mesesFechados: number
+  /** Meses fechados do recorte com realizado acima do orçado (modo %). */
+  mesesAcimaOrcado: number
+  mesesComOrcado: number
   mesParcial: number | null
   parcialAte: string | null
 }
@@ -75,6 +78,9 @@ export type ApresentacaoOpexMesData = {
   yoyPct: number | null
   linhas: OpexResumoMesLinha[]
   top5Pct: number
+  /** Grupos com realizado acima do orçado no mês (modo %). */
+  gruposAcimaOrcado: number
+  gruposTotal: number
   /** Contas que explicam o desvio do mês (estouro ou economia). */
   desvio: {
     tipo: 'estouro' | 'economia'
@@ -92,6 +98,18 @@ function pctSobre(atual: number, base: number): number | null {
 /** Mesmo número da página OPEX (`variancia_ytd_pct`, 1 casa). Sem orçamento → `null`. */
 function variacaoOrcamento(k: { previsto_ytd: number; variancia_ytd_pct: number }): number | null {
   return k.previsto_ytd > 0 ? k.variancia_ytd_pct : null
+}
+
+/** Meses fechados com orçamento e quantos deles tiveram realizado acima do orçado. */
+function mesesContraOrcado(
+  evolucao: Array<{ mes: number; previsto: number; realizado: number }>,
+  fechados: number[],
+): { mesesAcimaOrcado: number; mesesComOrcado: number } {
+  const comOrcado = evolucao.filter((e) => fechados.includes(e.mes) && e.previsto > 0)
+  return {
+    mesesAcimaOrcado: comOrcado.filter((e) => e.realizado > e.previsto).length,
+    mesesComOrcado: comOrcado.length,
+  }
 }
 
 function ddmm(d: Date): string {
@@ -182,6 +200,7 @@ export async function fetchApresentacaoOpexPeriodo(
     projecaoAno,
     projecaoVsOrcAnoPct: projecaoAno != null ? pctSobre(projecaoAno, k.previsto_ano) : null,
     mesesFechados: fechados.length,
+    ...mesesContraOrcado(atual.evolucao, fechados),
     mesParcial,
     parcialAte: mesParcial != null ? ddmm(ref) : null,
   }
@@ -285,6 +304,8 @@ export async function fetchApresentacaoOpexMes(
     yoyPct: yoyPct(realizado, anterior.kpis.realizado_ytd),
     linhas,
     top5Pct: linhas.reduce((s, l) => s + l.participacao, 0),
+    gruposAcimaOrcado: todas.filter((g) => g.variacao > 0).length,
+    gruposTotal: todas.filter((g) => g.orcado > 0 || g.realizado > 0).length,
     desvio: contasDoDesvio(todas, realizado - orcamento),
     maior: maiorLinha
       ? {

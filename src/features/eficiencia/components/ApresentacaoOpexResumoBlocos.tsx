@@ -62,20 +62,10 @@ function acimaAbaixo(v: number): string {
 
 // ─── Peças visuais ─────────────────────────────────────────────────────────
 
+/** Só a linha do período — o título "OPEX" fica no slide do PPT, não no print. */
 function SlideTitulo({ subtitulo }: { subtitulo: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span
-        style={{
-          fontSize: 34,
-          fontWeight: 800,
-          color: NAVY,
-          lineHeight: 1,
-          letterSpacing: '0.01em',
-        }}
-      >
-        OPEX
-      </span>
       <span
         data-chart-export-preserve-bg
         style={{
@@ -439,10 +429,10 @@ function leituraPeriodo(d: ApresentacaoOpexPeriodoData, mostrarValores: boolean)
             texto: `projeção do ano no ritmo atual ${v >= 0 ? 'acima' : 'abaixo'} do orçamento anual.`,
           },
     )
-  } else if (d.variacaoViosPct != null) {
+  } else if (d.mesesComOrcado > 0) {
     itens.push({
-      destaque: pctSinal(d.variacaoViosPct),
-      texto: `${acimaAbaixo(d.variacaoViosPct)} do previsto VIOS no período.`,
+      destaque: `${d.mesesAcimaOrcado} de ${d.mesesComOrcado}`,
+      texto: `${d.mesesComOrcado === 1 ? 'mês' : 'meses'} com realizado acima do orçado.`,
     })
   }
 
@@ -548,10 +538,14 @@ export function ApresentacaoOpexPeriodoBloco({
                     sub="Realizado vs orçamento no período"
                   />
                   <KpiCard
-                    titulo="Vs. previsto VIOS"
-                    valor={pctSeta(data.variacaoViosPct)}
-                    cor={corSeta(data.variacaoViosPct)}
-                    sub="Realizado vs previsto VIOS no período"
+                    titulo="Meses acima do orçado"
+                    valor={
+                      data.mesesComOrcado > 0
+                        ? `${data.mesesAcimaOrcado} de ${data.mesesComOrcado}`
+                        : '—'
+                    }
+                    cor={data.mesesAcimaOrcado > 0 ? ALTA : QUEDA}
+                    sub="Meses fechados com realizado acima do orçado"
                   />
                   <KpiCard
                     titulo="Orçamento do ano consumido"
@@ -702,8 +696,9 @@ function TabelaMes({
 function leituraMes(d: ApresentacaoOpexMesData, mostrarValores: boolean): LeituraItem[] {
   const itens: LeituraItem[] = []
   const diff = d.realizado - d.orcamento
+  // Previsto VIOS só no modo com valores (como no modelo); no modo % a base é só o orçado.
   const viosTxt =
-    d.variacaoViosPct != null
+    mostrarValores && d.variacaoViosPct != null
       ? ` e ${num(Math.abs(d.variacaoViosPct), 1)}% ${acimaAbaixo(d.variacaoViosPct)} do previsto VIOS`
       : ''
 
@@ -831,10 +826,14 @@ export function ApresentacaoOpexMesBloco({
                     sub="Realizado vs orçamento no mês"
                   />
                   <KpiCard
-                    titulo="Vs. previsto VIOS"
-                    valor={pctSeta(data.variacaoViosPct)}
-                    cor={corSeta(data.variacaoViosPct)}
-                    sub="Realizado vs previsto VIOS no mês"
+                    titulo="Grupos acima do orçado"
+                    valor={
+                      data.gruposTotal > 0
+                        ? `${data.gruposAcimaOrcado} de ${data.gruposTotal}`
+                        : '—'
+                    }
+                    cor={data.gruposAcimaOrcado > 0 ? ALTA : QUEDA}
+                    sub="Grupos de conta com realizado acima do orçado no mês"
                   />
                   <KpiCard
                     titulo="Vs. ano anterior"
