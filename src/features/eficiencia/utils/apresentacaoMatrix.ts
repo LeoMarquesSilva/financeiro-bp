@@ -74,6 +74,7 @@ export type ApresentacaoBlocoId =
   | 'financeiro_ops'
   | 'governanca_interna'
   | 'programa_bonus'
+  | 'opex'
 
 export const APRESENTACAO_BLOCOS: {
   id: ApresentacaoBlocoId
@@ -149,6 +150,12 @@ export const APRESENTACAO_BLOCOS: {
   {
     id: 'programa_bonus',
     label: 'Bloco 12 — Programa de Bônus',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'opex',
+    label: 'Bloco 13 — OPEX',
     secoes: [],
     semGradeAreas: true,
   },

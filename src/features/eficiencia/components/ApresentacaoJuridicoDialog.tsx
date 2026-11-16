@@ -13,6 +13,9 @@ import { copyApresentacaoSlideToClipboard } from '@/shared/utils/copyChartImage'
 import { MesFilterButtons } from './MesFilterButtons'
 import { ApresentacaoJuridicoSlide } from './ApresentacaoJuridicoSlide'
 import { useApresentacaoMatrix } from '../hooks/useApresentacaoMatrix'
+import { useApresentacaoOpex } from '../hooks/useApresentacaoOpex'
+import { opexMesFimPadrao } from '../utils/apresentacaoOpex'
+import { temPlanoFiltroAtivo } from '@/features/opex/utils/opexPlanoFiltro'
 import {
   APRESENTACAO_BLOCOS,
   type ApresentacaoBlocoId,
@@ -67,6 +70,15 @@ export function ApresentacaoJuridicoDialog({
     useState<MesFiltroEficiencia>(null)
   const [financeiroOpsMesFiltro, setFinanceiroOpsMesFiltro] =
     useState<MesFiltroEficiencia>(null)
+  /** Período exclusivo do Bloco 13 — OPEX (padrão Jan até o último mês fechado). */
+  const [opexMesInicio, setOpexMesInicio] = useState(1)
+  const [opexMesFim, setOpexMesFim] = useState(() => opexMesFimPadrao(ano))
+  const {
+    data: opex,
+    loading: loadingOpex,
+    error: opexError,
+    planoFiltro: opexPlanoFiltro,
+  } = useApresentacaoOpex(ano, opexMesInicio, opexMesFim, open)
 
   const anosUnificado = useMemo(
     () => anosNoPeriodo(unificadoInicio, unificadoFim),
@@ -204,6 +216,10 @@ export function ApresentacaoJuridicoDialog({
       toast.error('Programa de Bônus ainda carregando')
       return
     }
+    if (blocoId === 'opex' && (loadingOpex || !opex)) {
+      toast.error('OPEX ainda carregando')
+      return
+    }
     if (
       (blocoId === 'juridico' || blocoId === 'financeiro') &&
       loading
@@ -279,6 +295,8 @@ export function ApresentacaoJuridicoDialog({
                                     ? false
                                   : bloco.id === 'programa_bonus'
                                     ? loadingBonus || !bonus
+                                  : bloco.id === 'opex'
+                                    ? loadingOpex || !opex
                                     : loading
                 return (
                   <Button
@@ -366,6 +384,14 @@ export function ApresentacaoJuridicoDialog({
               onMarketingMesFiltroChange={setMarketingMesFiltro}
               financeiroOpsMesFiltro={financeiroOpsMesFiltro}
               onFinanceiroOpsMesFiltroChange={setFinanceiroOpsMesFiltro}
+              opex={opex}
+              loadingOpex={loadingOpex}
+              opexError={opexError}
+              opexMesInicio={opexMesInicio}
+              opexMesFim={opexMesFim}
+              onOpexMesInicioChange={setOpexMesInicio}
+              onOpexMesFimChange={setOpexMesFim}
+              opexPlanoFiltroAtivo={temPlanoFiltroAtivo(opexPlanoFiltro)}
             />
           </div>
         </div>

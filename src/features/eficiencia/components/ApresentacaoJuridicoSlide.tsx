@@ -25,6 +25,7 @@ import type { ApresentacaoMarketingData } from '../utils/apresentacaoMarketing'
 import type { ApresentacaoFinanceiroOpsData } from '../utils/apresentacaoFinanceiroOps'
 import type { ApresentacaoLiderancaData } from '../utils/apresentacaoLideranca'
 import type { ApresentacaoBonusData } from '../utils/apresentacaoBonus'
+import type { ApresentacaoOpexData } from '../utils/apresentacaoOpex'
 import type { ApresentacaoTopContrato } from '../utils/apresentacaoTopContratos'
 import type { ApresentacaoFinanceiroBundle } from '../utils/apresentacaoFinanceiro'
 import type { MesAno } from '../utils/apresentacaoMesAno'
@@ -40,6 +41,7 @@ import { ApresentacaoIniciativasBloco } from './ApresentacaoIniciativasBloco'
 import { ApresentacaoJuridicoUnificadoBloco } from './ApresentacaoJuridicoUnificadoBloco'
 import { ApresentacaoLiderancaBloco } from './ApresentacaoLiderancaBloco'
 import { ApresentacaoMarketingBloco } from './ApresentacaoMarketingBloco'
+import { ApresentacaoOpexBloco } from './ApresentacaoOpexBloco'
 import { toPriMaiuscula } from '../utils/textFormat'
 
 const FENIX_URL = '/team/fenix-bismarchi.png'
@@ -140,6 +142,14 @@ type Props = {
   onMarketingMesFiltroChange?: (mes: MesFiltroEficiencia) => void
   financeiroOpsMesFiltro?: MesFiltroEficiencia
   onFinanceiroOpsMesFiltroChange?: (mes: MesFiltroEficiencia) => void
+  opex?: ApresentacaoOpexData | null
+  loadingOpex?: boolean
+  opexError?: Error | null
+  opexMesInicio?: number
+  opexMesFim?: number
+  onOpexMesInicioChange?: (mes: number) => void
+  onOpexMesFimChange?: (mes: number) => void
+  opexPlanoFiltroAtivo?: boolean
 }
 
 /** Separador nomeado entre blocos — só na tela; fora de `data-apresentacao-export`. */
@@ -756,6 +766,14 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
     onMarketingMesFiltroChange,
     financeiroOpsMesFiltro = null,
     onFinanceiroOpsMesFiltroChange,
+    opex = null,
+    loadingOpex = false,
+    opexError = null,
+    opexMesInicio = 1,
+    opexMesFim = 12,
+    onOpexMesInicioChange,
+    onOpexMesFimChange,
+    opexPlanoFiltroAtivo = false,
   }: Props,
   ref: Ref<HTMLDivElement>,
 ) {
@@ -871,6 +889,20 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
               mesFim={bonusMesFim}
               onMesInicioChange={onBonusMesInicioChange ?? (() => {})}
               onMesFimChange={onBonusMesFimChange ?? (() => {})}
+            />
+          )
+        } else if (bloco.id === 'opex') {
+          content = (
+            <ApresentacaoOpexBloco
+              data={opex}
+              loading={loadingOpex}
+              error={opexError}
+              ano={ano}
+              mesInicio={opexMesInicio}
+              mesFim={opexMesFim}
+              onMesInicioChange={onOpexMesInicioChange ?? (() => {})}
+              onMesFimChange={onOpexMesFimChange ?? (() => {})}
+              planoFiltroAtivo={opexPlanoFiltroAtivo}
             />
           )
         } else if (bloco.id === 'financeiro') {
