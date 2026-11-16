@@ -16,7 +16,6 @@ import {
 } from '../utils/overviewFinanceiroKpis'
 import {
   explicarReceitaBrutaPct,
-  explicarReceitaBrutaRecebido,
   modoReceitaBruta,
   rotuloPeriodoEficiencia,
   TELA_EFICIENCIA_PESSOAS,
@@ -57,11 +56,6 @@ export function ReceitaBrutaTab({
   const mesesEscopo = (data?.meses ?? []).filter(
     (m: GestaoVistaMesRow) =>
       m.mes >= MES_INICIO_RESULTADO && mesNoFiltro(m.mes, mesFiltro, ano),
-  )
-
-  const recebidoAcumulado = mesesEscopo.reduce(
-    (s: number, m: GestaoVistaMesRow) => s + (m.recebido ?? 0),
-    0,
   )
 
   /** Fênix: mesma conta do card (recebido e meta de receitaBrutaMonetarioAcumulado). */
@@ -105,7 +99,8 @@ export function ReceitaBrutaTab({
         responsavelHintDisabled={responsavelHintDisabled}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* Aba só em %: sem valores em R$. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <EficienciaKpiCard
           title="Receita Bruta Gestão a Vista"
           value={
@@ -135,31 +130,6 @@ export function ReceitaBrutaTab({
           accentClass="bg-emerald-100 text-emerald-700"
           loading={isLoading}
           fenix={{ chave: 'eficiencia.receita-bruta.periodo', explicar: explicarPct('periodo') }}
-        />
-        <EficienciaKpiCard
-          title="Recebido acumulado (período selecionado)"
-          value={
-            data
-              ? new Intl.NumberFormat('pt-BR', {
-                  style: 'currency',
-                  currency: 'BRL',
-                  maximumFractionDigits: 0,
-                }).format(recebidoAcumulado)
-              : '—'
-          }
-          icon={TrendingUp}
-          accentClass="bg-slate-100 text-slate-700"
-          loading={isLoading}
-          fenix={{
-            chave: 'eficiencia.receita-bruta.recebido',
-            explicar: () =>
-              explicarReceitaBrutaRecebido({
-                ano,
-                meses: mesesEscopo,
-                total: recebidoAcumulado,
-                periodo: rotuloPeriodoEficiencia(mesFiltro, ano),
-              }),
-          }}
         />
       </div>
 

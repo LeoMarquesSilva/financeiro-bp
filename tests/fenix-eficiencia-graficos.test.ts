@@ -251,9 +251,11 @@ test('Gestão de PDI, Receita Bruta e Inadimplência: ponto do mês reaproveita 
     ponto(0),
   )
   assert.equal(rb.valor, '90,00%')
+  // Receita Bruta só em %: o recebido do mês vem em % da meta ajustada, sem R$.
   const rec = linha(rb.conta, 'Recebido em Out/26')
-  const met = linha(rb.conta, 'Meta ajustada do mês')
-  quase(totais(rb.conta).at(-1)?.numero, ((rec?.numero ?? 0) / (met?.numero ?? 1)) * 100)
+  assert.equal(rec?.valor, '90,00%')
+  quase(totais(rb.conta).at(-1)?.numero, rec?.numero ?? 0)
+  assert.ok(!JSON.stringify(rb).includes('R$'), 'Receita Bruta não pode mostrar R$')
 
   const inad = explicarGraficoInadimplencia(
     { tela: 'Eficiência › Índice de Inadimplência', ano: 2026, mesFiltro: null, data: [{ mes: 10, valor: 6.67 }], meses, hoje: HOJE },

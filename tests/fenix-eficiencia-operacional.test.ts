@@ -18,6 +18,7 @@ import {
   periodoMesesTexto,
 } from '../src/features/eficiencia/fenix/eficienciaOperacionalFenix.ts'
 import type { FenixExplicacao, FenixLinha } from '../src/shared/fenix/fenix.types.ts'
+import type { GestaoVistaMesRow, ReceitaMesRow } from '../src/features/receita/types/receita.types.ts'
 
 /** 11/11/2026: jan–out fechados, nov em andamento. */
 const HOJE = new Date(2026, 10, 11, 12)
@@ -371,19 +372,60 @@ test('Receita Bruta e Inadimplência no Overview', () => {
   assert.equal(modoReceitaBruta([9, 10]), 'meses')
   assert.equal(modoReceitaBruta('resultado'), 'meses')
 
+  // Jun–Dez com meta de 1 mi; jun–nov recebem 800 mil cada (nov em andamento).
+  const rowsRb: ReceitaMesRow[] = Array.from({ length: 12 }, (_, i) => {
+    const mes = i + 1
+    return {
+      mes,
+      mesLabel: String(mes),
+      meta: mes >= 6 ? 1_000_000 : 0,
+      metaBase: mes >= 6 ? 1_000_000 : 0,
+      projetadoBaseAbril: 0,
+      projetadoReal: 0,
+      recebido: mes >= 6 && mes <= 11 ? 800_000 : 0,
+      previsto: 0,
+      encargos: 0,
+    }
+  })
+  const mesesRb: GestaoVistaMesRow[] = rowsRb.map((r) => ({
+    mes: r.mes,
+    mesLabel: r.mesLabel,
+    meta: r.meta > 0 ? r.meta : null,
+    previsto: 0,
+    recebido: r.mes <= 11 ? r.recebido : null,
+    pctMeta: r.meta > 0 && r.mes <= 11 ? (r.recebido / r.meta) * 100 : null,
+    pctPrevisto: null,
+    inadimplencia: null,
+    inadimplenciaPct: null,
+    congelado: false,
+  }))
   const rb = explicarReceitaBruta({
     ano: 2026,
     mesFiltro: null,
-    recebido: 4_000_000,
+    recebido: 4_800_000,
     meta: 7_000_000,
-    pct: (4 / 7) * 100,
-    valor: '57.14%',
+    pct: (4.8 / 7) * 100,
+    valor: '68.57%',
+    meses: mesesRb,
+    rows: rowsRb,
     hoje: HOJE,
   })
-  const [rec, meta, res] = rb.conta ?? []
-  quase(res?.numero, ((rec?.numero ?? 0) / (meta?.numero ?? 1)) * 100)
+  // Só %: cada mês = recebido do mês em % da meta do ano; a soma dá o acumulado do card.
+  const partes = (rb.conta ?? []).filter((l) => (l.tipo ?? 'parcela') === 'parcela')
+  assert.equal(partes.length, 6)
+  assert.equal(partes[0]?.valor, '11,43%')
+  quase(partes.reduce((s, l) => s + (l.numero ?? 0), 0), totais(rb.conta).at(-1)?.numero ?? 0)
+  assert.equal(totais(rb.conta).at(-1)?.valor, '68.57%')
+  assert.ok(!JSON.stringify(rb).includes('R$'), 'Receita Bruta no Overview não pode mostrar R$')
   assert.ok(regra(rb, 'meta do ano inteiro'))
   assert.ok(regra(rb, 'filtro de área'))
+  assert.ok(regra(rb, 'só percentuais'))
+
+  const semMeta = explicarReceitaBruta({
+    ano: 2026, mesFiltro: null, recebido: 0, meta: 0, pct: null, valor: '-', meses: [], rows: [], hoje: HOJE,
+  })
+  assert.equal(infos(semMeta.conta)[0]?.detalhe, 'sem meta no período')
+  assert.ok(!JSON.stringify(semMeta).includes('R$'))
 
   const inad = explicarInadimplencia({
     ano: 2026,

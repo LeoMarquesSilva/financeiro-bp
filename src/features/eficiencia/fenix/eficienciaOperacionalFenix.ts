@@ -38,6 +38,11 @@ import {
   rangeSemanaFiltro,
   type MesFiltroEficiencia,
 } from '../constants.ts'
+import type { GestaoVistaMesRow, ReceitaMesRow } from '../../receita/types/receita.types.ts'
+import {
+  explicarReceitaBrutaPct,
+  modoReceitaBruta as modoReceitaBrutaConta,
+} from './eficienciaPessoasFinanceiroFenix.ts'
 
 // ---------------------------------------------------------------------------
 // Formatação e período
@@ -1162,38 +1167,38 @@ export function explicarReceitaBruta(i: {
   meta: number
   pct: number | null
   valor: string
+  /** Meses e linhas da Receita: a conta sai mês a mês, só em % (igual à aba Receita Bruta). */
+  meses: readonly GestaoVistaMesRow[]
+  rows: readonly ReceitaMesRow[]
   hoje?: Date
 }): FenixExplicacao {
   const hoje = i.hoje ?? new Date()
   const modo = modoReceitaBruta(i.mesFiltro)
-  const moeda = (v: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
   const regraModo =
     modo === 'mes'
       ? 'Um mês escolhido: recebido do mês ÷ meta do mês já ajustada com o que faltou nos meses anteriores, como no painel da Receita.'
       : modo === 'meses'
         ? 'Vários meses (ou Resultado): soma do recebido ÷ soma das metas ajustadas desses meses, de junho em diante.'
         : 'Sem mês escolhido: recebido dos meses com meta que já começaram ÷ meta do ano inteiro (todos os meses com meta). O percentual cresce ao longo do ano.'
+  // Só %: reaproveita a conta mês a mês da aba Receita Bruta (cada mês em % da meta da conta).
+  const { modo: modoConta, meses: mesesConta } = modoReceitaBrutaConta(i.mesFiltro, i.ano, i.meses)
+  const contaPct = explicarReceitaBrutaPct({
+    ano: i.ano,
+    escopo: 'periodo',
+    pct: i.pct ?? (i.meta > 0 ? (i.recebido / i.meta) * 100 : null),
+    recebido: i.recebido,
+    meta: i.meta,
+    modo: modoConta,
+    mesesConta,
+    meses: i.meses,
+    rows: i.rows,
+    periodo: descreverFiltroMes(i.ano, i.mesFiltro, hoje),
+    hoje,
+  }).conta
   const conta: FenixLinha[] =
     i.meta > 0
-      ? [
-          { rotulo: 'Recebido', valor: moeda(i.recebido), numero: i.recebido },
-          {
-            rotulo: modo === 'ano' ? 'Meta do ano' : 'Meta do período',
-            valor: moeda(i.meta),
-            numero: i.meta,
-            operador: '÷',
-          },
-          {
-            rotulo: 'Receita Bruta',
-            valor: i.valor,
-            numero: i.pct ?? (i.recebido / i.meta) * 100,
-            operador: '=',
-            tipo: 'total',
-            detalhe: '× 100',
-          },
-        ]
-      : [{ rotulo: 'Meta', valor: moeda(0), numero: 0, tipo: 'info', detalhe: 'sem meta no período' }]
+      ? (contaPct ?? []).map((l) => (l.tipo === 'total' && l.rotulo === 'Receita Bruta' ? { ...l, valor: i.valor } : l))
+      : [{ rotulo: 'Meta', valor: '—', tipo: 'info', detalhe: 'sem meta no período' }]
   return {
     tela: 'Eficiência › Overview',
     titulo: 'Receita Bruta · Acum.',
@@ -1211,12 +1216,13 @@ export function explicarReceitaBruta(i: {
       `Só conta de ${nomeMes(MES_INICIO_RESULTADO).toLowerCase()} em diante, quando começa a meta de receita.`,
       'O recebido segue as regras da Receita: honorários da cota, pela data de pagamento, sem encargos de boleto e juros.',
       'Indicador do escritório: o filtro de área do Overview não muda este número.',
+      'Mostra só percentuais: cada mês aparece como parte da meta da conta, e a soma das partes dá o acumulado.',
       'Meta: 100% da meta de receita.',
     ],
     fonte: 'Financeiro do VIOS (títulos a receber) e meta mensal das Configurações da Receita: os mesmos números do painel da Receita.',
     fonteTecnica:
       'buildOverviewReceitaBruta e receitaBrutaMonetarioAcumulado (eficiencia/utils/overviewFinanceiroKpis.ts) · calcularAtingimentoMetaKpi · receita_totais_mensais',
-    detalhe: 'Para ver título a título, abra o painel da Receita.',
+    detalhe: 'Para ver mês a mês, clique em Racional nesta linha.',
   }
 }
 

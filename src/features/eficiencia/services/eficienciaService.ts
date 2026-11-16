@@ -518,12 +518,10 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
     dataColuna: 'mes',
     areaColuna: null,
     colunas: [
+      // Somente %: a Receita Bruta não exibe valores em R$ (nem na tela, nem no Excel).
       { key: 'mes', label: 'Mês' },
-      { key: 'meta', label: 'Meta R$' },
-      { key: 'previsto', label: 'Previsto R$' },
-      { key: 'recebido', label: 'Recebido R$' },
-      { key: 'pct_meta', label: '% Meta' },
-      { key: 'pct_previsto', label: '% Previsto' },
+      { key: 'pct_meta', label: '% Meta', format: 'percentual' },
+      { key: 'pct_previsto', label: '% Previsto', format: 'percentual' },
     ],
   },
   indice_inadimplencia: {

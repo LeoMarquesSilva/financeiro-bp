@@ -13,7 +13,6 @@ import {
   explicarNpsGrupo,
   explicarOpsTreinamentoCategoria,
   explicarReceitaBrutaPct,
-  explicarReceitaBrutaRecebido,
   explicarRetencao,
   explicarSaidasVoluntarias,
   explicarTreinamentoPessoa,
@@ -88,6 +87,9 @@ const parcelas = (conta: FenixLinha[] | undefined) => (conta ?? []).filter((l) =
 const totais = (conta: FenixLinha[] | undefined) => (conta ?? []).filter((l) => l.tipo === 'total')
 const infos = (conta: FenixLinha[] | undefined) => (conta ?? []).filter((l) => l.tipo === 'info')
 const temRegra = (exp: FenixExplicacao, re: RegExp) => (exp.regras ?? []).some((r) => re.test(r))
+/** Receita Bruta é só em %: nenhum texto da explicação pode trazer R$. */
+const semReais = (exp: FenixExplicacao) =>
+  assert.ok(!JSON.stringify(exp).includes('R$'), `${exp.titulo}: não pode mostrar R$`)
 /** Intl.NumberFormat usa espaço não separável depois de "R$". */
 const semNbsp = (v: string) => v.replace(/\u00a0/g, ' ')
 
@@ -511,10 +513,16 @@ test('Receita Bruta (ano inteiro): recebido jun→hoje ÷ meta do ano inteiro', 
     hoje: HOJE,
   })
   verificaConta(exp)
-  assert.equal(parcelas(exp.conta).filter((l) => l.operador !== '÷').length, 6)
-  assert.match(parcelas(exp.conta).find((l) => l.operador === '÷')?.detalhe ?? '', /× 7 meses/)
+  semReais(exp)
+  // Cada mês = recebido do mês em % da meta do ano; a soma fecha com o card.
+  assert.equal(parcelas(exp.conta).length, 6)
+  assert.equal(parcelas(exp.conta)[0]?.valor, '12,94%')
   assert.match(parcelas(exp.conta)[5]?.detalhe ?? '', /em andamento/)
+  const base = infos(exp.conta).find((l) => l.rotulo === 'Base: meta do ano')
+  assert.equal(base?.valor, '7 meses')
+  assert.match(base?.detalhe ?? '', /Jun–Dez\/2026/)
   assert.ok(temRegra(exp, /meta do ano inteiro \(Jun–Dez\/2026\)/))
+  assert.ok(temRegra(exp, /só percentuais/))
 })
 
 test('Receita Bruta (Gestão a Vista, vários meses): soma recebido ÷ soma da meta ajustada', () => {
@@ -540,12 +548,15 @@ test('Receita Bruta (Gestão a Vista, vários meses): soma recebido ÷ soma da m
     hoje: HOJE,
   })
   verificaConta(exp)
+  semReais(exp)
   assert.ok(temRegra(exp, /meta ajustada/))
   assert.ok(temRegra(exp, /sem olhar o filtro de meses/))
   assert.equal(exp.filtros?.find((f) => f.rotulo === 'Meses (fixo)')?.valor, 'Jun–Nov/2026')
+  assert.equal(infos(exp.conta).find((l) => l.rotulo === 'Base: meta ajustada de Jun–Nov/2026')?.valor, '6 meses')
+  assert.match(parcelas(exp.conta)[0]?.detalhe ?? '', /90,60% da meta do próprio mês/)
 })
 
-test('Receita Bruta (um mês): recebido do mês ÷ meta ajustada, mostra a meta original', () => {
+test('Receita Bruta (um mês): % da meta ajustada e comparação com a meta original, sem R$', () => {
   const rows = receitaRows()
   const meses = gestaoMeses(rows)
   const nov = meses.find((m) => m.mes === 11)!
@@ -564,19 +575,11 @@ test('Receita Bruta (um mês): recebido do mês ÷ meta ajustada, mostra a meta 
     hoje: HOJE,
   })
   verificaConta(exp)
+  semReais(exp)
   assert.equal(modo, 'mes')
-  assert.ok(infos(exp.conta).some((l) => l.rotulo === 'Meta original do mês' && l.numero === 1_000_000))
-})
-
-test('Recebido acumulado: soma dos meses = card (sem centavos no card)', () => {
-  const meses = gestaoMeses(receitaRows()).filter((m) => m.mes >= 6)
-  meses[0] = { ...meses[0], recebido: (meses[0].recebido ?? 0) + 0.4 }
-  const totalCard = meses.reduce((s, m) => s + (m.recebido ?? 0), 0)
-  const exp = explicarReceitaBrutaRecebido({ ano: 2026, meses, total: totalCard, periodo: 'Ano inteiro (2026)', hoje: HOJE })
-  verificaConta(exp)
-  assert.equal(semNbsp(exp.valor), 'R$ 5.451.000')
-  assert.ok(infos(exp.conta).some((l) => l.rotulo === 'No card'))
-  assert.ok(temRegra(exp, /Sem recebido: Dez\/2026/))
+  assert.equal(parcelas(exp.conta)[0]?.rotulo, 'Recebido em Nov/26')
+  assert.equal(infos(exp.conta).find((l) => l.rotulo === 'Meta ajustada do mês')?.valor, '105,00% da original')
+  assert.equal(infos(exp.conta).find((l) => l.rotulo === 'Sobre a meta original')?.valor, '91,10%')
 })
 
 // ---------------------------------------------------------------------------

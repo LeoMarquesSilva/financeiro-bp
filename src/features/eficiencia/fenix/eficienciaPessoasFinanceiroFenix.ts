@@ -58,7 +58,7 @@ export const TELAS_EFICIENCIA_PESSOAS_FINANCEIRO: readonly string[] = Object.val
 
 const moeda = formatCurrency
 
-/** Igual ao card "Recebido acumulado" / "Saldo inadimplência" (sem centavos). */
+/** Igual ao card "Saldo inadimplência" (sem centavos). */
 function moedaSemCentavos(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v)
 }
@@ -1325,11 +1325,23 @@ function detalheMesAndamento(ano: number, mes: number, hoje: Date): string | und
   return isMesAtual(ano, mes, hoje) ? 'mês em andamento: pago até hoje' : undefined
 }
 
+/** Valor em % da base (a aba Receita Bruta não mostra R$: a conta sai só em percentual). */
+function pctDaBase(valor: number, base: number): number {
+  return (valor / base) * 100
+}
+
+const REGRA_SO_PERCENTUAL =
+  'Esta aba mostra só percentuais: cada mês aparece como parte da meta da conta, e a soma das partes dá o card.'
+
 export function explicarReceitaBrutaPct(c: ReceitaBrutaFenixCtx): FenixExplicacao {
   const hoje = c.hoje ?? new Date()
   const valor = c.pct != null ? formatPercent(c.pct) : '—'
   const conta: FenixLinha[] = []
-  const regras: string[] = [REGRA_RECEBIDO, `Só conta de junho em diante (início do Resultado ${c.ano}).`]
+  const regras: string[] = [
+    REGRA_RECEBIDO,
+    `Só conta de junho em diante (início do Resultado ${c.ano}).`,
+    REGRA_SO_PERCENTUAL,
+  ]
   let formula: string
   let periodoConta: string
 
@@ -1341,34 +1353,28 @@ export function explicarReceitaBrutaPct(c: ReceitaBrutaFenixCtx): FenixExplicaca
     const periodoMeta = periodoMeses(c.ano, comMeta.map((r) => r.mes))
     periodoConta = periodoMeses(c.ano, recebidos.map((r) => r.mes))
     formula = 'Receita Bruta = Recebido de junho até hoje ÷ Meta do ano × 100'
-    if (c.pct != null && c.recebido != null && c.meta != null) {
+    if (c.pct != null && c.recebido != null && c.meta != null && c.meta > 0) {
+      const meta = c.meta
       conta.push(
-        ...recebidos.map((r, i) => ({
-          rotulo: mesAno(c.ano, r.mes),
-          valor: moeda(r.recebido),
-          numero: r.recebido,
-          operador: i === 0 ? undefined : ('+' as const),
-          detalhe: detalheMesAndamento(c.ano, r.mes, hoje),
-        })),
-        total('Recebido', moeda(c.recebido), c.recebido),
-      )
-      const bases = new Set(comMeta.map((r) => Math.round(r.metaBase * 100)))
-      conta.push(
-        {
-          rotulo: `Meta do ano (${periodoMeta})`,
-          valor: moeda(c.meta),
-          numero: c.meta,
-          operador: '÷',
-          detalhe:
-            bases.size === 1 && comMeta.length > 0
-              ? `${moeda(comMeta[0].metaBase)} × ${plural(comMeta.length, 'mês', 'meses')} (meta original)`
-              : 'soma da meta original de cada mês com meta',
-        },
-        total('Receita Bruta', valor, c.pct, '× 100'),
+        info('Base: meta do ano', plural(comMeta.length, 'mês', 'meses'), undefined, `${periodoMeta} · meta original de cada mês`),
+        ...recebidos.map((r, i) => {
+          const parte = pctDaBase(r.recebido, meta)
+          return {
+            rotulo: mesAno(c.ano, r.mes),
+            valor: formatPercent(parte),
+            numero: parte,
+            operador: i === 0 ? undefined : ('+' as const),
+            detalhe: ['recebido do mês em % da meta do ano', detalheMesAndamento(c.ano, r.mes, hoje)]
+              .filter(Boolean)
+              .join(' · '),
+          }
+        }),
+        total('Receita Bruta', valor, c.pct),
       )
       const somaRec = recebidos.reduce((s, r) => s + r.recebido, 0)
       if (!quaseIgual(somaRec, c.recebido, 0.01)) {
-        conta.push(info('Soma dos meses listados', moeda(somaRec), somaRec, 'diferente do recebido da conta; vale conferir'))
+        const somaPct = pctDaBase(somaRec, meta)
+        conta.push(info('Soma dos meses listados', formatPercent(somaPct), somaPct, 'diferente do card; vale conferir'))
       }
     }
     regras.push(
@@ -1385,40 +1391,51 @@ export function explicarReceitaBrutaPct(c: ReceitaBrutaFenixCtx): FenixExplicaca
       c.modo === 'mes'
         ? 'Receita Bruta = Recebido do mês ÷ Meta ajustada do mês × 100'
         : 'Receita Bruta = Recebido dos meses ÷ Soma da meta ajustada dos meses × 100'
-    if (c.pct != null && c.recebido != null && c.meta != null) {
+    if (c.pct != null && c.recebido != null && c.meta != null && c.meta > 0) {
+      const meta = c.meta
       if (c.modo === 'mes') {
         const m = linhas[0]
+        const mesConta = m?.mes ?? c.mesesConta[0]
+        const parte = pctDaBase(c.recebido, meta)
         conta.push(
           {
-            rotulo: `Recebido em ${mesAno(c.ano, m?.mes ?? c.mesesConta[0])}`,
-            valor: moeda(c.recebido),
-            numero: c.recebido,
-            detalhe: m ? detalheMesAndamento(c.ano, m.mes, hoje) : undefined,
+            rotulo: `Recebido em ${mesAno(c.ano, mesConta)}`,
+            valor: formatPercent(parte),
+            numero: parte,
+            detalhe: ['em % da meta ajustada do mês', m ? detalheMesAndamento(c.ano, m.mes, hoje) : undefined]
+              .filter(Boolean)
+              .join(' · '),
           },
-          { rotulo: 'Meta ajustada do mês', valor: moeda(c.meta), numero: c.meta, operador: '÷' },
-          total('Receita Bruta', valor, c.pct, '× 100'),
+          total('Receita Bruta', valor, c.pct),
         )
-        const base = c.rows.find((r) => r.mes === m?.mes)?.metaBase
-        if (base != null && base > 0 && !quaseIgual(base, c.meta, 0.01)) {
-          conta.push(info('Meta original do mês', moeda(base), base, `${moeda(c.meta - base)} do que faltou antes`))
+        const base = c.rows.find((r) => r.mes === mesConta)?.metaBase
+        if (base != null && base > 0 && !quaseIgual(base, meta, 0.01)) {
+          const metaVsBase = pctDaBase(meta, base)
+          const recVsBase = pctDaBase(c.recebido, base)
+          conta.push(
+            info('Meta ajustada do mês', `${formatPercent(metaVsBase)} da original`, metaVsBase, 'inclui parte do que faltou nos meses anteriores'),
+            info('Sobre a meta original', formatPercent(recVsBase), recVsBase, 'recebido do mês ÷ meta original do mês'),
+          )
         }
       } else {
         conta.push(
-          ...linhas.map((m, i) => ({
-            rotulo: mesAno(c.ano, m.mes),
-            valor: moeda(m.recebido ?? 0),
-            numero: m.recebido ?? 0,
-            operador: i === 0 ? undefined : ('+' as const),
-            detalhe: [
-              `meta ${moeda(m.meta ?? 0)}${m.pctMeta != null ? ` · ${formatPercent(m.pctMeta)}` : ''}`,
-              detalheMesAndamento(c.ano, m.mes, hoje),
-            ]
-              .filter(Boolean)
-              .join(' · '),
-          })),
-          total('Recebido', moeda(c.recebido), c.recebido),
-          { rotulo: `Meta ajustada de ${periodoConta}`, valor: moeda(c.meta), numero: c.meta, operador: '÷', detalhe: 'soma da meta de cada mês' },
-          total('Receita Bruta', valor, c.pct, '× 100'),
+          info(`Base: meta ajustada de ${periodoConta}`, plural(linhas.length, 'mês', 'meses'), undefined, 'soma da meta de cada mês'),
+          ...linhas.map((m, i) => {
+            const parte = pctDaBase(m.recebido ?? 0, meta)
+            return {
+              rotulo: mesAno(c.ano, m.mes),
+              valor: formatPercent(parte),
+              numero: parte,
+              operador: i === 0 ? undefined : ('+' as const),
+              detalhe: [
+                m.pctMeta != null ? `${formatPercent(m.pctMeta)} da meta do próprio mês` : undefined,
+                detalheMesAndamento(c.ano, m.mes, hoje),
+              ]
+                .filter(Boolean)
+                .join(' · '),
+            }
+          }),
+          total('Receita Bruta', valor, c.pct),
         )
       }
     }
@@ -1455,56 +1472,7 @@ export function explicarReceitaBrutaPct(c: ReceitaBrutaFenixCtx): FenixExplicaca
       c.modo === 'ano'
         ? 'buildOverviewReceitaBruta → calcularAtingimentoMetaKpi · receita_totais_mensais · app_settings.receita_metas'
         : 'buildOverviewReceitaBruta (eficiencia/utils/overviewFinanceiroKpis.ts) · buildGestaoVistaConsolidado · receita_totais_mensais',
-    detalhe: 'Para ver título a título, feche o Fênix e clique em Racional (no gráfico) ou abra o card Recebido na Receita.',
-  }
-}
-
-export function explicarReceitaBrutaRecebido(c: {
-  ano: number
-  /** Meses que o card soma (jun+ dentro do filtro). */
-  meses: readonly GestaoVistaMesRow[]
-  /** Valor somado pelo card. */
-  total: number
-  periodo: string
-  hoje?: Date
-}): FenixExplicacao {
-  const hoje = c.hoje ?? new Date()
-  const linhas = [...c.meses].filter((m) => (m.recebido ?? 0) !== 0).sort((a, b) => a.mes - b.mes)
-  const conta: FenixLinha[] = [
-    ...linhas.map((m, i) => ({
-      rotulo: mesAno(c.ano, m.mes),
-      valor: moeda(m.recebido ?? 0),
-      numero: m.recebido ?? 0,
-      operador: i === 0 ? undefined : ('+' as const),
-      detalhe: detalheMesAndamento(c.ano, m.mes, hoje),
-    })),
-    total('Recebido no período', moeda(c.total), c.total),
-  ]
-  if (Math.round(c.total) !== c.total) {
-    conta.push(info('No card', moedaSemCentavos(c.total), c.total, 'o card mostra o valor sem centavos'))
-  }
-  const mesesSemValor = c.meses.filter((m) => (m.recebido ?? 0) === 0).map((m) => m.mes)
-  return {
-    tela: TELA_EFICIENCIA_PESSOAS.receitaBruta,
-    titulo: 'Recebido acumulado (período selecionado)',
-    valor: moedaSemCentavos(c.total),
-    resumo: `Honorários que entraram no caixa nos meses do filtro (${c.periodo}), de junho em diante.`,
-    formula: 'Recebido acumulado = soma do recebido de cada mês do filtro (junho em diante)',
-    conta,
-    filtros: [
-      { rotulo: 'Ano', valor: String(c.ano) },
-      { rotulo: 'Filtro', valor: c.periodo },
-      { rotulo: 'Meses somados', valor: periodoMeses(c.ano, c.meses.map((m) => m.mes)) },
-    ],
-    regras: [
-      REGRA_RECEBIDO,
-      'Só entram os meses de junho em diante que estão no filtro de meses.',
-      'Meses que ainda não começaram entram com zero. O mês em andamento entra com o que foi pago até hoje.',
-      ...(mesesSemValor.length > 0 ? [`Sem recebido: ${periodoMeses(c.ano, mesesSemValor)}.`] : []),
-    ],
-    fonte: FONTE_RECEITA,
-    fonteTecnica: 'buildGestaoVistaConsolidado (receita/utils/receitaGestaoVista.ts) · receita_totais_mensais',
-    detalhe: 'Para ver título a título, abra o card Recebido no painel da Receita.',
+    detalhe: 'Para ver mês a mês, feche o Fênix e clique em Racional (no gráfico).',
   }
 }
 

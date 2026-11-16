@@ -836,6 +836,8 @@ export function OverviewTab({
               meta: m?.meta ?? 0,
               pct: acumuladoReceitaBruta.value,
               valor: acumuladoReceitaBruta.label,
+              meses: financeiroKpis.meses,
+              rows: financeiroKpis.rows,
             })
           },
         }
