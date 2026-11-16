@@ -9,10 +9,21 @@ import {
   mesNoFiltro,
   type MesFiltroEficiencia,
 } from '../constants'
-import { useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
-import { buildOverviewInadimplencia } from '../utils/overviewFinanceiroKpis'
+import { useInadimplenciaAoVivo, useOverviewFinanceiroKpis } from '../hooks/useOverviewFinanceiroKpis'
+import {
+  buildOverviewInadimplencia,
+  mesesInadimplenciaAoVivo,
+} from '../utils/overviewFinanceiroKpis'
+import {
+  explicarInadimplenciaIndice,
+  explicarInadimplenciaSaldo,
+  rotuloPeriodoEficiencia,
+  TELA_EFICIENCIA_PESSOAS,
+  type InadimplenciaFenixCtx,
+} from '../fenix/eficienciaPessoasFinanceiroFenix'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { explicarGraficoInadimplencia } from '../fenix/eficienciaGraficosFenix'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 
@@ -35,16 +46,27 @@ export function InadimplenciaTab({
 }: Props) {
   const [racionalAberto, setRacionalAberto] = useState(false)
   const { data, isLoading } = useOverviewFinanceiroKpis(ano)
-  const overview = data ? buildOverviewInadimplencia(data.meses, mesFiltro, ano) : null
   const filtroGav = filtroEfetivoGestaoAVista(ano)
+  const { data: aoVivo, isLoading: loadingAoVivo } = useInadimplenciaAoVivo(ano, mesFiltro)
+  const { data: aoVivoGestaoVista, isLoading: loadingAoVivoGestaoVista } =
+    useInadimplenciaAoVivo(ano, filtroGav)
+  const overview = data ? buildOverviewInadimplencia(data.meses, aoVivo) : null
   const overviewGestaoVista = data
-    ? buildOverviewInadimplencia(data.meses, filtroGav, ano)
+    ? buildOverviewInadimplencia(data.meses, aoVivoGestaoVista)
     : null
 
   const mesesEscopo = (data?.meses ?? []).filter(
     (m: GestaoVistaMesRow) =>
       m.mes >= MES_INICIO_RESULTADO && mesNoFiltro(m.mes, mesFiltro, ano),
   )
+
+  const fenixCtx = (escopo: 'gestao_vista' | 'periodo'): InadimplenciaFenixCtx => ({
+    ano,
+    escopo,
+    meses: mesesInadimplenciaAoVivo(escopo === 'gestao_vista' ? filtroGav : mesFiltro, ano),
+    aoVivo: escopo === 'gestao_vista' ? aoVivoGestaoVista : aoVivo,
+    periodo: rotuloPeriodoEficiencia(mesFiltro, ano),
+  })
 
   const chartData = mesesEscopo
     .filter((m: GestaoVistaMesRow) => m.inadimplenciaPct != null)
@@ -69,10 +91,14 @@ export function InadimplenciaTab({
               ? formatPercent(overviewGestaoVista.acumulado.value)
               : '—'
           }
-          hint="Saldo ÷ previsto · jun→hoje"
+          hint="Saldo ao vivo ÷ previsto · jun→hoje"
           icon={AlertTriangle}
           accentClass="bg-slate-100 text-slate-700"
-          loading={isLoading}
+          loading={isLoading || loadingAoVivoGestaoVista}
+          fenix={{
+            chave: 'eficiencia.inadimplencia.gestao-vista',
+            explicar: () => explicarInadimplenciaIndice(fenixCtx('gestao_vista')),
+          }}
         />
         <EficienciaKpiCard
           title="Índice de Inadimplência no período selecionado"
@@ -81,30 +107,34 @@ export function InadimplenciaTab({
               ? formatPercent(overview.acumulado.value)
               : '—'
           }
-          hint="Saldo ÷ previsto · meses filtrados"
+          hint="Saldo ao vivo ÷ previsto · meses filtrados"
           icon={AlertTriangle}
           accentClass="bg-amber-100 text-amber-800"
-          loading={isLoading}
+          loading={isLoading || loadingAoVivo}
+          fenix={{
+            chave: 'eficiencia.inadimplencia.periodo',
+            explicar: () => explicarInadimplenciaIndice(fenixCtx('periodo')),
+          }}
         />
         <EficienciaKpiCard
           title="Saldo inadimplência (período selecionado)"
           value={
-            data
+            aoVivo
               ? new Intl.NumberFormat('pt-BR', {
                   style: 'currency',
                   currency: 'BRL',
                   maximumFractionDigits: 0,
-                }).format(
-                  mesesEscopo.reduce(
-                    (s: number, m: GestaoVistaMesRow) => s + (m.inadimplencia ?? 0),
-                    0,
-                  ),
-                )
+                }).format(aoVivo.valor)
               : '—'
           }
+          hint="Saldo ao vivo do período (com baixa de pagamento posterior)"
           icon={AlertTriangle}
           accentClass="bg-slate-100 text-slate-700"
-          loading={isLoading}
+          loading={loadingAoVivo}
+          fenix={{
+            chave: 'eficiencia.inadimplencia.saldo',
+            explicar: () => explicarInadimplenciaSaldo(fenixCtx('periodo')),
+          }}
         />
       </div>
 
@@ -112,6 +142,20 @@ export function InadimplenciaTab({
         title="Índice de Inadimplência"
         subtitle="% saldo congelado ÷ previsto (a partir de junho)"
         data={chartData}
+        fenix={{
+          chave: 'eficiencia.inadimplencia.grafico',
+          explicar: (ponto) =>
+            explicarGraficoInadimplencia(
+              {
+                tela: TELA_EFICIENCIA_PESSOAS.inadimplencia,
+                ano,
+                mesFiltro,
+                data: chartData,
+                meses: data?.meses ?? [],
+              },
+              ponto,
+            ),
+        }}
         color="#d97706"
         onRacionalClick={() => setRacionalAberto(true)}
       />

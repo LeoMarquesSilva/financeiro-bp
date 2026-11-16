@@ -164,6 +164,8 @@ export function OpexPage() {
         loading={isLoading}
         realizadoAnoAnterior={dataAnoAnterior?.kpis.realizado_ytd}
         loadingAnoAnterior={loadingAnoAnterior}
+        evolucao={data?.evolucao}
+        planoFiltro={planoFiltro}
       />
 
       {data && (
@@ -186,7 +188,17 @@ export function OpexPage() {
           />
 
           {!temFiltroMeses(mesesFiltro) && (
-            <OpexProjecaoFixas grupos={data.grupos} kpis={data.kpis} mesAtual={data.mes_atual} />
+            <OpexProjecaoFixas
+              grupos={data.grupos}
+              kpis={data.kpis}
+              mesAtual={data.mes_atual}
+              fenix={{
+                ano: data.ano,
+                evolucao: data.evolucao,
+                orcamentoImportado: data.orcamento_importado,
+                planoFiltro,
+              }}
+            />
           )}
 
           <OpexGruposTable

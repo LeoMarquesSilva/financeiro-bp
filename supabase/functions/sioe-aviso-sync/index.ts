@@ -56,8 +56,7 @@ function formatarQuando(valor: string | Date): string {
   }).format(new Date(valor))
 }
 
-/** Início da hora do slot em Brasília, se o relógio está na janela de conferência (:40+). */
-function janelaAtual(now = new Date()): Date | null {
+function relogioBrt(now: Date) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
@@ -69,9 +68,57 @@ function janelaAtual(now = new Date()): Date | null {
   }).formatToParts(now)
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value)
   const hour = get('hour')
-  const minute = get('minute')
+  return {
+    hour,
+    minute: get('minute'),
+    // Brasília é UTC−3, sem horário de verão.
+    inicioDaHora: new Date(Date.UTC(get('year'), get('month') - 1, get('day'), hour + 3, 0, 0)),
+  }
+}
+
+/**
+ * Início da hora corrente em Brasília. É a régua do disparar e do checar: a carga do slot conta se
+ * gravou em sharepoint_sync_log desde a hora cheia. Antes o disparar olhava os últimos 40 minutos e
+ * o checar só a partir da hora cheia. Uma execução atrasada do schedule do GitHub que terminava
+ * entre :40 e :59 da hora anterior fazia o disparar pular a carga e o checar avisar "não atualizou".
+ */
+function inicioDaHoraBrt(now = new Date()): Date {
+  return relogioBrt(now).inicioDaHora
+}
+
+/** Início da hora do slot em Brasília, se o relógio está na janela de conferência (:40+). */
+function janelaAtual(now = new Date()): Date | null {
+  const { hour, minute, inicioDaHora } = relogioBrt(now)
   if (!SLOTS_BRT.includes(hour) || minute < 40) return null
-  return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), hour + 3, 0, 0))
+  return inicioDaHora
+}
+
+/** Pede a carga no GitHub. Uma nova tentativa em erro de rede ou 5xx. */
+async function dispararWorkflow(githubToken: string): Promise<Response> {
+  const pedir = () =>
+    fetch(
+      'https://api.github.com/repos/LeoMarquesSilva/financeiro-bp/actions/workflows/sync-sharepoint.yml/dispatches',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({ ref: 'main' }),
+        signal: AbortSignal.timeout(10000),
+      },
+    )
+  try {
+    const res = await pedir()
+    if (res.status < 500) return res
+    await res.body?.cancel()
+  } catch (err) {
+    console.error(`[disparar] primeira tentativa falhou: ${err instanceof Error ? err.message : err}`)
+  }
+  await new Promise((r) => setTimeout(r, 3000))
+  return await pedir()
 }
 
 interface FonteResultado {
@@ -160,7 +207,8 @@ Deno.serve(async (req: Request) => {
   if (modo === 'resultado' && !serviceOk) return json({ error: 'Não autorizado.' }, 403)
 
   if (modo === 'disparar') {
-    const desde = new Date(Date.now() - 40 * 60 * 1000).toISOString()
+    // Mesma régua do checar: só pula se já houve carga desde a hora cheia do slot.
+    const desde = inicioDaHoraBrt().toISOString()
     const { data: recente } = await admin
       .from('sharepoint_sync_log')
       .select('executado_em')
@@ -170,20 +218,7 @@ Deno.serve(async (req: Request) => {
 
     const githubToken = Deno.env.get('GITHUB_DISPATCH_TOKEN')?.trim()
     if (!githubToken) return json({ error: 'Token do GitHub ausente.' }, 500)
-    const disparo = await fetch(
-      'https://api.github.com/repos/LeoMarquesSilva/financeiro-bp/actions/workflows/sync-sharepoint.yml/dispatches',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${githubToken}`,
-          Accept: 'application/vnd.github+json',
-          'Content-Type': 'application/json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        body: JSON.stringify({ ref: 'main' }),
-        signal: AbortSignal.timeout(20000),
-      },
-    )
+    const disparo = await dispararWorkflow(githubToken)
     if (!disparo.ok) {
       const detalhe = (await disparo.text()).slice(0, 300)
       return json({ error: 'Falha ao disparar a carga.', detalhe }, 502)

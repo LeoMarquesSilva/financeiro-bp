@@ -12,6 +12,9 @@ const HOME_BY_ROLE: Partial<Record<AppRole, string>> = {
 /** Rota de entrada de cada módulo liberado individualmente. */
 export const MODULE_HOME_PATH: Record<ModuleKey, string> = {
   eficiencia: '/financeiro/eficiencia',
+  'eficiencia-area': '/financeiro/eficiencia',
+  'eficiencia-protocolos': '/financeiro/eficiencia',
+  timesheet: '/financeiro/timesheet',
   'operacoes-legais': '/financeiro/operacoes-legais',
   inadimplencia: '/financeiro/inadimplencia',
   receita: '/financeiro/receita',
@@ -25,6 +28,9 @@ export const MODULE_HOME_PATH: Record<ModuleKey, string> = {
 /** Ordem de preferência quando o usuário só tem módulos (sem role de home fixa). */
 const MODULE_HOME_PRIORITY: ModuleKey[] = [
   'eficiencia',
+  'eficiencia-area',
+  'eficiencia-protocolos',
+  'timesheet',
   'operacoes-legais',
   'receita',
   'inadimplencia',

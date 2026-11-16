@@ -28,11 +28,16 @@ import type {
   NpsKpi,
 } from '../types/eficiencia.types'
 
-export function useEficienciaOverview(ano: number, area: string | null = null) {
+export function useEficienciaOverview(
+  ano: number,
+  area: string | null = null,
+  enabled = true,
+) {
   const { data, error, isLoading, refetch } = useQuery({
     queryKey: ['eficiencia', 'overview', ano, area],
     queryFn: () => eficienciaService.getOverview(ano, area),
     staleTime: 5 * 60 * 1000,
+    enabled,
   })
   return { data: data ?? null, loading: isLoading, error, refetch }
 }

@@ -25,6 +25,13 @@ import type { ApresentacaoMarketingData } from '../utils/apresentacaoMarketing'
 import type { ApresentacaoFinanceiroOpsData } from '../utils/apresentacaoFinanceiroOps'
 import type { ApresentacaoLiderancaData } from '../utils/apresentacaoLideranca'
 import type { ApresentacaoBonusData } from '../utils/apresentacaoBonus'
+import type { ApresentacaoOpexData } from '../utils/apresentacaoOpex'
+import type {
+  ApresentacaoOpexMesData,
+  ApresentacaoOpexPeriodoData,
+} from '../utils/apresentacaoOpexResumo'
+import type { ApresentacaoOpexPontuaisBase } from '../utils/apresentacaoOpexPontuais'
+import { ApresentacaoOpexPontuaisBloco } from './ApresentacaoOpexPontuaisBloco'
 import type { ApresentacaoTopContrato } from '../utils/apresentacaoTopContratos'
 import type { ApresentacaoFinanceiroBundle } from '../utils/apresentacaoFinanceiro'
 import type { MesAno } from '../utils/apresentacaoMesAno'
@@ -40,6 +47,11 @@ import { ApresentacaoIniciativasBloco } from './ApresentacaoIniciativasBloco'
 import { ApresentacaoJuridicoUnificadoBloco } from './ApresentacaoJuridicoUnificadoBloco'
 import { ApresentacaoLiderancaBloco } from './ApresentacaoLiderancaBloco'
 import { ApresentacaoMarketingBloco } from './ApresentacaoMarketingBloco'
+import { ApresentacaoOpexBloco } from './ApresentacaoOpexBloco'
+import {
+  ApresentacaoOpexMesBloco,
+  ApresentacaoOpexPeriodoBloco,
+} from './ApresentacaoOpexResumoBlocos'
 import { toPriMaiuscula } from '../utils/textFormat'
 
 const FENIX_URL = '/team/fenix-bismarchi.png'
@@ -140,6 +152,25 @@ type Props = {
   onMarketingMesFiltroChange?: (mes: MesFiltroEficiencia) => void
   financeiroOpsMesFiltro?: MesFiltroEficiencia
   onFinanceiroOpsMesFiltroChange?: (mes: MesFiltroEficiencia) => void
+  opex?: ApresentacaoOpexData | null
+  loadingOpex?: boolean
+  opexError?: Error | null
+  opexMesInicio?: number
+  opexMesFim?: number
+  onOpexMesInicioChange?: (mes: number) => void
+  onOpexMesFimChange?: (mes: number) => void
+  opexPlanoFiltroAtivo?: boolean
+  opexPeriodo?: ApresentacaoOpexPeriodoData | null
+  loadingOpexPeriodo?: boolean
+  opexPeriodoError?: Error | null
+  opexMesData?: ApresentacaoOpexMesData | null
+  loadingOpexMes?: boolean
+  opexMesError?: Error | null
+  opexMes?: number
+  onOpexMesChange?: (mes: number) => void
+  opexPontuais?: ApresentacaoOpexPontuaisBase | null
+  loadingOpexPontuais?: boolean
+  opexPontuaisError?: Error | null
 }
 
 /** Separador nomeado entre blocos — só na tela; fora de `data-apresentacao-export`. */
@@ -756,6 +787,25 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
     onMarketingMesFiltroChange,
     financeiroOpsMesFiltro = null,
     onFinanceiroOpsMesFiltroChange,
+    opex = null,
+    loadingOpex = false,
+    opexError = null,
+    opexMesInicio = 1,
+    opexMesFim = 12,
+    onOpexMesInicioChange,
+    onOpexMesFimChange,
+    opexPlanoFiltroAtivo = false,
+    opexPeriodo = null,
+    loadingOpexPeriodo = false,
+    opexPeriodoError = null,
+    opexMesData = null,
+    loadingOpexMes = false,
+    opexMesError = null,
+    opexMes = 1,
+    onOpexMesChange,
+    opexPontuais = null,
+    loadingOpexPontuais = false,
+    opexPontuaisError = null,
   }: Props,
   ref: Ref<HTMLDivElement>,
 ) {
@@ -871,6 +921,55 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
               mesFim={bonusMesFim}
               onMesInicioChange={onBonusMesInicioChange ?? (() => {})}
               onMesFimChange={onBonusMesFimChange ?? (() => {})}
+            />
+          )
+        } else if (bloco.id === 'opex') {
+          content = (
+            <ApresentacaoOpexBloco
+              data={opex}
+              loading={loadingOpex}
+              error={opexError}
+              ano={ano}
+              mesInicio={opexMesInicio}
+              mesFim={opexMesFim}
+              onMesInicioChange={onOpexMesInicioChange ?? (() => {})}
+              onMesFimChange={onOpexMesFimChange ?? (() => {})}
+              planoFiltroAtivo={opexPlanoFiltroAtivo}
+            />
+          )
+        } else if (bloco.id === 'opex_periodo') {
+          content = (
+            <ApresentacaoOpexPeriodoBloco
+              data={opexPeriodo}
+              loading={loadingOpexPeriodo}
+              error={opexPeriodoError}
+              ano={ano}
+              mesInicio={opexMesInicio}
+              mesFim={opexMesFim}
+              onMesInicioChange={onOpexMesInicioChange ?? (() => {})}
+              onMesFimChange={onOpexMesFimChange ?? (() => {})}
+            />
+          )
+        } else if (bloco.id === 'opex_mes') {
+          content = (
+            <ApresentacaoOpexMesBloco
+              data={opexMesData}
+              loading={loadingOpexMes}
+              error={opexMesError}
+              ano={ano}
+              mes={opexMes}
+              onMesChange={onOpexMesChange ?? (() => {})}
+            />
+          )
+        } else if (bloco.id === 'opex_pontuais') {
+          content = (
+            <ApresentacaoOpexPontuaisBloco
+              data={opexPontuais}
+              loading={loadingOpexPontuais}
+              error={opexPontuaisError}
+              ano={ano}
+              mes={opexMes}
+              onMesChange={onOpexMesChange ?? (() => {})}
             />
           )
         } else if (bloco.id === 'financeiro') {

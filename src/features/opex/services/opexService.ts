@@ -10,6 +10,7 @@ import type {
   OpexLancamentoRow,
   OpexMesGrupoRow,
   OpexMesItemRow,
+  OpexPlanoContaNivel,
   OpexPlanoRow,
   OpexTituloRow,
 } from '../types/opex.types'
@@ -106,6 +107,22 @@ function rpcPlanoFiltro(filtro?: { gruposExcluidos: string[]; planosExcluidos: s
 }
 
 export const opexService = {
+  /** Níveis 1 e 2 do plano de contas do VIOS (raiz e grupo da conta). */
+  async fetchPlanoContasNiveis(): Promise<OpexPlanoContaNivel[]> {
+    const { data, error } = await supabase
+      .from('financeiro_plano_contas' as never)
+      .select('codigo, nivel, n1, nome')
+      .lte('nivel' as never, 2)
+      .order('codigo' as never)
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      codigo: String(row.codigo ?? ''),
+      nivel: Number(row.nivel) || 0,
+      n1: Number(row.n1) || 0,
+      nome: String(row.nome ?? ''),
+    }))
+  },
+
   async fetchCatalogoPlanos(ano: number) {
     const { data, error } = await supabase.rpc('opex_catalogo_planos' as never, { p_ano: ano } as never)
     if (error) throw error

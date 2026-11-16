@@ -8,6 +8,7 @@ import type { CobrancaSeguimentoGrupo } from '@/features/cobranca/types/cobranca
 import {
   judicializadaService,
 } from '@/features/inadimplencia-judicializada/services/judicializadaService'
+import type { InadimplenciaJudicializadaRow } from '@/features/inadimplencia-judicializada/types/judicializada.types'
 import {
   fetchInadimplenciaGruposIndex,
   grupoChaveNoComiteInadimplencia,
@@ -23,6 +24,8 @@ export interface DashboardCarteiraPontual {
   mediaDiasAtraso: number
   classeA: number
   classeB: number
+  /** Grupos que entraram na conta (fora do comitê). Usado pelo Fênix. */
+  grupos: CobrancaSeguimentoGrupo[]
 }
 
 export interface DashboardCarteiraRecorrente {
@@ -40,6 +43,8 @@ export interface DashboardCarteiraJudicializada {
   qtdProcessos: number
   qtdGrupos: number
   porArea: { area: string; valor: number; qtd: number }[]
+  /** Casos usados em calcularKpis (ativos). Usado pelo Fênix. */
+  rows: InadimplenciaJudicializadaRow[]
 }
 
 export interface DashboardCarteiras {
@@ -84,6 +89,23 @@ export interface TaxaRecuperacaoComite {
   recuperadoPorGestor: RankingItem[]
   /** Total recuperado desde 05/02 por área. */
   recuperadoPorArea: RankingItem[]
+  /** Parcelas da conta (Fênix): pagamentos registrados nos cards + títulos VIOS baixados. */
+  recuperadoManual: number
+  recuperadoVios: number
+  /** Soma do valor em aberto hoje de todos os cards (ativos e resolvidos). */
+  emAbertoAtual: number
+  qtdClientes: number
+  qtdResolvidos: number
+}
+
+/** Parcelas do recuperado no mês corrente (Fênix). */
+export interface RecuperacaoMesComposicao {
+  /** Pagamentos registrados nos cards do comitê com data no mês. */
+  manual: number
+  /** Títulos a receber do VIOS baixados no mês depois do vencimento. */
+  vios: number
+  ano: number
+  mes: number
 }
 
 export interface DashboardData {
@@ -95,6 +117,9 @@ export interface DashboardData {
   valorEmAbertoPorGestor: RankingItem[]
   valorEmAbertoPorArea: RankingItem[]
   tempoMedioRecuperacaoDias: number | null
+  /** Base da média (Fênix): cards resolvidos e soma dos dias de cada um. */
+  tempoMedioRecuperacaoBase: { qtd: number; somaDias: number } | null
+  recuperacaoMes: RecuperacaoMesComposicao
   followUpAlerts: FollowUpAlerts
 }
 
@@ -122,6 +147,8 @@ type RecuperacaoMesRaw = {
 }
 type RecuperacaoMesMetrics = {
   total: number
+  manual: number
+  vios: number
   rankingGestores: RankingItem[]
   rankingAreas: RankingItem[]
 }
@@ -187,9 +214,11 @@ function calcularCarteiraPontual(
   let classeB = 0
   let qtdGrupos = 0
   let somaMediaDias = 0
+  const contados: CobrancaSeguimentoGrupo[] = []
 
   for (const g of grupos) {
     if (grupoChaveNoComiteInadimplencia(g.grupo_chave, index)) continue
+    contados.push(g)
     qtdGrupos += 1
     valorEmAberto += g.valor_total
     somaMediaDias += g.media_dias_atraso ?? 0
@@ -210,6 +239,7 @@ function calcularCarteiraPontual(
     mediaDiasAtraso: qtdGrupos > 0 ? Math.round(somaMediaDias / qtdGrupos) : 0,
     classeA,
     classeB,
+    grupos: contados,
   }
 }
 
@@ -459,9 +489,11 @@ function buildRecuperacaoMesMetrics(
   const byGestor = new Map<string, { valor: number; qty: number }>()
   const byArea = new Map<string, { valor: number; qty: number }>()
   let total = 0
+  let manual = 0
+  let vios = 0
 
-  const addToRankings = (gestor: string, area: string, valor: number) => {
-    if (valor <= 0) return
+  const addToRankings = (gestor: string, area: string, valor: number): boolean => {
+    if (valor <= 0) return false
     total += valor
     const g = byGestor.get(gestor) ?? { valor: 0, qty: 0 }
     g.valor += valor
@@ -471,21 +503,25 @@ function buildRecuperacaoMesMetrics(
     a.valor += valor
     a.qty += 1
     byArea.set(area, a)
+    return true
   }
 
   for (const p of raw.pagamentos) {
     const client = clientById.get(p.client_id)
-    addToRankings(normKey(client?.gestor), normKey(client?.area), Number(p.valor_pago))
+    const valor = Number(p.valor_pago)
+    if (addToRankings(normKey(client?.gestor), normKey(client?.area), valor)) manual += valor
   }
 
   for (const p of raw.parcelas) {
     const valor = Number(p.valor_pago ?? p.valor ?? 0)
     const { gestor, area } = resolveGestorAreaRecuperacaoParcela(p, pessoaMap, historico, processos)
-    addToRankings(gestor, area, valor)
+    if (addToRankings(gestor, area, valor)) vios += valor
   }
 
   return {
     total,
+    manual,
+    vios,
     rankingGestores: Array.from(byGestor.entries())
       .map(([nome, v]) => ({ nome, valor: v.valor, quantidade: v.qty }))
       .sort((a, b) => b.valor - a.valor),
@@ -495,7 +531,7 @@ function buildRecuperacaoMesMetrics(
   }
 }
 
-async function getTempoMedioRecuperacao(): Promise<number | null> {
+async function getTempoMedioRecuperacao(): Promise<{ media: number; qtd: number; somaDias: number } | null> {
   const { data: resolvidos, error: errR } = await supabase
     .from('clients_inadimplencia')
     .select('created_at, resolvido_at')
@@ -509,7 +545,7 @@ async function getTempoMedioRecuperacao(): Promise<number | null> {
     return Math.round((resolved - created) / (1000 * 60 * 60 * 24))
   })
   const sum = dias.reduce((a, b) => a + b, 0)
-  return dias.length ? Math.round(sum / dias.length) : null
+  return dias.length ? { media: Math.round(sum / dias.length), qtd: dias.length, somaDias: sum } : null
 }
 
 async function getFollowUpAlerts(): Promise<FollowUpAlerts> {
@@ -574,11 +610,17 @@ async function getTaxaRecuperacaoComite(clients: ClientListRow[]): Promise<TaxaR
   const byArea = new Map<string, number>()
   let totalRecuperadoDesdeComite = 0
   let valorTotalEmAbertoInicioComite = 0
+  let recuperadoManual = 0
+  let recuperadoVios = 0
+  let emAbertoAtual = 0
   for (const c of clients) {
     const emAberto = Number(c.valor_em_aberto)
     const pagoInadimplencia = pagamentosPorCliente.get(c.id) ?? 0
     const pagoParcelas = (c.pessoa_id ? recuperadoPorPessoaId.get(c.pessoa_id) ?? 0 : 0)
     const pagoDesdeComite = pagoInadimplencia + pagoParcelas
+    recuperadoManual += pagoInadimplencia
+    recuperadoVios += pagoParcelas
+    emAbertoAtual += emAberto
     totalRecuperadoDesdeComite += pagoDesdeComite
     valorTotalEmAbertoInicioComite += emAberto + pagoDesdeComite
     const gKey = normKey(c.gestor)
@@ -605,6 +647,11 @@ async function getTaxaRecuperacaoComite(clients: ClientListRow[]): Promise<TaxaR
     percentualRecuperacaoComite,
     recuperadoPorGestor,
     recuperadoPorArea,
+    recuperadoManual,
+    recuperadoVios,
+    emAbertoAtual,
+    qtdClientes: clients.length,
+    qtdResolvidos: clients.filter((c) => c.resolvido_at != null).length,
   }
 }
 
@@ -634,6 +681,8 @@ export const dashboardService = {
 
     const {
       total: recuperadoMes,
+      manual: recuperadoMesManual,
+      vios: recuperadoMesVios,
       rankingGestores,
       rankingAreas,
     } = buildRecuperacaoMesMetrics(
@@ -670,6 +719,7 @@ export const dashboardService = {
         qtdProcessos: judicializadaKpis.qtdProcessos,
         qtdGrupos: judicializadaKpis.qtdGrupos,
         porArea: judicializadaKpis.porArea.slice(0, 3),
+        rows: judicializadaRows,
       },
     }
 
@@ -714,7 +764,14 @@ export const dashboardService = {
       rankingAreas,
       valorEmAbertoPorGestor: valorPorGestor,
       valorEmAbertoPorArea: valorPorArea,
-      tempoMedioRecuperacaoDias: tempoMedio,
+      tempoMedioRecuperacaoDias: tempoMedio?.media ?? null,
+      tempoMedioRecuperacaoBase: tempoMedio ? { qtd: tempoMedio.qtd, somaDias: tempoMedio.somaDias } : null,
+      recuperacaoMes: {
+        manual: recuperadoMesManual,
+        vios: recuperadoMesVios,
+        ano: new Date().getFullYear(),
+        mes: new Date().getMonth() + 1,
+      },
       followUpAlerts,
     }
   },

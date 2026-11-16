@@ -14,6 +14,56 @@ import {
 import { DashboardComposicaoBar } from '../components/DashboardComposicaoBar'
 import { DashboardSaldoDevedorSection } from '../components/DashboardSaldoDevedorSection'
 import { AlertTriangle, Clock, Scale } from 'lucide-react'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  TELA_PAINEL_CARTEIRAS,
+  TELA_PAINEL_CLASSES,
+  explicarClasse,
+  explicarRecorrenteClasses,
+  explicarRecorrenteClientes,
+  explicarRecorrenteValor,
+  explicarRecuperacaoComite,
+  explicarRecuperacaoMes,
+  explicarRecuperadoComite,
+  explicarRecuperadoMes,
+  explicarTempoMedioRecuperacao,
+  explicarTotalEmAbertoCarteiras,
+  explicarValorInicioComite,
+} from '../fenix/inadimplenciaFenix'
+import {
+  explicarPontualFaixa31a60,
+  explicarPontualGrupos,
+  explicarPontualValorEmAberto,
+  type PontualFenixContexto,
+} from '@/features/cobranca/fenix/cobrancaFenix'
+import {
+  explicarJudicializadaLancamentoVios,
+  explicarJudicializadaValorCausa,
+  explicarJudicializadaValorCorrigido,
+} from '@/features/inadimplencia-judicializada/fenix/judicializadaFenix'
+
+type FenixAlvo = { chave: string; explicar: FenixExplicar }
+
+/** Caixa de número do painel: mesmo elemento de antes, marcado para o Fênix. */
+function FenixBox({
+  fenix,
+  className,
+  children,
+}: {
+  fenix: FenixAlvo
+  className: string
+  children: React.ReactNode
+}) {
+  const fenixId = useFenixAlvo(fenix.chave, fenix.explicar)
+  return (
+    <div className={className} data-fenix={fenixId}>
+      {children}
+    </div>
+  )
+}
+
+const BOX = 'rounded-lg border border-slate-200 bg-white p-4 shadow-sm'
 
 export function InadimplenciaDashboardPage() {
   useOfficialPhotos()
@@ -58,6 +108,23 @@ export function InadimplenciaDashboardPage() {
 
   const barDenominatorOperacional = totais.totalEmAbertoOperacional
 
+  const pontualCtx: PontualFenixContexto = {
+    tela: TELA_PAINEL_CARTEIRAS,
+    grupos: carteiras.pontual.grupos,
+    filtros: [{ rotulo: 'Comitê de Inadimplência', valor: 'só grupos fora do Comitê' }],
+    comite: 'fora_comite',
+    detalhe: 'Clique no card (com o Fênix fechado) para abrir a Inadimplência Pontual, grupo a grupo.',
+  }
+  const comTitulo = (titulo: string, explicar: FenixExplicar): FenixExplicar => () => ({
+    ...explicar(),
+    titulo,
+  })
+  const judicializadaInput = (total: number) => ({
+    tela: TELA_PAINEL_CARTEIRAS,
+    rows: carteiras.judicializada.rows,
+    total,
+  })
+
   return (
     <div className="space-y-8">
       <header>
@@ -77,12 +144,40 @@ export function InadimplenciaDashboardPage() {
             icon={Clock}
             accentClass="bg-amber-100 text-amber-700"
             stats={[
-              { label: 'Valor em aberto', value: carteiraCurrency(carteiras.pontual.valorEmAberto) },
-              { label: 'Grupos devedores', value: String(carteiras.pontual.qtdGrupos) },
+              {
+                label: 'Valor em aberto',
+                value: carteiraCurrency(carteiras.pontual.valorEmAberto),
+                fenix: {
+                  chave: 'inadimplencia.painel.pontual.valor-aberto',
+                  explicar: comTitulo('Inadimplência Pontual › Valor em aberto', () =>
+                    explicarPontualValorEmAberto(pontualCtx, carteiras.pontual.valorEmAberto),
+                  ),
+                },
+              },
+              {
+                label: 'Grupos devedores',
+                value: String(carteiras.pontual.qtdGrupos),
+                fenix: {
+                  chave: 'inadimplencia.painel.pontual.grupos',
+                  explicar: comTitulo('Inadimplência Pontual › Grupos devedores', () =>
+                    explicarPontualGrupos(pontualCtx, carteiras.pontual.qtdGrupos),
+                  ),
+                },
+              },
               {
                 label: 'Faixa 31–60 dias',
                 value: carteiraCurrency(carteiras.pontual.valorFaixa31_60),
                 hint: `${carteiras.pontual.mediaDiasAtraso} dias (média)`,
+                fenix: {
+                  chave: 'inadimplencia.painel.pontual.faixa-31-60',
+                  explicar: comTitulo('Inadimplência Pontual › Faixa 31–60 dias', () =>
+                    explicarPontualFaixa31a60(
+                      pontualCtx,
+                      carteiras.pontual.valorFaixa31_60,
+                      carteiras.pontual.mediaDiasAtraso,
+                    ),
+                  ),
+                },
               },
             ]}
           />
@@ -93,11 +188,29 @@ export function InadimplenciaDashboardPage() {
             icon={AlertTriangle}
             accentClass="bg-red-100 text-red-700"
             stats={[
-              { label: 'Valor em aberto', value: carteiraCurrency(carteiras.recorrente.valorEmAberto) },
-              { label: 'Clientes ativos', value: String(carteiras.recorrente.qtdClientes) },
+              {
+                label: 'Valor em aberto',
+                value: carteiraCurrency(carteiras.recorrente.valorEmAberto),
+                fenix: {
+                  chave: 'inadimplencia.painel.recorrente.valor-aberto',
+                  explicar: () => explicarRecorrenteValor(data),
+                },
+              },
+              {
+                label: 'Clientes ativos',
+                value: String(carteiras.recorrente.qtdClientes),
+                fenix: {
+                  chave: 'inadimplencia.painel.recorrente.clientes',
+                  explicar: () => explicarRecorrenteClientes(data),
+                },
+              },
               {
                 label: 'Classes A / B / C',
                 value: `${carteiraCurrency(carteiras.recorrente.classeA)} / ${carteiraCurrency(carteiras.recorrente.classeB)} / ${carteiraCurrency(carteiras.recorrente.classeC)}`,
+                fenix: {
+                  chave: 'inadimplencia.painel.recorrente.classes',
+                  explicar: () => explicarRecorrenteClasses(data),
+                },
               },
             ]}
           />
@@ -112,16 +225,36 @@ export function InadimplenciaDashboardPage() {
                 label: 'Valor de ajuizamento',
                 value: carteiraCurrency(carteiras.judicializada.totalValorCausa),
                 hint: 'Soma valor da causa (planilha)',
+                fenix: {
+                  chave: 'inadimplencia.painel.judicializada.valor-causa',
+                  explicar: comTitulo('Inadimplência Judicializada › Valor de ajuizamento', () =>
+                    explicarJudicializadaValorCausa(judicializadaInput(carteiras.judicializada.totalValorCausa)),
+                  ),
+                },
               },
               {
                 label: 'Lançamento VIOS (grupo)',
                 value: carteiraCurrency(carteiras.judicializada.totalLancamentoVios),
                 hint: 'Saldo financeiro do grupo devedor',
+                fenix: {
+                  chave: 'inadimplencia.painel.judicializada.lancamento-vios',
+                  explicar: comTitulo('Inadimplência Judicializada › Lançamento VIOS (grupo)', () =>
+                    explicarJudicializadaLancamentoVios(
+                      judicializadaInput(carteiras.judicializada.totalLancamentoVios),
+                    ),
+                  ),
+                },
               },
               {
                 label: 'Valor corrigido',
                 value: carteiraCurrency(carteiras.judicializada.valorEmAberto),
                 hint: 'INPC + juros TJSP',
+                fenix: {
+                  chave: 'inadimplencia.painel.judicializada.valor-corrigido',
+                  explicar: comTitulo('Inadimplência Judicializada › Valor corrigido', () =>
+                    explicarJudicializadaValorCorrigido(judicializadaInput(carteiras.judicializada.valorEmAberto)),
+                  ),
+                },
               },
             ]}
           />
@@ -161,7 +294,10 @@ export function InadimplenciaDashboardPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-800">Resumo</h2>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <FenixBox
+            className={BOX}
+            fenix={{ chave: 'inadimplencia.painel.resumo.total-aberto', explicar: () => explicarTotalEmAbertoCarteiras(data) }}
+          >
             <p className="text-xs font-medium text-slate-500">Total em aberto</p>
             <p className="text-2xl font-bold text-slate-900">{formatCurrency(totais.totalEmAberto)}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
@@ -169,22 +305,31 @@ export function InadimplenciaDashboardPage() {
               {formatCurrency(carteiras.recorrente.valorEmAberto)} · Judicializada{' '}
               {formatCurrency(carteiras.judicializada.valorEmAberto)}
             </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          </FenixBox>
+          <FenixBox
+            className={BOX}
+            fenix={{ chave: 'inadimplencia.painel.resumo.recuperado-mes', explicar: () => explicarRecuperadoMes(data) }}
+          >
             <p className="text-xs font-medium text-slate-500">Total recuperado no mês</p>
             <p className="text-2xl font-bold text-emerald-700">{formatCurrency(totais.totalRecuperadoMes)}</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          </FenixBox>
+          <FenixBox
+            className={BOX}
+            fenix={{ chave: 'inadimplencia.painel.resumo.recuperacao-mes', explicar: () => explicarRecuperacaoMes(data) }}
+          >
             <p className="text-xs font-medium text-slate-500">% Recuperação</p>
             <p className="text-2xl font-bold text-slate-900">{formatPercent(totais.percentualRecuperacao)}</p>
             <p className="mt-1 text-[11px] text-slate-400">Recorrente + Pontual (mês corrente)</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          </FenixBox>
+          <FenixBox
+            className={BOX}
+            fenix={{ chave: 'inadimplencia.painel.resumo.tempo-medio', explicar: () => explicarTempoMedioRecuperacao(data) }}
+          >
             <p className="text-xs font-medium text-slate-500">Tempo médio de recuperação</p>
             <p className="text-2xl font-bold text-slate-900">
               {tempoMedioRecuperacaoDias != null ? `${tempoMedioRecuperacaoDias} dias` : '–'}
             </p>
-          </div>
+          </FenixBox>
         </div>
       </section>
 
@@ -198,18 +343,27 @@ export function InadimplenciaDashboardPage() {
           Data de corte do comitê: 05/02/2026.
         </p>
         <div className="grid gap-5 sm:grid-cols-3">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <FenixBox
+            className={BOX}
+            fenix={{ chave: 'inadimplencia.painel.comite.recuperado', explicar: () => explicarRecuperadoComite(data) }}
+          >
             <p className="text-xs font-medium text-slate-500">Total recuperado desde 05/02</p>
             <p className="text-2xl font-bold text-emerald-700">{formatCurrency(taxaRecuperacaoComite.totalRecuperadoDesdeComite)}</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          </FenixBox>
+          <FenixBox
+            className={BOX}
+            fenix={{ chave: 'inadimplencia.painel.comite.valor-inicio', explicar: () => explicarValorInicioComite(data) }}
+          >
             <p className="text-xs font-medium text-slate-500">Valor total em aberto (início comitê)</p>
             <p className="text-2xl font-bold text-slate-900">{formatCurrency(taxaRecuperacaoComite.valorTotalEmAbertoInicioComite)}</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          </FenixBox>
+          <FenixBox
+            className={BOX}
+            fenix={{ chave: 'inadimplencia.painel.comite.recuperacao', explicar: () => explicarRecuperacaoComite(data) }}
+          >
             <p className="text-xs font-medium text-slate-500">% Recuperação comitê</p>
             <p className="text-2xl font-bold text-slate-900">{formatPercent(taxaRecuperacaoComite.percentualRecuperacaoComite)}</p>
-          </div>
+          </FenixBox>
         </div>
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -273,6 +427,7 @@ export function InadimplenciaDashboardPage() {
               comite={totais.comiteClasseA}
               pontual={totais.pontualClasseA}
               tone="blue"
+              fenix={{ chave: 'inadimplencia.painel.classes.a', explicar: () => explicarClasse(data, 'A', TELA_PAINEL_CLASSES) }}
             />
             <ClasseTotalRow
               label="Classe B"
@@ -280,6 +435,7 @@ export function InadimplenciaDashboardPage() {
               comite={totais.comiteClasseB}
               pontual={totais.pontualClasseB}
               tone="amber"
+              fenix={{ chave: 'inadimplencia.painel.classes.b', explicar: () => explicarClasse(data, 'B', TELA_PAINEL_CLASSES) }}
             />
             <ClasseTotalRow
               label="Classe C"
@@ -287,6 +443,7 @@ export function InadimplenciaDashboardPage() {
               comite={totais.comiteClasseC}
               pontual={0}
               tone="red"
+              fenix={{ chave: 'inadimplencia.painel.classes.c', explicar: () => explicarClasse(data, 'C', TELA_PAINEL_CLASSES) }}
             />
           </div>
           <div className="mt-4 h-48">
@@ -432,13 +589,16 @@ function ClasseTotalRow({
   comite,
   pontual,
   tone,
+  fenix,
 }: {
   label: string
   total: number
   comite: number
   pontual: number
   tone: 'blue' | 'amber' | 'red'
+  fenix?: FenixAlvo
 }) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   const tones = {
     blue: {
       box: 'bg-blue-50',
@@ -458,7 +618,7 @@ function ClasseTotalRow({
   }[tone]
 
   return (
-    <div className={`rounded px-3 py-2 ${tones.box}`}>
+    <div className={`rounded px-3 py-2 ${tones.box}`} data-fenix={fenixId}>
       <div className="flex items-center justify-between gap-2">
         <span className={`text-sm font-medium ${tones.title}`}>{label}</span>
         <span className={`font-bold ${tones.title}`}>{formatCurrency(total)}</span>

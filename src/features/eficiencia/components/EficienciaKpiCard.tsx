@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils'
 import { formatPercent } from '@/shared/utils/format'
 import { copyElementImageToClipboard } from '@/shared/utils/copyChartImage'
 import { toPriMaiuscula } from '../utils/textFormat'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
 
 type Props = {
   title: string
@@ -36,6 +38,8 @@ type Props = {
   copyable?: boolean
   /** Reserva espaço do bloco “Filtrado por…” para alinhar altura com os demais cards da linha. */
   reservePessoaSlot?: boolean
+  /** Explicação do número no Fênix IA (chave única + função que monta a memória de cálculo). */
+  fenix?: { chave: string; explicar: FenixExplicar }
 }
 
 function formatPp(value: number): string {
@@ -60,7 +64,9 @@ export function EficienciaKpiCard({
   vsEquipePct = null,
   copyable = true,
   reservePessoaSlot = false,
+  fenix,
 }: Props) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   const cardRef = useRef<HTMLDivElement>(null)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const temPessoa = Boolean(pessoaNome?.trim())
@@ -101,7 +107,7 @@ export function EficienciaKpiCard({
     copyStatus === 'loading' ? Loader2 : copyStatus === 'done' ? Check : Copy
 
   return (
-    <div className="group relative h-full">
+    <div className="group relative h-full" data-fenix={fenixId}>
       {copyable ? (
         <TooltipProvider delayDuration={200}>
           <Tooltip>

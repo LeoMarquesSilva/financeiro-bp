@@ -13,6 +13,46 @@ const GRAPH = 'https://graph.microsoft.com/v1.0'
 let cachedToken = null
 let cachedTokenExp = 0
 
+const GRAPH_TENTATIVAS = 6
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * fetch com nova tentativa em erro de rede ("fetch failed") e em 429/5xx (só para GET e para o
+ * token, que são idempotentes). Devolve a última resposta; quem chama trata status não-ok.
+ */
+async function fetchComRetry(url, init, rotulo) {
+  let ultimoErro = null
+  for (let tentativa = 1; tentativa <= GRAPH_TENTATIVAS; tentativa++) {
+    const ultima = tentativa === GRAPH_TENTATIVAS
+    let res
+    try {
+      res = await fetch(url, init)
+    } catch (e) {
+      ultimoErro = e
+      if (ultima) break
+      const causa = e?.cause ? ` (${e.cause.code ?? e.cause.message ?? e.cause})` : ''
+      const espera = 2000 * 2 ** (tentativa - 1)
+      console.warn(`[graph] ${rotulo}: ${e.message}${causa} — tentativa ${tentativa}/${GRAPH_TENTATIVAS}, nova em ${espera / 1000}s`)
+      await sleep(espera)
+      continue
+    }
+    if ((res.status === 429 || res.status >= 500) && !ultima) {
+      const retryAfter = Number(res.headers.get('retry-after'))
+      const espera =
+        res.status === 429
+          ? (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 3) * 1000 * tentativa
+          : 2000 * 2 ** (tentativa - 1)
+      console.warn(`[graph] ${rotulo}: HTTP ${res.status} — tentativa ${tentativa}/${GRAPH_TENTATIVAS}, nova em ${espera / 1000}s`)
+      await res.body?.cancel().catch(() => {})
+      await sleep(espera)
+      continue
+    }
+    return res
+  }
+  const causa = ultimoErro?.cause ? ` (${ultimoErro.cause.code ?? ultimoErro.cause.message ?? ultimoErro.cause})` : ''
+  throw new Error(`${rotulo}: ${ultimoErro?.message ?? 'falhou'}${causa} (após ${GRAPH_TENTATIVAS} tentativas)`)
+}
+
 export async function getGraphToken() {
   const now = Date.now()
   if (cachedToken && now < cachedTokenExp - 60_000) return cachedToken
@@ -24,16 +64,20 @@ export async function getGraphToken() {
     throw new Error('Faltam MS_TENANT_ID / MS_CLIENT_ID / MS_CLIENT_SECRET no .env')
   }
 
-  const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      scope: 'https://graph.microsoft.com/.default',
-      grant_type: 'client_credentials',
-    }),
-  })
+  const res = await fetchComRetry(
+    `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        scope: 'https://graph.microsoft.com/.default',
+        grant_type: 'client_credentials',
+      }),
+    },
+    'token Graph',
+  )
   if (!res.ok) throw new Error(`Token Graph falhou: ${res.status} ${await res.text()}`)
   const json = await res.json()
   cachedToken = json.access_token
@@ -43,19 +87,9 @@ export async function getGraphToken() {
 
 async function graphGet(url) {
   const token = await getGraphToken()
-  let lastErr = ''
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    if (res.status === 429) {
-      const wait = Number(res.headers.get('retry-after') ?? 3) * 1000
-      lastErr = `429 ${await res.text()}`
-      await new Promise((r) => setTimeout(r, wait * (attempt + 1)))
-      continue
-    }
-    if (!res.ok) throw new Error(`Graph GET ${url} falhou: ${res.status} ${await res.text()}`)
-    return res.json()
-  }
-  throw new Error(`Graph GET ${url} falhou após retries: ${lastErr}`)
+  const res = await fetchComRetry(url, { headers: { Authorization: `Bearer ${token}` } }, `Graph GET ${url}`)
+  if (!res.ok) throw new Error(`Graph GET ${url} falhou: ${res.status} ${await res.text()}`)
+  return res.json()
 }
 
 /** Resolve o siteId a partir do hostname + caminho (ex.: 'bpplaw2.sharepoint.com', '/sites/CONTROLADORIAJURDICA'). */
@@ -124,12 +158,20 @@ export async function fetchListItems(siteId, listId, filter = null, fieldSelect 
 export async function fetchDriveFile(siteId, filePath) {
   const token = await getGraphToken()
   const encoded = filePath.split('/').map(encodeURIComponent).join('/')
-  const res = await fetch(`${GRAPH}/sites/${siteId}/drive/root:/${encoded}:/content`, {
-    headers: { Authorization: `Bearer ${token}` },
-    redirect: 'follow',
-  })
-  if (!res.ok) throw new Error(`Download ${filePath} falhou: ${res.status} ${await res.text()}`)
-  return Buffer.from(await res.arrayBuffer())
+  const url = `${GRAPH}/sites/${siteId}/drive/root:/${encoded}:/content`
+  const init = { headers: { Authorization: `Bearer ${token}` }, redirect: 'follow' }
+  // A conexão pode cair no meio do corpo (CSV grande); aí o download inteiro recomeça.
+  for (let tentativa = 1; ; tentativa++) {
+    const res = await fetchComRetry(url, init, `Download ${filePath}`)
+    if (!res.ok) throw new Error(`Download ${filePath} falhou: ${res.status} ${await res.text()}`)
+    try {
+      return Buffer.from(await res.arrayBuffer())
+    } catch (e) {
+      if (tentativa >= 3) throw new Error(`Download ${filePath}: ${e.message} (corpo, após ${tentativa} tentativas)`)
+      console.warn(`[graph] Download ${filePath}: corpo interrompido (${e.message}) — nova tentativa`)
+      await sleep(3000 * tentativa)
+    }
+  }
 }
 
 /** Lista arquivos de uma pasta do drive do site (para combinar Historico/*.csv). */

@@ -48,6 +48,8 @@ jobs:
           MS_CLIENT_SECRET: ${{ secrets.MS_CLIENT_SECRET }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # off = publicações saem da rodada automática (o BKP passa a vir do Orquestra)
+          SYNC_PUBLICACOES: ${{ vars.SYNC_PUBLICACOES }}
         run: |
           ONLY="${{ github.event.inputs.only }}"
           if [ -n "$ONLY" ]; then

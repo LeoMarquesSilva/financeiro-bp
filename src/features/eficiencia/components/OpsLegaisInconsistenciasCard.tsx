@@ -137,15 +137,15 @@ function mapDesvio(
   if (String(row.eficiencia ?? '').trim() !== 'DESVIO') return null
   const subtipo = String(row.inconsistencia_subtipo ?? '').trim()
   const tipo = String(row.inconsistencias_tipo ?? '').trim()
-  // Análise: responsável por Área (Trabalhista → Isadora; demais → Giovanna).
-  // Agendamento: quem realmente agendou (AGENDADO POR).
-  const pessoa =
-    indicador === 'ops_legais_pub_analise'
-      ? resolveOpsLegaisPubResponsavel(area)
-      : String(row.agendado_por ?? '').trim() || '—'
   const data = dataDia(
     row.data_recebimento_kurier == null ? null : String(row.data_recebimento_kurier),
   )
+  // Análise: responsável por Área e data (Trabalhista → Isadora; demais → Gustavo até
+  // 09/04/2026, depois Giovanna). Agendamento: quem realmente agendou (AGENDADO POR).
+  const pessoa =
+    indicador === 'ops_legais_pub_analise'
+      ? resolveOpsLegaisPubResponsavel(area, data)
+      : String(row.agendado_por ?? '').trim() || '—'
   const check = String(row.check_pub ?? '').trim() || null
   return {
     pessoa,

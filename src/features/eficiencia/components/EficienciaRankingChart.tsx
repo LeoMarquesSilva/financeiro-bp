@@ -13,6 +13,9 @@ import { BarChart3, Building2, Tags } from 'lucide-react'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import { getInitials } from '@/shared/components/Avatar'
 import { formatPercent } from '@/shared/utils/format'
+import type { FenixExplicacao, FenixPontoGrafico } from '@/shared/fenix/fenix.types'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+import type { RankingBarraFenix } from '../fenix/eficienciaGraficosFenix'
 import { cn } from '@/lib/utils'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import { useBpUsuariosAvatar } from '../hooks/useBpUsuariosAvatar'
@@ -71,6 +74,16 @@ type Props = {
   /** Miniatura do responsável (catálogo ticket-bp / team_members). */
   showAvatars?: boolean
   className?: string
+  /**
+   * Fênix IA: `explicar` recebe todas as barras como aparecem (nome, valor, quantidade
+   * em `qtdKey`, % do total) e a barra sob o mouse (`null` = o ranking inteiro).
+   */
+  fenix?: {
+    chave: string
+    /** Coluna com a quantidade de desvios da linha (ex.: `qtd_fatal`). */
+    qtdKey: string
+    explicar: (barras: RankingBarraFenix[], ponto: FenixPontoGrafico | null) => FenixExplicacao
+  }
 }
 
 function AvatarYTick({
@@ -287,6 +300,7 @@ export function EficienciaRankingChart({
   porTipoToggle,
   showAvatars = false,
   className,
+  fenix,
 }: Props) {
   const compact = compactProp ?? biStyle
   const chartExportRef = useRef<HTMLDivElement>(null)
@@ -361,6 +375,29 @@ export function EficienciaRankingChart({
     }
     return map
   }, [chartData])
+
+  // Fênix: barras exatamente como o gráfico desenha (mesmo índice do mouse).
+  const fenixGrafico = useFenixGrafico(
+    fenix?.chave,
+    fenix
+      ? (ponto) =>
+          fenix.explicar(
+            chartData.map((d) => {
+              const qtd = Number((d as RankingChartRow)[fenix.qtdKey])
+              const pctRow = Number((d as RankingChartRow).pct_do_total)
+              return {
+                rotulo: String(d._labelFull ?? d._label),
+                valor: d._value,
+                valorTexto: formatValue(d._value),
+                posicao: d._rank,
+                qtd: Number.isFinite(qtd) ? qtd : 0,
+                pctDoTotal: Number.isFinite(pctRow) ? pctRow : null,
+              }
+            }),
+            ponto,
+          )
+      : undefined,
+  )
 
   const textAxisWidth = chartData[0]?._textAxisWidth ?? (compact ? 120 : 140)
   const resolvedYWidth = textAxisWidth + (showAvatars ? 30 : 0)
@@ -494,7 +531,7 @@ export function EficienciaRankingChart({
         </p>
       ) : (
         /* ref no wrapper; data-chart-plot no filho — copyChartImage usa querySelector nos descendentes */
-        <div ref={chartExportRef} className="w-full">
+        <div ref={chartExportRef} className="w-full" data-fenix={fenixGrafico.fenixId}>
           <div data-chart-plot className="w-full" style={plotViewportStyle}>
             <div style={{ height: chartHeight, minHeight: chartHeight }}>
               <ResponsiveContainer
@@ -512,6 +549,8 @@ export function EficienciaRankingChart({
                     bottom: 2,
                   }}
                   barCategoryGap={compact ? '12%' : '18%'}
+                  onMouseMove={fenixGrafico.onMouseMove}
+                  onMouseLeave={fenixGrafico.onMouseLeave}
                 >
                   <CartesianGrid
                     horizontal={false}

@@ -27,6 +27,12 @@ import {
   TreinamentosVisaoToggle,
   type TreinamentosVisao,
 } from './TreinamentosVisaoToggle'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  explicarOpsTreinamentoCategoria,
+  REGRAS_OPS_TREINAMENTOS_POPULACAO,
+  TELA_EFICIENCIA_PESSOAS,
+} from '../fenix/eficienciaPessoasFinanceiroFenix'
 
 type Props = {
   ativos: OpsTurnoverAtivo[]
@@ -150,6 +156,51 @@ export function OpsLegaisTreinamentosSection({
     }
   }, [visao, gruposDuplicadosBase.length])
 
+  // Fênix: um alvo por categoria (Equipe, Liderança, Gerente), com os mesmos números do card.
+  const explicarCategoria = (categoria: OpsTreinamentoCategoria) => () => {
+    const r = resumos.find((x) => x.categoria === categoria)
+    const visaoPessoas = visao === 'pessoas'
+    return explicarOpsTreinamentoCategoria({
+      ano,
+      categoria,
+      visaoPessoas: visaoPessoas && categoria !== 'Gerente',
+      qtdPessoas: r?.qtdPessoas ?? 0,
+      minutos: r?.minutos ?? 0,
+      metaMinutos: r?.metaMinutos ?? null,
+      pctAtingimento: r?.pctAtingimento ?? null,
+      pctProjetado: r?.pctProjetado ?? null,
+      mostraProjecao:
+        !visaoPessoas &&
+        categoria !== 'Gerente' &&
+        sessoesFuturas.length > 0 &&
+        r?.pctProjetado != null &&
+        r?.pctAtingimento != null &&
+        r.pctProjetado > r.pctAtingimento,
+      qtdMetaAtingida: r?.qtdMetaAtingida ?? 0,
+      pctPessoasMeta: r?.pctPessoasMeta ?? null,
+      pessoas: pessoas
+        .filter((p) => p.categoria === categoria)
+        .map((p) => ({
+          colaborador: p.colaborador,
+          minutos: p.minutos,
+          metaMinutos: categoria === 'Gerente' ? null : metaTreinamentoMinutosProporcional(p.admissao, ano),
+          admissao: p.admissao ?? null,
+        })),
+      sessoesFuturas,
+    })
+  }
+  const fenixIds: Record<OpsTreinamentoCategoria, string | undefined> = {
+    Equipe: useFenixAlvo('eficiencia.ops-treinamentos.equipe', explicarCategoria('Equipe')),
+    Liderança: useFenixAlvo('eficiencia.ops-treinamentos.lideranca', explicarCategoria('Liderança')),
+    Gerente: useFenixAlvo('eficiencia.ops-treinamentos.gerente', explicarCategoria('Gerente')),
+  }
+  const fenixRegrasPessoa = [
+    ...REGRAS_OPS_TREINAMENTOS_POPULACAO,
+    categoriaAtiva === 'Gerente'
+      ? 'Categoria Gerente: não há meta da categoria; a meta do card da pessoa é só referência (14h proporcional à admissão).'
+      : `Categoria ${categoriaAtiva}: a meta é a do ano inteiro, mesmo com filtro de meses.`,
+  ]
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -207,6 +258,7 @@ export function OpsLegaisTreinamentosSection({
               <button
                 key={r.categoria}
                 type="button"
+                data-fenix={fenixIds[r.categoria]}
                 onClick={() => setCategoriaAtiva(r.categoria)}
                 className={cn(
                   'rounded-xl border border-slate-200/70 border-t-[5px] bg-white p-4 text-left shadow-sm transition-all',
@@ -349,6 +401,13 @@ export function OpsLegaisTreinamentosSection({
                   : 'default'
             }
             mostrarBannerDuplicados={false}
+            fenix={{
+              tela: TELA_EFICIENCIA_PESSOAS.opsTreinamentos,
+              ano,
+              regras: fenixRegrasPessoa,
+              fonteTecnica:
+                'sp_treinamentos_presenca · meta: metaTreinamentoMinutosProporcional (admissão em sp_turnover)',
+            }}
           />
         ) : (
           <TreinamentosCursoCards porPessoa={pessoasLista} itens={itensFiltrados} />
@@ -379,6 +438,15 @@ export function OpsLegaisTreinamentosSection({
             badgeLabel="Equipe"
             accentClass="indigo"
             mostrarBannerDuplicados={false}
+            fenix={{
+              tela: TELA_EFICIENCIA_PESSOAS.opsTreinamentos,
+              ano,
+              regras: [
+                'Capacitação da Equipe para Liderança: horas em treinamentos de Liderança (nome do treinamento com "Liderança") feitas por pessoas da categoria Equipe.',
+                'Não conta na meta de nenhuma categoria; o card mostra só as horas.',
+              ],
+              fonteTecnica: 'sp_treinamentos_presenca (isTreinamentoLideranca) · buildOpsTreinamentosCategorias',
+            }}
           />
         </section>
       ) : null}

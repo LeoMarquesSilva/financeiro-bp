@@ -253,11 +253,21 @@ export function RacionalSheet({
                               : undefined
                         }
                       >
-                        {colunas.map((c) => (
-                          <td key={c.key} className="whitespace-nowrap py-1.5 pr-4">
-                            {formatRacionalColumnCell(c, row[c.key])}
-                          </td>
-                        ))}
+                        {colunas.map((c) => {
+                          const texto = formatRacionalColumnCell(c, row[c.key])
+                          return (
+                            <td
+                              key={c.key}
+                              className={cn(
+                                'whitespace-nowrap py-1.5 pr-4',
+                                c.textoLongo && 'max-w-[22rem] truncate',
+                              )}
+                              title={c.textoLongo && texto !== '—' ? texto : undefined}
+                            >
+                              {texto}
+                            </td>
+                          )
+                        })}
                       </tr>
                     )
                   })}

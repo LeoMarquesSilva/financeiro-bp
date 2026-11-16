@@ -4,7 +4,7 @@ import { resolveEficienciaAccess, type EficienciaAccess } from '../utils/eficien
 
 /** Resolve o perfil de visão do dashboard Eficiência a partir da sessão. */
 export function useEficienciaAccess(): EficienciaAccess {
-  const { role, user, area, nivelHierarquico, colaboradorArea } = useAuth()
+  const { role, user, area, nivelHierarquico, colaboradorArea, moduleAccess } = useAuth()
 
   return useMemo(
     () =>
@@ -14,7 +14,8 @@ export function useEficienciaAccess(): EficienciaAccess {
         teamMemberArea: area,
         nivelHierarquico,
         colaboradorArea,
+        moduleAccess,
       }),
-    [role, user?.email, area, nivelHierarquico, colaboradorArea],
+    [role, user?.email, area, nivelHierarquico, colaboradorArea, moduleAccess],
   )
 }

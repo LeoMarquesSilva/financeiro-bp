@@ -22,7 +22,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { MODULE_KEY_OPTIONS, type ModuleKey } from '@/lib/moduleAccess'
+import {
+  EFICIENCIA_AREA_MODULE,
+  EFICIENCIA_PROTOCOLOS_MODULE,
+  MODULE_KEY_OPTIONS,
+  eficienciaEscopoFromModules,
+  withEficienciaEscopo,
+  type EficienciaEscopo,
+  type ModuleKey,
+} from '@/lib/moduleAccess'
+import { resolveAreaEficienciaPessoa } from '@/features/eficiencia/utils/eficienciaAccess'
 import type { AppRole, TeamMember } from '@/lib/database.types'
 import {
   teamMembersService,
@@ -40,6 +49,24 @@ const ROLE_OPTIONS: { value: '' | AppRole; label: string }[] = [
   { value: 'financeiro', label: 'Financeiro' },
   { value: 'comite', label: 'Comitê' },
   { value: 'coordenador', label: 'Coordenador' },
+]
+
+const ESCOPO_EFICIENCIA_OPTIONS: { value: EficienciaEscopo; label: string; hint: string }[] = [
+  {
+    value: 'completa',
+    label: 'Visão completa (escritório geral)',
+    hint: 'Todas as abas e todas as áreas',
+  },
+  {
+    value: 'area',
+    label: 'Visão completa (somente área)',
+    hint: 'Todas as abas, só da área da pessoa',
+  },
+  {
+    value: 'protocolos',
+    label: 'Somente protocolos',
+    hint: 'SLA Protocolo, Eficiência Protocolo e SLA Ciência de Agendamentos',
+  },
 ]
 
 export function AcessoUsuarioDialog({
@@ -109,12 +136,19 @@ export function AcessoUsuarioDialog({
       await teamMembersService.updateRole(member.id, role || null)
       await teamMembersService.updateActive(member.id, loginAtivo)
 
-      // Coordenador sempre precisa do módulo Eficiência (visão Overview da área).
-      const next = new Set(modules)
-      if (role === 'coordenador') next.add('eficiencia')
+      // Coordenador sem recorte escolhido vê o módulo inteiro.
+      // Resultado Metas grava uma chave só (completa / somente área / somente protocolos).
+      const escopo =
+        eficienciaEscopoFromModules(modules) ?? (role === 'coordenador' ? 'completa' : null)
+      const next = withEficienciaEscopo(modules, escopo)
 
       const current = new Set(grantedModules)
-      for (const key of MODULE_KEY_OPTIONS.map((m) => m.value)) {
+      const keys = [
+        ...MODULE_KEY_OPTIONS.map((m) => m.value),
+        EFICIENCIA_AREA_MODULE,
+        EFICIENCIA_PROTOCOLOS_MODULE,
+      ]
+      for (const key of keys) {
         const was = current.has(key)
         const now = next.has(key)
         if (was && !now) await teamMemberModuleAccessService.revoke(member.id, key)
@@ -176,12 +210,26 @@ export function AcessoUsuarioDialog({
 
   const toggleModule = (key: ModuleKey, grant: boolean) => {
     setModules((prev) => {
+      if (key === 'eficiencia') return withEficienciaEscopo(prev, grant ? 'completa' : null)
       const next = new Set(prev)
       if (grant) next.add(key)
       else next.delete(key)
       return next
     })
   }
+
+  const setEscopoEficiencia = (escopo: EficienciaEscopo) => {
+    setModules((prev) => withEficienciaEscopo(prev, escopo))
+  }
+
+  const escopoEficiencia = eficienciaEscopoFromModules(modules)
+  const areaEficiencia = usuario
+    ? resolveAreaEficienciaPessoa({
+        email: email || usuario.email,
+        colaboradorArea: usuario.colaborador?.area,
+        teamMemberArea: usuario.teamMember?.area,
+      })
+    : null
 
   const pending = saveMutation.isPending || resetMutation.isPending
 
@@ -397,7 +445,11 @@ export function AcessoUsuarioDialog({
                     const nextRole = e.target.value as '' | AppRole
                     setRole(nextRole)
                     if (nextRole === 'coordenador') {
-                      setModules((prev) => new Set(prev).add('eficiencia'))
+                      setModules((prev) =>
+                        eficienciaEscopoFromModules(prev)
+                          ? prev
+                          : withEficienciaEscopo(prev, 'completa'),
+                      )
                     }
                   }}
                   disabled={pending}
@@ -413,39 +465,92 @@ export function AcessoUsuarioDialog({
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {MODULE_KEY_OPTIONS.map((m) => {
-                  const checked = modules.has(m.value)
+                  const checked =
+                    m.value === 'eficiencia' ? escopoEficiencia != null : modules.has(m.value)
                   return (
                     <div
                       key={m.value}
-                      role="checkbox"
-                      aria-checked={checked}
-                      aria-disabled={pending || undefined}
-                      tabIndex={pending ? -1 : 0}
-                      onClick={() => {
-                        if (!pending) toggleModule(m.value, !checked)
-                      }}
-                      onKeyDown={(e) => {
-                        if (pending) return
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          toggleModule(m.value, !checked)
-                        }
-                      }}
-                      className={cn(
-                        'flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm transition-colors',
-                        pending && 'pointer-events-none cursor-not-allowed opacity-50',
-                        checked
-                          ? 'border-teal-300 bg-teal-50/70 text-slate-800 shadow-sm'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
-                      )}
+                      className={cn(m.value === 'eficiencia' && checked && 'sm:col-span-2')}
                     >
-                      <Checkbox
-                        checked={checked}
-                        tabIndex={-1}
-                        className="pointer-events-none"
-                        aria-hidden
-                      />
-                      <span className="leading-snug">{m.label}</span>
+                      <div
+                        role="checkbox"
+                        aria-checked={checked}
+                        aria-disabled={pending || undefined}
+                        tabIndex={pending ? -1 : 0}
+                        onClick={() => {
+                          if (!pending) toggleModule(m.value, !checked)
+                        }}
+                        onKeyDown={(e) => {
+                          if (pending) return
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleModule(m.value, !checked)
+                          }
+                        }}
+                        className={cn(
+                          'flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm transition-colors',
+                          pending && 'pointer-events-none cursor-not-allowed opacity-50',
+                          checked
+                            ? 'border-teal-300 bg-teal-50/70 text-slate-800 shadow-sm'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+                        )}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          tabIndex={-1}
+                          className="pointer-events-none"
+                          aria-hidden
+                        />
+                        <span className="leading-snug">{m.label}</span>
+                      </div>
+                      {m.value === 'eficiencia' && checked ? (
+                        <div className="mt-2 space-y-2">
+                          <div
+                            className="grid gap-2 sm:grid-cols-3"
+                            role="radiogroup"
+                            aria-label="Recorte de Resultado Metas"
+                          >
+                            {ESCOPO_EFICIENCIA_OPTIONS.map((opt) => {
+                              const selected = escopoEficiencia === opt.value
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selected}
+                                  disabled={pending}
+                                  onClick={() => setEscopoEficiencia(opt.value)}
+                                  className={cn(
+                                    'rounded-xl border px-3.5 py-2.5 text-left text-sm transition-colors',
+                                    selected
+                                      ? 'border-teal-300 bg-white text-slate-800 shadow-sm'
+                                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                                  )}
+                                >
+                                  <span className="block font-medium">{opt.label}</span>
+                                  <span className="mt-0.5 block text-xs leading-snug text-slate-500">
+                                    {opt.hint}
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                          {escopoEficiencia === 'area' || escopoEficiencia === 'protocolos' ? (
+                            areaEficiencia ? (
+                              <p className="text-xs text-slate-500">
+                                Área considerada:{' '}
+                                <span className="font-medium text-slate-700">{areaEficiencia}</span>
+                              </p>
+                            ) : (
+                              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                Sem área do jurídico no cadastro desta pessoa (Cível, Contratos,
+                                Recuperação de Crédito, Reestruturação ou Trabalhista). Com esse
+                                recorte ela não verá dados até a área ser ajustada.
+                              </p>
+                            )
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   )
                 })}

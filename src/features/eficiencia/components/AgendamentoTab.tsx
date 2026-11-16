@@ -32,6 +32,13 @@ import {
   emptyLabelDesvioResponsavel,
   rankingDesvioFiltrado,
 } from '../utils/responsavelMatch'
+import {
+  explicarContagem,
+  explicarRazao,
+  type FenixMesContagem,
+  type FenixOrigemPeriodo,
+} from '../fenix/eficienciaOperacionalFenix'
+import { explicarGraficoRazao, explicarRankingIndicador } from '../fenix/eficienciaGraficosFenix'
 
 const BI_BAR = '#94a3b8'
 
@@ -146,6 +153,16 @@ export function AgendamentoTab({
   const pctGestaoVista =
     !indisponivel && totalGav > 0 ? (dentroPrazoGav / totalGav) * 100 : null
   const areaHint = area ? `Área ${area}` : undefined
+  const origemPeriodo: FenixOrigemPeriodo = periodoCurto.periodoCurtoAtivo
+    ? 'periodo_curto'
+    : responsavel
+      ? 'responsavel'
+      : 'mensal'
+  const contagemMensal = (rows: typeof mensal): FenixMesContagem[] =>
+    rows.map((m) => ({ mes: m.mes, ok: m.dentro_prazo, total: m.dentro_prazo + m.fora_prazo }))
+  const fenixIndisponivel = indisponivel
+    ? 'SLA Ciência Agendamentos não se aplica a Operações Legais: com essa área no filtro o card fica sem número.'
+    : null
   const loadingPeriodo =
     loading ||
     periodoCurto.loading ||
@@ -302,6 +319,22 @@ export function AgendamentoTab({
           loading={loading}
           scopeEquipe
           pessoaNome={responsavel}
+          fenix={{
+            chave: 'eficiencia.agendamento.gestao-a-vista',
+            explicar: () =>
+              explicarRazao({
+                indicador: 'sla_ciencia_agendamentos',
+                ano,
+                escopo: 'gestao_a_vista',
+                area,
+                responsavel,
+                ok: dentroPrazoGav,
+                total: totalGav,
+                pct: pctGestaoVista,
+                meses: contagemMensal(mensalGestaoVista),
+                indisponivel: fenixIndisponivel,
+              }),
+          }}
         />
         <EficienciaKpiCard
           title="Agendamento/Ciência D+1 no período selecionado"
@@ -317,6 +350,24 @@ export function AgendamentoTab({
           pessoaNome={responsavel}
           currentPct={pctGeral}
           vsEquipePct={pctGestaoVista}
+          fenix={{
+            chave: 'eficiencia.agendamento.periodo',
+            explicar: () =>
+              explicarRazao({
+                indicador: 'sla_ciencia_agendamentos',
+                ano,
+                escopo: 'periodo',
+                area,
+                mesFiltro,
+                origem: origemPeriodo,
+                responsavel,
+                ok: dentroPrazo,
+                total,
+                pct: pctGeral,
+                meses: origemPeriodo === 'mensal' ? contagemMensal(mensalFiltrado) : undefined,
+                indisponivel: fenixIndisponivel,
+              }),
+          }}
         />
         <EficienciaKpiCard
           title="Fora do prazo no período selecionado"
@@ -325,6 +376,24 @@ export function AgendamentoTab({
           accentClass="bg-rose-100 text-rose-700"
           loading={loadingPeriodo}
           reservePessoaSlot={Boolean(responsavel?.trim())}
+          fenix={{
+            chave: 'eficiencia.agendamento.fora-prazo',
+            explicar: () =>
+              explicarContagem({
+                indicador: 'sla_ciencia_agendamentos',
+                ano,
+                titulo: 'Fora do prazo no período selecionado',
+                area,
+                mesFiltro,
+                origem: origemPeriodo,
+                responsavel,
+                mostra: 'nok',
+                ok: dentroPrazo,
+                total,
+                valor: String(foraPrazo),
+                indisponivel: fenixIndisponivel,
+              }),
+          }}
         />
       </div>
 
@@ -332,6 +401,32 @@ export function AgendamentoTab({
         title="Agendamento / Ciência D+1"
         subtitle={chartSubtitle}
         data={loadingChart ? [] : chartData}
+        fenix={
+          indisponivel
+            ? undefined
+            : {
+                chave: 'eficiencia.agendamento.grafico.evolucao',
+                explicar: (ponto) =>
+                  explicarGraficoRazao(
+                    {
+                      indicador: 'sla_ciencia_agendamentos',
+                      titulo: 'Agendamento / Ciência D+1',
+                      ano,
+                      area,
+                      mesFiltro,
+                      responsavel,
+                      granularidade:
+                        drill.chartGranularidade === 'dia' && mesDrillTarget != null ? 'dia' : 'mes',
+                      mesDia: mesDrillTarget,
+                      data: loadingChart ? [] : chartData,
+                      metaFixa: EFICIENCIA_META_AGENDAMENTO,
+                      meses: contagemMensal(mensal),
+                      dias: diario.map((d: AgendamentoDiaRow) => ({ dia: d.dia, total: d.total })),
+                    },
+                    ponto,
+                  ),
+              }
+        }
         color="#d97706"
         metaFixa={EFICIENCIA_META_AGENDAMENTO}
         granularidade={drill.chartGranularidade}
@@ -355,6 +450,28 @@ export function AgendamentoTab({
           title={rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsáveis'}
           subtitle={areaHint}
           rows={rankingFatal}
+          fenix={
+            indisponivel
+              ? undefined
+              : {
+                  chave: 'eficiencia.agendamento.grafico.desvio-pct',
+                  qtdKey: 'qtd_fatal',
+                  explicar: (barras, ponto) =>
+                    explicarRankingIndicador(
+                      {
+                        indicador: 'sla_ciencia_agendamentos',
+                        dimensao: rankingPorGrupo ? 'grupo' : 'responsavel',
+                        titulo: rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsáveis',
+                        ano,
+                        area,
+                        mesFiltro,
+                        responsavel,
+                        barras,
+                      },
+                      ponto,
+                    ),
+                }
+          }
           labelKey={rankingDesvioLabelKey}
           valueKey="pct_do_total"
           valueLabel="% do total"
@@ -376,6 +493,28 @@ export function AgendamentoTab({
           title={rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsáveis'}
           subtitle={areaHint}
           rows={rankingFatal}
+          fenix={
+            indisponivel
+              ? undefined
+              : {
+                  chave: 'eficiencia.agendamento.grafico.desvio-qtd',
+                  qtdKey: 'qtd_fatal',
+                  explicar: (barras, ponto) =>
+                    explicarRankingIndicador(
+                      {
+                        indicador: 'sla_ciencia_agendamentos',
+                        dimensao: rankingPorGrupo ? 'grupo' : 'responsavel',
+                        titulo: rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsáveis',
+                        ano,
+                        area,
+                        mesFiltro,
+                        responsavel,
+                        barras,
+                      },
+                      ponto,
+                    ),
+                }
+          }
           labelKey={rankingDesvioLabelKey}
           valueKey="qtd_fatal"
           valueLabel="Fora do prazo"

@@ -49,6 +49,8 @@ type KpiDef = {
   /** `pct_yoy` = variação % YoY; com toggle mostra também R$ (receita bruta). */
   kind: 'horas' | 'count' | 'moeda' | 'pct_yoy'
   accentAtual?: string
+  /** Segundo indicador no mesmo card (`pct_yoy`); a cor do delta é invertida (subir = ruim). */
+  secundario?: { key: keyof ApresentacaoBigNumberData['kpis']; label: string }
 }
 
 const KPI_DEFS: KpiDef[] = [
@@ -63,6 +65,7 @@ const KPI_DEFS: KpiDef[] = [
     icon: Banknote,
     kind: 'pct_yoy',
     accentAtual: '#16A34A',
+    secundario: { key: 'custo_opex', label: 'Custo (OPEX)' },
   },
 ]
 
@@ -111,15 +114,89 @@ function formatValorKpi(kind: Exclude<KpiDef['kind'], 'pct_yoy'>, v: number): st
   return formatCount(v)
 }
 
+function trendYoy(par: BigNumberPar, inverterCor = false) {
+  const pct = deltaPct(par.atual, par.anterior)
+  const up = pct != null && pct > 0
+  const down = pct != null && pct < 0
+  const bom = inverterCor ? down : up
+  const ruim = inverterCor ? up : down
+  return {
+    seta: up ? '↑ ' : down ? '↓ ' : '',
+    color: bom ? '#16A34A' : ruim ? '#DC2626' : '#64748B',
+    label: formatDeltaPctLabel(par.atual, par.anterior),
+  }
+}
+
+/** Bloco R$ atual / ano anterior / delta % de um indicador `pct_yoy`. */
+function YoyValores({
+  par,
+  anoAnterior,
+  accent,
+  inverterCor = false,
+  valorFontSize = 16,
+}: {
+  par: BigNumberPar
+  anoAnterior: number
+  accent: string
+  inverterCor?: boolean
+  valorFontSize?: number
+}) {
+  const t = trendYoy(par, inverterCor)
+  return (
+    <>
+      <div
+        data-bn-receita-valor
+        style={{
+          fontSize: valorFontSize,
+          fontWeight: 800,
+          color: accent,
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1.15,
+        }}
+      >
+        {formatCurrencyCompact(par.atual)}
+      </div>
+      <div
+        data-bn-receita-anterior
+        style={{
+          marginTop: 2,
+          fontSize: 10,
+          color: '#64748B',
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1.15,
+        }}
+      >
+        {anoAnterior}: {formatCurrencyCompact(par.anterior)}
+      </div>
+      <div
+        data-bn-receita-delta
+        style={{
+          marginTop: 6,
+          fontSize: 11,
+          fontWeight: 700,
+          color: t.color,
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1.15,
+        }}
+      >
+        {t.seta}
+        {t.label}
+      </div>
+    </>
+  )
+}
+
 function KpiCard({
   def,
   par,
+  parSecundario,
   ano,
   anoAnterior,
   mostrarValores = false,
 }: {
   def: KpiDef
   par: BigNumberPar
+  parSecundario?: BigNumberPar
   ano: number
   anoAnterior: number
   mostrarValores?: boolean
@@ -189,6 +266,27 @@ function KpiCard({
   }
 
   if (kind === 'pct_yoy') {
+    const sec = def.secundario && parSecundario ? { ...def.secundario, par: parSecundario } : null
+    const tSec = sec ? trendYoy(sec.par, true) : null
+    const secLabel = sec ? (
+      <div
+        style={{
+          marginTop: 8,
+          paddingTop: 6,
+          borderTop: '1px solid #E2E8F0',
+          marginBottom: 2,
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: '#64748B',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {sec.label}
+      </div>
+    ) : null
+
     if (mostrarValores) {
       return (
         <div
@@ -197,44 +295,22 @@ function KpiCard({
           style={cardStyle}
         >
           {header}
-          <div
-            data-bn-receita-valor
-            style={{
-              fontSize: 16,
-              fontWeight: 800,
-              color: def.accentAtual ?? '#16A34A',
-              fontVariantNumeric: 'tabular-nums',
-              lineHeight: 1.15,
-            }}
-          >
-            {formatCurrencyCompact(par.atual)}
-          </div>
-          <div
-            data-bn-receita-anterior
-            style={{
-              marginTop: 2,
-              fontSize: 10,
-              color: '#64748B',
-              fontVariantNumeric: 'tabular-nums',
-              lineHeight: 1.15,
-            }}
-          >
-            {anoAnterior}: {formatCurrencyCompact(par.anterior)}
-          </div>
-          <div
-            data-bn-receita-delta
-            style={{
-              marginTop: 6,
-              fontSize: 11,
-              fontWeight: 700,
-              color: trendColor,
-              fontVariantNumeric: 'tabular-nums',
-              lineHeight: 1.15,
-            }}
-          >
-            {up ? '↑ ' : down ? '↓ ' : ''}
-            {deltaLabel}
-          </div>
+          <YoyValores
+            par={par}
+            anoAnterior={anoAnterior}
+            accent={def.accentAtual ?? '#16A34A'}
+          />
+          {sec && (
+            <>
+              {secLabel}
+              <YoyValores
+                par={sec.par}
+                anoAnterior={anoAnterior}
+                accent="#334155"
+                inverterCor
+              />
+            </>
+          )}
           <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 2 }}>
             {ano} vs {anoAnterior}
           </div>
@@ -261,6 +337,23 @@ function KpiCard({
           {up ? '↑ ' : down ? '↓ ' : ''}
           {deltaLabel}
         </div>
+        {sec && tSec && (
+          <>
+            {secLabel}
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: tSec.color,
+                fontVariantNumeric: 'tabular-nums',
+                lineHeight: 1.15,
+              }}
+            >
+              {tSec.seta}
+              {tSec.label}
+            </div>
+          </>
+        )}
         <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 6 }}>
           {ano} vs {anoAnterior}
         </div>
@@ -700,6 +793,7 @@ export function ApresentacaoBigNumberBloco({
                 key={def.key}
                 def={def}
                 par={data.kpis[def.key]}
+                parSecundario={def.secundario ? data.kpis[def.secundario.key] : undefined}
                 ano={data.ano}
                 anoAnterior={data.anoAnterior}
                 mostrarValores={mostrarValores}

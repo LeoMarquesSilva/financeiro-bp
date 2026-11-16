@@ -500,7 +500,7 @@ function IndicadoresTable({
 
 function PremissasCard({ periodoLabel }: { periodoLabel: string }) {
   const items = [
-    { label: `Meta de Receita (${periodoLabel})`, value: '100%' },
+    { label: `Meta de Receita (anual, Jun–Dez · recebido ${periodoLabel})`, value: '100%' },
     { label: 'Gatilho de liberação', value: `≥ ${BONUS_GATILHO_RECEITA_PCT}% da meta` },
     {
       label: 'Degrau de pagamento',

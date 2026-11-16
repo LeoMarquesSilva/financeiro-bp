@@ -14,6 +14,14 @@ import { MesFilterButtons } from './MesFilterButtons'
 import { ApresentacaoJuridicoSlide } from './ApresentacaoJuridicoSlide'
 import { useApresentacaoMatrix } from '../hooks/useApresentacaoMatrix'
 import {
+  useApresentacaoOpex,
+  useApresentacaoOpexMes,
+  useApresentacaoOpexPontuais,
+  useApresentacaoOpexPeriodo,
+} from '../hooks/useApresentacaoOpex'
+import { opexMesFimPadrao } from '../utils/apresentacaoOpex'
+import { temPlanoFiltroAtivo } from '@/features/opex/utils/opexPlanoFiltro'
+import {
   APRESENTACAO_BLOCOS,
   type ApresentacaoBlocoId,
 } from '../utils/apresentacaoMatrix'
@@ -67,6 +75,33 @@ export function ApresentacaoJuridicoDialog({
     useState<MesFiltroEficiencia>(null)
   const [financeiroOpsMesFiltro, setFinanceiroOpsMesFiltro] =
     useState<MesFiltroEficiencia>(null)
+  /** Período exclusivo do Bloco 13 — OPEX (padrão Jan até o último mês fechado). */
+  const [opexMesInicio, setOpexMesInicio] = useState(1)
+  const [opexMesFim, setOpexMesFim] = useState(() => opexMesFimPadrao(ano))
+  const {
+    data: opex,
+    loading: loadingOpex,
+    error: opexError,
+    planoFiltro: opexPlanoFiltro,
+  } = useApresentacaoOpex(ano, opexMesInicio, opexMesFim, open)
+  /** Bloco 14 usa o mesmo De/Até do Bloco 13; Bloco 15 tem mês próprio. */
+  const {
+    data: opexPeriodo,
+    loading: loadingOpexPeriodo,
+    error: opexPeriodoError,
+  } = useApresentacaoOpexPeriodo(ano, opexMesInicio, opexMesFim, open)
+  const [opexMes, setOpexMes] = useState(() => opexMesFimPadrao(ano))
+  const {
+    data: opexMesData,
+    loading: loadingOpexMes,
+    error: opexMesError,
+  } = useApresentacaoOpexMes(ano, opexMes, open)
+  /** Bloco 16 — desdobramento das altas no mesmo mês do Bloco 15. */
+  const {
+    data: opexPontuais,
+    loading: loadingOpexPontuais,
+    error: opexPontuaisError,
+  } = useApresentacaoOpexPontuais(ano, opexMes, open)
 
   const anosUnificado = useMemo(
     () => anosNoPeriodo(unificadoInicio, unificadoFim),
@@ -204,6 +239,22 @@ export function ApresentacaoJuridicoDialog({
       toast.error('Programa de Bônus ainda carregando')
       return
     }
+    if (blocoId === 'opex' && (loadingOpex || !opex)) {
+      toast.error('OPEX ainda carregando')
+      return
+    }
+    if (blocoId === 'opex_periodo' && (loadingOpexPeriodo || !opexPeriodo)) {
+      toast.error('OPEX · Período ainda carregando')
+      return
+    }
+    if (blocoId === 'opex_mes' && (loadingOpexMes || !opexMesData)) {
+      toast.error('OPEX · Mês ainda carregando')
+      return
+    }
+    if (blocoId === 'opex_pontuais' && (loadingOpexPontuais || !opexPontuais)) {
+      toast.error('Desdobramento das altas ainda carregando')
+      return
+    }
     if (
       (blocoId === 'juridico' || blocoId === 'financeiro') &&
       loading
@@ -279,6 +330,14 @@ export function ApresentacaoJuridicoDialog({
                                     ? false
                                   : bloco.id === 'programa_bonus'
                                     ? loadingBonus || !bonus
+                                  : bloco.id === 'opex'
+                                    ? loadingOpex || !opex
+                                  : bloco.id === 'opex_periodo'
+                                    ? loadingOpexPeriodo || !opexPeriodo
+                                  : bloco.id === 'opex_mes'
+                                    ? loadingOpexMes || !opexMesData
+                                  : bloco.id === 'opex_pontuais'
+                                    ? loadingOpexPontuais || !opexPontuais
                                     : loading
                 return (
                   <Button
@@ -366,6 +425,25 @@ export function ApresentacaoJuridicoDialog({
               onMarketingMesFiltroChange={setMarketingMesFiltro}
               financeiroOpsMesFiltro={financeiroOpsMesFiltro}
               onFinanceiroOpsMesFiltroChange={setFinanceiroOpsMesFiltro}
+              opex={opex}
+              loadingOpex={loadingOpex}
+              opexError={opexError}
+              opexMesInicio={opexMesInicio}
+              opexMesFim={opexMesFim}
+              onOpexMesInicioChange={setOpexMesInicio}
+              onOpexMesFimChange={setOpexMesFim}
+              opexPlanoFiltroAtivo={temPlanoFiltroAtivo(opexPlanoFiltro)}
+              opexPeriodo={opexPeriodo}
+              loadingOpexPeriodo={loadingOpexPeriodo}
+              opexPeriodoError={opexPeriodoError}
+              opexMesData={opexMesData}
+              loadingOpexMes={loadingOpexMes}
+              opexMesError={opexMesError}
+              opexMes={opexMes}
+              onOpexMesChange={setOpexMes}
+              opexPontuais={opexPontuais}
+              loadingOpexPontuais={loadingOpexPontuais}
+              opexPontuaisError={opexPontuaisError}
             />
           </div>
         </div>

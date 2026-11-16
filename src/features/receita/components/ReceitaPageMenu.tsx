@@ -1,13 +1,16 @@
 import {
   BarChart3,
   ChartColumnIncreasing,
+  Crosshair,
   FileSpreadsheet,
   LayoutDashboard,
   PieChart,
+  Scale,
   Table2,
   TrendingUp,
   TriangleAlert,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { RECEITA_SECTION_IDS, type ReceitaSectionId } from '../utils/receitaNav'
 
 type SectionItem = {
@@ -19,7 +22,7 @@ type SectionItem = {
 
 type ActionItem = {
   kind: 'action'
-  key: 'relatorio' | 'rateio'
+  key: 'melhor-estimativa' | 'relatorio' | 'rateio'
   label: string
   icon: typeof TrendingUp
 }
@@ -36,9 +39,11 @@ const SECTION_ITEMS: SectionItem[] = [
     label: 'Valores acumulados',
     icon: ChartColumnIncreasing,
   },
+  { kind: 'section', id: RECEITA_SECTION_IDS.custos, label: 'Custos e resultado', icon: Scale },
 ]
 
 const ACTION_ITEMS: ActionItem[] = [
+  { kind: 'action', key: 'melhor-estimativa', label: 'Melhor estimativa', icon: Crosshair },
   { kind: 'action', key: 'relatorio', label: 'Relatório gerencial', icon: FileSpreadsheet },
   { kind: 'action', key: 'rateio', label: 'Consulta rateio', icon: PieChart },
 ]
@@ -53,6 +58,7 @@ type Props = {
 }
 
 export function ReceitaPageMenu({ onNavigateSection, onRelatorio, onRateio }: Props) {
+  const navigate = useNavigate()
   return (
     <nav
       className="flex w-full min-w-0 items-center justify-center gap-0.5 overflow-x-auto px-10 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -82,7 +88,8 @@ export function ReceitaPageMenu({ onNavigateSection, onRelatorio, onRateio }: Pr
             type="button"
             className={ITEM_CLASS}
             onClick={() => {
-              if (item.key === 'relatorio') onRelatorio()
+              if (item.key === 'melhor-estimativa') navigate('/financeiro/receita/melhor-estimativa')
+              else if (item.key === 'relatorio') onRelatorio()
               else onRateio()
             }}
           >

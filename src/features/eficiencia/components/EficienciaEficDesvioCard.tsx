@@ -1,6 +1,8 @@
 import { BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatPercent } from '@/shared/utils/format'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
 
 type Props = {
   title?: string
@@ -10,6 +12,8 @@ type Props = {
   qtdNok: number
   loading?: boolean
   className?: string
+  /** Explicação do número no Fênix IA (chave única + função que monta a memória de cálculo). */
+  fenix?: { chave: string; explicar: FenixExplicar }
 }
 
 function formatInt(n: number): string {
@@ -25,13 +29,16 @@ export function EficienciaEficDesvioCard({
   qtdNok,
   loading = false,
   className,
+  fenix,
 }: Props) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   const total = qtdOk + qtdNok
   const pctOk = total > 0 ? (qtdOk / total) * 100 : 0
   const pctNok = total > 0 ? (qtdNok / total) * 100 : 0
 
   return (
     <div
+      data-fenix={fenixId}
       className={cn(
         'flex min-w-[230px] flex-col gap-2.5 rounded-[10px] border border-[#E6E8EB] bg-white p-4 shadow-[0_2px_4px_rgba(15,23,42,0.06)]',
         className,

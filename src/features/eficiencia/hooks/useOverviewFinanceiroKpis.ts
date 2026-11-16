@@ -4,7 +4,13 @@ import { receitaInadimplenciaService } from '@/features/receita/services/receita
 import { receitaMetasService } from '@/features/receita/services/receitaMetasService'
 import { receitaService } from '@/features/receita/services/receitaService'
 import { mesMaxDisponivelInadimplencia } from '@/features/receita/constants'
-import { buildGestaoConsolidadoFromInadDashboard } from '../utils/overviewFinanceiroKpis'
+import type { MesFiltroEficiencia } from '../constants'
+import {
+  buildGestaoConsolidadoFromInadDashboard,
+  consolidarInadimplenciaAoVivo,
+  intervalosContiguos,
+  mesesInadimplenciaAoVivo,
+} from '../utils/overviewFinanceiroKpis'
 
 export function useOverviewFinanceiroKpis(ano: number, enabled = true) {
   return useQuery({
@@ -23,6 +29,28 @@ export function useOverviewFinanceiroKpis(ano: number, enabled = true) {
     },
     staleTime: 60_000,
     enabled,
+  })
+}
+
+/** Acum. do índice de inadimplência: saldo ao vivo dos meses do filtro (Jun+). */
+export function useInadimplenciaAoVivo(
+  ano: number,
+  mesFiltro: MesFiltroEficiencia,
+  enabled = true,
+) {
+  const meses = mesesInadimplenciaAoVivo(mesFiltro, ano)
+  return useQuery({
+    queryKey: ['eficiencia', 'inadimplencia-ao-vivo', ano, meses.join(',')],
+    queryFn: async () => {
+      const dashboards = await Promise.all(
+        intervalosContiguos(meses).map(([mesInicio, mesFim]) =>
+          receitaInadimplenciaService.fetchDashboard({ ano, mesInicio, mesFim }),
+        ),
+      )
+      return consolidarInadimplenciaAoVivo(dashboards)
+    },
+    staleTime: 60_000,
+    enabled: enabled && meses.length > 0,
   })
 }
 

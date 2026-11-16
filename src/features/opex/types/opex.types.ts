@@ -58,6 +58,27 @@ export type OpexGrupoRow = {
   aliases?: string[]
 }
 
+/** Conta do plano de contas do VIOS (só níveis 1 e 2: raiz e grupo da conta). */
+export type OpexPlanoContaNivel = {
+  codigo: string
+  nivel: number
+  n1: number
+  nome: string
+}
+
+/** Nível superior ao grupo da conta (ex.: 8 · DESPESAS COM PESSOAS). `codigo` nulo = fora do plano. */
+export type OpexNivel1 = {
+  codigo: number | null
+  nome: string
+}
+
+export type OpexNivel1Bloco = {
+  nivel1: OpexNivel1
+  grupos: OpexGrupoRow[]
+  /** Soma dos grupos, no formato de grupo para reaproveitar ordenação e variação. */
+  total: OpexGrupoRow
+}
+
 export type OpexPlanoRow = {
   plano_contas: string
   realizado_ytd: number

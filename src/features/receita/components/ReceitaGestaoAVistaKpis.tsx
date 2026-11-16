@@ -3,6 +3,14 @@ import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { cn } from '@/lib/utils'
 import { RECEITA_COLORS, RECEITA_META_INADIMPLENCIA_PCT } from '../constants'
 import type { GestaoVistaResumo } from '../types/receita.types'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  explicarGestaoBatimento,
+  explicarGestaoInadimplencia,
+  explicarGestaoMeta,
+  type GestaoVistaFenixContexto,
+} from '../fenix/receitaSecoesFenix'
 
 type Props = {
   resumo: GestaoVistaResumo | null
@@ -10,6 +18,8 @@ type Props = {
   loading?: boolean
   /** `row` = faixa horizontal; `column` = pilha ao lado da tabela */
   layout?: 'row' | 'column'
+  /** Contexto para o Fênix explicar os cards (mesmos valores da seção). */
+  fenix?: Omit<GestaoVistaFenixContexto, 'resumo'>
 }
 
 function KPISkeleton() {
@@ -54,6 +64,8 @@ type KPIItemProps = {
   iconColor: string
   valueColor?: string
   compact?: boolean
+  /** Explicação do número no Fênix. */
+  fenix?: { chave: string; explicar: FenixExplicar }
 }
 
 function KPIProgressBar({ progress }: { progress: KPIProgressProps }) {
@@ -151,11 +163,14 @@ function KPIItem({
   iconColor,
   valueColor = 'text-slate-900',
   compact = false,
+  fenix,
 }: KPIItemProps) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   const withProgress = progress != null
 
   return (
     <div
+      data-fenix={fenixId}
       className={cn(
         'relative w-full rounded-xl border border-slate-200/60 bg-white text-left shadow-sm',
         withProgress ? KPI_CARD_PROGRESS_CLASS : compact ? 'p-3' : 'p-3 sm:p-4',
@@ -202,6 +217,7 @@ export function ReceitaGestaoAVistaKpis({
   areaLabel,
   loading,
   layout = 'row',
+  fenix,
 }: Props) {
   const gridClassName =
     layout === 'column'
@@ -261,6 +277,10 @@ export function ReceitaGestaoAVistaKpis({
       : gapPrevisto < -0.01
         ? `Previsto ${formatCurrency(resumo.previstoAcumulado)} · ${formatCurrency(-gapPrevisto)} acima`
         : `Previsto ${formatCurrency(resumo.previstoAcumulado)} · batido`
+  const ctx: GestaoVistaFenixContexto | null = fenix ? { ...fenix, resumo } : null
+  const alvo = (chave: string, explicar: (c: GestaoVistaFenixContexto) => ReturnType<FenixExplicar>) =>
+    ctx ? { chave: `receita.gestao.${chave}`, explicar: () => explicar(ctx) } : undefined
+
   const previstoProgressBarClassName =
     pctPrevisto >= 100
       ? 'bg-emerald-600'
@@ -284,6 +304,7 @@ export function ReceitaGestaoAVistaKpis({
         iconColor={RECEITA_COLORS.meta.bgIcon}
         valueColor="text-slate-900"
         compact
+        fenix={alvo('meta', explicarGestaoMeta)}
       />
       <KPIItem
         icon={Wallet}
@@ -300,6 +321,7 @@ export function ReceitaGestaoAVistaKpis({
         iconColor="bg-violet-50 text-violet-700"
         valueColor={RECEITA_COLORS.recebido.textStrong}
         compact
+        fenix={alvo('batimento', (c) => explicarGestaoBatimento({ ...c, pct: pctPrevisto }))}
       />
       <KPIItem
         icon={AlertTriangle}
@@ -315,6 +337,7 @@ export function ReceitaGestaoAVistaKpis({
         iconColor="bg-red-50 text-red-700"
         valueColor={inadValueColor}
         compact
+        fenix={alvo('inadimplencia', explicarGestaoInadimplencia)}
       />
     </div>
   )

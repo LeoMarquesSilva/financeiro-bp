@@ -5,8 +5,15 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
-import type { OpsLegaisIniciativasDashboard, OpsLegaisIniciativasItem } from '../types/eficiencia.types'
+import type {
+  OpsLegaisIniciativasDashboard,
+  OpsLegaisIniciativasItem,
+  OpsLegaisIniciativasProjeto,
+} from '../types/eficiencia.types'
 import { formatPercent } from '@/shared/utils/format'
+
+/** Meta de iniciativas estratégicas em cada mês. */
+export const INICIATIVAS_META_MENSAL = 2
 
 export type IniciativasMesEvo = {
   mes: number
@@ -17,6 +24,15 @@ export type IniciativasMesEvo = {
   ytd: number
   pctYtd: number
   pctYtdLabel: string
+  metaMensal: number
+  pctMes: number
+  pctMesLabel: string
+  /** Mês bateu 2 entregas, ou a meta anual já estava batida. */
+  atingiu: boolean
+  /** Acumulado do ano já chegou à meta anual. */
+  metaAnualBatida: boolean
+  /** Primeiro mês em que o acumulado chegou à meta anual. */
+  mesMetaBatida: boolean
   destaque: boolean
 }
 
@@ -33,6 +49,20 @@ export type IniciativasEntrega = {
   destaque: boolean
 }
 
+/** Classe de prioridade do FORJAI; `null` = projeto sem avaliação. */
+export type IniciativaPrioridade = 'urgent' | 'high' | 'normal' | 'low' | 'backlog'
+
+export type IniciativaAndamento = {
+  id: string
+  nome: string
+  etapa: string
+  prioridade: IniciativaPrioridade | null
+  score: number | null
+  responsavel: string
+  prazo: string | null
+  prazoLabel: string
+}
+
 export type ApresentacaoIniciativasData = {
   ano: number
   meta: number
@@ -42,6 +72,8 @@ export type ApresentacaoIniciativasData = {
   /** Meses com movimento (ou até o destaque). */
   evolucaoAtiva: IniciativasMesEvo[]
   entregas: IniciativasEntrega[]
+  /** Projetos em andamento no FORJAI, na ordem do ranking de prioridade. */
+  andamento: IniciativaAndamento[]
   totais: {
     total: number
     projetos: number
@@ -72,6 +104,36 @@ function formatDataBr(iso: string | null): string {
   const [y, m, d] = iso.split('-')
   if (!y || !m || !d) return iso
   return `${d}/${m}/${y}`
+}
+
+const PRIORIDADES: readonly IniciativaPrioridade[] = ['urgent', 'high', 'normal', 'low', 'backlog']
+
+function prioridadeOuNull(v: string | null | undefined): IniciativaPrioridade | null {
+  return PRIORIDADES.includes(v as IniciativaPrioridade) ? (v as IniciativaPrioridade) : null
+}
+
+/** Ranking do FORJAI primeiro (score); sem avaliação no fim, por nome. */
+function buildAndamento(projetos: OpsLegaisIniciativasProjeto[]): IniciativaAndamento[] {
+  return [...projetos]
+    .sort((a, b) => {
+      const ra = a.rank_prioridade ?? Number.POSITIVE_INFINITY
+      const rb = b.rank_prioridade ?? Number.POSITIVE_INFINITY
+      if (ra !== rb) return ra - rb
+      const sa = a.score ?? Number.NEGATIVE_INFINITY
+      const sb = b.score ?? Number.NEGATIVE_INFINITY
+      if (sa !== sb) return sb - sa
+      return a.nome.localeCompare(b.nome, 'pt-BR')
+    })
+    .map((p) => ({
+      id: p.id,
+      nome: p.nome,
+      etapa: p.etapa ?? '',
+      prioridade: prioridadeOuNull(p.prioridade),
+      score: p.score ?? null,
+      responsavel: p.responsavel,
+      prazo: p.prazo ?? null,
+      prazoLabel: p.prazo ? formatDataBr(p.prazo) : '',
+    }))
 }
 
 /** Último mês do filtro (ou mês corrente / dez se ano passado). */
@@ -131,10 +193,16 @@ export function buildApresentacaoIniciativas(
   }
 
   let ytd = 0
+  let metaBatidaAntes = false
   const evolucao: IniciativasMesEvo[] = buckets.map((b, i) => {
     const mes = i + 1
     ytd += b.total
     const pctYtd = meta > 0 ? (ytd / meta) * 100 : 0
+    const metaAnualBatida = meta > 0 && ytd >= meta
+    const mesMetaBatida = metaAnualBatida && !metaBatidaAntes
+    metaBatidaAntes = metaAnualBatida
+    const pctMes =
+      INICIATIVAS_META_MENSAL > 0 ? (b.total / INICIATIVAS_META_MENSAL) * 100 : 0
     return {
       mes,
       mesLabel: MESES_NOME[i] ?? String(mes),
@@ -144,6 +212,13 @@ export function buildApresentacaoIniciativas(
       ytd,
       pctYtd,
       pctYtdLabel: formatPercent(pctYtd),
+      metaMensal: INICIATIVAS_META_MENSAL,
+      pctMes,
+      pctMesLabel: formatPercent(pctMes),
+      // Depois de bater a meta anual, mês abaixo de 2 não fica vermelho.
+      atingiu: b.total >= INICIATIVAS_META_MENSAL || metaAnualBatida,
+      metaAnualBatida,
+      mesMetaBatida,
       destaque: mes === mesDestaque,
     }
   })
@@ -189,6 +264,7 @@ export function buildApresentacaoIniciativas(
     evolucao,
     evolucaoAtiva: evolucaoAtiva.length > 0 ? evolucaoAtiva : evolucao.slice(0, mesDestaque),
     entregas,
+    andamento: buildAndamento(dash.painel?.andamento ?? []),
     totais: {
       total,
       projetos,

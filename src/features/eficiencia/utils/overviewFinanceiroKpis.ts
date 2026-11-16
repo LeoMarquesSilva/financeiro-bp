@@ -1,6 +1,10 @@
 import { calcularAtingimentoMetaKpi } from '@/features/receita/utils/receitaAcumuladoChart'
 import { buildGestaoVistaConsolidado } from '@/features/receita/utils/receitaGestaoVista'
-import { calcularPctInadimplencia } from '@/features/receita/utils/receitaInadimplenciaCalc'
+import { mesMaxDisponivelInadimplencia } from '@/features/receita/constants'
+import {
+  calcularPctInadimplencia,
+  previstoMesEvolucao,
+} from '@/features/receita/utils/receitaInadimplenciaCalc'
 import type { GestaoVistaMesRow, ReceitaMesRow } from '@/features/receita/types/receita.types'
 import type { ReceitaInadimplenciaDashboard } from '@/features/receita/types/receitaInadimplencia.types'
 import type { HeatCell } from '../components/OverviewKpiHeatRow'
@@ -79,11 +83,54 @@ export function buildOverviewReceitaBruta(
   }
 }
 
-/** Índice de inadimplência (% saldo congelado ÷ previsto); só meses com snapshot. */
+export type InadimplenciaAoVivo = { valor: number; previsto: number; pct: number }
+
+/** Meses do Acum. de inadimplência: Jun+ no filtro, até o mês corrente. */
+export function mesesInadimplenciaAoVivo(
+  filtro: MesFiltroEficiencia,
+  ano: number,
+  ref = new Date(),
+): number[] {
+  const mesMax = mesMaxDisponivelInadimplencia(ano, ref)
+  return Array.from({ length: mesMax }, (_, i) => i + 1).filter((mes) =>
+    mesNoEscopoFinanceiro(mes, filtro, ano),
+  )
+}
+
+/** Quebra meses em intervalos contíguos — o saldo ao vivo é calculado por intervalo. */
+export function intervalosContiguos(meses: number[]): Array<[number, number]> {
+  const intervalos: Array<[number, number]> = []
+  for (const mes of [...meses].sort((a, b) => a - b)) {
+    const ultimo = intervalos[intervalos.length - 1]
+    if (ultimo && mes === ultimo[1] + 1) ultimo[1] = mes
+    else intervalos.push([mes, mes])
+  }
+  return intervalos
+}
+
+/**
+ * Saldo ao vivo (`grupos_periodo`) ÷ previsto do período — mesma base do card
+ * Resultado % da Receita. Nunca soma os snapshots congelados da evolução.
+ */
+export function consolidarInadimplenciaAoVivo(
+  dashboards: ReceitaInadimplenciaDashboard[],
+): InadimplenciaAoVivo | null {
+  const valor = dashboards.reduce((s, d) => s + d.valor_total_periodo, 0)
+  const previsto = dashboards.reduce(
+    (s, d) => s + d.evolucao.reduce((acc, m) => acc + previstoMesEvolucao(m), 0),
+    0,
+  )
+  if (previsto <= 0) return null
+  return { valor, previsto, pct: calcularPctInadimplencia(valor, previsto) }
+}
+
+/**
+ * Índice de inadimplência: mês = % do snapshot congelado (mês corrente ainda parcial);
+ * Acum. = saldo ao vivo do período ÷ previsto (card Resultado % da Receita).
+ */
 export function buildOverviewInadimplencia(
   gestaoMeses: GestaoVistaMesRow[],
-  mesFiltro: MesFiltroEficiencia,
-  ano?: number,
+  aoVivo: InadimplenciaAoVivo | null | undefined,
 ): { cells: HeatCell[]; acumulado: HeatCell } {
   const cells: HeatCell[] = Array.from({ length: 12 }, (_, i) => {
     const mes = i + 1
@@ -93,28 +140,10 @@ export function buildOverviewInadimplencia(
     return { value: row.inadimplenciaPct, label: PCT0(row.inadimplenciaPct) }
   })
 
-  const filtrados = filterGestaoMeses(gestaoMeses, mesFiltro, ano).filter(
-    (m) => m.inadimplencia != null && m.inadimplencia > 0,
-  )
-  const inadTotal = filtrados.reduce((s, m) => s + (m.inadimplencia ?? 0), 0)
-  const previstoTotal = filtrados.reduce((s, m) => s + m.previsto, 0)
-  const pctAcum = calcularPctInadimplencia(inadTotal, previstoTotal)
-
-  if (isMesesFiltro(mesFiltro) && mesFiltro.length === 1) {
-    const row = gestaoMeses.find((m) => m.mes === mesFiltro[0])
-    if (!row || row.inadimplenciaPct == null) {
-      return { cells, acumulado: { value: null, label: '-' } }
-    }
-    return {
-      cells,
-      acumulado: { value: row.inadimplenciaPct, label: PCT0(row.inadimplenciaPct) },
-    }
-  }
-
   return {
     cells,
     acumulado:
-      pctAcum == null ? { value: null, label: '-' } : { value: pctAcum, label: PCT0(pctAcum) },
+      aoVivo == null ? { value: null, label: '-' } : { value: aoVivo.pct, label: PCT0(aoVivo.pct) },
   }
 }
 

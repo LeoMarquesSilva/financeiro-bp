@@ -7,10 +7,14 @@ import { useReceitaDepartamentoCores } from '@/features/receita/hooks/useReceita
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import type { CobrancaSeguimentoGrupo } from '../types/cobrancaSeguimento.types'
 import { calcularSlicesPorDepartamento } from '../utils/cobrancaSeguimentoKpis'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import { explicarPontualDepartamentos, type PontualFenixContexto } from '../fenix/cobrancaFenix'
 
 type Props = {
   grupos: CobrancaSeguimentoGrupo[]
   loading?: boolean
+  /** Contexto do Fênix; `valorEmAberto` é o card Valor em aberto, para comparar com a pizza. */
+  fenixContexto?: PontualFenixContexto & { valorEmAberto: number }
 }
 
 type TooltipPayload = {
@@ -33,7 +37,7 @@ function PieTooltip({ active, payload }: { active?: boolean; payload?: TooltipPa
   )
 }
 
-export function CobrancaSeguimentoDepartamentosPie({ grupos, loading }: Props) {
+export function CobrancaSeguimentoDepartamentosPie({ grupos, loading, fenixContexto }: Props) {
   const { cores } = useReceitaDepartamentoCores()
   const departamentoCores = cores ?? RECEITA_DEPARTAMENTO_CORES
 
@@ -53,8 +57,15 @@ export function CobrancaSeguimentoDepartamentosPie({ grupos, loading }: Props) {
     [slices],
   )
 
+  const fenixId = useFenixAlvo(
+    loading || !fenixContexto ? undefined : 'pontual.resumo.departamentos',
+    fenixContexto
+      ? () => explicarPontualDepartamentos(fenixContexto, slices, fenixContexto.valorEmAberto)
+      : undefined,
+  )
+
   return (
-    <Card className="cobranca-kpi-card flex h-full flex-col p-4">
+    <Card className="cobranca-kpi-card flex h-full flex-col p-4" data-fenix={fenixId}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
           Por departamento

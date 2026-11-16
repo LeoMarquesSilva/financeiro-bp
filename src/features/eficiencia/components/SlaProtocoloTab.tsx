@@ -37,6 +37,17 @@ import {
   evolucaoDrilldownSubtitle,
   resolveEvolucaoDrilldownChart,
 } from '../utils/evolucaoDrilldown'
+import {
+  explicarContagem,
+  explicarRazao,
+  type FenixMesContagem,
+  type FenixOrigemPeriodo,
+} from '../fenix/eficienciaOperacionalFenix'
+import {
+  explicarGraficoRazao,
+  explicarRankingIndicador,
+  type RankingDimensao,
+} from '../fenix/eficienciaGraficosFenix'
 
 /** Cor das barras no visual BI (cinza). */
 const BI_BAR = '#94a3b8'
@@ -180,6 +191,13 @@ export function SlaProtocoloTab({
     : null
 
   const areaHint = area ? `Área ${area}` : undefined
+  const origemPeriodo: FenixOrigemPeriodo = periodoCurto.periodoCurtoAtivo
+    ? 'periodo_curto'
+    : responsavel
+      ? 'responsavel'
+      : 'mensal'
+  const contagemMensal = (rows: typeof mensal): FenixMesContagem[] =>
+    rows.map((m) => ({ mes: m.mes, ok: m.qtd_d1, total: m.qtd_total }))
   const loadingPeriodo =
     loading ||
     periodoCurto.loading ||
@@ -262,6 +280,8 @@ export function SlaProtocoloTab({
     responsavel,
   )
 
+  const fenixDimensaoDesvio: RankingDimensao = rankingPorGrupo ? 'grupo' : 'responsavel'
+
   const loadingChart =
     loading ||
     Boolean(responsavel && loadingEvol) ||
@@ -298,6 +318,22 @@ export function SlaProtocoloTab({
           loading={loading}
           scopeEquipe
           pessoaNome={responsavel}
+          fenix={{
+            chave: 'eficiencia.sla-protocolo.gestao-a-vista',
+            explicar: () =>
+              explicarRazao({
+                indicador: 'sla_protocolo',
+                ano,
+                escopo: 'gestao_a_vista',
+                area,
+                responsavel,
+                ok: qtdD1Gav,
+                total: qtdTotalGav,
+                pct: pctGestaoVista,
+                meses: contagemMensal(mensalGestaoVista),
+                meta: metaGestaoVista,
+              }),
+          }}
         />
         <EficienciaKpiCard
           title="SLA de Protocolo no período selecionado"
@@ -311,6 +347,24 @@ export function SlaProtocoloTab({
           pessoaNome={responsavel}
           currentPct={pctGeral}
           vsEquipePct={pctGestaoVista}
+          fenix={{
+            chave: 'eficiencia.sla-protocolo.periodo',
+            explicar: () =>
+              explicarRazao({
+                indicador: 'sla_protocolo',
+                ano,
+                escopo: 'periodo',
+                area,
+                mesFiltro,
+                origem: origemPeriodo,
+                responsavel,
+                ok: qtdD1,
+                total: qtdTotal,
+                pct: pctGeral,
+                meses: origemPeriodo === 'mensal' ? contagemMensal(mensalFiltrado) : undefined,
+                meta: metaAtual,
+              }),
+          }}
         />
         <EficienciaKpiCard
           title="FATAL no período selecionado"
@@ -324,6 +378,24 @@ export function SlaProtocoloTab({
           accentClass="bg-rose-100 text-rose-700"
           loading={loadingPeriodo}
           reservePessoaSlot={Boolean(responsavel?.trim())}
+          fenix={{
+            chave: 'eficiencia.sla-protocolo.fatal',
+            explicar: () =>
+              explicarContagem({
+                indicador: 'sla_protocolo',
+                ano,
+                titulo: 'FATAL no período selecionado',
+                area,
+                mesFiltro,
+                origem: origemPeriodo,
+                responsavel,
+                mostra: 'nok',
+                ok: qtdD1,
+                total: qtdTotal,
+                valor: String(qtdFatal),
+                excludentes: responsavel ? undefined : qtdExcludente,
+              }),
+          }}
         />
       </div>
 
@@ -331,6 +403,33 @@ export function SlaProtocoloTab({
         title="SLA de Protocolo (D-1 vs FATAL)"
         subtitle={chartSubtitle}
         data={loadingChart ? [] : chartData}
+        fenix={{
+          chave: 'eficiencia.sla-protocolo.grafico.evolucao',
+          explicar: (ponto) =>
+            explicarGraficoRazao(
+              {
+                indicador: 'sla_protocolo',
+                titulo: 'SLA de Protocolo (D-1 vs FATAL)',
+                ano,
+                area,
+                mesFiltro,
+                responsavel,
+                granularidade:
+                  drill.chartGranularidade === 'dia' && mesDrillTarget != null ? 'dia' : 'mes',
+                mesDia: mesDrillTarget,
+                data: loadingChart ? [] : chartData,
+                metaFixa: metaRacional,
+                meses: mensal.map((m) => ({
+                  mes: m.mes,
+                  ok: m.qtd_d1,
+                  total: m.qtd_total,
+                  meta: m.meta,
+                })),
+                dias: diario.map((d) => ({ dia: d.dia, ok: d.qtd_d1, total: d.qtd_total })),
+              },
+              ponto,
+            ),
+        }}
         color="#7c3aed"
         metaFixa={metaRacional}
         granularidade={drill.chartGranularidade}
@@ -359,6 +458,23 @@ export function SlaProtocoloTab({
           }))}
           labelKey="justificativa"
           valueKey="qtd"
+          fenix={{
+            chave: 'eficiencia.sla-protocolo.grafico.justificativa',
+            qtdKey: 'qtd',
+            explicar: (barras, ponto) =>
+              explicarRankingIndicador(
+                {
+                  indicador: 'sla_protocolo',
+                  dimensao: 'justificativa',
+                  titulo: 'Justificativa de Fatal',
+                  ano,
+                  area,
+                  mesFiltro,
+                  barras,
+                },
+                ponto,
+              ),
+          }}
           valueLabel="Qtd"
           pctKey={null}
           color={BI_BAR}
@@ -374,6 +490,24 @@ export function SlaProtocoloTab({
           title={rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsáveis'}
           subtitle={areaHint}
           rows={rankingDesvioRows}
+          fenix={{
+            chave: 'eficiencia.sla-protocolo.grafico.desvio-pct',
+            qtdKey: 'qtd_fatal',
+            explicar: (barras, ponto) =>
+              explicarRankingIndicador(
+                {
+                  indicador: 'sla_protocolo',
+                  dimensao: fenixDimensaoDesvio,
+                  titulo: rankingPorGrupo ? '% Desvio Grupo Cliente' : '% Desvio Responsáveis',
+                  ano,
+                  area,
+                  mesFiltro,
+                  responsavel,
+                  barras,
+                },
+                ponto,
+              ),
+          }}
           labelKey={rankingDesvioLabelKey}
           valueKey="pct_do_total"
           valueLabel="% do total"
@@ -395,6 +529,24 @@ export function SlaProtocoloTab({
           title={rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsáveis'}
           subtitle={areaHint}
           rows={rankingDesvioRows}
+          fenix={{
+            chave: 'eficiencia.sla-protocolo.grafico.desvio-qtd',
+            qtdKey: 'qtd_fatal',
+            explicar: (barras, ponto) =>
+              explicarRankingIndicador(
+                {
+                  indicador: 'sla_protocolo',
+                  dimensao: fenixDimensaoDesvio,
+                  titulo: rankingPorGrupo ? 'Qtd Desvio Grupo Cliente' : 'Qtd Desvio Responsáveis',
+                  ano,
+                  area,
+                  mesFiltro,
+                  responsavel,
+                  barras,
+                },
+                ponto,
+              ),
+          }}
           labelKey={rankingDesvioLabelKey}
           valueKey="qtd_fatal"
           valueLabel="Desvio"

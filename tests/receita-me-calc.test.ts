@@ -1,0 +1,309 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  calcularAreaMe,
+  calcularGapMeta,
+  horizonteMe,
+  montarMesAMes,
+  novaReceitaCorrespondeGrupo,
+  ordenarLinhasMe,
+  ordenarPorColuna,
+  proximaOrdenacao,
+  proximoAjusteAoClicar,
+  valorNovaReceitaPorMes,
+  type ReceitaMeItemPrevisto,
+} from '../src/features/receita/utils/receitaMeCalc.ts'
+import type { ReceitaMeAjuste, ReceitaMeNovaReceita } from '../src/features/receita/types/receitaMe.types.ts'
+
+const MESES = [10, 11, 12]
+
+function prev(grupo: string, mes: number, valor: number, extra: Partial<ReceitaMeItemPrevisto> = {}) {
+  return { areaKey: 'trabalhista', grupo, mes, valor, pago: false, vencido: false, ...extra }
+}
+
+function ajuste(grupo: string, mes: number, tipo: ReceitaMeAjuste['tipo'], valor_marcado: number): ReceitaMeAjuste {
+  return {
+    id: `${grupo}-${mes}`,
+    ano: 2026,
+    area_key: 'trabalhista',
+    grupo,
+    mes,
+    tipo,
+    valor_marcado,
+    motivo: null,
+    updated_at: null,
+    updated_by: null,
+  }
+}
+
+function nova(overrides: Partial<ReceitaMeNovaReceita>): ReceitaMeNovaReceita {
+  return {
+    id: 'nr1',
+    ano: 2026,
+    area_key: 'trabalhista',
+    nome: 'Lead',
+    grupo_cliente: null,
+    origem: 'lead',
+    tipo_receita: null,
+    recorrencia: 'mensal',
+    mes_inicio: 11,
+    mes_fim: 12,
+    valor: 1000,
+    chance: 'media',
+    observacao: null,
+    meses_baixados: [],
+    updated_at: null,
+    updated_by: null,
+    ...overrides,
+  }
+}
+
+function base(over: Partial<Parameters<typeof calcularAreaMe>[0]> = {}) {
+  return calcularAreaMe({
+    areaKey: 'trabalhista',
+    meses: MESES,
+    mesCorrente: 10,
+    previstos: [],
+    recebidos: [],
+    ajustes: [],
+    novasReceitas: [],
+    vistos: [],
+    confirmada: false,
+    ...over,
+  })
+}
+
+test('ME soma recebido do mês corrente, aberto e novas receitas sem contar pago em dobro', () => {
+  const r = base({
+    previstos: [
+      prev('Grupo A', 10, 1000, { pago: true }),
+      prev('Grupo A', 11, 1000),
+      prev('Grupo A', 12, 1000),
+      prev('Outra área', 11, 5000, { areaKey: 'civel' }),
+    ],
+    recebidos: [{ areaKey: 'trabalhista', grupo: 'Grupo A', valor: 1000 }],
+    novasReceitas: [nova({})],
+  })
+  assert.equal(r.recebido, 1000)
+  assert.equal(r.aberto, 2000)
+  assert.deepEqual(r.mePorMes, { 10: 1000, 11: 2000, 12: 2000 })
+  assert.equal(r.meTotal, 5000)
+})
+
+test('vencido no mês corrente fica fora por padrão; vai_pagar e nao_paga invertem', () => {
+  const previstos = [prev('Grupo A', 10, 800, { vencido: true }), prev('Grupo A', 10, 200)]
+  const padrao = base({ previstos })
+  assert.equal(padrao.linhas[0].celulas[10].estado, 'em_atraso')
+  assert.equal(padrao.mePorMes[10], 200)
+  assert.equal(padrao.fora, 800)
+
+  const vai = base({ previstos, ajustes: [ajuste('Grupo A', 10, 'vai_pagar', 1000)] })
+  assert.equal(vai.mePorMes[10], 1000)
+
+  const nao = base({ previstos, ajustes: [ajuste('Grupo A', 10, 'nao_paga', 1000)] })
+  assert.equal(nao.mePorMes[10], 0)
+  assert.equal(nao.fora, 1000)
+})
+
+test('fora da estimativa separa em atraso (inadimplência) de não deve pagar', () => {
+  const r = base({
+    previstos: [prev('Grupo A', 10, 800, { vencido: true }), prev('Grupo B', 11, 500)],
+    ajustes: [ajuste('Grupo B', 11, 'nao_paga', 500)],
+  })
+  assert.equal(r.foraAtraso, 800)
+  assert.equal(r.foraNaoPaga, 500)
+  assert.equal(r.fora, r.foraAtraso + r.foraNaoPaga)
+})
+
+test('marcar não paga não muda a ordem das linhas', () => {
+  const previstos = [prev('Grupo Grande', 11, 5000), prev('Grupo Pequeno', 11, 1000)]
+  const antes = base({ previstos }).linhas.map((l) => l.grupo)
+  const depois = base({ previstos, ajustes: [ajuste('Grupo Grande', 11, 'nao_paga', 5000)] }).linhas.map((l) => l.grupo)
+  assert.deepEqual(depois, antes)
+})
+
+test('chance baixa vira potencial e meses baixados deixam de contar', () => {
+  const r = base({
+    novasReceitas: [
+      nova({ id: 'a', chance: 'baixa', recorrencia: 'pontual', mes_inicio: 12, mes_fim: 12, valor: 500 }),
+      nova({ id: 'b', meses_baixados: [11] }),
+    ],
+  })
+  assert.equal(r.potencial, 500)
+  assert.deepEqual(r.novasPorMes, { 10: 0, 11: 0, 12: 1000 })
+})
+
+test('estimativa de mês já fechado some do horizonte', () => {
+  assert.deepEqual(valorNovaReceitaPorMes(nova({ mes_inicio: 9, mes_fim: 12 }), MESES), { 10: 1000, 11: 1000, 12: 1000 })
+})
+
+test('novidades só depois de confirmar: título novo, pagamento e duplicidade', () => {
+  const previstos = [prev('Grupo A', 11, 1000), prev('Grupo Nova Era', 12, 1500), prev('Grupo B', 11, 300)]
+  const vistos = [{ ano: 2026, area_key: 'trabalhista', grupo: 'Grupo A', mes: 11, valor_visto: 1000 }]
+  const semConfirmar = base({ previstos, vistos })
+  assert.equal(semConfirmar.novidades.length, 0)
+
+  const r = base({
+    previstos,
+    vistos,
+    confirmada: true,
+    ajustes: [ajuste('Grupo B', 11, 'nao_paga', 900)],
+    novasReceitas: [nova({ id: 'nr-era', nome: 'Acordo Nova Era', recorrencia: 'pontual', mes_inicio: 12, mes_fim: 12 })],
+  })
+  const novo = r.novidades.filter((n) => n.tipo === 'novo')
+  assert.deepEqual(novo.map((n) => n.grupo).sort(), ['Grupo B', 'Grupo Nova Era'])
+  const era = novo.find((n) => n.grupo === 'Grupo Nova Era')
+  assert.ok(era && era.tipo === 'novo' && era.duplicidade?.novaReceitaId === 'nr-era')
+  const pagou = r.novidades.find((n) => n.tipo === 'pagou')
+  assert.ok(pagou && pagou.tipo === 'pagou' && pagou.reducao === 600 && pagou.abertoAtual === 300)
+})
+
+test('correspondência de nome ignora "Grupo" e acentos', () => {
+  assert.equal(novaReceitaCorrespondeGrupo({ nome: 'Metalúrgica São José', grupo_cliente: null }, 'Grupo Metalurgica Sao Jose'), true)
+  assert.equal(novaReceitaCorrespondeGrupo({ nome: 'Lead', grupo_cliente: null }, 'Grupo Spel'), false)
+})
+
+test('ciclo de clique na célula', () => {
+  assert.equal(proximoAjusteAoClicar('conta'), 'nao_paga')
+  assert.equal(proximoAjusteAoClicar('nao_paga'), null)
+  assert.equal(proximoAjusteAoClicar('em_atraso'), 'vai_pagar')
+  assert.equal(proximoAjusteAoClicar('vai_pagar'), 'nao_paga')
+  assert.equal(proximoAjusteAoClicar('quitado'), 'ignorar')
+})
+
+test('ordenação por coluna: valor exibido, empate por nome e ciclo de cliques', () => {
+  const r = base({
+    previstos: [prev('Grupo B', 11, 1000), prev('Grupo A', 11, 1000), prev('Grupo C', 11, 3000), prev('Grupo C', 12, 100)],
+    recebidos: [{ areaKey: 'trabalhista', grupo: 'Grupo A', valor: 5000 }],
+  })
+  const nomes = (o: Parameters<typeof ordenarLinhasMe>[1]) => ordenarLinhasMe(r.linhas, o).map((l) => l.grupo)
+  assert.deepEqual(nomes({ chave: 11, direcao: 'desc' }), ['Grupo C', 'Grupo A', 'Grupo B'])
+  assert.deepEqual(nomes({ chave: 'recebido', direcao: 'desc' }), ['Grupo A', 'Grupo B', 'Grupo C'])
+  assert.deepEqual(nomes({ chave: 'grupo', direcao: 'desc' }), ['Grupo C', 'Grupo B', 'Grupo A'])
+  assert.deepEqual(nomes(null), r.linhas.map((l) => l.grupo))
+
+  const um = proximaOrdenacao(null, 'me')
+  assert.deepEqual(um, { chave: 'me', direcao: 'desc' })
+  const dois = proximaOrdenacao(um, 'me')
+  assert.deepEqual(dois, { chave: 'me', direcao: 'asc' })
+  assert.equal(proximaOrdenacao(dois, 'me'), null)
+  assert.deepEqual(proximaOrdenacao(dois, 'grupo'), { chave: 'grupo', direcao: 'asc' })
+})
+
+test('ordenação genérica: texto, número e direção inicial explícita', () => {
+  const itens = [
+    { nome: 'B', situacao: 'Não deve pagar', total: 10 },
+    { nome: 'A', situacao: 'Em atraso', total: 10 },
+    { nome: 'C', situacao: 'Em atraso, Não deve pagar', total: 30 },
+  ]
+  type Chave = 'situacao' | 'total'
+  const valor = (i: (typeof itens)[number], c: Chave) => i[c]
+  const nomes = (o: { chave: Chave; direcao: 'asc' | 'desc' } | null) =>
+    ordenarPorColuna(itens, o, valor, (i) => i.nome).map((i) => i.nome)
+  assert.deepEqual(nomes({ chave: 'situacao', direcao: 'asc' }), ['A', 'C', 'B'])
+  assert.deepEqual(nomes({ chave: 'total', direcao: 'desc' }), ['C', 'A', 'B'])
+  assert.deepEqual(nomes(null), ['B', 'A', 'C'])
+  assert.deepEqual(proximaOrdenacao<Chave>(null, 'situacao', 'asc'), { chave: 'situacao', direcao: 'asc' })
+})
+
+test('horizonte vai do mês corrente a dezembro', () => {
+  assert.deepEqual(horizonteMe(2026, new Date(2026, 9, 21)), { meses: [10, 11, 12], mesCorrente: 10 })
+  assert.deepEqual(horizonteMe(2025, new Date(2026, 9, 21)), { meses: [], mesCorrente: null })
+})
+
+test('mês a mês e gap usam realizado nos fechados e ME nos abertos', () => {
+  const meta = 1_428_571.43
+  const linhas = montarMesAMes({
+    mesesMeta: [6, 7, 8, 9, 10, 11, 12],
+    metaPorMes: { 6: meta, 7: meta, 8: meta, 9: meta, 10: meta, 11: meta, 12: meta },
+    realizadoPorMes: { 6: 1_000_000, 7: 1_000_000, 8: 1_000_000, 9: 1_000_000 },
+    mePorMes: { 10: 1_200_000, 11: 1_100_000, 12: 1_100_000 },
+    mesesHorizonte: [10, 11, 12],
+  })
+  assert.equal(linhas[0].base, 'realizado')
+  assert.equal(linhas[4].base, 'me')
+  const gap = calcularGapMeta(linhas)
+  assert.equal(Math.round(gap.projecao), 7_400_000)
+  assert.equal(Math.round(gap.gap), 2_600_000)
+  assert.equal(gap.mesesAbertos, 3)
+  assert.equal(Math.round(gap.necessarioPorMes), 2_000_000)
+})
+
+test('meta variável no mês, meta anual no acumulado e no gap', () => {
+  const base = 1_000
+  const mesesMeta = [6, 7, 8]
+  const linhas = montarMesAMes({
+    mesesMeta,
+    // Jun ficou 300 abaixo: a meta variável de Jul e Ago sobe 150 cada (como na Gestão à vista).
+    metaPorMes: { 6: base, 7: base + 150, 8: base + 150 },
+    metaBasePorMes: { 6: base, 7: base, 8: base },
+    realizadoPorMes: { 6: 700 },
+    mePorMes: { 7: 1_150, 8: 1_150 },
+    mesesHorizonte: [7, 8],
+  })
+  assert.equal(linhas[1].meta, 1_150)
+  assert.equal(linhas[1].diferenca, 0)
+  assert.equal(linhas[2].metaAcumulada, 3_000)
+  assert.equal(linhas[2].gapAcumulado, 0)
+  const gap = calcularGapMeta(linhas)
+  assert.equal(gap.metaTotal, 3_000)
+  assert.equal(gap.necessarioPorMes, 1_150)
+  assert.equal(gap.gap, 0)
+})
+
+test('nova receita que virou título é descontada sozinha (caso Inconel), e "são diferentes" desfaz', () => {
+  const area = 'insolvencia'
+  const p = (mes: number, valor: number) => ({ areaKey: area, grupo: 'Grupo Inconel', mes, valor, pago: false, vencido: false })
+  // Gerente viu R$ 5 mil por mês; depois entraram os títulos de R$ 200 mil.
+  const previstos = [p(11, 5000), p(11, 200000), p(12, 5000), p(12, 200000)]
+  const vistos = [11, 12].map((mes) => ({ ano: 2026, area_key: area, grupo: 'Grupo Inconel', mes, valor_visto: 5000 }))
+  const nr = nova({ id: 'inc', area_key: area, nome: 'Grupo Inconel', grupo_cliente: 'Grupo Inconel', valor: 200000, mes_inicio: 10, mes_fim: 12, chance: 'alta' })
+  const entrada = { areaKey: area, meses: [11, 12], mesCorrente: 11, previstos, recebidos: [], ajustes: [], novasReceitas: [nr], vistos, confirmada: true }
+
+  const r = calcularAreaMe(entrada)
+  assert.deepEqual(r.novasPorMes, { 11: 0, 12: 0 })
+  assert.deepEqual(r.compensadoPorMes, { 11: 200000, 12: 200000 })
+  assert.equal(r.compensado, 400000)
+  assert.deepEqual(r.mePorMes, { 11: 205000, 12: 205000 }, 'título conta uma vez só')
+  const n = r.novidades.find((x) => x.tipo === 'novo')
+  assert.ok(n && n.tipo === 'novo' && n.duplicidade?.novaReceitaId === 'inc' && n.duplicidade.compensado === 400000)
+  assert.deepEqual(n && n.tipo === 'novo' ? n.duplicidade?.meses : [], [11, 12])
+
+  // "São receitas diferentes" marca o título como visto: o desconto some e os dois contam.
+  const diferentes = calcularAreaMe({ ...entrada, vistos: [11, 12].map((mes) => ({ ...vistos[0], mes, valor_visto: 205000 })) })
+  assert.deepEqual(diferentes.novasPorMes, { 11: 200000, 12: 200000 })
+  assert.deepEqual(diferentes.mePorMes, { 11: 405000, 12: 405000 })
+  assert.equal(diferentes.compensado, 0)
+
+  // "Confirmar: é a mesma" baixa os meses da nova receita: mesma ME do desconto automático.
+  const vistosAtuais = [11, 12].map((mes) => ({ ...vistos[0], mes, valor_visto: 205000 }))
+  const baixada = calcularAreaMe({ ...entrada, novasReceitas: [{ ...nr, meses_baixados: [11, 12] }], vistos: vistosAtuais })
+  assert.deepEqual(baixada.mePorMes, r.mePorMes)
+})
+
+test('desconto automático vai só até o valor do título novo e só depois de confirmar a área', () => {
+  const previstos = [prev('Grupo Lead', 11, 150000)]
+  const nr = nova({ id: 'l', nome: 'Grupo Lead', grupo_cliente: 'Grupo Lead', valor: 200000, mes_inicio: 11, mes_fim: 11, recorrencia: 'pontual', chance: 'media' })
+  const parcial = base({ previstos, novasReceitas: [nr], confirmada: true })
+  assert.equal(parcial.novasPorMes[11], 50000, 'sobra da estimativa que ainda não virou título')
+  assert.equal(parcial.compensadoPorMes[11], 150000)
+  assert.equal(parcial.mePorMes[11], 200000)
+
+  const semConfirmar = base({ previstos, novasReceitas: [nr], confirmada: false })
+  assert.equal(semConfirmar.novasPorMes[11], 200000, 'sem confirmação não há como saber o que é novo')
+  assert.equal(semConfirmar.compensado, 0)
+
+  // Outra área ou outro grupo não descontam.
+  const outroGrupo = base({ previstos: [prev('Grupo Outro', 11, 150000)], novasReceitas: [nr], confirmada: true })
+  assert.equal(outroGrupo.novasPorMes[11], 200000)
+})
+
+test('título novo desconta chance alta/média antes da baixa; o resto desconta o potencial', () => {
+  const previstos = [prev('Grupo X', 12, 1500)]
+  const alta = nova({ id: 'a', nome: 'Grupo X', grupo_cliente: 'Grupo X', valor: 1000, mes_inicio: 12, mes_fim: 12, recorrencia: 'pontual', chance: 'alta' })
+  const baixa = nova({ id: 'b', nome: 'Grupo X', grupo_cliente: 'Grupo X', valor: 800, mes_inicio: 12, mes_fim: 12, recorrencia: 'pontual', chance: 'baixa' })
+  const r = base({ previstos, novasReceitas: [baixa, alta], confirmada: true })
+  assert.equal(r.novasPorMes[12], 0)
+  assert.equal(r.compensadoPorMes[12], 1000)
+  assert.equal(r.potencial, 300, '1.500 do título: 1.000 descontam a alta e 500 descontam a baixa')
+})

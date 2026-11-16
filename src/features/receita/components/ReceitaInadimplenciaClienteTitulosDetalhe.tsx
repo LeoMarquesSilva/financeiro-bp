@@ -148,8 +148,18 @@ export function ReceitaInadimplenciaClienteTitulosDetalhe({
     <div className="mb-2 mt-1 space-y-3 border-l-2 border-slate-200 pl-3 ml-7">
       {Math.abs(somaItens - valorPeriodo) > 1 && (
         <p className="text-[11px] text-amber-800">
-          O total por título ({formatCurrency(somaItens)}) difere do valor na lista (
-          {formatCurrency(valorPeriodo)}) por arredondamento ou recebimento parcial no período.
+          {areaKey != null ? (
+            <>
+              O total por título ({formatCurrency(somaItens)}) difere do valor da área (
+              {formatCurrency(valorPeriodo)}) porque o saldo do cliente no período é rateado entre
+              as áreas pelo faturamento do período (inclui títulos já pagos).
+            </>
+          ) : (
+            <>
+              O total por título ({formatCurrency(somaItens)}) difere do valor na lista (
+              {formatCurrency(valorPeriodo)}) por arredondamento ou recebimento parcial no período.
+            </>
+          )}
         </p>
       )}
       {!areaKey && (

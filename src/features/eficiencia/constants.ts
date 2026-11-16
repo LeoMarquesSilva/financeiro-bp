@@ -27,20 +27,33 @@ export const AREAS_EFICIENCIA_JURIDICO = [
 export const EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL = 'Trabalhista' as const
 
 /**
- * Responsável no card Inconsistências — Análise (Ops Legais), conforme a Área.
+ * Responsável no card Inconsistências — Análise (Ops Legais), conforme a Área e a data
+ * (DATA RECEBIMENTO KURIER). Trabalhista → Isadora; demais áreas → Gustavo até a saída
+ * dele (09/04/2026, inclusive) e Giovanna depois.
  * Agendamento continua usando AGENDADO POR.
  */
 export const OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA = {
   trabalhista: 'Isadora Godoy Conte',
-  demais: 'Giovanna Pereira de Souza',
+  /** Em ordem cronológica; `ate` = último dia (YYYY-MM-DD), null = vigente. */
+  demais: [
+    { ate: '2026-04-09', nome: 'Gustavo Ribeiro de Siqueira' },
+    { ate: null, nome: 'Giovanna Pereira de Souza' },
+  ],
 } as const
 
-export function resolveOpsLegaisPubResponsavel(area: string | null | undefined): string {
+export function resolveOpsLegaisPubResponsavel(
+  area: string | null | undefined,
+  data: string | null | undefined,
+): string {
   const a = (area ?? '').trim()
   if (a === EFICIENCIA_AREA_SEM_VISTAGEM_NORMAL) {
     return OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA.trabalhista
   }
-  return OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA.demais
+  const dia = (data ?? '').slice(0, 10)
+  const periodos = OPS_LEGAIS_PUB_RESPONSAVEL_POR_AREA.demais
+  // Sem data → responsável vigente.
+  const periodo = dia ? periodos.find((p) => p.ate == null || dia <= p.ate) : undefined
+  return (periodo ?? periodos[periodos.length - 1]).nome
 }
 
 /**
@@ -302,7 +315,7 @@ export const EFICIENCIA_AMOSTRA_FRACAO = 0.3
  * - `number[]` — um ou mais meses (1..12), ordenados
  * - `'resultado'` — jun+ fechados (mês corrente fora; jan–mai em branco) — Receita/Eficiência
  * - `'resultado_ytd'` — jan até o último mês fechado (mês corrente fora) — Ops Legais
- * - `'semana_passada'` / `'semana_retrasada'` — semana civil seg–dom (BRT)
+ * - `'semana_passada'` — sexta a quinta da reunião de sexta (BRT), ver `rangeSemanaFiltro`
  * - `{ tipo: 'dia', de, ate }` — intervalo civil inclusivo YYYY-MM-DD (BRT)
  */
 export type DiaFiltroEficiencia = { tipo: 'dia'; de: string; ate: string }
@@ -313,7 +326,6 @@ export type MesFiltroEficiencia =
   | 'resultado'
   | 'resultado_ytd'
   | 'semana_passada'
-  | 'semana_retrasada'
   | DiaFiltroEficiencia
 
 /** Primeiro mês do período "Resultado" (junho). */
@@ -323,10 +335,8 @@ export function isMesesFiltro(filtro: MesFiltroEficiencia): filtro is number[] {
   return Array.isArray(filtro)
 }
 
-export function isSemanaFiltro(
-  filtro: MesFiltroEficiencia,
-): filtro is 'semana_passada' | 'semana_retrasada' {
-  return filtro === 'semana_passada' || filtro === 'semana_retrasada'
+export function isSemanaFiltro(filtro: MesFiltroEficiencia): filtro is 'semana_passada' {
+  return filtro === 'semana_passada'
 }
 
 export function isDiaFiltro(filtro: MesFiltroEficiencia): filtro is DiaFiltroEficiencia {
@@ -343,7 +353,7 @@ export function isDiaFiltro(filtro: MesFiltroEficiencia): filtro is DiaFiltroEfi
 /** Filtro por intervalo curto (semana ou dias) — KPIs via racional/resumo, não série mensal. */
 export function isPeriodoCurtoFiltro(
   filtro: MesFiltroEficiencia,
-): filtro is 'semana_passada' | 'semana_retrasada' | DiaFiltroEficiencia {
+): filtro is 'semana_passada' | DiaFiltroEficiencia {
   return isSemanaFiltro(filtro) || isDiaFiltro(filtro)
 }
 
@@ -398,31 +408,45 @@ function toIsoCivil(y: number, m: number, d: number): string {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
-/**
- * Intervalo [inicio, fimExclusivo) da semana civil (segunda–domingo) em BRT.
- * Semana passada = semana completa anterior à atual; retrasada = a anterior a essa.
- */
-export function rangeSemanaFiltro(
-  filtro: 'semana_passada' | 'semana_retrasada',
-  ref = new Date(),
+function rangeSemanaCivil(
+  start: { year: number; month: number; day: number },
+  titulo: string,
 ): { inicio: string; fimExclusivo: string; label: string } {
-  const p = civilPartsBrt(ref)
-  const daysFromMonday = p.weekday === 0 ? 6 : p.weekday - 1
-  const thisMonday = addCivilDays(p.year, p.month, p.day, -daysFromMonday)
-  const weeksBack = filtro === 'semana_passada' ? 1 : 2
-  const start = addCivilDays(thisMonday.year, thisMonday.month, thisMonday.day, -7 * weeksBack)
   const end = addCivilDays(start.year, start.month, start.day, 7)
   const inicio = toIsoCivil(start.year, start.month, start.day)
   const fimExclusivo = toIsoCivil(end.year, end.month, end.day)
   const fimInclusivo = addCivilDays(end.year, end.month, end.day, -1)
   const fmt = (m: number, d: number) =>
     `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
-  const titulo = filtro === 'semana_passada' ? 'Semana passada' : 'Semana retrasada'
   return {
     inicio,
     fimExclusivo,
     label: `${titulo} (${fmt(start.month, start.day)}–${fmt(fimInclusivo.month, fimInclusivo.day)})`,
   }
+}
+
+/**
+ * Filtro "Semana passada": sexta a quinta (BRT), a semana da reunião de indicadores de sexta.
+ * Vai da última sexta antes de hoje até a quinta seguinte. Na sexta 23/10 → 16/10 a 22/10;
+ * de sábado a quinta → da sexta mais recente até a próxima quinta (dias à frente vêm vazios).
+ */
+export function rangeSemanaFiltro(
+  ref = new Date(),
+): { inicio: string; fimExclusivo: string; label: string } {
+  const p = civilPartsBrt(ref)
+  const diasDesdeSexta = (p.weekday - 5 + 7) % 7 || 7
+  const sexta = addCivilDays(p.year, p.month, p.day, -diasDesdeSexta)
+  return rangeSemanaCivil(sexta, 'Semana passada')
+}
+
+/** Semana civil seg–dom anterior à atual (BRT). Usada no painel de projetos das Iniciativas. */
+export function rangeSemanaSegDomPassada(
+  ref = new Date(),
+): { inicio: string; fimExclusivo: string; label: string } {
+  const p = civilPartsBrt(ref)
+  const daysFromMonday = p.weekday === 0 ? 6 : p.weekday - 1
+  const segundaPassada = addCivilDays(p.year, p.month, p.day, -daysFromMonday - 7)
+  return rangeSemanaCivil(segundaPassada, 'Semana passada')
 }
 
 /** Intervalo [inicio, fimExclusivo) de De–Até (inclusivo) em YYYY-MM-DD. */
@@ -537,7 +561,7 @@ export function mesesEfetivosFiltro(
     return Array.from({ length: fim }, (_, i) => i + 1)
   }
   if (isSemanaFiltro(filtro)) {
-    const { inicio, fimExclusivo } = rangeSemanaFiltro(filtro, ref)
+    const { inicio, fimExclusivo } = rangeSemanaFiltro(ref)
     const start = {
       y: Number(inicio.slice(0, 4)),
       m: Number(inicio.slice(5, 7)),
@@ -653,7 +677,7 @@ export function rangePeriodoFiltro(
   ref = new Date(),
 ): { inicio: string; fimExclusivo: string } {
   if (isSemanaFiltro(filtro)) {
-    const r = rangeSemanaFiltro(filtro, ref)
+    const r = rangeSemanaFiltro(ref)
     return { inicio: r.inicio, fimExclusivo: r.fimExclusivo }
   }
   if (isDiaFiltro(filtro)) {

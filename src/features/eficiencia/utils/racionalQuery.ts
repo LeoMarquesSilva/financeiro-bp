@@ -109,7 +109,7 @@ export function applyRacionalPeriodo(
   mes: MesFiltroEficiencia,
 ): AnyQuery {
   if (isSemanaFiltro(mes)) {
-    const { inicio, fimExclusivo } = rangeSemanaFiltro(mes)
+    const { inicio, fimExclusivo } = rangeSemanaFiltro()
     return query.gte(dataColuna, inicio).lt(dataColuna, fimExclusivo)
   }
   if (isDiaFiltro(mes)) {
@@ -233,9 +233,8 @@ export async function fetchDesenvolvimentoRacional(
   escopo: RacionalEscopo = 'desenvolvimento_equipe',
   limite: number | null = RACIONAL_LIMITE,
 ): Promise<RacionalResultado> {
-  // Indicador anual: filtro Resultado = ano todo (mesmos minutos/meta do KPI).
-  const mesPeriodo: MesFiltroEficiencia =
-    mes === 'resultado' || mes === 'resultado_ytd' ? null : mes
+  // Jurídico: Resultado (jun+) = ano todo. Ops (resultado_ytd), mês, semana e De/Até recortam.
+  const mesPeriodo: MesFiltroEficiencia = mes === 'resultado' ? null : mes
 
   // Ativo no ano: desligamento nulo ou a partir de 1/jan do ano seguinte (equiv. year > ano).
   const turnoverQuery = supabase
@@ -506,7 +505,7 @@ export function shouldSkipFiltroRetencaoArea(
 }
 
 export function formatRacionalPeriodoLabel(ano: number, mes: MesFiltroEficiencia): string {
-  if (isSemanaFiltro(mes)) return rangeSemanaFiltro(mes).label
+  if (isSemanaFiltro(mes)) return rangeSemanaFiltro().label
   if (isDiaFiltro(mes)) return rangeDiaFiltro(mes).label
   if (mes === 'resultado') {
     const fim = mesFimResultado(ano)

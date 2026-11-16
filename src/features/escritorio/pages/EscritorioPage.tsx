@@ -159,6 +159,7 @@ export function EscritorioPage() {
             resumo={resumo}
             loading={isLoading}
             onRacional={setRacionalBloco}
+            filtros={filtros}
           />
 
           {resumo?.processos_por_situacao?.length ? (

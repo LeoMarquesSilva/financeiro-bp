@@ -1,6 +1,15 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type TdHTMLAttributes,
+} from 'react'
 import { FileSearch } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
 import { MESES_EFICIENCIA } from '../constants'
 import {
   atingiuMetaKpi,
@@ -19,6 +28,18 @@ export type OverviewKpiHeatCardProps = Omit<
   Props,
   'onRacionalClick' | 'copyAnualAcumulado' | 'copyAnualCells'
 >
+
+/** Alvo do Fênix IA: chave única + função que monta a memória de cálculo. */
+export type OverviewFenixAlvo = { chave: string; explicar: FenixExplicar }
+
+/** `<td>` marcado para o Fênix (não muda o DOM: só acrescenta `data-fenix`). */
+function FenixTd({
+  fenix,
+  ...props
+}: TdHTMLAttributes<HTMLTableCellElement> & { fenix?: OverviewFenixAlvo }) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
+  return <td {...props} data-fenix={fenixId} />
+}
 
 export function OverviewRacionalButton({
   onClick,
@@ -115,6 +136,10 @@ type Props = {
    * O % do mês é fatia da meta anual e ficaria vermelho mesmo com o ano cumprido.
    */
   colorirMesesComoAcumulado?: boolean
+  /** Fênix IA: explicação da coluna Acum. (ou da célula anual em `modoAnual`). */
+  fenixAcumulado?: OverviewFenixAlvo
+  /** Fênix IA: explicação de cada célula do corpo (índice 0 = primeira célula). */
+  fenixCelula?: (indice: number) => OverviewFenixAlvo | undefined
 }
 
 function mesesDestaqueSet(mesDestaque: number | number[] | null): Set<number> | null {
@@ -243,7 +268,10 @@ export function OverviewKpiHeatCard({
   showAcumulado = true,
   includeInCopy = true,
   colorirMesesComoAcumulado = false,
+  fenixAcumulado,
+  fenixCelula,
 }: OverviewKpiHeatCardProps) {
+  const fenixAcumuladoId = useFenixAlvo(fenixAcumulado?.chave, fenixAcumulado?.explicar)
   const metasDefinidas = (metasPorMes ?? []).filter((m): m is number => m != null)
   const metaFallbackAcum =
     metaAcumulado ??
@@ -379,6 +407,7 @@ export function OverviewKpiHeatCard({
               {modoAnual ? (
                 <td
                   {...heatCellStackedAttr(acumulado)}
+                  data-fenix={fenixAcumuladoId}
                   style={{
                     padding: 4,
                     textAlign: 'center',
@@ -397,8 +426,9 @@ export function OverviewKpiHeatCard({
                 cells.map((cell, i) => {
                   const span = Math.max(1, cellColSpans[i] ?? 1)
                   return (
-                    <td
+                    <FenixTd
                       key={i}
+                      fenix={fenixCelula?.(i)}
                       colSpan={span}
                       {...heatCellStackedAttr(cell)}
                       style={{
@@ -415,7 +445,7 @@ export function OverviewKpiHeatCard({
                       }}
                     >
                       {renderHeatCellContent(cell)}
-                    </td>
+                    </FenixTd>
                   )
                 })
               ) : yearBands ? (
@@ -480,8 +510,9 @@ export function OverviewKpiHeatCard({
                   const destacado = destaque?.has(i + 1) ?? false
                   const yearBreak = Boolean(monthLabels) && isYearBreakAt(labels, i)
                   return (
-                    <td
+                    <FenixTd
                       key={i}
+                      fenix={fenixCelula?.(i)}
                       {...heatCellStackedAttr(cell)}
                       style={{
                         padding: 4,
@@ -500,13 +531,14 @@ export function OverviewKpiHeatCard({
                       }}
                     >
                       {renderHeatCellContent(cell)}
-                    </td>
+                    </FenixTd>
                   )
                 })
               )}
               {showAcumulado ? (
                 <td
                   {...heatCellStackedAttr(acumulado)}
+                  data-fenix={fenixAcumuladoId}
                   style={{
                     padding: 4,
                     textAlign: 'center',
@@ -535,6 +567,8 @@ export function OverviewKpiHeatRow({
   onRacionalClick,
   copyAnualAcumulado,
   copyAnualCells,
+  fenixAcumulado,
+  fenixCelula,
   ...cardProps
 }: Props) {
   const copyAnual = copyAnualAcumulado != null
@@ -557,6 +591,8 @@ export function OverviewKpiHeatRow({
         <OverviewKpiHeatCard
           {...cardProps}
           includeInCopy={!copyAnual && cardProps.includeInCopy !== false}
+          fenixAcumulado={fenixAcumulado}
+          fenixCelula={fenixCelula}
         />
         {copyAnual ? (
           <div

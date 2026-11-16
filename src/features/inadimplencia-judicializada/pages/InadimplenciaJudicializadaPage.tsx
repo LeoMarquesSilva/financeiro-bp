@@ -15,6 +15,14 @@ import { ModalJudicializadaCadastro } from '../components/ModalJudicializadaCada
 import { ModalJudicializadaImport } from '../components/ModalJudicializadaImport'
 import { JudicializadaDetailSheet } from '../components/JudicializadaDetailSheet'
 import type { InadimplenciaJudicializadaRow } from '../types/judicializada.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  TELA_JUDICIALIZADA,
+  explicarJudicializadaLancamentoVios,
+  explicarJudicializadaProcessos,
+  explicarJudicializadaValorCausa,
+  explicarJudicializadaValorCorrigido,
+} from '../fenix/judicializadaFenix'
 
 export function InadimplenciaJudicializadaPage() {
   const { role } = useAuth()
@@ -58,6 +66,21 @@ export function InadimplenciaJudicializadaPage() {
   const abrirCadastro = () => setCadastroOpen(true)
 
   const kpis = useMemo(() => judicializadaService.calcularKpis(rows), [rows])
+
+  const fenixBase = { tela: TELA_JUDICIALIZADA, rows, mostrandoEncerrados: incluirEncerrados }
+  const fenixChave = (sufixo: string) => (isLoading ? undefined : `judicializada.resumo.${sufixo}`)
+  const fenixCorrigidoId = useFenixAlvo(fenixChave('valor-corrigido'), () =>
+    explicarJudicializadaValorCorrigido({ ...fenixBase, total: kpis.totalEmAberto }),
+  )
+  const fenixCausaId = useFenixAlvo(fenixChave('valor-causa'), () =>
+    explicarJudicializadaValorCausa({ ...fenixBase, total: kpis.totalValorCausa }),
+  )
+  const fenixViosId = useFenixAlvo(fenixChave('lancamento-vios'), () =>
+    explicarJudicializadaLancamentoVios({ ...fenixBase, total: kpis.totalLancamentoVios }),
+  )
+  const fenixProcessosId = useFenixAlvo(fenixChave('processos'), () =>
+    explicarJudicializadaProcessos({ ...fenixBase, qtdProcessos: kpis.qtdProcessos, qtdGrupos: kpis.qtdGrupos }),
+  )
 
   const handleOpenRow = (row: InadimplenciaJudicializadaRow) => {
     setSelectedRow(row)
@@ -115,22 +138,22 @@ export function InadimplenciaJudicializadaPage() {
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" data-fenix={fenixCorrigidoId}>
           <p className="text-xs font-medium text-slate-500">Valor corrigido (ativos)</p>
           <p className="text-2xl font-bold text-slate-900">{formatCurrency(kpis.totalEmAberto)}</p>
           <p className="mt-0.5 text-[10px] text-slate-400">INPC + juros TJSP (1% a.m.)</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" data-fenix={fenixCausaId}>
           <p className="text-xs font-medium text-slate-500">Valor de ajuizamento</p>
           <p className="text-2xl font-bold text-slate-900">{formatCurrency(kpis.totalValorCausa)}</p>
           <p className="mt-0.5 text-[10px] text-slate-400">Soma valor da causa na planilha</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" data-fenix={fenixViosId}>
           <p className="text-xs font-medium text-slate-500">Lançamento VIOS (grupo)</p>
           <p className="text-2xl font-bold text-slate-900">{formatCurrency(kpis.totalLancamentoVios)}</p>
           <p className="mt-0.5 text-[10px] text-slate-400">Saldo financeiro vinculado ao grupo</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" data-fenix={fenixProcessosId}>
           <p className="text-xs font-medium text-slate-500">Processos / grupos</p>
           <p className="text-2xl font-bold text-slate-900">{kpis.qtdProcessos}</p>
           <p className="mt-0.5 text-xs text-slate-400">{kpis.qtdGrupos} grupo(s) distintos</p>

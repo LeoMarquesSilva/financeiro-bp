@@ -13,6 +13,17 @@ import type { TreinamentoItemRow, TreinamentosPorPessoaRow } from '../types/efic
 import { EFICIENCIA_META_TREINAMENTO_MINUTOS } from '../constants'
 import { matchNomeChaveNaEquipe, normalizeResponsavelChave } from '../utils/responsavelMatch'
 import { agruparTreinamentosDuplicados } from '../utils/treinamentosDedupe'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import { explicarTreinamentoPessoa } from '../fenix/eficienciaPessoasFinanceiroFenix'
+
+/** Contexto do Fênix para os cards por pessoa (tela, período e regras da aba). */
+export type TreinamentosPessoaCardsFenix = {
+  tela: string
+  ano: number
+  periodo?: string
+  regras?: string[]
+  fonteTecnica?: string
+}
 
 function formatHorasMinutos(minutos: number): string {
   const h = Math.floor(minutos / 60)
@@ -32,6 +43,8 @@ type Props = {
   accentClass?: Accent
   /** false no Jurídico consolidado (Todas as áreas). Default true. */
   mostrarBannerDuplicados?: boolean
+  /** Explicação de cada card no Fênix IA. */
+  fenix?: TreinamentosPessoaCardsFenix
 }
 
 const ACCENT: Record<
@@ -75,6 +88,7 @@ type PessoaCardItemProps = {
   accent: (typeof ACCENT)[Accent]
   teamMembers: ReturnType<typeof useTeamMembers>['teamMembers']
   avatarCatalog: ReturnType<typeof useBpUsuariosAvatar>['usuarios']
+  fenix?: TreinamentosPessoaCardsFenix
 }
 
 function TreinamentoPessoaCardItem({
@@ -88,6 +102,7 @@ function TreinamentoPessoaCardItem({
   accent,
   teamMembers,
   avatarCatalog,
+  fenix,
 }: PessoaCardItemProps) {
   const metaPessoa =
     pessoa.meta_minutos != null && Number.isFinite(Number(pessoa.meta_minutos))
@@ -101,9 +116,31 @@ function TreinamentoPessoaCardItem({
   const nomeExibicao = resolvePessoaDisplayNome(pessoa.colaborador, teamMembers, avatarCatalog)
   const avatarUrl = resolvePessoaAvatarUrl(pessoa.colaborador, teamMembers, avatarCatalog)
   const temDuplicado = lista.some((item) => item.duplicado)
+  const fenixId = useFenixAlvo(
+    fenix ? 'eficiencia.treinamentos.pessoa' : undefined,
+    fenix
+      ? () =>
+          explicarTreinamentoPessoa({
+            tela: fenix.tela,
+            ano: fenix.ano,
+            periodo: fenix.periodo,
+            colaborador: nomeExibicao,
+            minutos,
+            metaMinutos: semMetaPessoa ? null : (metaPessoa ?? null),
+            admissao: pessoa.admissao ?? null,
+            badge: badgeLabel ?? null,
+            itens: lista,
+            regras: fenix.regras,
+            fonteTecnica: fenix.fonteTecnica,
+          })
+      : undefined,
+  )
 
   return (
-    <article className="overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow-sm">
+    <article
+      data-fenix={fenixId}
+      className="overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow-sm"
+    >
       <button
         type="button"
         onClick={() => onToggle(cardId)}
@@ -289,6 +326,7 @@ export function TreinamentosPessoaCards({
   badgeLabel,
   accentClass = 'default',
   mostrarBannerDuplicados = true,
+  fenix,
 }: Props) {
   const { teamMembers } = useTeamMembers()
   const { usuarios: avatarCatalog } = useBpUsuariosAvatar()
@@ -357,6 +395,7 @@ export function TreinamentosPessoaCards({
         accent={accent}
         teamMembers={teamMembers}
         avatarCatalog={avatarCatalog}
+        fenix={fenix}
       />
     )
   }

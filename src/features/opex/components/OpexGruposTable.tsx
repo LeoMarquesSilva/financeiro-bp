@@ -5,11 +5,13 @@ import { cn } from '@/lib/utils'
 import { formatCurrency, formatPercent } from '@/shared/utils/format'
 import { opexService } from '../services/opexService'
 import { OPEX_COLORS } from '../constants'
+import { useOpexDeParaPorOrigem, useOpexPlanoContasNiveis } from '../hooks/useOpexPlanoContas'
 import { formatPeriodoOpex, mesesFiltroKey, planoFiltroKey, temFiltroMeses } from '../utils/opexPeriodo'
 import { compromissoGrupo, insightUsaCompromissoVios, variacaoGrupo } from '../utils/opexInsights'
+import { agruparGruposPorNivel1, nivel1Chave } from '../utils/opexNivel1'
 import type { OpexPlanoFiltroState } from '../utils/opexPlanoFiltro'
 import { OpexPlanoTitulos } from './OpexPlanoTitulos'
-import type { OpexGrupoRow, OpexPlanoRow } from '../types/opex.types'
+import type { OpexGrupoRow, OpexNivel1Bloco, OpexPlanoRow } from '../types/opex.types'
 
 type Props = {
   grupos: OpexGrupoRow[]
@@ -283,6 +285,202 @@ function GrupoDetalhe({
   )
 }
 
+function compareBlocos(
+  a: OpexNivel1Bloco,
+  b: OpexNivel1Bloco,
+  key: SortKey,
+  usaCompromisso: boolean,
+): number {
+  if (key === 'grupo_conta') {
+    return (a.nivel1.codigo ?? Infinity) - (b.nivel1.codigo ?? Infinity)
+  }
+  return compareGrupos(a.total, b.total, key, usaCompromisso)
+}
+
+type ValoresProps = {
+  row: OpexGrupoRow
+  filtroAtivo: boolean
+  orcamentoImportado?: boolean
+  usaCompromisso: boolean
+  referenciaColor: string
+  destaque?: boolean
+}
+
+function ValoresCells({ row, filtroAtivo, orcamentoImportado, usaCompromisso, referenciaColor, destaque }: ValoresProps) {
+  const compromisso = compromissoGrupo(row, usaCompromisso)
+  const variacao = variacaoGrupo(row, usaCompromisso)
+  const peso = destaque && 'font-semibold'
+
+  return (
+    <>
+      <td className={cn('px-4 py-2.5 text-right tabular-nums', OPEX_COLORS.realizado.text, peso)}>
+        {formatCurrency(row.realizado_ytd)}
+      </td>
+      <td className={cn('hidden px-4 py-2.5 text-right tabular-nums sm:table-cell', referenciaColor, peso)}>
+        {formatCurrency(row.previsto_ano)}
+      </td>
+      {orcamentoImportado && (
+        <td className={cn('hidden px-4 py-2.5 text-right tabular-nums md:table-cell', OPEX_COLORS.previsto.text, peso)}>
+          {formatCurrency(row.previsto_vios)}
+        </td>
+      )}
+      {!filtroAtivo && (
+        <td className={cn('hidden px-4 py-2.5 text-right tabular-nums lg:table-cell', OPEX_COLORS.projetado.text, peso)}>
+          {formatCurrency(row.projetado_ano)}
+        </td>
+      )}
+      <td className={cn('hidden px-4 py-2.5 text-right tabular-nums md:table-cell', variacaoClass(variacao), peso)}>
+        {formatCurrency(variacao)}
+      </td>
+      <td className={cn('hidden px-4 py-2.5 text-center tabular-nums text-slate-500 md:table-cell', peso)}>
+        {pct(compromisso, row.previsto_ano)}
+      </td>
+    </>
+  )
+}
+
+function Nivel1Row({
+  bloco,
+  recolhido,
+  onToggle,
+  referenciaMeta,
+  ...valores
+}: Omit<ValoresProps, 'row' | 'destaque' | 'referenciaColor'> & {
+  bloco: OpexNivel1Bloco
+  recolhido: boolean
+  onToggle: () => void
+  referenciaMeta: ReturnType<typeof referenciaGrupoMeta>
+}) {
+  const { nivel1, grupos, total } = bloco
+  const qtd = grupos.length
+
+  return (
+    <tr
+      className="cursor-pointer border-b border-slate-100 bg-slate-50/80 transition-colors hover:bg-slate-100/70"
+      onClick={onToggle}
+      aria-expanded={!recolhido}
+    >
+      <td className="px-4 py-2.5 sm:px-5">
+        <span className="flex items-center gap-2">
+          {recolhido ? (
+            <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" />
+          ) : (
+            <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
+          )}
+          <span className="min-w-0">
+            <span className="flex flex-wrap items-baseline gap-x-2">
+              {nivel1.codigo != null && (
+                <span className="rounded border border-slate-200 bg-white px-1.5 text-[10px] font-semibold tabular-nums text-slate-500">
+                  {nivel1.codigo}
+                </span>
+              )}
+              <span
+                className="font-semibold text-slate-900"
+                title={
+                  nivel1.codigo == null
+                    ? 'Grupos sem correspondência no plano de contas do VIOS (cadastre um De × Para para classificá-los).'
+                    : undefined
+                }
+              >
+                {nivel1.nome}
+              </span>
+              <span className="text-[11px] font-normal text-slate-500">
+                {qtd} {qtd === 1 ? 'grupo' : 'grupos'}
+              </span>
+            </span>
+            <span className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] font-medium sm:hidden">
+              <span className={OPEX_COLORS.realizado.text}>{formatCurrency(total.realizado_ytd)}</span>
+              <span className={referenciaMeta.color}>
+                {referenciaMeta.labelCurto} {formatCurrency(total.previsto_ano)}
+              </span>
+            </span>
+          </span>
+        </span>
+      </td>
+      <ValoresCells row={total} referenciaColor={referenciaMeta.color} destaque {...valores} />
+    </tr>
+  )
+}
+
+function GrupoRow({
+  grupo: g,
+  expandido,
+  onToggle,
+  indentado,
+  colSpanDetalhe,
+  ano,
+  mesesFiltro,
+  planoFiltro,
+  referenciaMeta,
+  ...valores
+}: Omit<ValoresProps, 'row' | 'destaque' | 'referenciaColor'> & {
+  grupo: OpexGrupoRow
+  expandido: boolean
+  onToggle: () => void
+  indentado: boolean
+  colSpanDetalhe: number
+  ano: number
+  mesesFiltro: number[]
+  planoFiltro?: OpexPlanoFiltroState
+  referenciaMeta: ReturnType<typeof referenciaGrupoMeta>
+}) {
+  return (
+    <>
+      <tr
+        className="cursor-pointer border-b border-slate-50 transition-colors hover:bg-slate-50/80"
+        onClick={onToggle}
+      >
+        <td className={cn('py-2.5 pr-4', indentado ? 'pl-10 sm:pl-11' : 'pl-4 sm:pl-5')}>
+          <span className="flex items-center gap-2">
+            {expandido ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+            )}
+            <span className="min-w-0">
+              <span className="block font-medium text-slate-800">{g.grupo_conta}</span>
+              <span className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] sm:hidden">
+                <span className={OPEX_COLORS.realizado.text}>
+                  {formatCurrency(g.realizado_ytd)}
+                </span>
+                <span className={referenciaMeta.color}>
+                  {referenciaMeta.labelCurto} {formatCurrency(g.previsto_ano)}
+                </span>
+              </span>
+            </span>
+            {g.fixo && (
+              <span
+                className={cn(
+                  'hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold sm:inline',
+                  OPEX_COLORS.fixo.bg,
+                  OPEX_COLORS.fixo.text,
+                )}
+              >
+                Fixa
+              </span>
+            )}
+          </span>
+        </td>
+        <ValoresCells row={g} referenciaColor={referenciaMeta.color} {...valores} />
+      </tr>
+      {expandido && (
+        <tr>
+          <td colSpan={colSpanDetalhe} className="p-0">
+            <GrupoDetalhe
+              ano={ano}
+              grupo={g.grupo_conta}
+              aliases={g.aliases}
+              mesesFiltro={mesesFiltro}
+              orcamentoImportado={valores.orcamentoImportado}
+              planoFiltro={planoFiltro}
+            />
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
 export function OpexGruposTable({
   grupos,
   ano,
@@ -296,10 +494,13 @@ export function OpexGruposTable({
   planoFiltro,
 }: Props) {
   const [aberto, setAberto] = useState<string | null>(null)
+  const [nivel1Recolhidos, setNivel1Recolhidos] = useState<Set<string>>(() => new Set())
   const [sortKey, setSortKey] = useState<SortKey>('realizado_ytd')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const filtroAtivo = temFiltroMeses(mesesFiltro)
   const usaCompromisso = insightUsaCompromissoVios(mesesFiltro, mesAtual)
+  const { data: planoContas } = useOpexPlanoContasNiveis()
+  const { data: dePara } = useOpexDeParaPorOrigem(ano)
 
   useEffect(() => {
     if (sortByVariacaoTrigger) {
@@ -325,6 +526,27 @@ export function OpexGruposTable({
     return list
   }, [grupos, soFixas, sortKey, sortDir, usaCompromisso])
 
+  /** Sem o plano de contas carregado, a tabela segue plana como antes. */
+  const blocos = useMemo(() => {
+    if (!planoContas?.length) return null
+    const sign = sortDir === 'asc' ? 1 : -1
+    return agruparGruposPorNivel1(lista, planoContas, dePara).sort((a, b) => {
+      const foraA = a.nivel1.codigo == null
+      const foraB = b.nivel1.codigo == null
+      if (foraA !== foraB) return foraA ? 1 : -1
+      return sign * compareBlocos(a, b, sortKey, usaCompromisso)
+    })
+  }, [lista, planoContas, dePara, sortKey, sortDir, usaCompromisso])
+
+  const toggleNivel1 = (chave: string) => {
+    setNivel1Recolhidos((prev) => {
+      const next = new Set(prev)
+      if (next.has(chave)) next.delete(chave)
+      else next.add(chave)
+      return next
+    })
+  }
+
   const referenciaMeta = referenciaGrupoMeta(orcamentoImportado, filtroAtivo)
   const variacaoLabel = usaCompromisso ? 'Variação (c/ VIOS)' : 'Variação'
   const pctLabel = usaCompromisso ? '% comprometido' : referenciaMeta.pctLabel
@@ -335,6 +557,26 @@ export function OpexGruposTable({
     : orcamentoImportado
       ? 7
       : 6
+  const valoresProps = { filtroAtivo, orcamentoImportado, usaCompromisso }
+
+  const renderGrupo = (g: OpexGrupoRow, indentado: boolean) => {
+    const expandido = aberto === g.grupo_conta
+    return (
+      <GrupoRow
+        key={g.grupo_conta}
+        grupo={g}
+        expandido={expandido}
+        onToggle={() => setAberto(expandido ? null : g.grupo_conta)}
+        indentado={indentado}
+        colSpanDetalhe={colSpanDetalhe}
+        ano={ano}
+        mesesFiltro={mesesFiltro}
+        planoFiltro={planoFiltro}
+        referenciaMeta={referenciaMeta}
+        {...valoresProps}
+      />
+    )
+  }
 
   return (
     <section id="opex-grupos-table" className="rounded-xl border border-slate-200/60 bg-white shadow-sm scroll-mt-6">
@@ -439,87 +681,24 @@ export function OpexGruposTable({
             </tr>
           </thead>
           <tbody>
-            {lista.map((g) => {
-              const expandido = aberto === g.grupo_conta
-              const compromisso = compromissoGrupo(g, usaCompromisso)
-              const variacao = variacaoGrupo(g, usaCompromisso)
-              return (
-                <Fragment key={g.grupo_conta}>
-                  <tr
-                    className="cursor-pointer border-b border-slate-50 transition-colors hover:bg-slate-50/80"
-                    onClick={() => setAberto(expandido ? null : g.grupo_conta)}
-                  >
-                    <td className="px-4 py-2.5 sm:px-5">
-                      <span className="flex items-center gap-2">
-                        {expandido ? (
-                          <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
-                        )}
-                        <span className="min-w-0">
-                          <span className="block font-medium text-slate-800">{g.grupo_conta}</span>
-                          <span className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] sm:hidden">
-                            <span className={OPEX_COLORS.realizado.text}>
-                              {formatCurrency(g.realizado_ytd)}
-                            </span>
-                            <span className={referenciaMeta.color}>
-                              {referenciaMeta.labelCurto} {formatCurrency(g.previsto_ano)}
-                            </span>
-                          </span>
-                        </span>
-                        {g.fixo && (
-                          <span
-                            className={cn(
-                              'hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold sm:inline',
-                              OPEX_COLORS.fixo.bg,
-                              OPEX_COLORS.fixo.text,
-                            )}
-                          >
-                            Fixa
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td className={cn('px-4 py-2.5 text-right tabular-nums', OPEX_COLORS.realizado.text)}>
-                      {formatCurrency(g.realizado_ytd)}
-                    </td>
-                    <td className={cn('hidden px-4 py-2.5 text-right tabular-nums sm:table-cell', referenciaMeta.color)}>
-                      {formatCurrency(g.previsto_ano)}
-                    </td>
-                    {orcamentoImportado && (
-                      <td className={cn('hidden px-4 py-2.5 text-right tabular-nums md:table-cell', OPEX_COLORS.previsto.text)}>
-                        {formatCurrency(g.previsto_vios)}
-                      </td>
-                    )}
-                    {!filtroAtivo && (
-                      <td className={cn('hidden px-4 py-2.5 text-right tabular-nums lg:table-cell', OPEX_COLORS.projetado.text)}>
-                        {formatCurrency(g.projetado_ano)}
-                      </td>
-                    )}
-                    <td className={cn('hidden px-4 py-2.5 text-right tabular-nums md:table-cell', variacaoClass(variacao))}>
-                      {formatCurrency(variacao)}
-                    </td>
-                    <td className="hidden px-4 py-2.5 text-center tabular-nums text-slate-500 md:table-cell">
-                      {pct(compromisso, g.previsto_ano)}
-                    </td>
-                  </tr>
-                  {expandido && (
-                    <tr>
-                      <td colSpan={colSpanDetalhe} className="p-0">
-                        <GrupoDetalhe
-                          ano={ano}
-                          grupo={g.grupo_conta}
-                          aliases={g.aliases}
-                          mesesFiltro={mesesFiltro}
-                          orcamentoImportado={orcamentoImportado}
-                          planoFiltro={planoFiltro}
-                        />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              )
-            })}
+            {blocos
+              ? blocos.map((bloco) => {
+                  const chave = nivel1Chave(bloco.nivel1)
+                  const recolhido = nivel1Recolhidos.has(chave)
+                  return (
+                    <Fragment key={`nivel1-${chave}`}>
+                      <Nivel1Row
+                        bloco={bloco}
+                        recolhido={recolhido}
+                        onToggle={() => toggleNivel1(chave)}
+                        referenciaMeta={referenciaMeta}
+                        {...valoresProps}
+                      />
+                      {!recolhido && bloco.grupos.map((g) => renderGrupo(g, true))}
+                    </Fragment>
+                  )
+                })
+              : lista.map((g) => renderGrupo(g, false))}
           </tbody>
         </table>
       </div>

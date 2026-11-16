@@ -33,7 +33,10 @@ import type {
   ReceitaMesRow,
   ReceitaRecebidoDepartamentoRow,
 } from '../types/receita.types'
-import type { ReceitaInadimplenciaDepartamentoMes } from '../types/receitaInadimplencia.types'
+import type {
+  ReceitaInadimplenciaDepartamentoMes,
+  ReceitaInadimplenciaEvolucaoMes,
+} from '../types/receitaInadimplencia.types'
 import {
   RECEITA_CHART_AXIS,
   RECEITA_CHART_LABEL,
@@ -42,6 +45,7 @@ import {
   RECEITA_DEPARTAMENTO_CORES,
   RECEITA_DEPARTAMENTO_LABELS,
   mesAbrev,
+  mesMaxDisponivelInadimplencia,
 } from '../constants'
 import { RECEITA_SECTION_IDS } from '../utils/receitaNav'
 import { ReceitaAreaPrevistoGrupoSheet } from './ReceitaAreaPrevistoGrupoSheet'
@@ -68,12 +72,19 @@ import {
 } from '../utils/receitaColunasChart'
 import { receitaService } from '../services/receitaService'
 import { receitaInadimplenciaService } from '../services/receitaInadimplenciaService'
+import { useReceitaInadimplencia } from '../hooks/useReceitaInadimplencia'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import {
   buildReceitaMetaAreaSlices,
   findMetaAreaSlice,
   type ReceitaMetaAreaSlice,
 } from '../utils/departamentoAreaCores'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+import {
+  explicarGraficoComparativo,
+  explicarGraficoComparativoAreaLinha,
+  explicarGraficoComparativoPorArea,
+} from '../fenix/receitaGraficosFenix'
 
 const SERIES = [
   {
@@ -806,13 +817,13 @@ export function ReceitaComparativoChart({
   })
 
   const inadEvolucaoEnabled = !porAreaMode || areaLinhaSelecionada != null
+  const mesMaxInad = mesMaxDisponivelInadimplencia(ano)
 
-  const { data: inadEvolucao } = useQuery({
-    queryKey: ['receita-inadimplencia', 'comparativo-evolucao', ano],
-    queryFn: () =>
-      receitaInadimplenciaService.fetchDashboard({ ano, mesInicio: 1, mesFim: 12 }),
-    enabled: inadEvolucaoEnabled,
-  })
+  const { data: inadEvolucao } = useReceitaInadimplencia(
+    inadEvolucaoEnabled ? ano : undefined,
+    1,
+    mesMaxInad > 0 ? mesMaxInad : 1,
+  )
 
   const { data: inadSelecoesMes } = useQuery({
     queryKey: ['receita-inadimplencia', 'selecoes-mes-chart', ano],
@@ -820,18 +831,28 @@ export function ReceitaComparativoChart({
     enabled: !porAreaMode,
   })
 
+  const mesesGrupoAbertos = useMemo(() => {
+    if (porAreaMode || !inadEvolucao) return [] as number[]
+    const evolucao = inadEvolucao.evolucao as ReceitaInadimplenciaEvolucaoMes[]
+    const abertos = new Set(
+      evolucao.filter((m) => !m.congelado).map((m) => m.mes),
+    )
+    const selecoes = (inadSelecoesMes ?? []) as Array<{ mes: number }>
+    return selecoes.map((s) => s.mes).filter((mes) => abertos.has(mes))
+  }, [porAreaMode, inadEvolucao, inadSelecoesMes])
+
   const { data: inadGruposPorMes } = useQuery({
-    queryKey: ['receita-inadimplencia', 'grupos-mes-chart', ano, inadSelecoesMes],
+    queryKey: ['receita-inadimplencia', 'grupos-mes-chart', ano, mesesGrupoAbertos],
     queryFn: async () => {
       const porMes: Record<number, Awaited<ReturnType<typeof receitaInadimplenciaService.fetchGruposMes>>> = {}
       await Promise.all(
-        (inadSelecoesMes ?? []).map(async ({ mes }: { mes: number }) => {
+        mesesGrupoAbertos.map(async (mes) => {
           porMes[mes] = await receitaInadimplenciaService.fetchGruposMes(ano, mes)
         }),
       )
       return porMes
     },
-    enabled: !porAreaMode && (inadSelecoesMes?.length ?? 0) > 0,
+    enabled: mesesGrupoAbertos.length > 0,
   })
 
   const inadMesesCongelados = useMemo(() => {
@@ -1161,6 +1182,55 @@ export function ReceitaComparativoChart({
 
   const porAreaAtivo = porAreaMode
 
+  // Fênix: explica o mês (ou a área) sob o mouse, com o mesmo array que o gráfico desenha.
+  const fenixGrafico = useFenixGrafico('receita.grafico.comparativo', (ponto) => {
+    if (porAreaMode && areaLinhaSelecionada && areaLinhaAtual) {
+      return explicarGraficoComparativoAreaLinha(
+        {
+          ano,
+          area: { label: areaLinhaAtual.label, pct: areaLinhaAtual.pct },
+          data: areaLinhaData,
+          rows: rowsGrafico,
+          periodo: semAreaPeriodoLabel,
+          resultadoMode: resultadoAtivo,
+          apresentacao: apresentacaoMode,
+        },
+        ponto,
+      )
+    }
+    if (porAreaMode) {
+      return explicarGraficoComparativoPorArea(
+        {
+          ano,
+          data: areaGapData,
+          periodo: semAreaPeriodoLabel,
+          tributario: areaGapTributarioRecebido,
+          semDepartamento: areaGapRecebidoSemDepartamento > 1 ? areaGapRecebidoSemDepartamento : 0,
+          resultadoMode: resultadoAtivo,
+          apresentacao: apresentacaoMode,
+        },
+        ponto,
+      )
+    }
+    const areaPct = percentMode && areaLinhaAtual ? areaLinhaAtual : null
+    return explicarGraficoComparativo(
+      {
+        ano,
+        rows: rowsGrafico,
+        data: chartData,
+        baseReais: areaPct
+          ? areaLinhaData.map((p) => ({ ...p, projetadoBaseAbril: null, projetadoReal: null }))
+          : rawChartData,
+        percentMode,
+        resultadoMode: resultadoAtivo,
+        visiveis: [...visibleSeries],
+        area: areaPct ? { label: areaPct.label, pct: areaPct.pct } : null,
+        apresentacao: apresentacaoMode,
+      },
+      ponto,
+    )
+  })
+
   return (
     <div className={apresentacaoMode ? undefined : 'space-y-6'}>
       <section
@@ -1389,7 +1459,7 @@ export function ReceitaComparativoChart({
           </div>
         )}
 
-        <div ref={chartExportRef} className="flex flex-col">
+        <div ref={chartExportRef} className="flex flex-col" data-fenix={fenixGrafico.fenixId}>
           {porAreaAtivo ? (
           areaLinhaSelecionada != null ? (
           deptLoading || previstoDeptLoading || inadDeptLoading || (inadEvolucaoEnabled && !inadEvolucao) ? (
@@ -1423,6 +1493,8 @@ export function ReceitaComparativoChart({
             <ComposedChart
               data={areaLinhaData}
               margin={RECEITA_CHART_LAYOUT.marginWithPointLabels}
+              onMouseMove={fenixGrafico.onMouseMove}
+              onMouseLeave={fenixGrafico.onMouseLeave}
             >
               <defs>
                 <linearGradient id="areaLinhaPrevistoGradient" x1="0" y1="0" x2="0" y2="1">
@@ -1612,7 +1684,14 @@ export function ReceitaComparativoChart({
           <>
           <div data-chart-plot className="h-[300px] min-h-[300px] w-full min-w-0">
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
-            <ComposedChart data={areaGapData} margin={{ left: 4, right: 12, top: 24, bottom: 4 }} barCategoryGap="22%" barGap={2}>
+            <ComposedChart
+              data={areaGapData}
+              margin={{ left: 4, right: 12, top: 24, bottom: 4 }}
+              barCategoryGap="22%"
+              barGap={2}
+              onMouseMove={fenixGrafico.onMouseMove}
+              onMouseLeave={fenixGrafico.onMouseLeave}
+            >
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
 
               <XAxis
@@ -1799,6 +1878,8 @@ export function ReceitaComparativoChart({
             <ComposedChart
               data={chartData}
               margin={{ ...RECEITA_CHART_LAYOUT.marginWithPointLabels, right: 28 }}
+              onMouseMove={fenixGrafico.onMouseMove}
+              onMouseLeave={fenixGrafico.onMouseLeave}
             >
               <defs>
                 <linearGradient id="receitaRecebidoGradient" x1="0" y1="0" x2="0" y2="1">

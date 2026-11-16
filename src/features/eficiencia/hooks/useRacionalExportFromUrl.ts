@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
+import { useAuth } from '@/lib/AuthContext'
+import { isEficienciaSomenteProtocolos } from '@/lib/moduleAccess'
+import { EFICIENCIA_INDICADORES_PROTOCOLOS } from '../config/eficienciaTabs'
 import { eficienciaService } from '../services/eficienciaService'
+import { useEficienciaAccess } from './useEficienciaAccess'
 import { exportRacionalExcel } from '../utils/racionalExport'
 import { formatRacionalPeriodoLabel } from '../utils/racionalQuery'
 import { MESES_EFICIENCIA } from '../constants'
@@ -44,6 +48,11 @@ function stripRacionalExportFromUrl(): void {
  */
 export function useRacionalExportFromUrl(authReady: boolean): void {
   const started = useRef(false)
+  const { role, moduleAccess } = useAuth()
+  const somenteProtocolos = isEficienciaSomenteProtocolos(role, moduleAccess)
+  const access = useEficienciaAccess()
+  // Visão “somente área”: o racional só sai da área da pessoa.
+  const areaTravada = access.profile === 'somente_area' ? (access.lockedArea ?? '') : null
 
   useEffect(() => {
     if (!authReady || started.current) return
@@ -56,9 +65,24 @@ export function useRacionalExportFromUrl(authReady: boolean): void {
     stripRacionalExportFromUrl()
     clearPersistedRacionalExport()
 
+    if (
+      somenteProtocolos &&
+      !EFICIENCIA_INDICADORES_PROTOCOLOS.includes(
+        parsed.indicador as (typeof EFICIENCIA_INDICADORES_PROTOCOLOS)[number],
+      )
+    ) {
+      toast.error('Este racional não está liberado para o seu acesso.')
+      return
+    }
+
     const { indicador, ano, mes, areaKey } = parsed
     const mesFiltro = mesFiltroForIndicador(indicador, mes)
     const area = receitaAreaKeyToEficienciaArea(areaKey)
+
+    if (areaTravada != null && area !== areaTravada) {
+      toast.error('Este racional é de outra área e não está liberado para o seu acesso.')
+      return
+    }
 
     const titulo = RACIONAL_EXPORT_TITULO[indicador] ?? indicador
     const periodoLabel =
@@ -89,7 +113,7 @@ export function useRacionalExportFromUrl(authReady: boolean): void {
         toast.error('Não foi possível baixar o racional. Tente pelo SIOE.', { id: toastId })
       }
     })()
-  }, [authReady])
+  }, [authReady, somenteProtocolos, areaTravada])
 }
 
 /** Compat — captura antecipada está em main.tsx; mantido para chamadas legadas. */

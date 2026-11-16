@@ -10,6 +10,10 @@ import { useTreinamentos } from '../hooks/useEficiencia'
 import { useEficienciaAreaFilter } from '../hooks/useEficienciaAreaFilter'
 import { filtrarPorResponsavel } from '../utils/responsavelMatch'
 import { itensDaEquipe } from '../utils/treinamentosDedupe'
+import {
+  aplicarMinutosTreinamentoPeriodo,
+  filtrarItensTreinamentoPorFiltro,
+} from '../utils/treinamentoPeriodoFiltro'
 import { formatMinutosHeatLabel } from '../utils/desenvolvimentoEquipeHeatCell'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
@@ -22,6 +26,16 @@ import {
   type TreinamentosVisao,
 } from './TreinamentosVisaoToggle'
 import { OverviewRacionalButton, type HeatCell } from './OverviewKpiHeatRow'
+import {
+  explicarTreinamentosAtivos,
+  explicarTreinamentosDesenvolvimento,
+  explicarTreinamentosHoras,
+  regrasPessoaJuridico,
+  rotuloPeriodoEficiencia,
+  TELA_EFICIENCIA_PESSOAS,
+  type DesenvolvimentoFenixCtx,
+  type TreinamentoPessoaFenix,
+} from '../fenix/eficienciaPessoasFinanceiroFenix'
 
 function formatHorasKpi(minutos: number): string {
   return `${formatMinutosHeatLabel(minutos)}h`
@@ -49,23 +63,49 @@ export function TreinamentosTab({
   const [visao, setVisao] = useState<TreinamentosVisao>('equipe')
   const porColaboradorRef = useRef<HTMLDivElement>(null)
   const { anual, porPessoa, itens, sessoesFuturas, loading } = useTreinamentos(ano, area)
-  const porPessoaFiltrado = filtrarPorResponsavel(porPessoa, (p) => p.colaborador, responsavel)
+  // Resultado no Jurídico continua o ano inteiro. Mês, semana e De/Até recortam as horas.
+  const filtroPeriodo: MesFiltroEficiencia = mesFiltro === 'resultado' ? null : mesFiltro
+  const itensPeriodo = useMemo(
+    () => filtrarItensTreinamentoPorFiltro(itens, filtroPeriodo, ano),
+    [itens, filtroPeriodo, ano],
+  )
+  const sessoesPeriodo = useMemo(
+    () => filtrarItensTreinamentoPorFiltro(sessoesFuturas, filtroPeriodo, ano),
+    [sessoesFuturas, filtroPeriodo, ano],
+  )
+  const porPessoaPeriodo = useMemo(
+    () =>
+      filtroPeriodo == null
+        ? porPessoa
+        : aplicarMinutosTreinamentoPeriodo(porPessoa, itensPeriodo),
+    [filtroPeriodo, porPessoa, itensPeriodo],
+  )
+  const porPessoaFiltrado = filtrarPorResponsavel(
+    porPessoaPeriodo,
+    (p) => p.colaborador,
+    responsavel,
+  )
   const itensFiltrados = useMemo(
     () =>
       itensDaEquipe(
-        filtrarPorResponsavel(itens, (i) => i.colaborador, responsavel),
+        filtrarPorResponsavel(itensPeriodo, (i) => i.colaborador, responsavel),
         porPessoaFiltrado,
       ),
-    [itens, porPessoaFiltrado, responsavel],
+    [itensPeriodo, porPessoaFiltrado, responsavel],
   )
-  const mesRacional: MesFiltroEficiencia =
-    mesFiltro === 'resultado' ? null : mesFiltro
+  const mesRacional: MesFiltroEficiencia = filtroPeriodo
 
   const pessoaUnica =
     responsavel && porPessoaFiltrado.length === 1 ? porPessoaFiltrado[0] : null
+  const minutosPeriodo = porPessoaFiltrado.reduce(
+    (s, p) => s + Number(p.minutos_lancados ?? 0),
+    0,
+  )
   const minutosLancados = pessoaUnica
     ? pessoaUnica.minutos_lancados
-    : (anual?.minutos_lancados ?? null)
+    : filtroPeriodo == null
+      ? (anual?.minutos_lancados ?? null)
+      : minutosPeriodo
   const metaMinutos = pessoaUnica
     ? Number(pessoaUnica.meta_minutos ?? EFICIENCIA_META_TREINAMENTO_MINUTOS)
     : (anual?.meta_minutos ?? null)
@@ -75,9 +115,36 @@ export function TreinamentosTab({
       ? (minutosLancados / metaMinutos) * 100
       : pessoaUnica
         ? 0
-        : (anual?.pct_atingimento ?? null)
+        : filtroPeriodo == null
+          ? (anual?.pct_atingimento ?? null)
+          : null
   const abaixoMeta = pct != null && pct < 100
   const pctEquipe = anual?.pct_atingimento ?? null
+  const periodoLabel = rotuloPeriodoEficiencia(filtroPeriodo, ano)
+
+  const paraFenix = (p: (typeof porPessoaPeriodo)[number]): TreinamentoPessoaFenix => ({
+    colaborador: p.colaborador,
+    minutos: Number(p.minutos_lancados ?? 0),
+    metaMinutos: p.meta_minutos != null ? Number(p.meta_minutos) : null,
+    admissao: p.admissao ?? null,
+  })
+  const fenixCtx = (): DesenvolvimentoFenixCtx => ({
+    ano,
+    area,
+    periodo: periodoLabel,
+    recortePeriodo: filtroPeriodo != null,
+    resultadoAnoInteiro: mesFiltro === 'resultado',
+    responsavel,
+    pessoa: pessoaUnica ? { ...paraFenix(pessoaUnica), metaMinutos: metaMinutos } : null,
+    minutos: minutosLancados != null ? Number(minutosLancados) : null,
+    metaMinutos: metaMinutos != null ? Number(metaMinutos) : null,
+    pct,
+    pctEquipe,
+    pessoasAtivas,
+    equipe: porPessoaPeriodo.map(paraFenix),
+    somadas: porPessoaFiltrado.map(paraFenix),
+    itens: itensFiltrados,
+  })
 
   return (
     <div className="space-y-5">
@@ -98,7 +165,11 @@ export function TreinamentosTab({
         <EficienciaKpiCard
           title="Desenvolvimento Contínuo da Equipe"
           value={pct != null ? formatPercent(pct) : '—'}
-          hint="Horas realizadas ÷ meta · ano inteiro"
+          hint={
+            filtroPeriodo == null
+              ? 'Horas realizadas ÷ meta · ano inteiro'
+              : 'Horas do período ÷ meta do ano'
+          }
           meta="100,00%"
           atingiuMeta={pct != null ? !abaixoMeta : null}
           icon={GraduationCap}
@@ -107,6 +178,10 @@ export function TreinamentosTab({
           pessoaNome={responsavel}
           currentPct={pessoaUnica ? pct : null}
           vsEquipePct={pessoaUnica ? pctEquipe : null}
+          fenix={{
+            chave: 'eficiencia.desenvolvimento.atingimento',
+            explicar: () => explicarTreinamentosDesenvolvimento(fenixCtx()),
+          }}
         />
         <EficienciaKpiCard
           title="Horas Realizadas"
@@ -124,6 +199,10 @@ export function TreinamentosTab({
           accentClass="bg-sky-100 text-sky-700"
           loading={loading}
           pessoaNome={responsavel}
+          fenix={{
+            chave: 'eficiencia.desenvolvimento.horas',
+            explicar: () => explicarTreinamentosHoras(fenixCtx()),
+          }}
         />
         <EficienciaKpiCard
           title="Colaboradores Ativos"
@@ -133,6 +212,10 @@ export function TreinamentosTab({
           accentClass="bg-violet-100 text-violet-700"
           loading={loading}
           pessoaNome={responsavel}
+          fenix={{
+            chave: 'eficiencia.desenvolvimento.ativos',
+            explicar: () => explicarTreinamentosAtivos(fenixCtx()),
+          }}
         />
       </div>
 
@@ -158,13 +241,20 @@ export function TreinamentosTab({
         className="rounded-xl bg-white"
       >
         {visao === 'futuros' ? (
-          <TreinamentosFuturosCards sessoes={sessoesFuturas} loading={loading} />
+          <TreinamentosFuturosCards sessoes={sessoesPeriodo} loading={loading} />
         ) : visao === 'equipe' ? (
           <TreinamentosPessoaCards
             porPessoa={porPessoaFiltrado}
             itens={itensFiltrados}
             loading={loading}
             mostrarBannerDuplicados={area != null}
+            fenix={{
+              tela: TELA_EFICIENCIA_PESSOAS.desenvolvimento,
+              ano,
+              periodo: periodoLabel,
+              regras: regrasPessoaJuridico(filtroPeriodo != null),
+              fonteTecnica: 'eficiencia_treinamentos_por_pessoa (meta e horas) · sp_treinamentos_presenca',
+            }}
           />
         ) : (
           <TreinamentosCursoCards

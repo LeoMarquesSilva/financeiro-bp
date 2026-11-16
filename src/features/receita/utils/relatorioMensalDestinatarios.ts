@@ -36,7 +36,7 @@ export const GERENTES_AREA_SUGERIDOS: GerenteSugerido[] = [
     email: 'daniel@bismarchipires.com.br',
   },
   {
-    area_key: 'trabalhista',
+    area_key: 'recuperacao_de_credito',
     nome: 'Renato Vallim',
     email: 'renato@bismarchipires.com.br',
   },

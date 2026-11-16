@@ -14,6 +14,7 @@ import { ReceitaKpis } from '../components/ReceitaKpis'
 import { ReceitaGestaoAVistaSection } from '../components/ReceitaGestaoAVistaSection'
 import { ReceitaInadimplenciaSection } from '../components/ReceitaInadimplenciaSection'
 import { ReceitaPageMenu } from '../components/ReceitaPageMenu'
+import { ReceitaResultadoCaixaSection } from '../components/ReceitaResultadoCaixaSection'
 import { PLANOS_CONTAS_INCLUIDOS_COTA, RECEITA_DEPARTAMENTO_CORES } from '../constants'
 import {
   RECEITA_SECTION_IDS,
@@ -183,6 +184,10 @@ export function ReceitaPage() {
           </div>
         </>
       )}
+
+      <div id={RECEITA_SECTION_IDS.custos} className="scroll-mt-36">
+        <ReceitaResultadoCaixaSection ano={metas.ano} />
+      </div>
 
       <details className="rounded-xl border border-slate-200/60 bg-slate-50/80 px-4 py-3 text-sm text-slate-600 shadow-sm">
         <summary className="cursor-pointer font-medium text-slate-700">

@@ -60,11 +60,29 @@ export const NAV_ACCESS_ITEMS: NavAccessItem[] = [
     moduleKey: 'opex',
   },
   {
+    to: '/financeiro/dl',
+    label: 'DL',
+    // Remuneração de sócios e gestores: só admin (RLS também restringe).
+    roles: ['admin'],
+  },
+  {
+    to: '/financeiro/planejamento-2027',
+    label: 'Planejamento 2027',
+    roles: ['admin', 'financeiro'],
+  },
+  {
     to: '/financeiro/eficiencia',
     label: 'Eficiência Operacional',
     // Resultado Metas (jurídico). Coordenador precisa do checkbox — não herda via role.
     roles: ['admin'],
     moduleKey: 'eficiencia',
+  },
+  {
+    to: '/financeiro/timesheet',
+    label: 'Timesheet',
+    // Admin vê todas as áreas. Coordenador entra pelo perfil e fica na área dele.
+    roles: ['admin'],
+    moduleKey: 'timesheet',
   },
   {
     to: '/financeiro/operacoes-legais',

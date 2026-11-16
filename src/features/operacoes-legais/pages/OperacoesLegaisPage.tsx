@@ -274,9 +274,7 @@ export function OperacoesLegaisPage() {
               onChange={setMesFiltro}
               showResultado
               resultadoMode="ytd"
-              showDiaPicker={
-                tab !== 'overview' && tab !== 'treinamentos' && tab !== 'turnover'
-              }
+              showDiaPicker={tab !== 'overview' && tab !== 'turnover'}
               ano={ano}
               trailing={
                 canVerApresentacao ? (

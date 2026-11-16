@@ -226,6 +226,7 @@ export function MarketingTab() {
             insights={accountInsights}
             demographics={data?.demographics ?? []}
             accountHistory={accountHistory.length ? accountHistory : data?.accountHistory ?? []}
+            fenix={{ range, rangeMeta: range, comparacao: rangeLabel(previousRange) }}
           />
         </TabsContent>
         <TabsContent value="posts" className="mt-5">

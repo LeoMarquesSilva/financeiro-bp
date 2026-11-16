@@ -1,8 +1,9 @@
 import type { AppRole } from '@/lib/database.types'
 import type { ColaboradorNivelHierarquico } from '@/features/colaboradores/types'
+import { isEficienciaSomenteArea, isEficienciaSomenteProtocolos } from '@/lib/moduleAccess'
 import { AREAS_EFICIENCIA, EFICIENCIA_AREA_OPS_LEGAIS } from '../constants'
 
-export type EficienciaAccessProfile = 'admin' | 'socio_area' | 'coordenador'
+export type EficienciaAccessProfile = 'admin' | 'socio_area' | 'coordenador' | 'somente_area'
 
 export type EficienciaAccess = {
   profile: EficienciaAccessProfile
@@ -14,6 +15,8 @@ export type EficienciaAccess = {
   canFilterAreas: boolean
   /** Área fixa do coordenador (canônica Eficiência), ou null. */
   lockedArea: string | null
+  /** Overview também travado na área (sem “Todas as áreas”). */
+  overviewSomenteArea: boolean
 }
 
 type ResolveInput = {
@@ -22,6 +25,7 @@ type ResolveInput = {
   teamMemberArea: string | null | undefined
   nivelHierarquico: ColaboradorNivelHierarquico | null | undefined
   colaboradorArea: string | null | undefined
+  moduleAccess?: readonly string[]
 }
 
 /**
@@ -60,7 +64,22 @@ export function normalizeAreaEficiencia(area: string | null | undefined): string
   return AREAS_SET.has(aliased) ? aliased : null
 }
 
-function resolveLockedArea(input: ResolveInput): string | null {
+/**
+ * Área do jurídico usada para travar o dashboard da pessoa.
+ * Ordem: lista de coordenadores por e-mail → área do colaborador (RH) → área do usuário.
+ * Operações Legais volta null (tem dashboard próprio).
+ */
+export function resolveAreaEficienciaPessoa(input: {
+  email: string | null | undefined
+  colaboradorArea: string | null | undefined
+  teamMemberArea: string | null | undefined
+}): string | null {
+  return resolveLockedArea(input)
+}
+
+function resolveLockedArea(
+  input: Pick<ResolveInput, 'email' | 'colaboradorArea' | 'teamMemberArea'>,
+): string | null {
   const local = emailLocalPart(input.email)
   const fromEmail =
     local && COORDENADORES_EFICIENCIA_POR_EMAIL[local]
@@ -98,8 +117,34 @@ export function isCoordenadorUsuario(input: {
  * - Sócio de área (sócio/gerente RH): todas as abas e áreas; sem ações admin.
  * - Coordenador: Overview com “Todas as áreas” + área dele; abas de detalhe
  *   só da própria área; sem ações admin.
+ * - Somente área: todas as abas e o Overview, travados na área da pessoa.
+ * - Somente protocolos: indicadores de protocolo, travados na área da pessoa.
  */
 export function resolveEficienciaAccess(input: ResolveInput): EficienciaAccess {
+  if (
+    isEficienciaSomenteProtocolos(input.role, input.moduleAccess ?? [])
+  ) {
+    return {
+      profile: 'coordenador',
+      canUseIndicadoresAdmin: false,
+      canSeeAllTabs: false,
+      canFilterAreas: false,
+      lockedArea: resolveLockedArea(input),
+      overviewSomenteArea: true,
+    }
+  }
+
+  if (isEficienciaSomenteArea(input.role, input.moduleAccess ?? [])) {
+    return {
+      profile: 'somente_area',
+      canUseIndicadoresAdmin: false,
+      canSeeAllTabs: true,
+      canFilterAreas: false,
+      lockedArea: resolveLockedArea(input),
+      overviewSomenteArea: true,
+    }
+  }
+
   if (input.role === 'admin') {
     return {
       profile: 'admin',
@@ -107,6 +152,7 @@ export function resolveEficienciaAccess(input: ResolveInput): EficienciaAccess {
       canSeeAllTabs: true,
       canFilterAreas: true,
       lockedArea: null,
+      overviewSomenteArea: false,
     }
   }
 
@@ -122,6 +168,7 @@ export function resolveEficienciaAccess(input: ResolveInput): EficienciaAccess {
       canSeeAllTabs: true,
       canFilterAreas: false,
       lockedArea: resolveLockedArea(input),
+      overviewSomenteArea: false,
     }
   }
 
@@ -132,5 +179,6 @@ export function resolveEficienciaAccess(input: ResolveInput): EficienciaAccess {
     canSeeAllTabs: true,
     canFilterAreas: true,
     lockedArea: null,
+    overviewSomenteArea: false,
   }
 }

@@ -15,6 +15,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+import type { MarketingFenixContexto } from '../fenix/marketingFenix'
+import {
+  explicarGraficoConta,
+  explicarGraficoFormato,
+  explicarGraficoTendencia,
+} from '../fenix/marketingGraficosFenix'
 
 const compact = (value: number) =>
   new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
@@ -34,14 +41,32 @@ const monthLabel = (value: string) => {
 export function MarketingPerformanceTrendChart({
   data,
   reachGoal,
+  fenix,
 }: {
-  data: Array<{ label: string; reach: number; engagementRate: number; posts: number }>
+  data: Array<{ label: string; reach: number; engagementRate: number; posts: number; interactions?: number }>
   reachGoal?: number
+  /** Contexto para o Fênix explicar o ponto (período e agrupamento do gráfico). */
+  fenix?: { contexto: MarketingFenixContexto; agrupamento: 'dia' | 'mes' }
 }) {
+  const g = useFenixGrafico(
+    fenix ? 'opslegais.marketing.grafico.tendencia' : undefined,
+    fenix
+      ? (ponto) =>
+          explicarGraficoTendencia(
+            { contexto: fenix.contexto, data, agrupamento: fenix.agrupamento, metaPorPonto: reachGoal ?? 0 },
+            ponto,
+          )
+      : undefined,
+  )
   return (
-    <div className="h-72 w-full">
+    <div className="h-72 w-full" data-fenix={g.fenixId}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
+        <ComposedChart
+          data={data}
+          margin={{ top: 12, right: 12, left: -12, bottom: 0 }}
+          onMouseMove={g.onMouseMove}
+          onMouseLeave={g.onMouseLeave}
+        >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
           <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748b' }} minTickGap={24} />
           <YAxis yAxisId="reach" tickFormatter={compact} tick={{ fontSize: 11, fill: '#64748b' }} />
@@ -109,13 +134,25 @@ export function MarketingTrendChart({
 
 export function MarketingFormatChart({
   data,
+  fenix,
 }: {
-  data: Array<{ format: string; posts: number; engagementRate: number }>
+  data: Array<{ format: string; posts: number; engagementRate: number; reach?: number; interactions?: number }>
+  /** Contexto para o Fênix explicar o formato apontado. */
+  fenix?: { contexto: MarketingFenixContexto }
 }) {
+  const g = useFenixGrafico(
+    fenix ? 'opslegais.marketing.grafico.formato' : undefined,
+    fenix ? (ponto) => explicarGraficoFormato({ contexto: fenix.contexto, data }, ponto) : undefined,
+  )
   return (
-    <div className="h-64 w-full">
+    <div className="h-64 w-full" data-fenix={g.fenixId}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 10, left: -18, bottom: 0 }}>
+        <BarChart
+          data={data}
+          margin={{ top: 8, right: 10, left: -18, bottom: 0 }}
+          onMouseMove={g.onMouseMove}
+          onMouseLeave={g.onMouseLeave}
+        >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
           <XAxis dataKey="format" tick={{ fontSize: 11, fill: '#64748b' }} />
           <YAxis yAxisId="posts" tick={{ fontSize: 11, fill: '#64748b' }} allowDecimals={false} />
@@ -136,13 +173,36 @@ export function MarketingFormatChart({
 
 export function MarketingAccountChart({
   data,
+  fenix,
 }: {
-  data: Array<{ date: string; reach: number; views: number; total_interactions: number }>
+  data: Array<{
+    date: string
+    reach: number
+    views: number
+    total_interactions: number
+    accounts_engaged?: number
+    likes?: number
+    comments?: number
+    saves?: number
+    shares?: number
+    replies?: number
+  }>
+  /** Contexto para o Fênix explicar o dia apontado. */
+  fenix?: { contexto: MarketingFenixContexto }
 }) {
+  const g = useFenixGrafico(
+    fenix ? 'opslegais.marketing.grafico.conta' : undefined,
+    fenix ? (ponto) => explicarGraficoConta({ contexto: fenix.contexto, data }, ponto) : undefined,
+  )
   return (
-    <div className="h-72 w-full">
+    <div className="h-72 w-full" data-fenix={g.fenixId}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
+        <LineChart
+          data={data}
+          margin={{ top: 8, right: 12, left: -12, bottom: 0 }}
+          onMouseMove={g.onMouseMove}
+          onMouseLeave={g.onMouseLeave}
+        >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
           <XAxis dataKey="date" tickFormatter={(value) => String(value).slice(5).split('-').reverse().join('/')} tick={{ fontSize: 10, fill: '#64748b' }} minTickGap={24} />
           <YAxis tickFormatter={compact} tick={{ fontSize: 11, fill: '#64748b' }} />

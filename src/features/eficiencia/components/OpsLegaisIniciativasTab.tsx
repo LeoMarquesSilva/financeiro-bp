@@ -19,9 +19,11 @@ import { filtrarSubtarefasPorResponsavel, formatIniciativasBi, subtarefasRealiza
 import { formatPercent } from '@/shared/utils/format'
 import {
   isDiaFiltro,
+  isPeriodoCurtoFiltro,
   isSemanaFiltro,
   mesNoFiltro,
   rangePeriodoFiltro,
+  rangeSemanaSegDomPassada,
   type MesFiltroEficiencia,
 } from '../constants'
 import { eficienciaService } from '../services/eficienciaService'
@@ -39,7 +41,19 @@ type Props = {
   mesFiltro: MesFiltroEficiencia
 }
 
-type PainelView = 'concluidos' | 'semana' | 'andamento'
+type SemanaView = 'semana_atual' | 'semana'
+type PainelView = 'concluidos' | SemanaView | 'andamento'
+
+/** Entregas de uma semana, no mesmo formato dos campos de semana do painel. */
+type SemanaEntregas = Pick<OpsLegaisIniciativasPainel, 'semana' | 'semana_por_tarefa' | 'semana_inicio' | 'semana_fim'>
+
+function isSemanaView(view: PainelView): view is SemanaView {
+  return view === 'semana' || view === 'semana_atual'
+}
+
+function rotuloSemana(view: SemanaView): string {
+  return view === 'semana_atual' ? 'nesta semana' : 'na semana passada'
+}
 
 const STATUS_DOT: Record<string, string> = {
   concluido: '#059669',
@@ -362,7 +376,7 @@ function PainelResumoLinha({
     )
   }
 
-  if (view === 'semana') {
+  if (isSemanaView(view)) {
     if (semanaRows.length > 0) {
       const { total, baixados, parcial, subs } = summarizeSemana(semanaRows)
       const inicio = painel?.semana_inicio ? formatDataBr(painel.semana_inicio) : ''
@@ -370,7 +384,7 @@ function PainelResumoLinha({
       const intervalo = inicio && fim ? ` (${inicio} – ${fim})` : ''
       return (
         <>
-          <b className="text-slate-700">{total}</b> com realização na semana passada
+          <b className="text-slate-700">{total}</b> com realização {rotuloSemana(view)}
           {intervalo}
           {baixados > 0 ? (
             <>
@@ -402,7 +416,7 @@ function PainelResumoLinha({
     const intervalo = inicio && fim ? ` (${inicio} – ${fim})` : ''
     return (
       <>
-        <b className="text-slate-700">{qtd}</b> {qtd === 1 ? 'item' : 'itens'} na semana passada
+        <b className="text-slate-700">{qtd}</b> {qtd === 1 ? 'item' : 'itens'} {rotuloSemana(view)}
         {intervalo}
         {subs > 0 ? (
           <>
@@ -436,6 +450,7 @@ type ProjetosRealizadosPanelProps = {
   loading: boolean
   mesFiltroAtivo: boolean
   painel: OpsLegaisIniciativasPainel | undefined
+  semanas: Record<SemanaView, SemanaEntregas> | undefined
 }
 
 function ProjetosRealizadosPanel(props: ProjetosRealizadosPanelProps) {
@@ -444,22 +459,23 @@ function ProjetosRealizadosPanel(props: ProjetosRealizadosPanelProps) {
 
 function ProjetosRealizadosContent({
   loading,
-  painel,
+  painel: painelBase,
   mesFiltroAtivo,
+  semanas,
 }: ProjetosRealizadosPanelProps) {
   const [view, setView] = useState<PainelView>('concluidos')
   const [responsavelAtivo, setResponsavelAtivo] = useState<string | null>(null)
   const resolveNome = useIniciativasPessoaNome()
+  // Nas visões de semana, os campos de semana do painel vêm da semana escolhida.
+  const semanaAtiva = isSemanaView(view) ? semanas?.[view] : undefined
+  const painel = painelBase && semanaAtiva ? { ...painelBase, ...semanaAtiva } : painelBase
   const concluidosLista = painel?.concluidos ?? []
   const concluidosResumo = useMemo(() => summarizeConcluidos(concluidosLista), [concluidosLista])
   const qtdConcluidos = concluidosResumo.total
   const qtdAndamento = painel?.andamento.length ?? painel?.projetos_em_andamento ?? 0
-  const semanaRows = painel?.semana_por_tarefa?.length ? painel.semana_por_tarefa : []
+  const semanaRows = semanaAtiva?.semana_por_tarefa ?? []
 
-  const qtdSemana =
-    semanaRows.length > 0 ? semanaRows.length : (painel?.semana.length ?? 0)
-
-  const subtarefasVisao = subtarefasRealizadasDaVisao(painel, view)
+  const subtarefasVisao = subtarefasRealizadasDaVisao(painel, isSemanaView(view) ? 'semana' : view)
   const subtarefasFiltradas = filtrarSubtarefasPorResponsavel(subtarefasVisao, responsavelAtivo, resolveNome)
   const subtarefasIds = new Set(subtarefasFiltradas.map((tarefa) => tarefa.id))
   const filtrarProjetos = (rows: OpsLegaisIniciativasProjeto[]) => responsavelAtivo === null
@@ -480,9 +496,15 @@ function ProjetosRealizadosContent({
       icon: CheckCircle2,
     },
     {
+      id: 'semana_atual',
+      label: 'Essa semana',
+      count: semanas?.semana_atual.semana_por_tarefa?.length ?? 0,
+      icon: CalendarDays,
+    },
+    {
       id: 'semana',
       label: 'Semana passada',
-      count: qtdSemana,
+      count: semanas?.semana.semana_por_tarefa?.length ?? 0,
       icon: CalendarDays,
     },
     {
@@ -581,19 +603,19 @@ function ProjetosRealizadosContent({
             expandAll={responsavelAtivo !== null}
             emptyLabel="Nenhum projeto ou melhoria baixado no período."
           />
-        ) : view === 'semana' ? (
+        ) : isSemanaView(view) ? (
           responsavelAtivo !== null && semanaIndividuais.length > 0 ? (
-            <TabelaSemana rows={semanaIndividuais} />
+            <TabelaSemana rows={semanaIndividuais} rotulo={rotuloSemana(view)} />
           ) : semanaFiltrada.length > 0 ? (
             <TabelaConcluidos
-              key={responsavelAtivo}
+              key={`${view}-${responsavelAtivo}`}
               rows={semanaFiltrada}
               expandAll={responsavelAtivo !== null}
               resumoParcial={summarizeSemana(semanaFiltrada).parcial}
-              emptyLabel="Nenhuma realização na semana passada."
+              emptyLabel={`Nenhuma realização ${rotuloSemana(view)}.`}
             />
           ) : (
-            <TabelaSemana rows={semanaIndividuais} />
+            <TabelaSemana rows={semanaIndividuais} rotulo={rotuloSemana(view)} />
           )
         ) : (
           <TabelaAndamento key={responsavelAtivo} rows={andamentoFiltrado} expandAll={responsavelAtivo !== null} />
@@ -687,14 +709,14 @@ function TabelaConcluidos({ rows, expandAll = false, resumoParcial = 0, emptyLab
   if (!rows.length) return <PainelEmptyState>{emptyLabel}</PainelEmptyState>
   return (
     <div>
-      {resumoParcial > 0 ? <p className="border-b border-amber-100 bg-amber-50/80 px-6 py-3 text-sm leading-relaxed text-amber-900"><strong>Pendente</strong> = projeto ainda aberto com subtarefa concluída na semana. Expanda para ver as entregas.</p> : null}
+      {resumoParcial > 0 ? <p className="border-b border-amber-100 bg-amber-50/80 px-6 py-3 text-sm leading-relaxed text-amber-900"><strong>Pendente</strong> = projeto não baixado na semana, mas com subtarefa concluída nela. Expanda para ver as entregas.</p> : null}
       <ListaProjetos rows={rowsOrdenadas} mode="concluidos" expandAll={expandAll} />
     </div>
   )
 }
 
-function TabelaSemana({ rows }: { rows: OpsLegaisIniciativasItemSemana[] }) {
-  if (!rows.length) return <PainelEmptyState>Nenhuma tarefa concluída na semana passada.</PainelEmptyState>
+function TabelaSemana({ rows, rotulo }: { rows: OpsLegaisIniciativasItemSemana[]; rotulo: string }) {
+  if (!rows.length) return <PainelEmptyState>Nenhuma tarefa concluída {rotulo}.</PainelEmptyState>
   const items = rows.map((r) => ({ ...r, status: 'concluido', paiTitulo: r.pai_titulo }))
   return <div className="p-4 sm:p-6"><SubtarefasList items={items} mode="concluidos" title="Entregas na semana" /></div>
 }
@@ -739,6 +761,80 @@ function contaNaMeta(tags: string[]): boolean {
   return hasTagItem(tags, 'Projetos') || hasTagItem(tags, 'Melhorias')
 }
 
+/** Projeto sem slug no FORJAI cai no link genérico do pipeline — aí agrupa pelo nome. */
+function chaveProjeto(url: string | null, nome: string): string {
+  return url?.includes('/projects/') ? url : `nome:${nome}`
+}
+
+function addDiasIso(iso: string, dias: number): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + dias)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Semana seg–dom: a passada ou a atual. O filtro global "Semana passada" é sexta a quinta,
+ * mas aqui "atual" precisa da semana corrente, então fica seg–dom. O FORJAI manda da
+ * segunda passada até hoje; aqui corta para a semana e agrupa por projeto só o que foi
+ * entregue nela (projeto baixado e/ou subtarefas concluídas).
+ */
+function deriveSemana(painel: OpsLegaisIniciativasPainel, qual: 'passada' | 'atual'): SemanaEntregas {
+  const passada = rangeSemanaSegDomPassada()
+  const inicio = qual === 'atual' ? passada.fimExclusivo : passada.inicio
+  const fimExclusivo = addDiasIso(inicio, 7)
+
+  const semana = painel.semana.filter((i) => i.data != null && i.data >= inicio && i.data < fimExclusivo)
+
+  const conhecidos = new Map(
+    [...painel.andamento, ...painel.concluidos].map((p) => [chaveProjeto(p.url, p.nome), p]),
+  )
+  const grupos = new Map<string, OpsLegaisIniciativasProjeto>()
+  for (const item of semana) {
+    const nome = item.tipo === 'Projeto' ? item.nome : item.pai_titulo
+    const chave = chaveProjeto(item.url, nome)
+    let grupo = grupos.get(chave)
+    if (!grupo) {
+      const base = conhecidos.get(chave)
+      grupo = {
+        id: base?.id ?? chave,
+        nome: base?.nome ?? nome,
+        url: base?.url ?? item.url,
+        tipo: base?.tipo ?? '',
+        extensao: base?.extensao ?? '',
+        responsavel: base?.responsavel ?? '',
+        data: null,
+        concluido: false,
+        subtarefas: [],
+        total_sub: 0,
+        sub_concluidas: 0,
+      }
+      grupos.set(chave, grupo)
+    }
+    if (item.tipo === 'Projeto') {
+      grupo.concluido = true
+      grupo.data = item.data
+      if (!grupo.responsavel) grupo.responsavel = item.responsavel
+    } else {
+      grupo.subtarefas.push({
+        id: item.id,
+        nome: item.nome,
+        responsavel: item.responsavel,
+        data: item.data,
+        status: 'concluido',
+      })
+      grupo.total_sub = grupo.subtarefas.length
+      grupo.sub_concluidas = grupo.subtarefas.length
+    }
+  }
+
+  return {
+    semana,
+    semana_por_tarefa: [...grupos.values()],
+    semana_inicio: inicio,
+    semana_fim: addDiasIso(fimExclusivo, -1),
+  }
+}
+
 function progressColor(pct01: number): string {
   if (pct01 >= 1) return '#059669'
   if (pct01 >= 0.75) return '#0284C7'
@@ -777,10 +873,17 @@ function deriveIniciativasFiltrado(
       ? { inicio: base.inicio, fimExclusivo: base.fim }
       : rangePeriodoFiltro(ano, mesFiltro)
 
-  const concluidos = buildConcluidosPainelFromItens(
+  const concluidosAno = buildConcluidosPainelFromItens(
     itens,
     base.painel?.concluidos ?? [],
   )
+  // Semana / De–Até: só as subtarefas entregues no período, não o histórico do projeto.
+  const concluidos = isPeriodoCurtoFiltro(mesFiltro)
+    ? concluidosAno.map((p) => ({
+        ...p,
+        subtarefas: p.subtarefas.filter((s) => projetoNoFiltro(s.data, mesFiltro, ano)),
+      }))
+    : concluidosAno
 
   return {
     ...base,
@@ -825,6 +928,16 @@ export function OpsLegaisIniciativasTab({ ano, mesFiltro }: Props) {
   const d = useMemo(
     () => (anoData ? deriveIniciativasFiltrado(anoData, mesFiltro, ano) : undefined),
     [anoData, mesFiltro, ano],
+  )
+  const semanas = useMemo(
+    () =>
+      anoData?.painel
+        ? {
+            semana_atual: deriveSemana(anoData.painel, 'atual'),
+            semana: deriveSemana(anoData.painel, 'passada'),
+          }
+        : undefined,
+    [anoData],
   )
   const loading = isLoading
   const painelFiltrado = d?.painel
@@ -927,6 +1040,7 @@ export function OpsLegaisIniciativasTab({ ano, mesFiltro }: Props) {
       <ProjetosRealizadosPanel
         loading={loading}
         painel={painelFiltrado}
+        semanas={semanas}
         mesFiltroAtivo={mesFiltro != null}
       />
     </div>

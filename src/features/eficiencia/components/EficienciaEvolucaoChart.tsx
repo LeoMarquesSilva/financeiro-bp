@@ -13,6 +13,8 @@ import {
 import { LineChart as LineChartIcon, Trophy } from 'lucide-react'
 import { ChartCopyButton } from '@/shared/components/ChartCopyButton'
 import { formatPercent } from '@/shared/utils/format'
+import type { FenixExplicacao, FenixPontoGrafico } from '@/shared/fenix/fenix.types'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
 import { toPriMaiuscula } from '../utils/textFormat'
 import { OverviewRacionalButton } from './OverviewKpiHeatRow'
 
@@ -57,6 +59,11 @@ type Props = {
   selectedIndex?: number | null
   onPointClick?: (index: number, point: EvolucaoPoint) => void
   toolbarExtra?: ReactNode
+  /**
+   * Fênix IA: `explicar` recebe o ponto sob o mouse (índice em `data`) ou `null`
+   * quando o clique foi fora de um ponto (explica a linha inteira).
+   */
+  fenix?: { chave: string; explicar: (ponto: FenixPontoGrafico | null) => FenixExplicacao }
 }
 
 function EvolucaoTooltip({
@@ -175,8 +182,10 @@ export function EficienciaEvolucaoChart({
   selectedIndex = null,
   onPointClick,
   toolbarExtra,
+  fenix,
 }: Props) {
   const chartExportRef = useRef<HTMLDivElement>(null)
+  const fenixGrafico = useFenixGrafico(fenix?.chave, fenix?.explicar)
   const pointCount = data.length
   const melhor = useMemo(
     () => resolveMelhorPonto(data),
@@ -225,7 +234,7 @@ export function EficienciaEvolucaoChart({
       </div>
 
       {/* ref no wrapper; data-chart-plot no filho — copyChartImage usa querySelector nos descendentes */}
-      <div ref={chartExportRef} className="w-full">
+      <div ref={chartExportRef} className="w-full" data-fenix={fenixGrafico.fenixId}>
         {(melhor || (metaNum != null && Number.isFinite(metaNum))) && (
           <div className="mb-2 flex flex-col items-end gap-1">
             {melhor ? (
@@ -255,6 +264,8 @@ export function EficienciaEvolucaoChart({
               key={chartData.map((d) => `${d.mesLabel}:${d.valor}`).join('|')}
               data={chartData}
               margin={{ left: 4, right: 20, top: 28, bottom: 8 }}
+              onMouseMove={fenixGrafico.onMouseMove}
+              onMouseLeave={fenixGrafico.onMouseLeave}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
               <XAxis

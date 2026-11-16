@@ -7,7 +7,13 @@ tabelas `sp_*` do Supabase, que alimentam o painel **Eficiência** do SIOE.
 npm run sync:sharepoint                  # todas as fontes
 npm run sync:sharepoint -- --only publicacoes,tarefas
 npm run sync:sharepoint -- --dump-fields publicacoes   # inspecionar nomes internos dos campos
+SYNC_AVISO_WHATSAPP=off npm run sync:sharepoint -- --only tarefas   # rodada manual sem avisar o grupo de T.I.
 ```
+
+Erro de rede ("fetch failed") e 429/5xx tentam de novo com backoff, tanto no Supabase
+(`scripts/sharepoint/supabaseRetry.mjs`, por lote) quanto no Graph. Lote que não grava nem
+assim não derruba os demais: a fonte segue e sai como erro no fim, com a causa real
+(ex.: `UND_ERR_SOCKET`) na mensagem.
 
 ## Fontes
 

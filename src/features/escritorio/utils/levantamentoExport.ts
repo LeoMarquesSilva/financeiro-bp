@@ -52,6 +52,8 @@ const TIPO_POR_CHAVE: Record<string, TipoColuna> = {
   ci: 'id',
   data: 'data',
   data_publicacao: 'data',
+  data_divulgacao: 'data',
+  data_recebimento_kurier: 'data',
   data_cadastro: 'data',
   data_encerramento: 'data',
   data_conclusao: 'data',
@@ -59,6 +61,21 @@ const TIPO_POR_CHAVE: Record<string, TipoColuna> = {
   solicitado_em: 'data',
   criado: 'dataHora',
   disponibilizado_vistagem: 'dataHora',
+  vistado_em: 'dataHora',
+}
+
+/** Texto livre e longo (ex.: síntese do processo): aspas, colchetes e vírgulas são do próprio texto. */
+const CHAVES_TEXTO_LONGO = new Set(['observacoes'])
+
+/** Limite de caracteres de uma célula do Excel. */
+const EXCEL_MAX_CHARS = 32767
+
+export function isRacionalTextoLongo(colKey: string): boolean {
+  return CHAVES_TEXTO_LONGO.has(colKey)
+}
+
+function textoLongo(value: unknown): string {
+  return value == null ? '' : String(value).trim()
 }
 
 function safeFilenamePart(value: string): string {
@@ -156,6 +173,11 @@ function tabelaFromRacional(racional: LevantamentoRacional): {
       )
       colunas.push({ header: 'Horas (decimal)', tipo: 'decimal' })
       extratores.push((row) => toExcelValue(row[col.key], 'decimal'))
+      continue
+    }
+    if (isRacionalTextoLongo(col.key)) {
+      colunas.push({ header: col.label, tipo: 'texto' })
+      extratores.push((row) => textoLongo(row[col.key]).slice(0, EXCEL_MAX_CHARS) || null)
       continue
     }
     const tipo = TIPO_POR_CHAVE[col.key] ?? 'texto'
@@ -337,7 +359,7 @@ function addAbaResumo(
     ['Timesheet — horas (HH:MM)', resumo.timesheet_horas / 24, 'duracao'],
     ['Timesheet — horas (decimal)', resumo.timesheet_horas, 'decimal'],
     ['Timesheet — apontamentos', resumo.timesheet_apontamentos, 'inteiro'],
-    ['Processos (estoque)', resumo.processos_total, 'inteiro'],
+    ['Processos (ativos)', resumo.processos_total, 'inteiro'],
     ['Prazos', resumo.tarefas_prazos, 'inteiro'],
     ['Providências', resumo.tarefas_providencias, 'inteiro'],
   ]
@@ -498,6 +520,7 @@ export function formatRacionalCell(
   if (bloco === 'timesheet' && colKey === 'total_horas_decimal') {
     return formatHorasTimesheetLinhaHHMM(parseHorasDecimaisValor(value))
   }
+  if (colKey && isRacionalTextoLongo(colKey)) return textoLongo(value)
   if (value != null && value !== '' && colKey) {
     const tipo = TIPO_POR_CHAVE[colKey]
     if (tipo === 'data') return formatDate(String(value))

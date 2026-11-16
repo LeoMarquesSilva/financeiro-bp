@@ -14,6 +14,8 @@ import {
   type OpexAreaSlice,
 } from '../utils/opexDepartamentosChart'
 import { OpexDepartamentoDetalhe } from './OpexDepartamentoDetalhe'
+import { useFenixGrafico } from '@/shared/fenix/useFenix'
+import { explicarGraficoOpexDepartamentos } from '../fenix/opexGraficosFenix'
 
 type Props = {
   ano: number
@@ -105,6 +107,28 @@ export function OpexDepartamentosChart({
 
   const periodoLabel = filtroAtivo ? formatPeriodoOpex(mesesFiltro, mesAtual, ano) : `Ano ${ano}`
 
+  const graficoVisivel = !isLoading && !error && slicesVisiveis.length > 0
+  const fenixGrafico = useFenixGrafico(
+    graficoVisivel ? 'opex.grafico.departamentos' : undefined,
+    graficoVisivel
+      ? (ponto) =>
+          explicarGraficoOpexDepartamentos(
+            {
+              ano,
+              mesAtual,
+              mesesFiltro,
+              metric,
+              somenteFixas,
+              fatias: slicesVisiveis,
+              ocultas: slicesOcultos.map((s) => s.label),
+              data: chartData,
+              total: totalMetric,
+            },
+            ponto,
+          )
+      : undefined,
+  )
+
   const toggleSlice = (slice: OpexAreaSlice) => {
     setSelectedSlice((prev) => (prev?.dataKey === slice.dataKey ? null : slice))
   }
@@ -189,7 +213,7 @@ export function OpexDepartamentosChart({
         </div>
       </div>
 
-      <div className="min-h-[320px] w-full min-w-0" style={{ height: 320 }}>
+      <div className="min-h-[320px] w-full min-w-0" style={{ height: 320 }} data-fenix={fenixGrafico.fenixId}>
         {isLoading && (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
@@ -218,7 +242,13 @@ export function OpexDepartamentosChart({
 
         {!isLoading && !error && slicesVisiveis.length > 0 && (
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
-            <BarChart data={chartData} margin={{ left: 4, right: 12, top: 8, bottom: 8 }} barCategoryGap="18%">
+            <BarChart
+              data={chartData}
+              margin={{ left: 4, right: 12, top: 8, bottom: 8 }}
+              barCategoryGap="18%"
+              onMouseMove={fenixGrafico.onMouseMove}
+              onMouseLeave={fenixGrafico.onMouseLeave}
+            >
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.35)" />
               <XAxis
                 dataKey="mesLabel"

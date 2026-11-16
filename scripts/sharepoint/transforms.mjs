@@ -388,7 +388,9 @@ export function computeAdesaoApos18(status, dataPrazo, conclusaoCompleta) {
 export const NOME_ALIASES_CHAVE = {
   'WAGNER ARMANI': 'WAGNER JOSE PENEREIRO ARMANI',
   // Conta AD incompleta — lista de presença usa o e-mail do grupo, não o display name.
-  'MEMBROS DE CRISTIANA.COSTA@BISMARCHIPIRES.COM.BR': 'CRISTIANE PEREIRA DA COSTA',
+  'MEMBROS DE CRISTIANA.COSTA@BISMARCHIPIRES.COM.BR': 'CRISTIANA PEREIRA DA COSTA',
+  // Turnover BP grafa "Cristiane"; o nome dela (e-mail, AD, cadastro de pessoas) é Cristiana.
+  'CRISTIANE PEREIRA DA COSTA': 'CRISTIANA PEREIRA DA COSTA',
 }
 
 /** Chave de match turnover: sem acento, caixa alta, espaços colapsados. */

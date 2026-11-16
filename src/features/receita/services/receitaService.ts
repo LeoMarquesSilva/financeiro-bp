@@ -18,6 +18,7 @@ import type {
   ReceitaPrevistoFechamentoMes,
   ReceitaPrevistoFechamentoBucket,
   ReceitaPrevistoFechamentoItemRow,
+  ReceitaResultadoCaixaMesRow,
 } from '../types/receita.types'
 
 type TotaisMensaisRow = {
@@ -49,6 +50,27 @@ function mapRecebidoItensRows(data: unknown): ReceitaRecebidoItemRow[] {
 }
 
 export const receitaService = {
+  /** Receita, OPEX e saídas fora do OPEX mês a mês — ano e ano anterior. */
+  async fetchResultadoCaixaMensal(ano: number): Promise<ReceitaResultadoCaixaMesRow[]> {
+    const { data, error } = await supabase.rpc(
+      'receita_resultado_caixa_mensal' as never,
+      { p_ano: ano } as never,
+    )
+    if (error) throw error
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ano: Number(row.ano) || 0,
+      mes: Number(row.mes) || 0,
+      receita: Number(row.receita) || 0,
+      opex: Number(row.opex) || 0,
+      distribuicao: Number(row.distribuicao) || 0,
+      investimentos: Number(row.investimentos) || 0,
+      financeiro: Number(row.financeiro) || 0,
+      deducoes: Number(row.deducoes) || 0,
+      repasses: Number(row.repasses) || 0,
+      transferencias: Number(row.transferencias) || 0,
+    }))
+  },
+
   async fetchUltimaAtualizacao(): Promise<string | null> {
     const { data, error } = await supabase.rpc(
       'receita_ultima_atualizacao' as never,

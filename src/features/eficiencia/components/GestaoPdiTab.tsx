@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useTeamMembers } from '@/features/inadimplencia/hooks/useTeamMembers'
 import {
   EFICIENCIA_META_PDI,
+  filtrarMensalGestaoAVista,
   filtrarMensalPorMesFiltro,
   filtroEfetivoGestaoAVista,
   MESES_EFICIENCIA,
@@ -31,9 +32,20 @@ import { toPriMaiuscula } from '../utils/textFormat'
 import { GestaoPdiPessoasTable } from './GestaoPdiPessoasTable'
 import { EficienciaKpiCard } from './EficienciaKpiCard'
 import { EficienciaEvolucaoChart } from './EficienciaEvolucaoChart'
+import { explicarGraficoGestaoPdi } from '../fenix/eficienciaGraficosFenix'
 import { EficienciaDetailFilters } from './EficienciaDetailFilters'
 import { RacionalSheet } from './RacionalSheet'
 import type { HeatCell } from './OverviewKpiHeatRow'
+import {
+  explicarGestaoPdiAptas,
+  explicarGestaoPdiDesvios,
+  explicarGestaoPdiGestaoVista,
+  explicarGestaoPdiPeriodo,
+  periodoMeses,
+  rotuloPeriodoEficiencia,
+  TELA_EFICIENCIA_PESSOAS,
+  type GestaoPdiFenixCtx,
+} from '../fenix/eficienciaPessoasFinanceiroFenix'
 
 type Props = {
   ano: number
@@ -124,6 +136,33 @@ export function GestaoPdiTab({
         .map((m) => ({ mes: m.mes, valor: m.pct_aptas!, meta: EFICIENCIA_META_PDI }))
   const loadingPeriodo = loading || Boolean(responsavel && loadingEvol)
 
+  const fenixTela = areaFixa ? TELA_EFICIENCIA_PESSOAS.pdiOps : TELA_EFICIENCIA_PESSOAS.pdi
+  const fenixPeriodo = (): GestaoPdiFenixCtx => ({
+    tela: fenixTela,
+    ano,
+    area,
+    periodo: rotuloPeriodoEficiencia(mesFiltro, ano),
+    meses: mensalFiltrado,
+    pct: pctPeriodo,
+    aptas,
+    desvios,
+    pessoa: responsavel ? formatPessoaNome(responsavel) || responsavel : null,
+  })
+  const fenixGestaoVista = (): GestaoPdiFenixCtx => {
+    const meses = filtrarMensalGestaoAVista(mensal, ano)
+    return {
+      tela: fenixTela,
+      ano,
+      area,
+      periodo: periodoMeses(ano, filtroEfetivoGestaoAVista(ano)),
+      meses,
+      pct: acumuladoGestaoVista.value,
+      aptas: meses.reduce((s, m) => s + m.aptas, 0),
+      desvios: meses.reduce((s, m) => s + m.desvios, 0),
+      pessoa: null,
+    }
+  }
+
   const handleExportarExcel = async () => {
     if (desviosLista.length === 0) return
     setExportando(true)
@@ -182,6 +221,22 @@ export function GestaoPdiTab({
             : 'Junho = 100% (baseline). Julho+ = % só de quem tem evidência, 1:1 e progresso preenchidos.'
         }
         data={chartData}
+        fenix={{
+          chave: areaFixa ? 'eficiencia.ops-legais.gestao-pdi.grafico' : 'eficiencia.gestao-pdi.grafico',
+          explicar: (ponto) =>
+            explicarGraficoGestaoPdi(
+              {
+                tela: fenixTela,
+                ano,
+                area,
+                mesFiltro,
+                responsavel,
+                data: chartData,
+                meses: mensal,
+              },
+              ponto,
+            ),
+        }}
         color="#059669"
         metaFixa={EFICIENCIA_META_PDI}
         onRacionalClick={() => setRacionalAberto(true)}
@@ -199,6 +254,10 @@ export function GestaoPdiTab({
           icon={Target}
           accentClass="bg-slate-100 text-slate-700"
           loading={loading}
+          fenix={{
+            chave: 'eficiencia.gestao-pdi.gestao-vista',
+            explicar: () => explicarGestaoPdiGestaoVista(fenixGestaoVista()),
+          }}
         />
         <EficienciaKpiCard
           title="Gestão de PDI no período selecionado"
@@ -209,6 +268,10 @@ export function GestaoPdiTab({
           icon={Target}
           accentClass="bg-emerald-100 text-emerald-700"
           loading={loadingPeriodo}
+          fenix={{
+            chave: 'eficiencia.gestao-pdi.periodo',
+            explicar: () => explicarGestaoPdiPeriodo(fenixPeriodo()),
+          }}
         />
         <EficienciaKpiCard
           title="Aptas"
@@ -217,6 +280,10 @@ export function GestaoPdiTab({
           icon={Target}
           accentClass="bg-slate-100 text-slate-700"
           loading={loadingPeriodo}
+          fenix={{
+            chave: 'eficiencia.gestao-pdi.aptas',
+            explicar: () => explicarGestaoPdiAptas(fenixPeriodo()),
+          }}
         />
         <EficienciaKpiCard
           title="Desvios"
@@ -225,6 +292,10 @@ export function GestaoPdiTab({
           icon={Target}
           accentClass="bg-rose-100 text-rose-700"
           loading={loadingPeriodo}
+          fenix={{
+            chave: 'eficiencia.gestao-pdi.desvios',
+            explicar: () => explicarGestaoPdiDesvios(fenixPeriodo()),
+          }}
         />
       </div>
 

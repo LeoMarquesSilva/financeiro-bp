@@ -21,6 +21,18 @@ import {
   CobrancaKpiDetalheSheet,
   type KpiCardTipo,
 } from './CobrancaKpiDetalheSheet'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  explicarIndicadorComWhatsapp,
+  explicarIndicadorEfetividade,
+  explicarIndicadorForaPrazo,
+  explicarIndicadorNoD1,
+  explicarIndicadorSemCobranca,
+  explicarIndicadorValorD1,
+  explicarIndicadorVencidos,
+  type CobrancaIndicadoresFenixInput,
+} from '../fenix/cobrancaFenix'
 
 const META_PCT = 100
 const TODOS = '__all__'
@@ -135,6 +147,7 @@ function StatCard({
   icon: Icon,
   tone = 'slate',
   onClick,
+  fenix,
 }: {
   label: string
   valor: string
@@ -142,7 +155,10 @@ function StatCard({
   icon: React.ElementType
   tone?: 'slate' | 'emerald' | 'rose' | 'amber'
   onClick?: () => void
+  /** Explicação do número no Fênix. */
+  fenix?: { chave: string; explicar: FenixExplicar }
 }) {
+  const fenixId = useFenixAlvo(fenix?.chave, fenix?.explicar)
   const tones: Record<string, string> = {
     slate: 'text-slate-600 bg-slate-100',
     emerald: 'text-emerald-600 bg-emerald-100',
@@ -154,6 +170,7 @@ function StatCard({
     <Comp
       type={onClick ? 'button' : undefined}
       onClick={onClick}
+      data-fenix={fenixId}
       className={cn(
         'w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors',
         onClick &&
@@ -235,6 +252,27 @@ export function CobrancaDashboard() {
   }, [opcoes.grupos, buscaGrupo])
 
   const kpi = useMemo(() => agregar(filtradas), [filtradas])
+
+  const fenixInput: CobrancaIndicadoresFenixInput = {
+    kpi,
+    filtros: {
+      ano: ano === TODOS ? null : ano,
+      mes: mes === TODOS ? null : mes,
+      planos: planosSelecionados,
+      grupos: gruposSelecionados,
+      status:
+        status === 'cobrado' || status === 'fora_prazo' || status === 'pendente' ? status : null,
+      faixa: faixa === '1-7' || faixa === '8-30' || faixa === '31+' ? faixa : null,
+    },
+  }
+  const fenixEfetividadeId = useFenixAlvo(
+    loading ? undefined : 'cobranca.indicadores.efetividade',
+    () => explicarIndicadorEfetividade(fenixInput),
+  )
+  const fenixValorD1Id = useFenixAlvo(
+    loading ? undefined : 'cobranca.indicadores.valor-d1',
+    () => explicarIndicadorValorD1(fenixInput),
+  )
 
   const rowsPorCard = useMemo(
     () => ({
@@ -449,7 +487,7 @@ export function CobrancaDashboard() {
       </div>
 
       {/* Card da meta */}
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm" data-fenix={fenixEfetividadeId}>
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
           <RadialMeta valor={efet} />
 
@@ -497,6 +535,7 @@ export function CobrancaDashboard() {
           icon={AlertTriangle}
           tone="slate"
           onClick={() => setDetalheCard('vencidos')}
+          fenix={{ chave: 'cobranca.indicadores.vencidos', explicar: () => explicarIndicadorVencidos(fenixInput) }}
         />
         <StatCard
           label="No D+1 (indicador)"
@@ -505,6 +544,7 @@ export function CobrancaDashboard() {
           icon={CheckCircle2}
           tone="emerald"
           onClick={() => setDetalheCard('d1')}
+          fenix={{ chave: 'cobranca.indicadores.no-d1', explicar: () => explicarIndicadorNoD1(fenixInput) }}
         />
         <StatCard
           label="Fora do prazo D+1"
@@ -513,6 +553,7 @@ export function CobrancaDashboard() {
           icon={MessageCircle}
           tone="amber"
           onClick={() => setDetalheCard('fora_prazo')}
+          fenix={{ chave: 'cobranca.indicadores.fora-prazo', explicar: () => explicarIndicadorForaPrazo(fenixInput) }}
         />
         <StatCard
           label="Sem cobrança"
@@ -521,6 +562,7 @@ export function CobrancaDashboard() {
           icon={AlertTriangle}
           tone="rose"
           onClick={() => setDetalheCard('sem_cobranca')}
+          fenix={{ chave: 'cobranca.indicadores.sem-cobranca', explicar: () => explicarIndicadorSemCobranca(fenixInput) }}
         />
         <StatCard
           label="Com WhatsApp (total)"
@@ -529,6 +571,7 @@ export function CobrancaDashboard() {
           icon={MessageCircle}
           tone="slate"
           onClick={() => setDetalheCard('com_whatsapp')}
+          fenix={{ chave: 'cobranca.indicadores.com-whatsapp', explicar: () => explicarIndicadorComWhatsapp(fenixInput) }}
         />
       </div>
 
@@ -555,7 +598,7 @@ export function CobrancaDashboard() {
       />
 
       {/* Pendência de valor */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-fenix={fenixValorD1Id}>
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="font-medium text-slate-700">Valor no indicador (D+1)</span>
           <span className="text-slate-500">

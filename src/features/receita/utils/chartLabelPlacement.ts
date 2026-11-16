@@ -206,7 +206,7 @@ export type ClusterLabelPixelEntry = ClusterLabelEntry & {
   boxHeight?: number
   /** cy real da escala do gráfico. Sem isso, estima pelo domínio. */
   pointY?: number
-  /** Força o rótulo abaixo do ponto (recebido / linha azul). */
+  /** Rótulo abaixo do ponto. Sem valor, só o recebido (linha azul) vai abaixo. */
   preferBelow?: boolean
 }
 
@@ -263,7 +263,7 @@ function estimatePointY(
 }
 
 function pinLabelBelow(entry: ClusterLabelPixelEntry): boolean {
-  return entry.preferBelow === true || entry.key === 'recebido'
+  return entry.preferBelow ?? entry.key === 'recebido'
 }
 
 function clusterPixelItems(

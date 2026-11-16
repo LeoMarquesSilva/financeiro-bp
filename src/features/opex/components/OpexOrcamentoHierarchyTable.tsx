@@ -38,6 +38,9 @@ type Props = {
   ) => void
   onEditarDescricao: (linhas: OpexOrcamentoLinha[], descricao: string, tituloBase: string) => void
   onExcluir: (id: string) => void
+  /** Fênix: ano e busca para explicar o gráfico mensal de cada grupo. */
+  fenixAno?: number
+  fenixBusca?: string
 }
 
 function ChevronToggle({ expanded }: { expanded: boolean }) {
@@ -132,6 +135,8 @@ export function OpexOrcamentoHierarchyTable({
   onEditarValorGrupo,
   onEditarDescricao,
   onExcluir,
+  fenixAno,
+  fenixBusca,
 }: Props) {
   return (
     <tbody>
@@ -174,6 +179,11 @@ export function OpexOrcamentoHierarchyTable({
                       onMesSelect={onMesSelect}
                       compact
                       className="mb-3"
+                      fenix={
+                        fenixAno != null
+                          ? { chave: 'opex.grafico.orcamento_grupo', ano: fenixAno, grupo: g.grupoConta, busca: fenixBusca }
+                          : undefined
+                      }
                     />
                     {!micros.length ? (
                       <p className="py-2 text-xs text-slate-500">Nenhum plano micro para o mês selecionado.</p>

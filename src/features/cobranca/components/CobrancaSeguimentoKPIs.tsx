@@ -4,11 +4,21 @@ import { formatCurrency } from '@/shared/utils/format'
 import { AlertTriangle, Clock, Users, type LucideIcon } from 'lucide-react'
 import type { CobrancaSeguimentoGrupo, CobrancaSeguimentoKpis } from '../types/cobrancaSeguimento.types'
 import { CobrancaSeguimentoDepartamentosPie } from './CobrancaSeguimentoDepartamentosPie'
+import type { FenixExplicar } from '@/shared/fenix/fenix.types'
+import { useFenixAlvo } from '@/shared/fenix/useFenix'
+import {
+  explicarPontualFaixa31a60,
+  explicarPontualGrupos,
+  explicarPontualValorEmAberto,
+  type PontualFenixContexto,
+} from '../fenix/cobrancaFenix'
 
 interface Props {
   kpis: CobrancaSeguimentoKpis
   grupos: CobrancaSeguimentoGrupo[]
   loading?: boolean
+  /** Tela e filtros para o Fênix explicar os cards (os grupos vêm de `grupos`). */
+  fenixContexto?: Omit<PontualFenixContexto, 'grupos'>
 }
 
 type StatCard = {
@@ -17,6 +27,7 @@ type StatCard = {
   icon: LucideIcon
   color: string
   hint?: string
+  fenix?: { chave: string; explicar: FenixExplicar }
 }
 
 function kpiValueSizeClass(value: string): string {
@@ -33,11 +44,13 @@ function CobrancaSeguimentoStatCard({
   color,
   hint,
   loading,
+  fenix,
 }: StatCard & { loading?: boolean }) {
+  const fenixId = useFenixAlvo(loading ? undefined : fenix?.chave, fenix?.explicar)
   const displayValue = loading ? '…' : value
 
   return (
-    <Card className="cobranca-kpi-card flex h-full flex-col p-4">
+    <Card className="cobranca-kpi-card flex h-full flex-col p-4" data-fenix={fenixId}>
       <div className="flex shrink-0 items-center justify-between gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</span>
         <Icon className={cn('h-4 w-4 shrink-0', color)} />
@@ -58,19 +71,26 @@ function CobrancaSeguimentoStatCard({
   )
 }
 
-export function CobrancaSeguimentoKPIs({ kpis, grupos, loading }: Props) {
+export function CobrancaSeguimentoKPIs({ kpis, grupos, loading, fenixContexto }: Props) {
+  const ctx: PontualFenixContexto | null = fenixContexto ? { ...fenixContexto, grupos } : null
   const cards: StatCard[] = [
     {
       label: 'Valor em aberto',
       value: formatCurrency(kpis.valor_total),
       icon: AlertTriangle,
       color: 'text-red-600',
+      fenix: ctx
+        ? { chave: 'pontual.resumo.valor-aberto', explicar: () => explicarPontualValorEmAberto(ctx, kpis.valor_total) }
+        : undefined,
     },
     {
       label: 'Grupos devedores',
       value: String(kpis.qtd_grupos),
       icon: Users,
       color: 'text-slate-700',
+      fenix: ctx
+        ? { chave: 'pontual.resumo.grupos', explicar: () => explicarPontualGrupos(ctx, kpis.qtd_grupos) }
+        : undefined,
     },
     {
       label: 'Faixa 31–60 dias',
@@ -78,6 +98,12 @@ export function CobrancaSeguimentoKPIs({ kpis, grupos, loading }: Props) {
       icon: Clock,
       color: 'text-amber-600',
       hint: `${kpis.media_dias_atraso} dias (média)`,
+      fenix: ctx
+        ? {
+            chave: 'pontual.resumo.faixa-31-60',
+            explicar: () => explicarPontualFaixa31a60(ctx, kpis.valor_faixa_31_60, kpis.media_dias_atraso),
+          }
+        : undefined,
     },
   ]
 
@@ -87,7 +113,11 @@ export function CobrancaSeguimentoKPIs({ kpis, grupos, loading }: Props) {
         <CobrancaSeguimentoStatCard key={c.label} {...c} loading={loading} />
       ))}
 
-      <CobrancaSeguimentoDepartamentosPie grupos={grupos} loading={loading} />
+      <CobrancaSeguimentoDepartamentosPie
+        grupos={grupos}
+        loading={loading}
+        fenixContexto={ctx ? { ...ctx, valorEmAberto: kpis.valor_total } : undefined}
+      />
 
       {cards.slice(2).map((c) => (
         <CobrancaSeguimentoStatCard key={c.label} {...c} loading={loading} />

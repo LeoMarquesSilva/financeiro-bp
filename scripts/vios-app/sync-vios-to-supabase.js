@@ -58,6 +58,39 @@ export function decodeViosCsvFile(filePath) {
 }
 
 /**
+ * Abre um relatório do VIOS em .xlsx ou .csv (Windows-1252, separador ; , ou tab) como workbook do SheetJS.
+ * No CSV os valores ficam como texto (raw): datas e valores em formato BR são convertidos por quem lê a linha.
+ */
+export function readViosWorkbook(filePath) {
+  if (path.extname(filePath).toLowerCase() !== '.csv') {
+    return XLSX.readFile(filePath, { cellDates: true, raw: true });
+  }
+  const text = decodeViosCsvFile(filePath).replace(/^\uFEFF/, '');
+  const firstLine = text.split(/\r?\n/).find((l) => l.trim()) || '';
+  const semi = (firstLine.match(/;/g) || []).length;
+  const comma = (firstLine.match(/,/g) || []).length;
+  const tab = (firstLine.match(/\t/g) || []).length;
+  let delim = ';';
+  if (tab > semi && tab > comma) delim = '\t';
+  else if (comma > semi) delim = ',';
+  const workbook = XLSX.read(text, { type: 'string', FS: delim, cellDates: true, raw: true });
+  // O VIOS escreve alguns campos como fórmula de texto do Excel (ex.: CI ="61268"): fica só o valor.
+  for (const nome of workbook.SheetNames) {
+    const sheet = workbook.Sheets[nome];
+    for (const endereco of Object.keys(sheet)) {
+      const cell = sheet[endereco];
+      if (endereco.startsWith('!') || !cell || typeof cell.v !== 'string') continue;
+      const formula = cell.v.match(/^="([\s\S]*)"$/);
+      if (formula) {
+        cell.v = formula[1].replace(/""/g, '"');
+        cell.w = cell.v;
+      }
+    }
+  }
+  return workbook;
+}
+
+/**
  * Normaliza texto para UTF-8 NFC após decode latin1.
  * Corrige mojibake residual (UTF-8 interpretado como latin1: Ã£, Ã§, etc.).
  */
@@ -382,6 +415,27 @@ function findProcessosClienteIndex(norm) {
   return norm.findIndex((h) => (h === 'razao social' || h === 'razão social') && !h.includes('grupo'));
 }
 
+/** Coluna "Ação": cabeçalho exato; senão o que começa com "ação" (fora "ação data do cadastro"). Não pega "Valor da Ação" nem "Situação". */
+function findProcessosAcaoIndex(norm) {
+  const exact = norm.findIndex((h) => h === 'ação' || h === 'acao');
+  if (exact >= 0) return exact;
+  return norm.findIndex((h) => (h.startsWith('ação') || h.startsWith('acao')) && !h.includes('data'));
+}
+
+/** Colunas "Valor da Ação" e "Valor da ação atualizado". */
+function findProcessosValorAcaoIndex(norm, atualizado) {
+  return norm.findIndex(
+    (h) => (h.includes('valor da ação') || h.includes('valor da acao')) && h.includes('atualizad') === atualizado,
+  );
+}
+
+/** Coluna "Observações (síntese do processo)" (ou só "Observações"). */
+function findProcessosObservacoesIndex(norm) {
+  const sintese = norm.findIndex((h) => h.includes('síntese do processo') || h.includes('sintese do processo'));
+  if (sintese >= 0) return sintese;
+  return norm.findIndex((h) => h.startsWith('observações') || h.startsWith('observacoes'));
+}
+
 /** Índices de colunas para ProcessoCompleto (XLSX). Cliente = coluna obrigatória. */
 function buildProcessosCompletoColumnIndexes(headerRow) {
   const norm = headerRow.map((h) => (h != null ? String(h).toLowerCase().trim().replace(/\s+/g, ' ') : ''));
@@ -410,7 +464,9 @@ function buildProcessosCompletoColumnIndexes(headerRow) {
     area: find(['área', 'area']),
     advogado_responsavel: find(['advogado responsável', 'advogado responsavel']),
     cliente: findProcessosClienteIndex(norm),
-    acao: find(['ação', 'acao']),
+    acao: findProcessosAcaoIndex(norm),
+    valor_acao: findProcessosValorAcaoIndex(norm, false),
+    valor_acao_atualizado: findProcessosValorAcaoIndex(norm, true),
     acao_data_cadastro: find([
       'ação data do cadastro',
       'acao data do cadastro',
@@ -430,13 +486,20 @@ function buildProcessosCompletoColumnIndexes(headerRow) {
     motivo_encerramento: find(['motivo de encerramento', 'motivo encerramento']),
     etiquetas: find(['etiquetas']),
     data_encerramento: find(['data do encerramento', 'data encerramento']),
+    observacoes: findProcessosObservacoesIndex(norm),
   };
 }
 
 function rowToProcessosCompletoRecord(row, idx) {
-  const cliente = idx.cliente >= 0 ? String(row[idx.cliente] ?? '').trim() : '';
+  const cliente = idx.cliente >= 0 ? normalizeViosText(String(row[idx.cliente] ?? '')) : '';
   if (!cliente) return null;
-  const trim = (i) => (i >= 0 && row[i] != null && String(row[i]).trim() !== '' ? String(row[i]).trim() : null);
+  const trim = (i) => {
+    if (i < 0 || row[i] == null) return null;
+    const text = normalizeViosText(String(row[i]));
+    return text !== '' ? text : null;
+  };
+  // Célula numérica vem como número; texto vem como "R$ 1.234,56".
+  const valor = (i) => (i < 0 ? null : parseValorBR(typeof row[i] === 'string' ? row[i].replace(/R\$/gi, '') : row[i]));
   const dataCadastro = idx.data_cadastro >= 0 ? parseDateToISO(row[idx.data_cadastro]) || (idx.data_cadastro >= 0 && row[idx.data_cadastro] ? parseDateBR(row[idx.data_cadastro]) : null) : null;
   const dataEncerramento = idx.data_encerramento >= 0 ? parseDateToISO(row[idx.data_encerramento]) || parseDateBR(row[idx.data_encerramento]) : null;
   return {
@@ -447,6 +510,8 @@ function rowToProcessosCompletoRecord(row, idx) {
     advogado_responsavel: trim(idx.advogado_responsavel),
     cliente,
     acao: trim(idx.acao),
+    valor_acao: valor(idx.valor_acao),
+    valor_acao_atualizado: valor(idx.valor_acao_atualizado),
     acao_data_cadastro: trim(idx.acao_data_cadastro),
     data_cadastro: dataCadastro,
     fase_processual: trim(idx.fase_processual),
@@ -457,13 +522,15 @@ function rowToProcessosCompletoRecord(row, idx) {
     motivo_encerramento: trim(idx.motivo_encerramento),
     etiquetas: trim(idx.etiquetas),
     data_encerramento: dataEncerramento,
+    // Só vai quando o relatório tem a coluna: relatório antigo não apaga a síntese já gravada.
+    ...(idx.observacoes >= 0 ? { observacoes: trim(idx.observacoes) } : {}),
   };
 }
 
 /**
- * Sincroniza o Excel ProcessoCompleto para a tabela processos_completo (uma linha por processo).
+ * Sincroniza o relatório ProcessoCompleto (.xlsx ou .csv do VIOS) para a tabela processos_completo (uma linha por processo).
  * Usa upsert por CI; duplicatas no mesmo arquivo são removidas por CI (fica a última). Chama processos_completo_vinculacao_pessoa().
- * @param {string} filePath - Caminho absoluto do arquivo Processos Completo.xlsx
+ * @param {string} filePath - Caminho absoluto do arquivo Processos Completo (.xlsx ou .csv)
  * @returns {Promise<{ upserted: number, errors: number }>}
  */
 export async function runSync(filePath) {
@@ -476,7 +543,7 @@ export async function runSync(filePath) {
   console.log('[Sync Supabase] ProcessoCompleto:', filePath);
   let workbook;
   try {
-    workbook = XLSX.readFile(filePath, { cellDates: true, raw: true });
+    workbook = readViosWorkbook(filePath);
   } catch (err) {
     throw new Error('Erro ao abrir o arquivo: ' + err.message);
   }
@@ -494,7 +561,13 @@ export async function runSync(filePath) {
   if (indexes.cliente < 0) {
     throw new Error('Coluna Cliente não encontrada no ProcessoCompleto.');
   }
-  for (const [campo, label] of [['fase_processual', 'Fase Processual'], ['vinculo', 'Vínculo']]) {
+  for (const [campo, label] of [
+    ['fase_processual', 'Fase Processual'],
+    ['vinculo', 'Vínculo'],
+    ['valor_acao', 'Valor da Ação'],
+    ['valor_acao_atualizado', 'Valor da ação atualizado'],
+    ['observacoes', 'Observações (síntese do processo)'],
+  ]) {
     if (indexes[campo] < 0) {
       console.warn(`[Sync Supabase] processos_completo: coluna "${label}" ausente no relatório VIOS — ${campo} ficará vazio.`);
     }
@@ -511,6 +584,17 @@ export async function runSync(filePath) {
   for (const r of rows) {
     byCi.set(String(r.ci ?? ''), r);
   }
+  // CI é só dígitos: outro formato (ex.: ="61268" do CSV) faria o upsert criar linhas novas em vez de atualizar.
+  const ciInvalido = [...byCi.values()].filter((r) => !/^\d+$/.test(String(r.ci ?? '')));
+  if (ciInvalido.length > Math.max(10, byCi.size * 0.01)) {
+    throw new Error(
+      `processos_completo: ${ciInvalido.length} CIs fora do padrão (ex.: ${ciInvalido.slice(0, 3).map((r) => r.ci).join(', ')}) — sync abortado para não duplicar a tabela.`
+    );
+  }
+  if (ciInvalido.length) {
+    console.warn('[Sync Supabase] processos_completo: ignorando CIs fora do padrão:', ciInvalido.map((r) => r.ci).join(', '));
+    for (const r of ciInvalido) byCi.delete(String(r.ci ?? ''));
+  }
   const rowsDedup = [...byCi.values()];
   if (rowsDedup.length < rows.length) {
     console.log('[Sync Supabase] processos_completo duplicatas removidas por CI:', rows.length, '->', rowsDedup.length);
@@ -522,11 +606,19 @@ export async function runSync(filePath) {
   let upserted = 0;
   let errors = 0;
   const BATCH = 200;
+  // Banco sem a coluna observacoes (migração 20261104120000 ainda não rodou): segue sem a síntese em vez de falhar tudo.
+  let semObservacoes = false;
+  const semSintese = (lote) => lote.map(({ observacoes: _observacoes, ...resto }) => resto);
   for (let i = 0; i < rowsDedup.length; i += BATCH) {
     const chunk = rowsDedup.slice(i, i + BATCH);
-    const { error } = await supabase
+    let { error } = await supabase
       .from('processos_completo')
-      .upsert(chunk, { onConflict: 'ci' });
+      .upsert(semObservacoes ? semSintese(chunk) : chunk, { onConflict: 'ci' });
+    if (error && !semObservacoes && error.message.includes('observacoes')) {
+      console.warn('[Sync Supabase] processos_completo: a coluna observacoes não existe no banco (rode a migração 20261104120000) — seguindo sem a síntese.');
+      semObservacoes = true;
+      ({ error } = await supabase.from('processos_completo').upsert(semSintese(chunk), { onConflict: 'ci' }));
+    }
     if (error) {
       console.error('[Sync Supabase] processos_completo upsert error:', error.message);
       errors++;

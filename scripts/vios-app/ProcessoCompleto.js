@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import 'dotenv/config';
 import axios from 'axios';
-import { runSync } from './sync-vios-to-supabase.js';
+import XLSX from 'xlsx';
+import { readViosWorkbook, runSync } from './sync-vios-to-supabase.js';
  
 const config = {
   baseUrl: 'https://bp.vios.com.br',
@@ -67,16 +68,21 @@ async function main() {
   await page.click('#Pesq');
  
   console.log('🔟 Aguardando link de download...');
-  const linkHandle = await page.waitForSelector("a[href*='processos-completo'][href$='.xlsx']", { timeout: 0 });
+  // O VIOS já entregou o relatório em .xlsx e agora entrega em .csv: aceita os dois (e o "Baixar arquivo" genérico).
+  const linkHandle = await page.waitForSelector(
+    "a[href*='processos-completo'][href$='.xlsx'], a[href*='processos-completo'][href$='.csv'], a[title*='Baixar arquivo']",
+    { timeout: 0 }
+  );
   const href = await linkHandle.getAttribute('href');
- 
+
   const finalUrl = href.startsWith('http') ? href : `${config.baseUrl}/${href.replace(/^\.\//, '')}`;
-  console.log(`🔗 URL final do XLSX: ${finalUrl}`);
- 
-  console.log('1️⃣1️⃣ Baixando XLSX...');
+  const extensao = /\.csv(\?|$)/i.test(finalUrl) ? '.csv' : '.xlsx';
+  console.log(`🔗 URL final do relatório (${extensao}): ${finalUrl}`);
+
+  console.log(`1️⃣1️⃣ Baixando ${extensao.slice(1).toUpperCase()}...`);
   fs.mkdirSync(path.dirname(config.downloadPath), { recursive: true });
- 
-  const tempPath = path.join(path.dirname(config.downloadPath), 'temp_Processos_Completo.xlsx');
+
+  const tempPath = path.join(path.dirname(config.downloadPath), `temp_Processos_Completo${extensao}`);
   const writer = fs.createWriteStream(tempPath);
  
   const response = await axios.get(finalUrl, {
@@ -112,8 +118,15 @@ async function main() {
   });
  
   if (fs.existsSync(config.downloadPath)) fs.unlinkSync(config.downloadPath);
-  fs.renameSync(tempPath, config.downloadPath);
-  console.log(`\n✅ XLSX salvo em ${config.downloadPath}`);
+  if (extensao === '.csv') {
+    // Quem usa a base no SharePoint lê o "Processos Completo.xlsx": o CSV vira o mesmo .xlsx (valores como texto, em formato BR).
+    XLSX.writeFile(readViosWorkbook(tempPath), config.downloadPath, { bookType: 'xlsx' });
+    fs.unlinkSync(tempPath);
+    console.log(`\n✅ CSV convertido e salvo como XLSX em ${config.downloadPath}`);
+  } else {
+    fs.renameSync(tempPath, config.downloadPath);
+    console.log(`\n✅ XLSX salvo em ${config.downloadPath}`);
+  }
  
   console.log('1️⃣2️⃣ Sincronizando com Supabase...');
   try {
