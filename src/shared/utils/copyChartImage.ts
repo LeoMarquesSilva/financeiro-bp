@@ -2407,7 +2407,7 @@ function resolveApresentacaoExportFontScale(exportId: string | null): number {
   if (exportId === 'programa_bonus') return APRESENTACAO_EXPORT_FONT_BONUS_SCALE
   if (exportId === 'bignumber') return APRESENTACAO_EXPORT_FONT_BIG_NUMBER_SCALE
   /** OPEX: layout flexível (gráfico + cabeçalho) já desenhado no tamanho final — sem bump. */
-  if (exportId === 'opex') return 1
+  if (exportId === 'opex' || exportId === 'opex_periodo' || exportId === 'opex_mes') return 1
   return APRESENTACAO_EXPORT_FONT_DEFAULT_SCALE
 }
 

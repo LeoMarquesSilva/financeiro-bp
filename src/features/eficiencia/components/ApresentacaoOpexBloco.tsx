@@ -87,7 +87,7 @@ function periodoTexto(meses: number[]): string {
   return meses.length === 1 ? a : `${a}–${b}`
 }
 
-function MesSelect({
+export function MesSelect({
   label,
   value,
   onChange,

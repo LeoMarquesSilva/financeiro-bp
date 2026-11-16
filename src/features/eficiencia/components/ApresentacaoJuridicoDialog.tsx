@@ -13,7 +13,11 @@ import { copyApresentacaoSlideToClipboard } from '@/shared/utils/copyChartImage'
 import { MesFilterButtons } from './MesFilterButtons'
 import { ApresentacaoJuridicoSlide } from './ApresentacaoJuridicoSlide'
 import { useApresentacaoMatrix } from '../hooks/useApresentacaoMatrix'
-import { useApresentacaoOpex } from '../hooks/useApresentacaoOpex'
+import {
+  useApresentacaoOpex,
+  useApresentacaoOpexMes,
+  useApresentacaoOpexPeriodo,
+} from '../hooks/useApresentacaoOpex'
 import { opexMesFimPadrao } from '../utils/apresentacaoOpex'
 import { temPlanoFiltroAtivo } from '@/features/opex/utils/opexPlanoFiltro'
 import {
@@ -79,6 +83,18 @@ export function ApresentacaoJuridicoDialog({
     error: opexError,
     planoFiltro: opexPlanoFiltro,
   } = useApresentacaoOpex(ano, opexMesInicio, opexMesFim, open)
+  /** Bloco 14 usa o mesmo De/Até do Bloco 13; Bloco 15 tem mês próprio. */
+  const {
+    data: opexPeriodo,
+    loading: loadingOpexPeriodo,
+    error: opexPeriodoError,
+  } = useApresentacaoOpexPeriodo(ano, opexMesInicio, opexMesFim, open)
+  const [opexMes, setOpexMes] = useState(() => opexMesFimPadrao(ano))
+  const {
+    data: opexMesData,
+    loading: loadingOpexMes,
+    error: opexMesError,
+  } = useApresentacaoOpexMes(ano, opexMes, open)
 
   const anosUnificado = useMemo(
     () => anosNoPeriodo(unificadoInicio, unificadoFim),
@@ -220,6 +236,14 @@ export function ApresentacaoJuridicoDialog({
       toast.error('OPEX ainda carregando')
       return
     }
+    if (blocoId === 'opex_periodo' && (loadingOpexPeriodo || !opexPeriodo)) {
+      toast.error('OPEX · Período ainda carregando')
+      return
+    }
+    if (blocoId === 'opex_mes' && (loadingOpexMes || !opexMesData)) {
+      toast.error('OPEX · Mês ainda carregando')
+      return
+    }
     if (
       (blocoId === 'juridico' || blocoId === 'financeiro') &&
       loading
@@ -297,6 +321,10 @@ export function ApresentacaoJuridicoDialog({
                                     ? loadingBonus || !bonus
                                   : bloco.id === 'opex'
                                     ? loadingOpex || !opex
+                                  : bloco.id === 'opex_periodo'
+                                    ? loadingOpexPeriodo || !opexPeriodo
+                                  : bloco.id === 'opex_mes'
+                                    ? loadingOpexMes || !opexMesData
                                     : loading
                 return (
                   <Button
@@ -392,6 +420,14 @@ export function ApresentacaoJuridicoDialog({
               onOpexMesInicioChange={setOpexMesInicio}
               onOpexMesFimChange={setOpexMesFim}
               opexPlanoFiltroAtivo={temPlanoFiltroAtivo(opexPlanoFiltro)}
+              opexPeriodo={opexPeriodo}
+              loadingOpexPeriodo={loadingOpexPeriodo}
+              opexPeriodoError={opexPeriodoError}
+              opexMesData={opexMesData}
+              loadingOpexMes={loadingOpexMes}
+              opexMesError={opexMesError}
+              opexMes={opexMes}
+              onOpexMesChange={setOpexMes}
             />
           </div>
         </div>

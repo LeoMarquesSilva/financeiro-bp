@@ -75,6 +75,8 @@ export type ApresentacaoBlocoId =
   | 'governanca_interna'
   | 'programa_bonus'
   | 'opex'
+  | 'opex_periodo'
+  | 'opex_mes'
 
 export const APRESENTACAO_BLOCOS: {
   id: ApresentacaoBlocoId
@@ -156,6 +158,18 @@ export const APRESENTACAO_BLOCOS: {
   {
     id: 'opex',
     label: 'Bloco 13 — OPEX',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'opex_periodo',
+    label: 'Bloco 14 — OPEX · Período',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'opex_mes',
+    label: 'Bloco 15 — OPEX · Mês',
     secoes: [],
     semGradeAreas: true,
   },
