@@ -10,6 +10,7 @@ import {
   fetchApresentacaoOpexMes,
   fetchApresentacaoOpexPeriodo,
 } from '../utils/apresentacaoOpexResumo'
+import { fetchApresentacaoOpexPontuais } from '../utils/apresentacaoOpexPontuais'
 
 /** Bloco 14 — resumo do período (mesmo De/Até do Bloco 13). */
 export function useApresentacaoOpexPeriodo(
@@ -33,6 +34,28 @@ export function useApresentacaoOpexPeriodo(
     ] as const,
     queryFn: () => fetchApresentacaoOpexPeriodo(ano, meses, planoFiltro),
     enabled: enabled && meses.length > 0,
+    staleTime: 60_000,
+  })
+  return {
+    data: query.data ?? null,
+    loading: enabled && (query.isLoading || query.isPending),
+    error: (query.error as Error | null) ?? null,
+  }
+}
+
+/** Bloco 16 — desdobramento das altas (gastos pontuais do mês). */
+export function useApresentacaoOpexPontuais(ano: number, mes: number, enabled: boolean) {
+  const planoFiltro = useMemo(() => loadOpexPlanoFiltro(ano), [ano, enabled])
+  const query = useQuery({
+    queryKey: [
+      'eficiencia',
+      'apresentacao-opex-pontuais',
+      ano,
+      mes,
+      planoFiltroKey(planoFiltro),
+    ] as const,
+    queryFn: () => fetchApresentacaoOpexPontuais(ano, mes, planoFiltro),
+    enabled: enabled && mes >= 1 && mes <= 12,
     staleTime: 60_000,
   })
   return {

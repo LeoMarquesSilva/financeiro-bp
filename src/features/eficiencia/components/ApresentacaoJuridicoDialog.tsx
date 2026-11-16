@@ -16,6 +16,7 @@ import { useApresentacaoMatrix } from '../hooks/useApresentacaoMatrix'
 import {
   useApresentacaoOpex,
   useApresentacaoOpexMes,
+  useApresentacaoOpexPontuais,
   useApresentacaoOpexPeriodo,
 } from '../hooks/useApresentacaoOpex'
 import { opexMesFimPadrao } from '../utils/apresentacaoOpex'
@@ -95,6 +96,12 @@ export function ApresentacaoJuridicoDialog({
     loading: loadingOpexMes,
     error: opexMesError,
   } = useApresentacaoOpexMes(ano, opexMes, open)
+  /** Bloco 16 — desdobramento das altas no mesmo mês do Bloco 15. */
+  const {
+    data: opexPontuais,
+    loading: loadingOpexPontuais,
+    error: opexPontuaisError,
+  } = useApresentacaoOpexPontuais(ano, opexMes, open)
 
   const anosUnificado = useMemo(
     () => anosNoPeriodo(unificadoInicio, unificadoFim),
@@ -244,6 +251,10 @@ export function ApresentacaoJuridicoDialog({
       toast.error('OPEX · Mês ainda carregando')
       return
     }
+    if (blocoId === 'opex_pontuais' && (loadingOpexPontuais || !opexPontuais)) {
+      toast.error('Desdobramento das altas ainda carregando')
+      return
+    }
     if (
       (blocoId === 'juridico' || blocoId === 'financeiro') &&
       loading
@@ -325,6 +336,8 @@ export function ApresentacaoJuridicoDialog({
                                     ? loadingOpexPeriodo || !opexPeriodo
                                   : bloco.id === 'opex_mes'
                                     ? loadingOpexMes || !opexMesData
+                                  : bloco.id === 'opex_pontuais'
+                                    ? loadingOpexPontuais || !opexPontuais
                                     : loading
                 return (
                   <Button
@@ -428,6 +441,9 @@ export function ApresentacaoJuridicoDialog({
               opexMesError={opexMesError}
               opexMes={opexMes}
               onOpexMesChange={setOpexMes}
+              opexPontuais={opexPontuais}
+              loadingOpexPontuais={loadingOpexPontuais}
+              opexPontuaisError={opexPontuaisError}
             />
           </div>
         </div>

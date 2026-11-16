@@ -30,6 +30,8 @@ import type {
   ApresentacaoOpexMesData,
   ApresentacaoOpexPeriodoData,
 } from '../utils/apresentacaoOpexResumo'
+import type { ApresentacaoOpexPontuaisBase } from '../utils/apresentacaoOpexPontuais'
+import { ApresentacaoOpexPontuaisBloco } from './ApresentacaoOpexPontuaisBloco'
 import type { ApresentacaoTopContrato } from '../utils/apresentacaoTopContratos'
 import type { ApresentacaoFinanceiroBundle } from '../utils/apresentacaoFinanceiro'
 import type { MesAno } from '../utils/apresentacaoMesAno'
@@ -166,6 +168,9 @@ type Props = {
   opexMesError?: Error | null
   opexMes?: number
   onOpexMesChange?: (mes: number) => void
+  opexPontuais?: ApresentacaoOpexPontuaisBase | null
+  loadingOpexPontuais?: boolean
+  opexPontuaisError?: Error | null
 }
 
 /** Separador nomeado entre blocos — só na tela; fora de `data-apresentacao-export`. */
@@ -798,6 +803,9 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
     opexMesError = null,
     opexMes = 1,
     onOpexMesChange,
+    opexPontuais = null,
+    loadingOpexPontuais = false,
+    opexPontuaisError = null,
   }: Props,
   ref: Ref<HTMLDivElement>,
 ) {
@@ -948,6 +956,17 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
               data={opexMesData}
               loading={loadingOpexMes}
               error={opexMesError}
+              ano={ano}
+              mes={opexMes}
+              onMesChange={onOpexMesChange ?? (() => {})}
+            />
+          )
+        } else if (bloco.id === 'opex_pontuais') {
+          content = (
+            <ApresentacaoOpexPontuaisBloco
+              data={opexPontuais}
+              loading={loadingOpexPontuais}
+              error={opexPontuaisError}
               ano={ano}
               mes={opexMes}
               onMesChange={onOpexMesChange ?? (() => {})}

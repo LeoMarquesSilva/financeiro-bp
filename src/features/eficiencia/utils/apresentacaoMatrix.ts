@@ -77,6 +77,7 @@ export type ApresentacaoBlocoId =
   | 'opex'
   | 'opex_periodo'
   | 'opex_mes'
+  | 'opex_pontuais'
 
 export const APRESENTACAO_BLOCOS: {
   id: ApresentacaoBlocoId
@@ -170,6 +171,12 @@ export const APRESENTACAO_BLOCOS: {
   {
     id: 'opex_mes',
     label: 'Bloco 15 — OPEX · Mês',
+    secoes: [],
+    semGradeAreas: true,
+  },
+  {
+    id: 'opex_pontuais',
+    label: 'Bloco 16 — OPEX · Desdobramento das altas',
     secoes: [],
     semGradeAreas: true,
   },
