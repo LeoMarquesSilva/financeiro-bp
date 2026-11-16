@@ -86,7 +86,7 @@ export const BONUS_PESOS: Record<BonusIndicadorId, number> = {
   exito: 2.5,
 }
 
-/** Indicadores sem fonte no SIOE — sempre “bateu” (valores do print / combinado). */
+/** Indicadores sem fonte no SIOE — valores fixos do print / combinado (Êxito: 0%, não bateu). */
 const BONUS_FIXOS: BonusIndicadorRow[] = [
   {
     id: 'avaliacao_competencia',
@@ -114,11 +114,11 @@ const BONUS_FIXOS: BonusIndicadorRow[] = [
     id: 'exito',
     label: 'Êxito',
     meta: 0,
-    resultado: 100,
+    resultado: 0,
     direcao: 'maior',
     peso: BONUS_PESOS.exito,
-    contribuicao: BONUS_PESOS.exito,
-    bateu: true,
+    contribuicao: 0,
+    bateu: false,
     fixo: true,
   },
 ]
