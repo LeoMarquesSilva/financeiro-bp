@@ -54,6 +54,7 @@ import {
   toIsoDateTime,
   parseDateOnlyBrt,
 } from './transforms.mjs'
+import { chamarSupabase, comRetry, sbComRetry, upsertEmLotes } from './supabaseRetry.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '..', '..', '.env') })
@@ -97,15 +98,16 @@ function dataCorteMesesAtras(meses) {
 /** Menor sp_id já gravado na janela (com 7 dias de folga) — usado para pular o histórico no Graph. */
 async function resolvePublicacoesSkipAfterId(corte) {
   const folga = new Date(corte.getTime() - 7 * 86_400_000)
-  const { data, error } = await supabase
-    .from('sp_publicacoes')
-    .select('sp_id')
-    .eq('origem', 'sharepoint')
-    .gte('criado', folga.toISOString())
-    .order('sp_id', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-  if (error) throw new Error(`ler min sp_id publicações: ${error.message}`)
+  const { data } = await sbComRetry('ler min sp_id publicações', () =>
+    supabase
+      .from('sp_publicacoes')
+      .select('sp_id')
+      .eq('origem', 'sharepoint')
+      .gte('criado', folga.toISOString())
+      .order('sp_id', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  )
   const minId = Number(data?.sp_id)
   if (!Number.isFinite(minId)) return null
   return Math.max(0, minId - 1)
@@ -256,27 +258,22 @@ function pick(fields, aliases) {
   return null
 }
 
-async function upsertChunks(table, rows, onConflict) {
-  let upserted = 0
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const chunk = rows.slice(i, i + BATCH)
-    const { error } = await supabase.from(table).upsert(chunk, { onConflict })
-    if (error) throw new Error(`upsert ${table} (lote ${i / BATCH + 1}): ${error.message}`)
-    upserted += chunk.length
-  }
-  return upserted
+/** Lote com retry em erro de rede/gateway; lote que não grava não derruba os demais (ver supabaseRetry.mjs). */
+function upsertChunks(table, rows, onConflict) {
+  return upsertEmLotes(supabase, table, rows, onConflict, { batch: BATCH })
 }
 
 async function loadExistingTaskAssignees(table) {
   const assignees = new Map()
   const pageSize = 1000
   for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
-      .from(table)
-      .select('ci, responsavel')
-      .not('responsavel', 'is', null)
-      .range(from, from + pageSize - 1)
-    if (error) throw new Error(`ler responsáveis existentes de ${table}: ${error.message}`)
+    const { data } = await sbComRetry(`ler responsáveis existentes de ${table}`, () =>
+      supabase
+        .from(table)
+        .select('ci, responsavel')
+        .not('responsavel', 'is', null)
+        .range(from, from + pageSize - 1),
+    )
     for (const row of data ?? []) {
       if (row.ci != null && row.responsavel?.trim()) assignees.set(Number(row.ci), row.responsavel.trim())
     }
@@ -299,11 +296,12 @@ async function deleteMissingIds(table, pkColumn, keepIds, scope = null) {
   const existing = []
   const pageSize = 1000
   for (let from = 0; ; from += pageSize) {
-    let q = supabase.from(table).select(pkColumn).range(from, from + pageSize - 1)
-    if (scope?.column && scope.gte) q = q.gte(scope.column, scope.gte)
-    if (scope?.eq) for (const [coluna, valor] of Object.entries(scope.eq)) q = q.eq(coluna, valor)
-    const { data, error } = await q
-    if (error) throw new Error(`ler ${table} para limpar órfãos: ${error.message}`)
+    const { data } = await sbComRetry(`ler ${table} para limpar órfãos`, () => {
+      let q = supabase.from(table).select(pkColumn).range(from, from + pageSize - 1)
+      if (scope?.column && scope.gte) q = q.gte(scope.column, scope.gte)
+      if (scope?.eq) for (const [coluna, valor] of Object.entries(scope.eq)) q = q.eq(coluna, valor)
+      return q
+    })
     if (!data?.length) break
     for (const r of data) existing.push(r[pkColumn])
     if (data.length < pageSize) break
@@ -313,42 +311,45 @@ async function deleteMissingIds(table, pkColumn, keepIds, scope = null) {
   let deleted = 0
   for (let i = 0; i < orphans.length; i += BATCH) {
     const chunk = orphans.slice(i, i + BATCH)
-    const { error: delError, count } = await supabase
-      .from(table)
-      .delete({ count: 'exact' })
-      .in(pkColumn, chunk)
-    if (delError) throw new Error(`delete órfãos ${table}: ${delError.message}`)
+    const { count } = await sbComRetry(`delete órfãos ${table}`, () =>
+      supabase.from(table).delete({ count: 'exact' }).in(pkColumn, chunk),
+    )
     deleted += count ?? chunk.length
   }
   return deleted
 }
 
+/**
+ * Apaga e regrava a tabela. Se um lote cair no meio, a nova tentativa refaz tudo desde o delete:
+ * repetir só o insert do lote duplicaria linha (PK serial) ou bateria na PK natural, caso o servidor
+ * já tivesse gravado antes de a conexão cair.
+ */
 async function replaceAll(table, rows, pkColumn) {
-  const { count, error: countError } = await supabase
-    .from(table)
-    .select(pkColumn, { count: 'exact', head: true })
-  if (countError) throw new Error(`contar ${table}: ${countError.message}`)
-  const { error: delError } = await supabase.from(table).delete().not(pkColumn, 'is', null)
-  if (delError) throw new Error(`delete ${table}: ${delError.message}`)
-  let inserted = 0
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const chunk = rows.slice(i, i + BATCH)
-    const { error } = await supabase.from(table).insert(chunk)
-    if (error) throw new Error(`insert ${table} (lote ${i / BATCH + 1}): ${error.message}`)
-    inserted += chunk.length
-  }
+  const { count } = await sbComRetry(`contar ${table}`, () =>
+    supabase.from(table).select(pkColumn, { count: 'exact', head: true }),
+  )
+  const inserted = await comRetry(`replace ${table}`, async () => {
+    await chamarSupabase(`delete ${table}`, () => supabase.from(table).delete().not(pkColumn, 'is', null))
+    let gravadas = 0
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const chunk = rows.slice(i, i + BATCH)
+      await chamarSupabase(`insert ${table} (lote ${i / BATCH + 1})`, () => supabase.from(table).insert(chunk))
+      gravadas += chunk.length
+    }
+    return gravadas
+  })
   return { upserted: inserted, deleted: count ?? 0 }
 }
 
 async function loadFeriadosSet() {
-  const { data, error } = await supabase.from('sp_feriados').select('data')
-  if (error) throw new Error(`ler sp_feriados: ${error.message}`)
+  const { data } = await sbComRetry('ler sp_feriados', () => supabase.from('sp_feriados').select('data'))
   return new Set((data ?? []).map((r) => r.data))
 }
 
 async function loadTurnover() {
-  const { data, error } = await supabase.from('sp_turnover').select('nome, area, admissao, desligamento')
-  if (error) throw new Error(`ler sp_turnover: ${error.message}`)
+  const { data } = await sbComRetry('ler sp_turnover', () =>
+    supabase.from('sp_turnover').select('nome, area, admissao, desligamento'),
+  )
   return data ?? []
 }
 
@@ -378,11 +379,12 @@ async function loadProcessosNumeroMap() {
   let from = 0
   const page = 1000
   for (;;) {
-    const { data, error } = await supabase
-      .from('sp_processos_numero')
-      .select('ci, numero')
-      .range(from, from + page - 1)
-    if (error) throw new Error(`ler sp_processos_numero: ${error.message}`)
+    const { data } = await sbComRetry('ler sp_processos_numero', () =>
+      supabase
+        .from('sp_processos_numero')
+        .select('ci, numero')
+        .range(from, from + page - 1),
+    )
     const rows = data ?? []
     for (const r of rows) {
       if (r.ci != null && r.numero) mapa.set(Number(r.ci), String(r.numero))
@@ -1259,8 +1261,9 @@ const FONTES = {
         'ci',
         unique.map((r) => r.ci),
       )
-      const { data: backfill, error } = await supabase.rpc('eficiencia_backfill_nro_cnj_de_processo')
-      if (error) throw new Error(`backfill nro_cnj: ${error.message}`)
+      const { data: backfill } = await sbComRetry('backfill nro_cnj', () =>
+        supabase.rpc('eficiencia_backfill_nro_cnj_de_processo'),
+      )
       console.log(
         `[Sync SharePoint] processos_numero backfill nro_cnj: ${JSON.stringify(backfill)}`,
       )
@@ -1329,7 +1332,25 @@ const FONTES = {
       const numeroMap = await loadProcessosNumeroMap()
       const existingAssignees = await loadExistingTaskAssignees('sp_tarefas_historico')
       let upserted = 0
+      const falhas = []
       for (const arq of csvs) {
+        try {
+          upserted += await upsertHistoricoCsv(arq)
+        } catch (err) {
+          // Acumulativo: um arquivo que não gravou não impede os demais; a próxima rodada completa.
+          upserted += err.upserted ?? 0
+          falhas.push(`${arq.name}: ${err.message}`)
+          console.error(`[tarefas_historico] ${arq.name} falhou: ${err.message}`)
+        }
+      }
+      if (falhas.length) {
+        const err = new Error(falhas.join(' | '))
+        err.upserted = upserted
+        throw err
+      }
+      return { upserted, deleted: 0 }
+
+      async function upsertHistoricoCsv(arq) {
         const buffer = await fetchDriveFile(ctx.siteControladoria, arq.path)
         const raw = parseCsvBuffer(buffer)
         const rows = raw
@@ -1370,9 +1391,8 @@ const FONTES = {
             }
           })
           .filter((r) => r.ci != null)
-        upserted += await upsertChunks('sp_tarefas_historico', dedupeBy(rows, (r) => r.ci), 'ci')
+        return await upsertChunks('sp_tarefas_historico', dedupeBy(rows, (r) => r.ci), 'ci')
       }
-      return { upserted, deleted: 0 }
     },
   },
 
@@ -1479,8 +1499,26 @@ function dumpFields(items) {
   return { upserted: 0, deleted: 0 }
 }
 
+/** SYNC_AVISO_WHATSAPP=off: rodada manual/teste sem mandar mensagem no grupo de T.I. */
+const AVISO_WHATSAPP_DESLIGADO = String(process.env.SYNC_AVISO_WHATSAPP ?? '').trim().toLowerCase() === 'off'
+
+/** Grava a linha da fonte em sharepoint_sync_log. Falha aqui não derruba a carga. */
+async function registrarSyncLog(linha) {
+  try {
+    await sbComRetry(`gravar sharepoint_sync_log (${linha.fonte})`, () =>
+      supabase.from('sharepoint_sync_log').insert(linha),
+    )
+  } catch (err) {
+    console.error(`[Sync SharePoint] ${err.message}`)
+  }
+}
+
 /** Avisa o grupo de T.I. (o mesmo da automação do Node). Falha aqui não derruba a carga. */
 async function avisarWhatsappSioe(payload) {
+  if (AVISO_WHATSAPP_DESLIGADO) {
+    console.log('[Sync SharePoint] aviso WhatsApp desligado (SYNC_AVISO_WHATSAPP=off)')
+    return
+  }
   const base = process.env.VITE_SUPABASE_URL?.replace(/\/+$/, '')
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!base || !key) {
@@ -1543,7 +1581,7 @@ async function main() {
       const segundos = ((Date.now() - inicio) / 1000).toFixed(1)
       console.log(`[Sync SharePoint] ${nome} -> ${fonte.tabela} | upserted=${upserted} deleted=${deleted} (${segundos}s)`)
       if (!ctx.dumpFields) {
-        await supabase.from('sharepoint_sync_log').insert({
+        await registrarSyncLog({
           fonte: nome,
           upserted,
           deleted,
@@ -1554,25 +1592,30 @@ async function main() {
     } catch (err) {
       hadError = true
       const erro = String(err.message).slice(0, 300)
+      // Falha parcial (lote que não gravou mesmo com retry): o resto da fonte entrou.
+      const upserted = Number(err.upserted) || 0
       console.error(`[Sync SharePoint] ${nome} FALHOU: ${err.message}`)
-      await supabase.from('sharepoint_sync_log').insert({
+      await registrarSyncLog({
         fonte: nome,
-        upserted: 0,
+        upserted,
         deleted: 0,
         errors: 1,
         detalhes: { erro: String(err.message).slice(0, 1000) },
       })
-      resultados.push({ fonte: nome, upserted: 0, deleted: 0, errors: 1, erro })
+      resultados.push({ fonte: nome, upserted, deleted: 0, errors: 1, erro })
     }
   }
 
   if (!ctx.dumpFields) {
-    const { error } = await supabase.rpc('registrar_sioe_sync', {
-      p_fonte: 'sharepoint',
-    })
-    if (error) {
+    try {
+      await sbComRetry('heartbeat do SIOE', () =>
+        supabase.rpc('registrar_sioe_sync', {
+          p_fonte: 'sharepoint',
+        }),
+      )
+    } catch (err) {
       hadError = true
-      console.error(`[Sync SharePoint] heartbeat do SIOE FALHOU: ${error.message}`)
+      console.error(`[Sync SharePoint] ${err.message}`)
     }
     await avisarWhatsappSioe({
       modo: 'resultado',
