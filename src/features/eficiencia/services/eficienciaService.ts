@@ -256,7 +256,9 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'inconsistencia_juridico', label: 'Inconsistência - Jurídico' },
       { key: 'inconsistencia_juridico_motivo', label: 'Motivo Inconsistência', textoLongo: true },
       { key: 'observacoes', label: 'Observações', textoLongo: true },
-      { key: 'excludente', label: 'Excludente', virtual: true },
+      // Coluna real (marcação manual); onboarding também marca no client.
+      { key: 'excludente', label: 'Excludente' },
+      { key: 'excludente_motivo', label: 'Motivo do excludente', textoLongo: true },
     ],
   },
   /**

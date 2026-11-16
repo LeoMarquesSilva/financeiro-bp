@@ -875,7 +875,7 @@ export async function fetchEficienciaProtocoloRacionalResumo(
       ano,
       area,
       mes,
-      'status_inconsistencia,cliente,data_criada',
+      'status_inconsistencia,cliente,data_criada,excludente',
       'default',
       responsavel,
     ).range(offset, offset + RACIONAL_FETCH_PAGE - 1)
@@ -885,7 +885,10 @@ export async function fetchEficienciaProtocoloRacionalResumo(
 
     const rows = (data ?? []) as Array<Record<string, unknown>>
     for (const row of rows) {
-      if (linhaExcluidaPorOnboarding(row, 'eficiencia_protocolo', exclusoes)) {
+      if (
+        row.excludente === 'Excludente' ||
+        linhaExcluidaPorOnboarding(row, 'eficiencia_protocolo', exclusoes)
+      ) {
         qtd_excludente += 1
         continue
       }

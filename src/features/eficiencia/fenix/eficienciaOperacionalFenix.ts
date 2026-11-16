@@ -221,6 +221,7 @@ const SPECS: Record<IndicadorRazao, SpecRazao> = {
       'Entram os pedidos de protocolo da lista do SharePoint, pela data em que o pedido foi criado.',
       'Sem inconsistência: o campo "Inconsistência - Jurídico" está vazio. Qualquer valor nesse campo conta como inconsistência.',
       'Área = área de quem criou o pedido (coluna de área da lista ou, se vazia, a área da pessoa na data, pela base de colaboradores). Operações Legais e Tributário ficam fora.',
+      'Pedido marcado como excludente pela controladoria sai da conta (não é eficiência nem inconsistência): continua no racional com o motivo, mas não entra na %.',
       REGRA_ONBOARDING,
     ],
     pessoa: 'quem criou o pedido de protocolo',
