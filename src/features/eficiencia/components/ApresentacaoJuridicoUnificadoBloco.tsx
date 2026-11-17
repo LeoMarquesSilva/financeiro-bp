@@ -83,14 +83,24 @@ function metaAnualEquipeMinutos(
   return overviewByAno.get(ano)?.treinamentos?.meta_minutos ?? 0
 }
 
+/**
+ * Meta anual da equipe usada no recorte: a do último ano (equipe atual), aplicada
+ * a todos os meses. Ex.: nov/25–out/26 = 12 × (meta 2026 / 12) = meta 2026 inteira,
+ * igual ao "Resultado" do Jurídico.
+ */
+function metaAnualDoRecorte(
+  overviewByAno: Map<number, EficienciaOverview>,
+  slots: MesAno[],
+): (ano: number) => number {
+  const anoFim = slots[slots.length - 1]?.ano
+  return () => (anoFim != null ? metaAnualEquipeMinutos(overviewByAno, anoFim) : 0)
+}
+
 function formatMetaDesenvolvimentoEquipe(
   overviewByAno: Map<number, EficienciaOverview>,
   slots: MesAno[],
 ): string {
-  const metaMin = metaTreinamentoPeriodoMinutos(
-    (ano) => metaAnualEquipeMinutos(overviewByAno, ano),
-    slots,
-  )
+  const metaMin = metaTreinamentoPeriodoMinutos(metaAnualDoRecorte(overviewByAno, slots), slots)
   if (metaMin <= 0) return 'Meta 100%'
   return `Meta ${formatMinutosHeatLabel(metaMin)}h`
 }
@@ -335,7 +345,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
       if (treinoRows.length === 0) return VAZIA
       const minutos = treinoRows.reduce((s, r) => s + r.minutos_lancados, 0)
       const metaMin = metaTreinamentoPeriodoMinutos(
-        (ano) => metaAnualEquipeMinutos(overviewByAno, ano),
+        metaAnualDoRecorte(overviewByAno, slots),
         slots,
       )
       const pct = metaMin > 0 ? (minutos / metaMin) * 100 : treinoRows[0]!.pct_atingimento
@@ -395,7 +405,7 @@ export function ApresentacaoJuridicoUnificadoBloco({
     })()
 
     const metaTreinoMin = metaTreinamentoPeriodoMinutos(
-      (ano) => metaAnualEquipeMinutos(overviewByAno, ano),
+      metaAnualDoRecorte(overviewByAno, slots),
       slots,
     )
     const treinoLinhaPoints: UnificadoLinhaPonto[] = (() => {
