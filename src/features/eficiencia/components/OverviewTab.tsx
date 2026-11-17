@@ -380,11 +380,16 @@ export function OverviewTab({
     )
   })()
   const acumuladoTreinamentos: HeatCell =
-    // Ano todo e Resultado: Acum. = atingimento anual (pessoas × 14h).
-    mesFiltro == null || mesFiltro === 'resultado'
+    // Ano todo: Acum. = atingimento anual (pessoas × 14h).
+    // Resultado: soma só os meses exibidos (fechados, sem o mês em aberto) contra a meta
+    // do ano todo — senão o Acum. inclui horas de um mês que aparece como "-".
+    mesFiltro == null
       ? treinamentosAcumulado
       : (() => {
-          const rows = filterMensal(data.treinamentosMensal)
+          const rows =
+            mesFiltro === 'resultado'
+              ? data.treinamentosMensal.filter((r) => r.mes <= mesFimResultado(ano))
+              : filterMensal(data.treinamentosMensal)
           if (rows.length === 0) return { value: null, label: '-' }
           const minutos = rows.reduce((s, r) => s + r.minutos_lancados, 0)
           const metaAno =
@@ -756,7 +761,12 @@ export function OverviewTab({
           area,
           mesFiltro,
           modo: 'ano',
-          minutos: Number(t?.minutos_lancados ?? 0),
+          minutos:
+            mesFiltro === 'resultado'
+              ? data.treinamentosMensal
+                  .filter((r) => r.mes <= mesFimResultado(ano))
+                  .reduce((s, r) => s + Number(r.minutos_lancados), 0)
+              : Number(t?.minutos_lancados ?? 0),
           metaMinutos: Number(t?.meta_minutos ?? 0),
           pessoas: t?.pessoas_ativas ?? null,
           pct: acumuladoTreinamentos.value,
@@ -1043,7 +1053,9 @@ export function OverviewTab({
           mesDestaque={mesDestaque}
           cells={treinamentosCells}
           acumulado={acumuladoTreinamentos}
-          copyAnualAcumulado={treinamentosAcumulado}
+          copyAnualAcumulado={
+            mesFiltro === 'resultado' ? acumuladoTreinamentos : treinamentosAcumulado
+          }
           onRacionalClick={() => setRacionalAberto('desenvolvimento_equipe')}
           fenixAcumulado={fenixDesenvolvimento}
         />
