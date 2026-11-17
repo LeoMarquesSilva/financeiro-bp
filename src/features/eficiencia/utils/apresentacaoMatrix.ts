@@ -65,6 +65,7 @@ export type ApresentacaoBlocoId =
   | 'juridico'
   | 'juridico_unificado'
   | 'financeiro'
+  | 'exito_reputacao'
   | 'composicao'
   | 'bignumber'
   | 'controladoria'
@@ -107,6 +108,13 @@ export const APRESENTACAO_BLOCOS: {
     id: 'financeiro',
     label: 'Bloco 4 — Financeiro',
     secoes: ['resultado_financeiro'],
+  },
+  {
+    /** Separado do Bloco 4 para colar no card “5 e 6. Êxito e Reputação” do PPT. */
+    id: 'exito_reputacao',
+    label: 'Bloco 4.1 — Êxito e Reputação',
+    secoes: [],
+    semGradeAreas: true,
   },
   {
     id: 'composicao',

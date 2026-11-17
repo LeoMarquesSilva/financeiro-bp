@@ -12,7 +12,11 @@ import {
   type MesFiltroEficiencia,
 } from '../constants'
 import type { EficienciaOverview } from '../types/eficiencia.types'
-import { cellApresentacaoKpi, cellApresentacaoNps } from './apresentacaoMatrix'
+import {
+  cellApresentacaoKpi,
+  cellApresentacaoNps,
+  type ApresentacaoCell,
+} from './apresentacaoMatrix'
 import { calcularAtingimentoMetaKpi } from '@/features/receita/utils/receitaAcumuladoChart'
 import {
   cellApresentacaoIndiceInadimplencia,
@@ -122,6 +126,36 @@ const BONUS_FIXOS: BonusIndicadorRow[] = [
     fixo: true,
   },
 ]
+
+/** Meta das linhas Reputação/Êxito no Bloco 4.1 (entrega com prazo, não percentual). */
+export const EXITO_REPUTACAO_META_LABEL = 'Estruturar e apresentar, até 31/10/2026'
+
+export type ExitoReputacaoLinha = {
+  id: 'reputacao' | 'exito'
+  title: string
+  metaLabel: string
+  cell: ApresentacaoCell
+}
+
+/**
+ * Bloco 4.1 — Reputação e Êxito na faixa única (mesmo visual do NPS).
+ * Usa os mesmos valores fixos do Programa de Bônus (Reputação 100%, Êxito 0%).
+ */
+export function linhasExitoReputacao(): ExitoReputacaoLinha[] {
+  return (['reputacao', 'exito'] as const).map((id) => {
+    const fixo = BONUS_FIXOS.find((r) => r.id === id)
+    const value = fixo?.resultado ?? null
+    return {
+      id,
+      title: fixo?.label ?? id,
+      metaLabel: EXITO_REPUTACAO_META_LABEL,
+      cell:
+        value == null
+          ? { label: '-', value: null, atingiu: null }
+          : { value, label: formatPercent(value), atingiu: fixo?.bateu ?? null },
+    }
+  })
+}
 
 export const BONUS_GATILHO_RECEITA_PCT = 95
 

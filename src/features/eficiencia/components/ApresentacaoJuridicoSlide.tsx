@@ -24,7 +24,7 @@ import type { ApresentacaoIniciativasData } from '../utils/apresentacaoIniciativ
 import type { ApresentacaoMarketingData } from '../utils/apresentacaoMarketing'
 import type { ApresentacaoFinanceiroOpsData } from '../utils/apresentacaoFinanceiroOps'
 import type { ApresentacaoLiderancaData } from '../utils/apresentacaoLideranca'
-import type { ApresentacaoBonusData } from '../utils/apresentacaoBonus'
+import { linhasExitoReputacao, type ApresentacaoBonusData } from '../utils/apresentacaoBonus'
 import type { ApresentacaoOpexData } from '../utils/apresentacaoOpex'
 import type {
   ApresentacaoOpexMesData,
@@ -555,6 +555,9 @@ function ApresentacaoKpiHeatCard({
   cells,
   mostrarValores = false,
   linhaUnica = false,
+  titleWidth = COL_TITLE_WIDTH,
+  metaWidth = COL_META_WIDTH,
+  metaLivre = false,
 }: {
   title: string
   metaLabel: string
@@ -563,6 +566,11 @@ function ApresentacaoKpiHeatCard({
   mostrarValores?: boolean
   /** Um valor para o escritório — faixa única nas colunas de área + consolidado. */
   linhaUnica?: boolean
+  /** Larguras próprias de título/meta (ex.: Bloco 4.1, meta em texto). */
+  titleWidth?: number
+  metaWidth?: number
+  /** Meta em texto livre (ex.: prazo de entrega): sem o prefixo “Meta”. */
+  metaLivre?: boolean
 }) {
   const areaCols = colunas.filter((c) => !('consolidado' in c && c.consolidado))
   const consCol = colunas.find((c) => 'consolidado' in c && c.consolidado)
@@ -591,8 +599,8 @@ function ApresentacaoKpiHeatCard({
         }}
       >
         <colgroup>
-          <col style={{ width: COL_TITLE_WIDTH }} />
-          <col style={{ width: COL_META_WIDTH }} />
+          <col style={{ width: titleWidth }} />
+          <col style={{ width: metaWidth }} />
           {areaCols.map((c) => (
             <col key={c.key} style={{ width: COL_AREA_WIDTH }} />
           ))}
@@ -624,7 +632,7 @@ function ApresentacaoKpiHeatCard({
                 whiteSpace: 'nowrap',
               }}
             >
-              {metaTexto(metaLabel)}
+              {metaLivre ? metaLabel : metaTexto(metaLabel)}
             </td>
             {linhaUnica && unicaCell && unicaSpan > 0 ? (
               <td
@@ -731,6 +739,54 @@ function BlocoExport({
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Título curto (“Reputação”/“Êxito”) e meta em texto numa linha só.
+ * A meta é larga para caber mesmo com a fonte ~27% maior da cópia para o PPT.
+ */
+const EXITO_REPUTACAO_COL_TITULO = 76
+const EXITO_REPUTACAO_COL_META = 250
+
+/**
+ * Bloco 4.1 — Reputação e Êxito, separado do Financeiro para colar no card
+ * “5 e 6. Êxito e Reputação”. Mesma faixa única do NPS (um valor para o escritório).
+ */
+function ExitoReputacaoExport({ colunas }: { colunas: typeof APRESENTACAO_COLUNAS }) {
+  const linhas = linhasExitoReputacao()
+  return (
+    <div
+      data-apresentacao-export="exito_reputacao"
+      style={{
+        width: '100%',
+        minWidth: 1100,
+        boxSizing: 'border-box',
+        backgroundColor: 'transparent',
+        padding: 4,
+        fontFamily: 'Segoe UI, system-ui, sans-serif',
+      }}
+    >
+      <div
+        data-apresentacao-bloco="exito_reputacao"
+        style={{ display: 'flex', flexDirection: 'column', gap: 3 }}
+      >
+        <SecaoTituloBadge label="5 e 6. Êxito e Reputação" />
+        {linhas.map((linha) => (
+          <ApresentacaoKpiHeatCard
+            key={linha.id}
+            title={linha.title}
+            metaLabel={linha.metaLabel}
+            colunas={colunas}
+            cells={colunas.map(() => linha.cell)}
+            linhaUnica
+            titleWidth={EXITO_REPUTACAO_COL_TITULO}
+            metaWidth={EXITO_REPUTACAO_COL_META}
+            metaLivre
+          />
+        ))}
       </div>
     </div>
   )
@@ -1000,6 +1056,8 @@ export const ApresentacaoJuridicoSlide = forwardRef(function ApresentacaoJuridic
               />
             </>
           )
+        } else if (bloco.id === 'exito_reputacao') {
+          content = <ExitoReputacaoExport colunas={colunas} />
         } else if (loading) {
           content = (
             <div style={{ display: 'grid', gap: 4, padding: 4 }}>

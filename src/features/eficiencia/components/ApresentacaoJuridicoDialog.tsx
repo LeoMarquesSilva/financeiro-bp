@@ -326,7 +326,8 @@ export function ApresentacaoJuridicoDialog({
                                 ? loadingFinanceiroOps || !financeiroOps
                                 : bloco.id === 'composicao'
                                   ? loadingComposicao || !composicao
-                                  : bloco.id === 'governanca_interna'
+                                  : bloco.id === 'governanca_interna' ||
+                                      bloco.id === 'exito_reputacao'
                                     ? false
                                   : bloco.id === 'programa_bonus'
                                     ? loadingBonus || !bonus
@@ -355,7 +356,8 @@ export function ApresentacaoJuridicoDialog({
                       }
                       aria-hidden
                     />
-                    Copiar {index + 1}
+                    {/* Número do rótulo (ex.: 4.1) — inserir bloco não renumera os demais. */}
+                    Copiar {/^Bloco\s+([\d.]+)/.exec(bloco.label)?.[1] ?? index + 1}
                   </Button>
                 )
               })}
