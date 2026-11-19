@@ -154,7 +154,7 @@ const cases: Case[] = [
     name: 'Coordenador (role) — Carol Thomé',
     role: 'coordenador',
     modules: ['eficiencia'],
-    email: 'caroline.thome@bpplaw.com.br',
+    email: 'caroline.thome@bismarchipires.com.br',
     colaboradorArea: 'Cível',
     expectHome: '/financeiro/eficiencia',
     expectNavLabels: ['Eficiência Operacional', 'Operações Legais'],
@@ -232,7 +232,7 @@ const cases: Case[] = [
     name: 'Sócio de área (gerente RH + módulo eficiência)',
     role: null,
     modules: ['eficiencia'],
-    email: 'giancarlo@bpplaw.com.br',
+    email: 'giancarlo@bismarchipires.com.br',
     nivel: 'gerente',
     colaboradorArea: 'Cível',
     expectHome: '/financeiro/eficiencia',
@@ -318,11 +318,11 @@ for (const c of cases) {
 // Badge / lista de coordenadores
 console.log('\n▶ Badge coordenadores (lista explícita)')
 const coords = [
-  ['ana.tavares@bpplaw.com.br', 'Reestruturação'],
-  ['ligia@bpplaw.com.br', 'Reestruturação'],
-  ['lavinia.ferraz@bpplaw.com.br', 'Reestruturação'],
-  ['caroline.thome@bpplaw.com.br', 'Cível'],
-  ['carolineabdalla@bpplaw.com.br', 'Trabalhista'],
+  ['ana.tavares@bismarchipires.com.br', 'Reestruturação'],
+  ['ligia@bismarchipires.com.br', 'Reestruturação'],
+  ['lavinia.ferraz@bismarchipires.com.br', 'Reestruturação'],
+  ['caroline.thome@bismarchipires.com.br', 'Cível'],
+  ['carolineabdalla@bismarchipires.com.br', 'Trabalhista'],
   ['henrique.nascimento@bismarchipires.com.br', 'Contratos'],
   ['mariaponce@bismarchipires.com.br', 'Operações Legais'],
 ] as const

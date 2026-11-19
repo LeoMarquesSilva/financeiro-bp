@@ -23,13 +23,13 @@ const sb = createClient(url, key, {
 })
 
 const EMAILS = [
-  'ana.tavares@bpplaw.com.br',
-  'carolineabdalla@bpplaw.com.br',
+  'ana.tavares@bismarchipires.com.br',
+  'carolineabdalla@bismarchipires.com.br',
   'mariaponce@bismarchipires.com.br',
   'ligia@bismarchipires.com.br',
   'lavinia.ferraz@bismarchipires.com.br',
   'henrique.nascimento@bismarchipires.com.br',
-  'caroline.thome@bpplaw.com.br',
+  'caroline.thome@bismarchipires.com.br',
 ]
 
 const DEFAULT_PASSWORD = '123456'
