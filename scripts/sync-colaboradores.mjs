@@ -5,6 +5,9 @@
  * alterado nos sistemas de origem (ORQESTRAI/RESPONSUM), apenas lido.
  *
  * Fonte de verdade: ORQESTRAI.hr_employees (nome, e-mail, área, cargo, status, admissão/desligamento).
+ * Exceção no e-mail: se a ficha de RH ainda está no domínio antigo (@bpplaw.com.br) e a conta de
+ * login do ORQESTRAI (users) já está no atual (@bismarchipires.com.br), grava o do login
+ * (ver resolveEmailColaborador).
  * Área e cargo são normalizados para o padrão já usado no módulo Eficiência/RESPONSUM
  * (ver AREA_ORQESTRAI_TO_CANONICA / AREA_CANONICA_TO_RESPONSUM abaixo).
  *
@@ -201,6 +204,21 @@ function emailMatchKey(email) {
   return normalized.split('@')[0]
 }
 
+/** Domínio atual do escritório (o antigo, bpplaw.com.br, ainda aparece em fichas de RH). */
+const CURRENT_EMAIL_DOMAIN = 'bismarchipires.com.br'
+
+/**
+ * E-mail gravado em colaboradores. Na troca de domínio, a conta de login do ORQESTRAI
+ * (users.email) foi atualizada, mas muitas fichas de RH (hr_employees.email) não — ex.: ficha
+ * @bpplaw.com.br, login @bismarchipires.com.br. Quando a ficha está em domínio interno antigo e
+ * existe login ativo no domínio atual com o mesmo local-part, usa o e-mail do login.
+ */
+function resolveEmailColaborador(hrEmail, loginEmailAtualByKey) {
+  if (!isInternalEmail(hrEmail)) return hrEmail
+  if (normalizeEmail(hrEmail).endsWith(`@${CURRENT_EMAIL_DOMAIN}`)) return hrEmail
+  return loginEmailAtualByKey.get(emailMatchKey(hrEmail)) ?? hrEmail
+}
+
 async function main() {
   console.log('Lendo hr_employees do ORQESTRAI...')
   const hrEmployees = await fetchOrqestraiTable(
@@ -235,6 +253,14 @@ async function main() {
     }
   }
   console.log(`  ${orqPhotoByKey.size} e-mails com foto resolvida no ORQESTRAI.`)
+
+  const loginEmailAtualByKey = new Map()
+  for (const u of orqUsers) {
+    if (u.is_active === false) continue
+    const email = normalizeEmail(u.email)
+    if (!email || !email.endsWith(`@${CURRENT_EMAIL_DOMAIN}`)) continue
+    loginEmailAtualByKey.set(emailMatchKey(email), email)
+  }
 
   let responsumUsers = []
   if (responsum) {
@@ -271,11 +297,12 @@ async function main() {
     const nivelHierarquico = isSocioFundador ? 'socio' : cargoToNivelHierarquico(emp.position)
     const isActive = forceActiveSocioFundador(emp.email, emp.is_active)
     const responsumMatch = key ? responsumByKey.get(key) : undefined
+    const email = resolveEmailColaborador(emp.email, loginEmailAtualByKey)
 
     rows.push({
       orqestrai_employee_id: emp.id,
       full_name: emp.full_name,
-      email: emp.email,
+      email,
       area: areaCanonica,
       area_orqestrai: isSocioFundador ? 'Sócio' : emp.department,
       cargo: isSocioFundador ? 'Sócio' : emp.position,
@@ -303,7 +330,7 @@ async function main() {
         divergencias.push({
           tipo: 'sem_conta_responsum',
           full_name: emp.full_name,
-          email: emp.email,
+          email,
           detalhe: `Ativo no ORQESTRAI (${areaCanonica}) sem conta correspondente na RESPONSUM.`,
         })
       }
@@ -316,7 +343,7 @@ async function main() {
       divergencias.push({
         tipo: 'status_diferente',
         full_name: emp.full_name,
-        email: emp.email,
+        email,
         detalhe: isActive
           ? 'Ativo no ORQESTRAI, mas a conta na RESPONSUM está inativa.'
           : 'Inativo/desligado no ORQESTRAI, mas a conta na RESPONSUM continua ativa.',
@@ -334,7 +361,7 @@ async function main() {
       divergencias.push({
         tipo: 'area_diferente',
         full_name: emp.full_name,
-        email: emp.email,
+        email,
         detalhe: `ORQESTRAI: ${emp.department} (esperado "${areaResponsumEsperada}" na RESPONSUM) · RESPONSUM: ${responsumMatch.department}`,
       })
     }
