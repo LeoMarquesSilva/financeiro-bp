@@ -554,7 +554,8 @@ const RACIONAL_CONFIG: Record<RacionalIndicador, RacionalConfig> = {
       { key: 'data_para_conclusao', label: 'Data para conclusão' },
       { key: 'data_limite', label: 'Data limite' },
       { key: 'data_conclusao', label: 'Data conclusão' },
-      { key: 'status_prazo', label: 'Resultado' },
+      // Calculada no front (antecipacaoHonorariosStatusLabel) — não existe em sp_tarefas.
+      { key: 'status_prazo', label: 'Resultado', virtual: true },
     ],
   },
   ops_legais_efetividade_cobranca: {
