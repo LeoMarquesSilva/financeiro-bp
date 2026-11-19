@@ -5,17 +5,17 @@
  * que a tabela já calculou), então a conta sempre fecha com o número da tela.
  * Imports com extensão `.ts` para rodar nos testes com `node --test`.
  *
- * Regras conforme `dl_resultado_mensal` / `dl_gestor_mensal` (migrations 20261026210000 e
- * 20261026211000). Quando o branch das regras do consultor entrar (alíquota por mês, profissionais
- * do RH, % da Controladoria do Fechamento Legal Ops, carteira automática), revisar as constantes
- * REGRA_* e DL_ALIQUOTA_IMPOSTO_PCT abaixo.
+ * Regras conforme `dl_resultado_mensal` / `dl_gestor_mensal` com as regras do consultor
+ * (migration 20261111120000): alíquota por mês, profissionais do cadastro do RH, % da Controladoria
+ * do Fechamento Legal Ops, carteira automática, Liberação de Recursos, regra do DL negativo por área
+ * e fechamento do mês com ajuste.
  */
 import type { FenixExplicacao, FenixFiltro, FenixLinha } from '../../../shared/fenix/fenix.types.ts'
 import { formatCurrency, formatPercent } from '../../../shared/utils/format.ts'
-import type { DlGestor, DlLinhaKey, DlMesCalculado, DlMesRow } from '../types/dl.types.ts'
+import type { DlGestor, DlLinhaKey, DlMesCalculado, DlMesRow, DlRegraNegativo } from '../types/dl.types.ts'
 import { DL_DIAS_MES, DL_EFICIENCIA, DL_HORAS_DIA, DL_LINHAS, DL_REFERENCIA_GERAL } from '../utils/dlCalc.ts'
 
-/** Alíquota fixa aplicada em `dl_resultado_mensal` (0.160587) sobre o recebido com NFS-e. */
+/** Alíquota padrão: a da planilha de jan a ago/2026 e a usada quando nenhum mês tem alíquota cadastrada. */
 export const DL_ALIQUOTA_IMPOSTO_PCT = 16.0587
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -81,7 +81,9 @@ export const REGRA_CAIXA =
 const REGRA_RECEITA_PLANOS = `Só entram os honorários ${PLANOS_HONORARIOS}. Os demais recebimentos ficam fora.`
 const REGRA_RECEITA_AREA =
   'A área de cada recebimento é o departamento do item no VIOS (ADD = departamento Distressed Deals).'
-export const REGRA_IMPOSTO = `Imposto = ${pctBr(DL_ALIQUOTA_IMPOSTO_PCT, 4)} do recebido que tem nota fiscal (título com número de NFS-e). Recebimento sem nota não tem imposto. A alíquota é a da planilha oficial do DL.`
+export const REGRA_IMPOSTO = `Imposto = alíquota do mês × recebido que tem nota fiscal (título com número de NFS-e). Recebimento sem nota não tem imposto. A alíquota é cadastrada mês a mês na aba Parâmetros; mês sem cadastro usa a do último mês cadastrado (marcado com ª no demonstrativo), ou ${pctBr(DL_ALIQUOTA_IMPOSTO_PCT, 4)} se nenhum mês tiver alíquota.`
+const REGRA_LIBERACAO =
+  'Liberação de Recursos = recebimentos do cliente Banco do Brasil. Os valores da liberação chegam em nome do BB e o cadastro no VIOS é feito com o BB como cliente. Já estão dentro da Receita Bruta: a linha só mostra quanto dela veio desses recebimentos.'
 const REGRA_DESPESA_AREA =
   'Despesas operacionais = pagamentos (títulos a pagar) lançados no departamento da área no VIOS.'
 export const REGRA_DESPESA_FORA =
@@ -89,28 +91,35 @@ export const REGRA_DESPESA_FORA =
 export const REGRA_CONTROLADORIA =
   'Controladoria = pagamentos do departamento Operações Legais no mês × % da área naquele mês.'
 const REGRA_CONTROLADORIA_PCT =
-  'O % de cada área é cadastrado mês a mês na aba Parâmetros (na tela, "% de agendamentos"). Pelo acordado com o consultor, é o % de horas da equipe de Operações Legais dedicadas à área no Fechamento Legal Ops.'
+  'O % de cada área é o % das horas da equipe de Operações Legais dedicadas à área no Fechamento Legal Ops do mês. Um % digitado na aba Parâmetros substitui o do fechamento.'
 export const REGRA_INDIRETAS =
   'Indiretas = pagamentos de Facilities, Financeiro, Marketing, R.H., T.I. e Comercial + pró-labore dos sócios, divididos pelo total de profissionais das áreas e multiplicados pelos profissionais da área.'
 const REGRA_PROFISSIONAIS =
-  'Profissionais por área vêm da aba Parâmetros. Mês sem cadastro usa o último mês cadastrado no mesmo ano (marcado com • no demonstrativo).'
+  'Profissionais por área vêm do cadastro do RH (lista de turnover): quem trabalhou ao menos um dia do mês na área, exceto quem entrou no último dia e advogado parceiro. Um número digitado na aba Parâmetros substitui o do RH naquele mês.'
 const REGRA_PARAMETRO_HERDADO =
-  'Mês sem parâmetros cadastrados usa os do último mês cadastrado no mesmo ano (marcado com • no demonstrativo).'
+  'Mês ainda sem Fechamento Legal Ops usa o % do último fechamento disponível (marcado com • no demonstrativo).'
 export const REGRA_DL_FORMULA =
   'DL do gestor = % do gestor × resultado dos clientes da carteira dele no mês.'
 const REGRA_DL_CLIENTE =
   'Resultado do cliente = honorário líquido do cliente (sem o imposto) − despesas da área (operacionais + controladoria + indiretas) rateadas pela participação do cliente na receita líquida da área.'
 export const REGRA_DL_NEGATIVO =
   'Se o resultado da carteira no mês for negativo, o DL do gestor fica zero naquele mês (não compensa com outros meses).'
+const REGRA_DL_ACUMULADO =
+  'Nesta área o DL é acumulado no ano: o DL de cada mês é o % do gestor sobre o resultado acumulado da carteira desde janeiro, menos o que já saiu nos meses anteriores. Um mês negativo reduz o DL dos meses seguintes.'
+const REGRA_DL_NEGATIVO_GERAL =
+  'Resultado negativo da carteira segue a regra de cada área na aba Parâmetros: mensal (o DL do mês fica zero e não compensa) ou acumulada (o prejuízo é compensado nos meses seguintes do ano).'
+export const REGRA_DL_FECHAMENTO =
+  'Mês com cadeado está fechado: o DL é o gravado no fechamento. Se algo mudar depois no VIOS num mês fechado, a diferença entra como ajuste no DL do mês seguinte ao último fechado.'
 const REGRA_DL_NAO_DESPESA =
   'O DL pago aos gestores não é despesa da área e não entra na conta do resultado: a linha DL Gestor é só para conferência.'
 const REGRA_DL_VIGENCIA =
-  'Só há DL nos meses de vigência do gestor e para os clientes da carteira dele, ambos configurados na aba Parâmetros.'
+  'Só há DL nos meses de vigência do gestor. A carteira dele tem todos os clientes da área, menos os marcados como excluídos na aba Parâmetros (cliente novo entra sozinho).'
 const REGRA_HORAS = `Horas produtivas = ${DL_HORAS_DIA} h por dia × ${DL_DIAS_MES} dias × ${pctBr(DL_EFICIENCIA * 100)} de eficiência × profissionais de cada mês (premissas da planilha oficial).`
 
-const FONTE = 'Financeiro do VIOS (títulos a receber e a pagar sincronizados no SIOE), com os parâmetros da aba Parâmetros do DL.'
+const FONTE =
+  'Financeiro do VIOS (títulos a receber e a pagar sincronizados no SIOE), cadastro do RH (profissionais), Fechamento Legal Ops (% da controladoria) e aba Parâmetros do DL (alíquota, carteiras e ajustes manuais).'
 const FONTE_TECNICA =
-  'Supabase › dl_resultado_mensal (financeiro_parcelas_itens, dl_areas, dl_parametros_mensais) + dl_gestor_mensal; cascata em src/features/dl/utils/dlCalc.ts'
+  'Supabase › dl_resultado_mensal (financeiro_parcelas_itens, dl_areas, dl_aliquotas, dl_parametros_mensais, sp_turnover, legal_ops_rateio_mensal, dl_fechamento_areas) + dl_gestor_mensal; cascata em src/features/dl/utils/dlCalc.ts'
 
 // ---------------------------------------------------------------------------
 // Contexto
@@ -122,6 +131,8 @@ export type DlFenixArea = {
   departamento: string
   /** Referência de mercado da margem de contribuição (0–1). */
   referencia: number | null
+  /** Regra do DL negativo da área (padrão mensal). */
+  regra_negativo?: DlRegraNegativo
 }
 
 export type DlFenixContexto = {
@@ -181,6 +192,30 @@ function regraMesParcial(ctx: DlFenixContexto): string[] {
   return [`${rotuloMes(ctx.ano, ctx.mesParcial)} ainda está em andamento: entra só o que foi pago até hoje.`]
 }
 
+function regraNegativo(ctx: DlFenixContexto): string {
+  if (!ctx.area) return REGRA_DL_NEGATIVO_GERAL
+  return ctx.area.regra_negativo === 'acumulado' ? REGRA_DL_ACUMULADO : REGRA_DL_NEGATIVO
+}
+
+function regraFechados(demo: readonly DlMesCalculado[]): string[] {
+  const f = demo.filter((m) => m.fechado).map((m) => MESES[m.mes - 1] ?? String(m.mes))
+  if (f.length === 0) return []
+  return [
+    `${listaComE(f)} ${f.length > 1 ? 'estão fechados' : 'está fechado'} (cadeado): os números são os gravados no fechamento e não mudam com lançamentos posteriores no VIOS.`,
+  ]
+}
+
+function aliquotaDoMes(ctx: DlFenixContexto, mes: number): DlMesRow | undefined {
+  return ctx.area ? rowDaArea(ctx, mes) : rowsDoMes(ctx, mes)[0]
+}
+
+const ORIGEM_CONTROLADORIA: Record<string, string> = {
+  manual: 'digitado na aba Parâmetros',
+  legal_ops: 'do Fechamento Legal Ops do mês',
+  legal_ops_herdado: 'do último Fechamento Legal Ops disponível',
+  sem_dado: 'sem Fechamento Legal Ops',
+}
+
 function referencia(ctx: DlFenixContexto): { valor: number; texto: string } | null {
   if (ctx.area) {
     const r = ctx.area.referencia
@@ -233,10 +268,17 @@ function gestoresVigentes(ctx: DlFenixContexto, mes: number): DlGestor[] {
 
 function detalheMes(key: DlLinhaKey, m: DlMesCalculado, ctx: DlFenixContexto): string | undefined {
   const partes: string[] = []
+  if (key === 'impostos' && m.receita_bruta > 0) {
+    const r = aliquotaDoMes(ctx, m.mes)
+    if (r?.aliquota != null) partes.push(`alíquota ${pctBr(r.aliquota, 4)}${r.aliquota_herdada ? ' (do último mês cadastrado)' : ''}`)
+  }
   if (key === 'desp_controladoria') {
     if (ctx.area) {
       const r = rowDaArea(ctx, m.mes)
-      if (r) partes.push(`${pctBr(r.pct_controladoria)} das despesas de Operações Legais`)
+      if (r) {
+        const origem = ORIGEM_CONTROLADORIA[r.origem_controladoria]
+        partes.push(`${pctBr(r.pct_controladoria)} das despesas de Operações Legais${origem ? `, ${origem}` : ''}`)
+      }
     } else {
       const doMes = rowsDoMes(ctx, m.mes)
       if (doMes.length > 0) {
@@ -255,8 +297,8 @@ function detalheMes(key: DlLinhaKey, m: DlMesCalculado, ctx: DlFenixContexto): s
       partes.push(`${numBr(totalProf)} profissionais`)
     }
   }
-  if ((key === 'desp_controladoria' || key === 'desp_indiretas') && m.herdado) {
-    partes.push('parâmetros herdados do último mês cadastrado')
+  if (key === 'desp_controladoria' && m.herdado && !ctx.area) {
+    partes.push('% de alguma área herdado do último Fechamento Legal Ops')
   }
   if (key === 'dl_gestor' && ctx.area) {
     const vig = gestoresVigentes(ctx, m.mes)
@@ -266,6 +308,7 @@ function detalheMes(key: DlLinhaKey, m: DlMesCalculado, ctx: DlFenixContexto): s
       if (m.dl_gestor === 0) partes.push('zero: resultado da carteira não foi positivo')
     }
   }
+  if (m.fechado) partes.push('mês fechado')
   if (ctx.mesParcial === m.mes) partes.push('mês em andamento')
   return partes.length > 0 ? partes.join(' · ') : undefined
 }
@@ -323,9 +366,18 @@ function explicarMensal(
       ),
       ...extra,
     ],
-    regras: [...regras, ...regraEscopo(ctx), ...regraMesParcial(ctx)],
+    regras: [...regras, ...regraEscopo(ctx), ...regraFechados(demo), ...regraMesParcial(ctx)],
     detalhe: DETALHE_AREA,
   }
+}
+
+/** Alíquotas do período (das linhas do banco); sem linhas, a padrão. */
+function aliquotasDoPeriodo(demo: readonly DlMesCalculado[], ctx: DlFenixContexto): number[] {
+  const v = demo
+    .filter((m) => m.receita_bruta > 0)
+    .map((m) => aliquotaDoMes(ctx, m.mes)?.aliquota)
+    .filter((a): a is number => a != null)
+  return v.length > 0 ? [...new Set(v)].sort((a, b) => a - b) : [DL_ALIQUOTA_IMPOSTO_PCT]
 }
 
 /** Linha do demonstrativo (coluna Total) para o período e o escopo (área ou escritório). */
@@ -348,17 +400,20 @@ export function explicarDlLinha(
         [REGRA_CAIXA, REGRA_RECEITA_PLANOS, REGRA_RECEITA_AREA],
       )
     case 'impostos': {
+      const aliq = aliquotasDoPeriodo(demo, ctx)
+      const menor = aliq[0]!
+      const efetivo = total.receita_bruta > 0 ? total.impostos / total.receita_bruta : 0
       const extra: FenixLinha[] =
         total.receita_bruta > 0
           ? [
               {
                 rotulo: 'Imposto ÷ receita bruta do período',
-                valor: pctBr((total.impostos / total.receita_bruta) * 100),
-                numero: (total.impostos / total.receita_bruta) * 100,
+                valor: pctBr(efetivo * 100),
+                numero: efetivo * 100,
                 tipo: 'info',
                 detalhe:
-                  total.impostos / total.receita_bruta < DL_ALIQUOTA_IMPOSTO_PCT / 100 - 0.0001
-                    ? `abaixo de ${pctBr(DL_ALIQUOTA_IMPOSTO_PCT, 4)} porque só o recebido com nota fiscal paga imposto`
+                  efetivo < menor / 100 - 0.0001
+                    ? `abaixo da alíquota (${aliq.map((a) => pctBr(a, 4)).join(' a ')}) porque só o recebido com nota fiscal paga imposto`
                     : undefined,
               },
             ]
@@ -369,8 +424,34 @@ export function explicarDlLinha(
         total,
         ctx,
         `Imposto sobre os honorários recebidos com nota fiscal ${escopoTexto(ctx)} em ${periodo}.`,
-        `Impostos = ${pctBr(DL_ALIQUOTA_IMPOSTO_PCT, 4)} × recebido com nota fiscal, mês a mês`,
+        aliq.length === 1
+          ? `Impostos = ${pctBr(menor, 4)} × recebido com nota fiscal, mês a mês`
+          : 'Impostos = alíquota do mês × recebido com nota fiscal, mês a mês',
         [REGRA_IMPOSTO, REGRA_CAIXA, REGRA_RECEITA_PLANOS],
+        extra,
+      )
+    }
+    case 'liberacao_recursos': {
+      const extra: FenixLinha[] =
+        total.receita_bruta > 0
+          ? [
+              {
+                rotulo: 'Parte da receita bruta',
+                valor: pctBr((total.liberacao_recursos / total.receita_bruta) * 100),
+                numero: (total.liberacao_recursos / total.receita_bruta) * 100,
+                tipo: 'info',
+                detalhe: `de ${moeda(total.receita_bruta)} de receita bruta no período`,
+              },
+            ]
+          : []
+      return explicarMensal(
+        key,
+        demo,
+        total,
+        ctx,
+        `Quanto da receita bruta ${escopoTexto(ctx)} em ${periodo} veio de liberação de recursos (cliente Banco do Brasil).`,
+        'Liberação de Recursos = honorários recebidos do cliente Banco do Brasil, mês a mês (já dentro da Receita Bruta)',
+        [REGRA_LIBERACAO, REGRA_CAIXA, REGRA_RECEITA_PLANOS],
         extra,
       )
     }
@@ -436,8 +517,8 @@ export function explicarDlLinha(
         ctx.area
           ? `Distribuição de lucros dos gestores da área ${ctx.area.nome} em ${periodo}: % de cada gestor sobre o resultado da carteira dele.`
           : `Distribuição de lucros dos gestores de todas as áreas em ${periodo}.`,
-        'DL Gestor = soma, mês a mês, de % do gestor × resultado da carteira (zero quando negativo)',
-        [REGRA_DL_FORMULA, REGRA_DL_CLIENTE, REGRA_DL_NEGATIVO, REGRA_DL_VIGENCIA, REGRA_DL_NAO_DESPESA],
+        'DL Gestor = soma, mês a mês, de % do gestor × resultado da carteira (+ ajuste de mês fechado)',
+        [REGRA_DL_FORMULA, REGRA_DL_CLIENTE, regraNegativo(ctx), REGRA_DL_VIGENCIA, REGRA_DL_FECHAMENTO, REGRA_DL_NAO_DESPESA],
       )
     case 'receita_liquida':
       return {
@@ -606,6 +687,13 @@ export function explicarDlResultado(t: DlMesCalculado, ctx: DlFenixContexto, tit
   }
 }
 
+function origemProfissionais(ctx: DlFenixContexto, mes: number): string | undefined {
+  if (ctx.area) return rowDaArea(ctx, mes)?.origem_profissionais === 'manual' ? 'digitado na aba Parâmetros' : undefined
+  const manuais = rowsDoMes(ctx, mes).filter((r) => r.origem_profissionais === 'manual').length
+  if (manuais === 0) return undefined
+  return manuais === 1 ? '1 área com número digitado na aba Parâmetros' : `${manuais} áreas com número digitado na aba Parâmetros`
+}
+
 export function explicarDlProfissionais(
   demo: readonly DlMesCalculado[],
   total: DlMesCalculado,
@@ -626,7 +714,7 @@ export function explicarDlProfissionais(
         valor: numBr(m.profissionais),
         numero: m.profissionais,
         operador: i === 0 ? undefined : ('+' as const),
-        detalhe: m.herdado ? 'herdado do último mês cadastrado' : undefined,
+        detalhe: origemProfissionais(ctx, m.mes),
       })),
       { rotulo: 'Soma dos meses', valor: numBr(soma), numero: soma, tipo: 'info' },
       { rotulo: 'Meses com profissionais', valor: String(comProf.length), numero: comProf.length, operador: '÷' },
@@ -635,9 +723,10 @@ export function explicarDlProfissionais(
     regras: [
       REGRA_PROFISSIONAIS,
       ...(ctx.area ? [] : ['No escritório, cada mês soma os profissionais de todas as áreas.']),
-      'Meses sem profissionais cadastrados não entram na média.',
+      'Meses sem profissionais não entram na média.',
     ],
-    detalhe: 'Para mudar os números, use a aba Parâmetros.',
+    detalhe:
+      'Para corrigir, atualize a área ou as datas do colaborador no cadastro do RH. Um número digitado na aba Parâmetros vale só para aquele mês.',
   }
 }
 
@@ -677,7 +766,7 @@ export function explicarDlCustoHora(
       REGRA_HORAS,
       'No período, o custo total é dividido pelas horas somadas de todos os meses (não é a média dos custos-hora mensais).',
       'O imposto e o DL dos gestores não entram no custo.',
-      'Sem profissionais cadastrados, não há custo-hora (—).',
+      'Sem profissionais, não há custo-hora (—).',
       REGRA_PROFISSIONAIS,
       ...regraEscopo(ctx),
       ...regraMesParcial(ctx),
@@ -693,7 +782,8 @@ export function explicarDlGestoresResumo(
   ctx: DlFenixContexto,
 ): FenixExplicacao {
   const periodo = periodoDl(ctx.ano, ctx.meses)
-  const gestores = ctx.gestores ?? []
+  // Só quem teve vigência no período (quem saiu ou mudou de área não aparece depois).
+  const gestores = (ctx.gestores ?? []).filter((g) => ctx.meses.some((m) => m >= g.mes_inicio && m <= g.mes_fim))
   const linhas = porArea.filter((a) => a.dl !== 0 || gestores.some((g) => g.area_key === a.area.key))
   return {
     ...base(ctx),
@@ -709,7 +799,7 @@ export function explicarDlGestoresResumo(
           valor: moeda(a.dl),
           numero: a.dl,
           operador: i === 0 ? undefined : ('+' as const),
-          detalhe: gs.length > 0 ? gs.map((g) => `${g.nome} ${pctBr(g.pct)}`).join(' · ') : 'sem gestor com DL cadastrado',
+          detalhe: gs.length > 0 ? gs.map((g) => `${g.nome} ${pctBr(g.pct)}`).join(' · ') : 'sem gestor com DL no período',
         }
       }),
       linhaTotal('DL Gestores no período', total),
@@ -718,9 +808,18 @@ export function explicarDlGestoresResumo(
         total,
       ),
     ],
-    regras: [REGRA_DL_FORMULA, REGRA_DL_CLIENTE, REGRA_DL_NEGATIVO, REGRA_DL_VIGENCIA, REGRA_DL_NAO_DESPESA, ...regraMesParcial(ctx)],
+    regras: [
+      REGRA_DL_FORMULA,
+      REGRA_DL_CLIENTE,
+      REGRA_DL_NEGATIVO_GERAL,
+      REGRA_DL_VIGENCIA,
+      REGRA_DL_FECHAMENTO,
+      REGRA_DL_NAO_DESPESA,
+      ...regraMesParcial(ctx),
+    ],
     fonte: FONTE,
-    fonteTecnica: 'Supabase › dl_gestor_mensal (dl_gestores, dl_gestor_clientes, dl_resultado_mensal, financeiro_parcelas_itens)',
+    fonteTecnica:
+      'Supabase › dl_gestor_mensal (dl_gestores, dl_gestor_clientes, dl_resultado_mensal, dl_fechamento_gestores, financeiro_parcelas_itens)',
     detalhe: 'Para ver mês a mês, abra a aba Por área e clique na linha DL Gestor.',
   }
 }
