@@ -3,8 +3,8 @@ import { useAuth } from '@/lib/AuthContext'
 import { exclusaoTitulosService } from '../services/exclusaoTitulosService'
 
 /**
- * Quem pode excluir títulos é definido por pessoa no banco
- * (financeiro_exclusao_autorizados), não pelo perfil. Hoje: só a Juliana Pires.
+ * Quem pode excluir títulos é decidido no banco (current_user_pode_excluir_titulos):
+ * admins ativos + quem está em financeiro_exclusao_autorizados (Juliana Pires).
  */
 export function usePodeExcluirTitulos() {
   const { user } = useAuth()

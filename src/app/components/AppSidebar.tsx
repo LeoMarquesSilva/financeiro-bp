@@ -44,7 +44,10 @@ const navItems: NavItem[] = [
   { ...NAV_ACCESS_ITEMS[14], icon: Settings },
 ]
 
-/** Fora de NAV_ACCESS_ITEMS: liberado por pessoa no banco, não pelo perfil. */
+/**
+ * Fora de NAV_ACCESS_ITEMS: quem vê é decidido no banco (admins + lista
+ * financeiro_exclusao_autorizados), não pela configuração de perfis.
+ */
 const exclusaoTitulosItem: NavItem = {
   to: '/financeiro/exclusao-titulos',
   label: 'Exclusão de Títulos',

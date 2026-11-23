@@ -86,7 +86,7 @@ function MelhorEstimativaRoute() {
   return <Navigate to={resolveHomePath(role, moduleAccess)} replace />
 }
 
-/** Exclusão de títulos: liberada por pessoa no banco (não pelo perfil). */
+/** Exclusão de títulos: o banco decide (admins + lista financeiro_exclusao_autorizados). */
 function ExclusaoTitulosRoute() {
   const { role, moduleAccess } = useAuth()
   const { pode, isLoading } = usePodeExcluirTitulos()
