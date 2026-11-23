@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
-import { AlertTriangle, BarChart3, Briefcase, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock, Scale, Gauge, Timer, HandCoins, Compass } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, Building2, Users, Settings, LogOut, BellRing, TrendingUp, Wallet, Clock, Scale, Gauge, Timer, HandCoins, Compass, FileX2 } from 'lucide-react'
+import { usePodeExcluirTitulos } from '@/features/exclusao-titulos/hooks/usePodeExcluirTitulos'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -43,6 +44,14 @@ const navItems: NavItem[] = [
   { ...NAV_ACCESS_ITEMS[14], icon: Settings },
 ]
 
+/** Fora de NAV_ACCESS_ITEMS: liberado por pessoa no banco, não pelo perfil. */
+const exclusaoTitulosItem: NavItem = {
+  to: '/financeiro/exclusao-titulos',
+  label: 'Exclusão de Títulos',
+  icon: FileX2,
+  roles: [],
+}
+
 function getInitials(name: string | null): string {
   if (!name) return '?'
   return name
@@ -71,10 +80,19 @@ export function AppSidebar() {
   const navigate = useNavigate()
   const homePath = resolveHomePath(role, moduleAccess)
 
-  const visibleItems = useMemo(
-    () => filterNavItemsForAccess(navItems, role, moduleAccess, roleRouteAccess),
-    [role, moduleAccess, roleRouteAccess],
-  )
+  const { pode: podeExcluirTitulos } = usePodeExcluirTitulos()
+
+  const visibleItems = useMemo(() => {
+    const items = filterNavItemsForAccess(navItems, role, moduleAccess, roleRouteAccess)
+    if (!podeExcluirTitulos) return items
+    // Junto dos itens do financeiro, antes de Usuários/Configurações.
+    const idx = items.findIndex(
+      (i) => i.to === '/financeiro/usuarios' || i.to === '/financeiro/configuracoes',
+    )
+    return idx >= 0
+      ? [...items.slice(0, idx), exclusaoTitulosItem, ...items.slice(idx)]
+      : [...items, exclusaoTitulosItem]
+  }, [role, moduleAccess, roleRouteAccess, podeExcluirTitulos])
 
   return (
     <TooltipProvider delayDuration={0}>

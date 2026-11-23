@@ -27,6 +27,8 @@ import { EficienciaPage } from '@/features/eficiencia/pages/EficienciaPage'
 import { RacionalExportPage } from '@/features/eficiencia/pages/RacionalExportPage'
 import { OperacoesLegaisPage } from '@/features/operacoes-legais/pages/OperacoesLegaisPage'
 import { TimesheetPage } from '@/features/timesheet/pages/TimesheetPage'
+import { ExclusaoTitulosPage } from '@/features/exclusao-titulos/pages/ExclusaoTitulosPage'
+import { usePodeExcluirTitulos } from '@/features/exclusao-titulos/hooks/usePodeExcluirTitulos'
 import { readRacionalExportParams } from '@/features/eficiencia/utils/racionalExportParams'
 import { RACIONAL_EXPORT_PATH } from '@/features/eficiencia/utils/racionalExportUrl'
 
@@ -82,6 +84,15 @@ function MelhorEstimativaRoute() {
   if (acessaReceita || acesso.minhasAreas.length > 0) return <ReceitaMelhorEstimativaPage />
   if (acesso.isLoading) return <div className="h-64 animate-pulse rounded-xl bg-slate-100" />
   return <Navigate to={resolveHomePath(role, moduleAccess)} replace />
+}
+
+/** Exclusão de títulos: liberada por pessoa no banco (não pelo perfil). */
+function ExclusaoTitulosRoute() {
+  const { role, moduleAccess } = useAuth()
+  const { pode, isLoading } = usePodeExcluirTitulos()
+  if (isLoading) return <div className="h-64 animate-pulse rounded-xl bg-slate-100" />
+  if (!pode) return <Navigate to={resolveHomePath(role, moduleAccess)} replace />
+  return <ExclusaoTitulosPage />
 }
 
 function AppRoutes() {
@@ -232,6 +243,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route path="exclusao-titulos" element={<ExclusaoTitulosRoute />} />
         <Route path="perfil" element={<PerfilPage />} />
         <Route
           path="planejamento-2027"
