@@ -183,6 +183,7 @@ const VISTAGEM_REGRAS_COMUNS = [
   'Conta cada publicação pela data em que foi disponibilizada para vistagem. Só entram publicações já vistadas (com "Vistado por" e data da vistagem preenchidos).',
   'No prazo (D+1): vistada até 12h do próximo dia útil depois da disponibilização, no horário de Brasília. Sábados, domingos e feriados não contam como dia útil.',
   'Área = escritório responsável da publicação, pelo De-Para do painel (Cível | Insolvência e Insolvência viram Reestruturação; Special Situations vira Distressed Deals).',
+  'Publicação marcada como excludente pela controladoria sai da conta (não é no prazo nem fora): continua no racional com o motivo, mas não entra na %.',
 ] as const
 
 const SPECS: Record<IndicadorRazao, SpecRazao> = {
@@ -225,6 +226,7 @@ const SPECS: Record<IndicadorRazao, SpecRazao> = {
       'Entram os pedidos de protocolo da lista do SharePoint, pela data em que o pedido foi criado.',
       'Sem inconsistência: o campo "Inconsistência - Jurídico" está vazio. Qualquer valor nesse campo conta como inconsistência.',
       'Área = área de quem criou o pedido (coluna de área da lista ou, se vazia, a área da pessoa na data, pela base de colaboradores). Operações Legais e Tributário ficam fora.',
+      'Pedido marcado como excludente pela controladoria sai da conta (não é eficiência nem inconsistência): continua no racional com o motivo, mas não entra na %.',
       REGRA_ONBOARDING,
     ],
     pessoa: 'quem criou o pedido de protocolo',
